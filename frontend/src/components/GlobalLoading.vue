@@ -8,14 +8,17 @@ const { isLoading, loadingMessage } = useGlobalState()
   <Transition name="fade">
     <div
       v-if="isLoading"
-      class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+      class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50"
     >
-      <div class="bg-slate-800 rounded-xl p-6 shadow-2xl">
+      <div class="bg-slate-800/90 rounded-2xl p-8 shadow-2xl border border-slate-700/50 scale-in">
         <div class="flex flex-col items-center gap-4">
-          <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <div>
-            <p class="text-white font-medium">{{ loadingMessage }}</p>
-            <p class="text-slate-400 text-sm text-center">请稍候...</p>
+          <div class="relative">
+            <div class="w-14 h-14 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <div class="absolute inset-0 w-14 h-14 border-4 border-purple-500 border-b-transparent rounded-full animate-spin" style="animation-direction: reverse; animation-duration: 1.5s;"></div>
+          </div>
+          <div class="text-center">
+            <p class="text-white font-semibold text-lg">{{ loadingMessage }}</p>
+            <p class="text-slate-400 text-sm mt-1">请稍候...</p>
           </div>
         </div>
       </div>

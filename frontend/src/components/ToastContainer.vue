@@ -21,25 +21,25 @@ const getToastIcon = (type: string) => {
 const getToastClass = (type: string) => {
   switch (type) {
     case 'success':
-      return 'bg-green-500/20 border-green-500/50 text-green-400'
+      return 'bg-green-500/15 border-green-500/40 text-green-400'
     case 'error':
-      return 'bg-red-500/20 border-red-500/50 text-red-400'
+      return 'bg-red-500/15 border-red-500/40 text-red-400'
     case 'warning':
-      return 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400'
+      return 'bg-yellow-500/15 border-yellow-500/40 text-yellow-400'
     case 'info':
     default:
-      return 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+      return 'bg-blue-500/15 border-blue-500/40 text-blue-400'
   }
 }
 </script>
 
 <template>
-  <div class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+  <div class="fixed top-6 right-6 z-50 flex flex-col gap-3 max-w-sm">
     <TransitionGroup name="toast">
       <div
         v-for="toast in store.toasts"
         :key="toast.id"
-        class="flex items-start gap-3 px-4 py-3 rounded-lg border backdrop-blur-sm shadow-lg"
+        class="flex items-start gap-3 px-4 py-3 rounded-xl border backdrop-blur-sm shadow-lg"
         :class="getToastClass(toast.type)"
       >
         <component :is="getToastIcon(toast.type)" class="w-5 h-5 flex-shrink-0 mt-0.5" />

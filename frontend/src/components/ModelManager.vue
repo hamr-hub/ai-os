@@ -6,10 +6,10 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
 </script>
 
 <template>
-  <div class="bg-slate-800 rounded-xl p-6">
+  <div class="bg-slate-800/80 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 card-hover">
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center gradient-purple">
           <Server class="w-6 h-6 text-white" />
         </div>
         <div>
@@ -21,21 +21,21 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
         <button
           @click="refresh"
           :disabled="isRefreshing"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-700 disabled:opacity-50 text-slate-300 rounded-lg text-sm transition-all"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 disabled:bg-slate-700/50 disabled:opacity-50 text-slate-300 rounded-lg text-sm transition-all"
         >
           <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isRefreshing }" />
           <span>{{ isRefreshing ? '刷新中' : '刷新' }}</span>
         </button>
         <button
           @click="toggleAutoRefresh"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors"
-          :class="isAutoRefreshEnabled ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all"
+          :class="isAutoRefreshEnabled ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'"
           :title="isAutoRefreshEnabled ? '暂停自动刷新' : '开启自动刷新'"
         >
           <Pause v-if="isAutoRefreshEnabled" class="w-4 h-4" />
           <PlayIcon v-else class="w-4 h-4" />
         </button>
-        <div v-if="defaultModel" class="flex items-center gap-2 bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-sm">
+        <div v-if="defaultModel" class="flex items-center gap-2 bg-yellow-500/20 text-yellow-400 px-3 py-1.5 rounded-lg text-sm">
           <Star class="w-4 h-4 fill-current" />
           <span>默认: {{ defaultModel }}</span>
           <button @click="handleClearDefaultModel" class="hover:text-yellow-300 transition-colors">
@@ -45,12 +45,16 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
       </div>
     </div>
 
-    <div v-if="loading" class="flex items-center justify-center py-12">
-      <div class="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+    <div v-if="loading" class="flex flex-col items-center justify-center py-12">
+      <div class="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p class="text-slate-400">正在加载模型...</p>
     </div>
 
-    <div v-else-if="error" class="text-red-400 text-center py-8">
-      <p class="font-medium">{{ error }}</p>
+    <div v-else-if="error" class="text-center py-8">
+      <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+        <Server class="w-8 h-8 text-red-400" />
+      </div>
+      <p class="text-red-400 font-medium">{{ error }}</p>
     </div>
 
     <div v-else-if="!modelStatus || Object.keys(modelStatus).length === 0" class="text-center py-8">
@@ -61,11 +65,11 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
     </div>
 
     <div v-else>
-      <div class="space-y-4">
+      <div class="space-y-3">
         <div
           v-for="(status, modelName) in modelStatus"
           :key="modelName"
-          class="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700 transition-all duration-200"
+          class="bg-slate-700/30 rounded-xl p-4 hover:bg-slate-700/50 transition-all duration-200 scale-in"
         >
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-3">
@@ -74,35 +78,39 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
                 :class="status.running ? 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50' : 'bg-slate-500'"
               ></div>
               <span class="text-white font-medium">{{ modelName }}</span>
-              <span v-if="defaultModel === modelName" class="text-yellow-400 text-xs flex items-center gap-1">
+              <span v-if="defaultModel === modelName" class="text-yellow-400 text-xs flex items-center gap-1 px-2 py-0.5 bg-yellow-500/20 rounded-full">
                 <Star class="w-3 h-3 fill-current" />
                 默认
               </span>
+              <span v-if="status.preloaded" class="text-green-400 text-xs flex items-center gap-1 px-2 py-0.5 bg-green-500/20 rounded-full">
+                <CheckCircle class="w-3 h-3" />
+                预加载
+              </span>
             </div>
             <span
-              class="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+              class="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
               :class="status.running ? 'bg-green-500/20 text-green-400' : 'bg-slate-600 text-slate-300'"
             >
               {{ status.running ? '运行中' : '已停止' }}
             </span>
           </div>
 
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
-            <div>
-              <span class="text-slate-500">端口</span>
-              <p class="text-slate-300">{{ status.port || '-' }}</p>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-sm">
+            <div class="bg-slate-600/30 rounded-lg p-3">
+              <span class="text-slate-500 text-xs">端口</span>
+              <p class="text-slate-300 font-medium">{{ status.port || '-' }}</p>
             </div>
-            <div>
-              <span class="text-slate-500">服务</span>
-              <p class="text-slate-300">{{ status.service || '-' }}</p>
+            <div class="bg-slate-600/30 rounded-lg p-3">
+              <span class="text-slate-500 text-xs">服务</span>
+              <p class="text-slate-300 font-medium">{{ status.service || '-' }}</p>
             </div>
-            <div>
-              <span class="text-slate-500">活跃请求</span>
-              <p class="text-slate-300">{{ status.active_requests }}</p>
+            <div class="bg-slate-600/30 rounded-lg p-3">
+              <span class="text-slate-500 text-xs">活跃请求</span>
+              <p class="text-slate-300 font-medium">{{ status.active_requests }}</p>
             </div>
-            <div>
-              <span class="text-slate-500">预加载</span>
-              <p class="text-slate-300">{{ status.preloaded ? '是' : '否' }}</p>
+            <div class="bg-slate-600/30 rounded-lg p-3">
+              <span class="text-slate-500 text-xs">预加载</span>
+              <p class="text-slate-300 font-medium">{{ status.preloaded ? '是' : '否' }}</p>
             </div>
           </div>
 
@@ -111,7 +119,7 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
               v-if="!status.running"
               @click="handleStartModel(modelName as string)"
               :disabled="actionLoading === modelName"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200"
+              class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 gradient-green hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200 btn-glow"
             >
               <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
               <Play v-else class="w-4 h-4" />
@@ -122,7 +130,7 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
               v-if="status.running"
               @click="handleStopModel(modelName as string)"
               :disabled="actionLoading === modelName"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200"
+              class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200"
             >
               <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
               <Square v-else class="w-4 h-4" />
@@ -132,7 +140,7 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
             <button
               @click="handleSwitchAndSetDefault(modelName as string)"
               :disabled="actionLoading === modelName"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200"
+              class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 gradient-purple hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200 btn-glow"
               title="切换模型并设为默认"
             >
               <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
@@ -143,7 +151,7 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
             <button
               @click="handleSetDefaultModel(modelName as string)"
               :disabled="actionLoading === modelName || defaultModel === modelName"
-              class="flex items-center justify-center gap-2 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200"
+              class="flex items-center justify-center gap-2 px-3 py-2.5 bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-600/50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200"
               :title="defaultModel === modelName ? '已是默认模型' : '设为默认模型'"
             >
               <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
@@ -153,10 +161,10 @@ const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, 
         </div>
       </div>
 
-      <div class="mt-6 pt-6 border-t border-slate-700">
+      <div class="mt-6 pt-6 border-t border-slate-700/50">
         <div class="flex flex-wrap items-center justify-center gap-6 text-sm">
           <div class="flex items-center gap-2">
-            <div class="w-3 h-3 rounded-full bg-green-500"></div>
+            <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
             <span class="text-slate-400">运行中</span>
           </div>
           <div class="flex items-center gap-2">

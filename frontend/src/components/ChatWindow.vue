@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
-import { MessageSquare, Send, Loader2, Bot, User, RefreshCw, ChevronDown } from 'lucide-vue-next'
+import { MessageSquare, Send, Loader2, Bot, User, RefreshCw, ChevronDown, Sparkles } from 'lucide-vue-next'
 import { chatCompletionStream, type ChatMessage } from '@/api/client'
 import { useModels } from '@/composables/useModels'
 import { useAppStore } from '@/stores/app'
@@ -120,10 +120,10 @@ addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
 </script>
 
 <template>
-  <div class="bg-slate-800 rounded-xl p-6">
+  <div class="bg-slate-800/80 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 card-hover">
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center gradient-blue">
           <MessageSquare class="w-6 h-6 text-white" />
         </div>
         <div>
@@ -135,7 +135,7 @@ addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
         <div class="relative">
           <button
             @click="showModelDropdown = !showModelDropdown"
-            class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition-colors"
+            class="flex items-center gap-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-all"
           >
             <span v-if="selectedModel">{{ selectedModel }}</span>
             <span v-else-if="defaultModel">{{ defaultModel }} (默认)</span>
@@ -144,11 +144,11 @@ addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
           </button>
           <div
             v-if="showModelDropdown"
-            class="absolute top-full right-0 mt-1 w-48 bg-slate-700 rounded-lg shadow-lg overflow-hidden z-10"
+            class="absolute top-full right-0 mt-2 w-52 bg-slate-700 rounded-xl shadow-xl overflow-hidden z-20 scale-in"
           >
             <button
               @click="selectModel('')"
-              class="w-full px-4 py-2 text-left hover:bg-slate-600 text-slate-300 text-sm transition-colors"
+              class="w-full px-4 py-2.5 text-left hover:bg-slate-600 text-slate-300 text-sm transition-all"
               :class="{ 'bg-slate-600': !selectedModel }"
             >
               {{ defaultModel ? `${defaultModel} (默认)` : '无默认模型' }}
@@ -158,20 +158,20 @@ addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
               v-for="model in availableModels()"
               :key="model"
               @click="selectModel(model)"
-              class="w-full px-4 py-2 text-left hover:bg-slate-600 text-slate-300 text-sm transition-colors flex items-center gap-2"
+              class="w-full px-4 py-2.5 text-left hover:bg-slate-600 text-slate-300 text-sm transition-all flex items-center gap-3"
               :class="{ 'bg-slate-600': selectedModel === model }"
             >
-              <span class="w-2 h-2 rounded-full bg-green-500"></span>
+              <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
               {{ model }}
             </button>
-            <div v-if="availableModels().length === 0" class="px-4 py-2 text-slate-500 text-sm">
+            <div v-if="availableModels().length === 0" class="px-4 py-3 text-slate-500 text-sm text-center">
               暂无运行中的模型
             </div>
           </div>
         </div>
         <button
           @click="clearChat"
-          class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition-colors"
+          class="flex items-center gap-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-all"
         >
           <RefreshCw class="w-4 h-4" />
           清空
@@ -181,41 +181,44 @@ addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
 
     <div
       ref="chatContainer"
-      class="h-64 overflow-y-auto bg-slate-900 rounded-lg p-4 mb-4 space-y-4"
+      class="h-72 overflow-y-auto bg-slate-900/50 rounded-xl p-4 mb-4 space-y-4"
     >
       <div
         v-for="(message, index) in messages"
         :key="index"
-        class="flex gap-3"
+        class="flex gap-3 fade-in"
         :class="{ 'flex-row-reverse': message.role === 'user' }"
       >
         <div
-          class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+          class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
           :class="{
-            'bg-blue-600': message.role === 'user',
-            'bg-purple-600': message.role === 'assistant',
+            'gradient-blue': message.role === 'user',
+            'gradient-purple': message.role === 'assistant',
             'bg-slate-600': message.role === 'system',
           }"
         >
           <User v-if="message.role === 'user'" class="w-5 h-5 text-white" />
           <Bot v-else-if="message.role === 'assistant'" class="w-5 h-5 text-white" />
+          <Sparkles v-else class="w-5 h-5 text-white" />
         </div>
-        <div
-          class="max-w-[80%]"
-        >
+        <div class="max-w-[80%]">
           <div
-            class="px-4 py-2 rounded-lg"
+            class="px-4 py-3 rounded-xl"
             :class="{
-              'bg-blue-600/20 text-blue-200 rounded-br-none': message.role === 'user',
-              'bg-slate-700 text-white rounded-bl-none': message.role === 'assistant',
-              'bg-slate-700/50 text-slate-300 rounded-lg': message.role === 'system',
+              'bg-blue-500/20 text-blue-200 rounded-tr-none': message.role === 'user',
+              'bg-slate-700/50 text-white rounded-tl-none': message.role === 'assistant',
+              'bg-slate-700/30 text-slate-300 rounded-xl': message.role === 'system',
             }"
           >
             <p class="text-sm whitespace-pre-wrap">{{ message.content }}</p>
             <span
               v-if="streamingMessageId === index"
-              class="inline-block w-2 h-4 bg-white/60 ml-1 animate-pulse"
-            ></span>
+              class="inline-flex gap-1 ml-1"
+            >
+              <span class="w-2 h-4 bg-white/60 rounded animate-bounce" style="animation-delay: 0ms"></span>
+              <span class="w-2 h-4 bg-white/60 rounded animate-bounce" style="animation-delay: 150ms"></span>
+              <span class="w-2 h-4 bg-white/60 rounded animate-bounce" style="animation-delay: 300ms"></span>
+            </span>
           </div>
           <p class="text-xs text-slate-500 mt-1 ml-1" :class="{ 'text-right': message.role === 'user' }">
             {{ formatTime(message.timestamp) }}
@@ -223,7 +226,7 @@ addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
         </div>
       </div>
 
-      <div v-if="isLoading && streamingMessageId === null" class="flex items-center gap-2 text-slate-400">
+      <div v-if="isLoading && streamingMessageId === null" class="flex items-center gap-2 text-slate-400 justify-center py-4">
         <Loader2 class="w-4 h-4 animate-spin" />
         <span class="text-sm">正在思考...</span>
       </div>
@@ -235,13 +238,13 @@ addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
         @keydown="handleKeyPress"
         type="text"
         placeholder="输入消息..."
-        class="flex-1 bg-slate-700 text-white border border-slate-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
+        class="flex-1 bg-slate-700/50 text-white border border-slate-600/50 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-all"
         :disabled="isLoading"
       />
       <button
         @click="handleSend"
         :disabled="isLoading || !inputMessage.trim()"
-        class="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2"
+        class="px-6 py-3 gradient-blue hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all flex items-center gap-2 btn-glow"
       >
         <Loader2 v-if="isLoading" class="w-4 h-4 animate-spin" />
         <Send v-else class="w-4 h-4" />
