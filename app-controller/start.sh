@@ -6,7 +6,7 @@ cd "$SCRIPT_DIR"
 
 VENV_DIR="$SCRIPT_DIR/.venv"
 HOST=${HOST:-0.0.0.0}
-PORT=${PORT:-5000}
+PORT=${PORT:-35000}
 
 # Check virtual environment
 if [ ! -d "$VENV_DIR" ]; then

@@ -1,0 +1,18 @@
+[Unit]
+Description=AI Controller Service
+After=network.target redis.target
+Wants=redis.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/ai-os/app-controller
+Environment=PATH=/root/ai-os/app-controller/.venv/bin
+ExecStart=/root/ai-os/app-controller/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

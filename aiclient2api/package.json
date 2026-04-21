@@ -1,0 +1,15 @@
+{
+  "name": "aiclient-proxy",
+  "version": "1.0.0",
+  "description": "AIClient2API Proxy Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

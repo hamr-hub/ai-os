@@ -48,6 +48,7 @@ class Scheduler:
         self.model_last_used: Dict[str, datetime] = {}
         self._model_lock = threading.Lock()
         self._init_preloaded_models()
+        self._default_model = None
     
     def _load_config(self) -> Dict:
         cached_config = cache_service.get("ai_controller:cache:config")
@@ -228,6 +229,23 @@ class Scheduler:
                 return max(tracked_running_models, key=lambda model: self.running_models.get(model))
 
         return running_models[0]
+
+    def get_default_model(self) -> Optional[str]:
+        """Return the default model, if set."""
+        if self._default_model and self.is_model_available(self._default_model):
+            return self._default_model
+        return None
+
+    def set_default_model(self, model_name: str) -> bool:
+        """Set the default model for inference requests."""
+        if not self.is_model_available(model_name):
+            return False
+        self._default_model = model_name
+        return True
+
+    def clear_default_model(self):
+        """Clear the default model setting."""
+        self._default_model = None
     
     def get_preloaded_models(self) -> List[str]:
         return list(self.preloaded_models)

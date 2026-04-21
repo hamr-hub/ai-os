@@ -1,37 +1,37 @@
 version: '3.8'
 
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: ai-controller-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
   ai-controller:
     build: .
     container_name: ai-controller
     ports:
       - "5000:5000"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./logs:/app/logs
+      - /mnt/pve_models:/mnt/pve_models
     environment:
       - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=INFO
     depends_on:
-      redis:
-        condition: service_healthy
+      - redis
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: ai-controller-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
 
 volumes:
-  redis-data:
-    driver: local
+  redis_data:

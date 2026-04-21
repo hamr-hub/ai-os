@@ -413,6 +413,11 @@ async def chat_completions(request: ChatCompletionRequest):
     request_data = request.model_dump(exclude_unset=True)
     has_image, total_image_size = count_image_content(request_data)
     
+    if not model_name or model_name.lower() == "default":
+        model_name = scheduler.get_default_model() or scheduler.get_current_model_name()
+        if not model_name:
+            raise HTTPException(status_code=400, detail="No default model set and no model specified")
+    
     if has_image:
         logger.info(f"Received chat completion request with image content for model: {model_name}, stream: {stream}, image_size: {total_image_size} bytes")
     else:
@@ -987,6 +992,30 @@ async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True):
         }
 
     return {"status": "switched", "model": model_name}
+
+@app.get("/manage/default-model")
+async def get_default_model():
+    """获取当前默认模型"""
+    default_model = scheduler.get_default_model()
+    return {"default_model": default_model}
+
+@app.post("/manage/default-model/{model_name}")
+async def set_default_model(model_name: str):
+    """设置默认模型"""
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+    
+    success = scheduler.set_default_model(model_name)
+    if success:
+        return {"status": "success", "default_model": model_name}
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to set default model to {model_name}")
+
+@app.delete("/manage/default-model")
+async def clear_default_model():
+    """清除默认模型设置"""
+    scheduler.clear_default_model()
+    return {"status": "success", "message": "Default model cleared"}
 
 @app.get("/manage/metrics")
 async def get_metrics():
@@ -1821,7 +1850,7 @@ async def get_monitor_all():
             "details": health_info
         },
         "service": service_info,
-        "controllerUrl": CONFIG.CONTROLLER_BASE_URL if 'CONFIG' in dir() else 'http://localhost:5000'
+        "controllerUrl": CONFIG.CONTROLLER_BASE_URL if 'CONFIG' in dir() else 'http://localhost:35000'
     }
 
 if __name__ == "__main__":
@@ -1830,7 +1859,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="AI Controller Service")
     parser.add_argument("--log-dir", type=str, default=None, help="Custom log directory path")
-    parser.add_argument("--port", type=int, default=5000, help="Server port")
+    parser.add_argument("--port", type=int, default=35000, help="Server port")
     
     args = parser.parse_args()
     
