@@ -1,0 +1,28 @@
+[Unit]
+Description=vLLM Service for Gemma Vision Model
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/ai-os
+ExecStart=/usr/local/bin/python -m vllm.entrypoints.api_server \
+    --model /models/gemma-2-9b-it \
+    --mmproj /models/gemma-2-vision-proj \
+    --image-input-type base64 \
+    --port 8002 \
+    --tensor-parallel-size 1 \
+    --gpu-memory-utilization 0.75 \
+    --max-model-len 8192 \
+    --enable-chunked-prefill \
+    --disable-log-requests \
+    --api-key none \
+    --served-model-name gemma-2-9b-it-vision
+Restart=always
+RestartSec=10
+Environment="PYTHONPATH=/root/ai-os"
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

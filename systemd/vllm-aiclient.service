@@ -1,0 +1,34 @@
+[Unit]
+Description=vLLM Inference Server (AIClient)
+After=network.target nvidia-persistenced.service
+Wants=nvidia-persistenced.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/ai-suite
+
+# 环境变量（修改 VLLM_MODEL_PATH 切换模型）
+Environment="VLLM_MODEL_PATH=/mnt/pve_models/Gemma-4-31B-Abliterated"
+Environment="CUDA_VISIBLE_DEVICES=0"
+
+# 启动命令
+ExecStart=/root/ai-suite/start_vllm_aiclient.sh
+
+# 重启策略
+Restart=always
+RestartSec=10
+
+# 资源限制
+LimitMEMLOCK=infinity
+LimitSTACK=infinity
+LimitNOFILE=65536
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vllm-aiclient
+
+[Install]
+WantedBy=multi-user.target

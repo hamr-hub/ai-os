@@ -1,0 +1,31 @@
+{
+  "openai-custom": [
+    {
+      "customName": "app-controller",
+      "checkModelName": "",
+      "checkHealth": false,
+      "concurrencyLimit": 0,
+      "queueLimit": 0,
+      "OPENAI_API_KEY": "123456",
+      "OPENAI_BASE_URL": "http://192.168.7.103:5000",
+      "uuid": "36babfc8-934a-404d-826a-3dd25bef139a",
+      "isHealthy": true,
+      "lastUsed": "2026-04-18T05:32:57.878Z",
+      "usageCount": 12,
+      "errorCount": 0,
+      "lastErrorTime": null,
+      "supportedModels": [
+        "/mnt/pve_models/Gemma-4-31B-Abliterated"
+      ],
+      "notSupportedModels": [],
+      "isDisabled": false,
+      "needsRefresh": false,
+      "refreshCount": 0,
+      "lastHealthCheckTime": "2026-04-18T05:32:57.878Z",
+      "lastHealthCheckModel": "/mnt/pve_models/Gemma-4-31B-Abliterated",
+      "lastErrorMessage": null,
+      "lastRefreshTime": 1776490377878,
+      "_lastSelectionSeq": 0
+    }
+  ]
+}

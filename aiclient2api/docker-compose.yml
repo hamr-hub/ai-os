@@ -1,0 +1,12 @@
+services:
+  aiclient:
+    image: justlikemaki/aiclient-2-api:latest
+    container_name: aiclient
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ./data:/app/data
+      - ./configs:/configs

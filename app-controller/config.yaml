@@ -1,0 +1,147 @@
+models:
+  Gemma-4-31B-Abliterated:
+    service: vllm
+    port: 8000
+    required_memory: 40GB
+    preload: true
+    keep_alive: true
+    model_path: /mnt/pve_models/Gemma-4-31B-Abliterated
+    supports_images: false
+    description: "Gemma 4 31B 模型（去审查版）"
+  
+  Qwen3-235B-A22B-Instruct-2507-AWQ:
+    service: vllm
+    port: 8000
+    required_memory: 120GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/Qwen3-235B-A22B-Instruct-2507-AWQ
+    supports_images: false
+    description: "Qwen3 235B AWQ 量化模型"
+  
+  Qwen3.6-35B-A3B:
+    service: vllm
+    port: 8000
+    required_memory: 40GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/Qwen3.6-35B-A3B
+    supports_images: false
+    description: "Qwen3.6 35B 稀疏激活模型"
+  
+  Qwen3.6-35B-A3B-NVFP4:
+    service: vllm
+    port: 8000
+    required_memory: 30GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/Qwen3.6-35B-A3B-NVFP4
+    supports_images: false
+    description: "Qwen3.6 35B NVFP4 量化模型"
+  
+  Qwen3.6-35B-A3B-Uncensored:
+    service: vllm
+    port: 8000
+    required_memory: 40GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/Qwen3.6-35B-A3B-Uncensored
+    supports_images: false
+    description: "Qwen3.6 35B 去审查版"
+  
+  llama-3.3-70b-8.0bpw:
+    service: vllm
+    port: 8000
+    required_memory: 80GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/llama-3.3-70b-8.0bpw
+    supports_images: false
+    description: "Llama 3.3 70B 8bit 量化模型"
+  
+  llama-3.3-70b-abliterated-gguf:
+    service: vllm
+    port: 8000
+    required_memory: 80GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/llama-3.3-70b-abliterated-gguf
+    supports_images: false
+    description: "Llama 3.3 70B GGUF 去审查版"
+  
+  llama-3.3-70b-exl2-6_5:
+    service: vllm
+    port: 8000
+    required_memory: 70GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/llama-3.3-70b-exl2-6_5
+    supports_images: false
+    description: "Llama 3.3 70B EXL2 6.5bpw 量化"
+  
+  llama-3.3-70b-exl2-8_0:
+    service: vllm
+    port: 8000
+    required_memory: 80GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/llama-3.3-70b-exl2-8_0
+    supports_images: false
+    description: "Llama 3.3 70B EXL2 8.0bpw 量化"
+  
+  midnight-miqu-103b-5.0bpw:
+    service: vllm
+    port: 8000
+    required_memory: 100GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/midnight-miqu-103b-5.0bpw
+    supports_images: false
+    description: "Midnight Miqu 103B 5bpw 量化"
+  
+  qwen2.5-72b-exl2-8_0:
+    service: vllm
+    port: 8000
+    required_memory: 80GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/qwen2.5-72b-exl2-8_0
+    supports_images: false
+    description: "Qwen2.5 72B EXL2 8.0bpw 量化"
+
+settings:
+  concurrency_limit: 32
+  min_available_memory: 4GB
+  request_timeout: 120
+  model_start_timeout: 120
+  preload_timeout: 300
+  idle_timeout: 600
+  memory_flush_interval: 300
+  memory_cleanup_delay: 5
+  gpu_memory_utilization: 0.92
+  default_memory_strategy: balanced
+  
+  logging:
+    log_dir: logs
+  
+  queue:
+    max_length: 100
+    poll_interval: 0.5
+    wait_timeout: 30
+  
+  priority:
+    default: normal
+    enabled: true
+  
+  recovery:
+    max_restart_attempts: 3
+    restart_cooldown: 60
+    watchdog_check_interval: 5
+
+vllm:
+  service_name: vllm
+  start_script: /root/ai-suite/start_vllm.sh
+  model_base_path: /mnt/pve_models
+  default_port: 8000
+  default_gpu_memory_utilization: 0.92
+  default_max_model_len: 32768

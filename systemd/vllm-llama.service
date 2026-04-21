@@ -1,0 +1,26 @@
+[Unit]
+Description=vLLM Service for Llama Model
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/ai-os
+ExecStart=/usr/local/bin/python -m vllm.entrypoints.api_server \
+    --model /models/llama-3-8b-instruct \
+    --port 8001 \
+    --tensor-parallel-size 1 \
+    --gpu-memory-utilization 0.80 \
+    --max-model-len 8192 \
+    --enable-chunked-prefill \
+    --disable-log-requests \
+    --api-key none \
+    --served-model-name llama-3-8b-instruct
+Restart=always
+RestartSec=10
+Environment="PYTHONPATH=/root/ai-os"
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
