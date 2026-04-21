@@ -14,9 +14,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   ai-controller:
-    build: ./app-controller
+    build: 
+      context: ./app-controller
+      dockerfile: Dockerfile
     container_name: ai-os-controller
     ports:
       - "5000:5000"
@@ -24,9 +31,12 @@ services:
       - ./config.yaml:/app/config.yaml
       - ./app-controller/logs:/app/logs
       - /mnt/pve_models:/mnt/pve_models
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - REDIS_URL=redis://redis:6379
       - LOG_LEVEL=INFO
+      - PORT=5000
+      - HOST=0.0.0.0
     depends_on:
       redis:
         condition: service_healthy
@@ -38,6 +48,17 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   aiclient:
     image: justlikemaki/aiclient-2-api:latest
@@ -46,12 +67,44 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - PORT=3000
     volumes:
       - ./aiclient2api/data:/app/data
       - ./aiclient2api/configs:/configs
     depends_on:
-      - ai-controller
+      ai-controller:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ai-os-frontend
+    ports:
+      - "8080:80"
+    environment:
+      - VUE_APP_API_URL=http://localhost:5000
+    depends_on:
+      ai-controller:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   redis_data:
@@ -59,3 +112,4 @@ volumes:
 networks:
   default:
     name: ai-os-network
+    driver: bridge

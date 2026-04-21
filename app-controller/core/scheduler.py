@@ -3,10 +3,13 @@ import os
 import asyncio
 import httpx
 import threading
+import logging
 from typing import Dict, Optional, List, Set
 from datetime import datetime, timedelta
 from .rate_limiter import RateLimiter
 from core.cache_service import cache_service
+
+logger = logging.getLogger("ai_controller.scheduler")
 
 def _parse_memory_size(size_str: str) -> int:
     if not size_str:
@@ -477,7 +480,7 @@ class Scheduler:
         
         return False
     
-    async def switch_model(self, target_model_name: str) -> bool:
+    async def switch_model(self, target_model_name: str, priority: str = "normal") -> bool:
         """智能切换到目标模型，自动处理显存管理"""
         if not self.is_model_available(target_model_name):
             return False
@@ -486,7 +489,7 @@ class Scheduler:
             self.mark_model_selected(target_model_name)
             return True
         
-        success = await self._free_up_memory(target_model_name)
+        success = await self._free_up_memory(target_model_name, priority)
         if not success:
             return False
 
@@ -495,8 +498,111 @@ class Scheduler:
             self.mark_model_selected(target_model_name)
         return success
     
+    async def switch_model_with_fallback(self, target_model_name: str, fallback_model: str = None) -> bool:
+        """带降级策略的模型切换"""
+        try:
+            success = await self.switch_model(target_model_name)
+            if success:
+                return True
+            
+            if fallback_model and fallback_model != target_model_name:
+                logger.info(f"Primary switch to {target_model_name} failed, trying fallback {fallback_model}")
+                return await self.switch_model(fallback_model)
+            
+            return False
+        except Exception as e:
+            logger.error(f"Error switching model: {str(e)}")
+            if fallback_model and fallback_model != target_model_name:
+                return await self.switch_model(fallback_model)
+            return False
+    
+    async def _free_up_memory(self, target_model_name: str, priority: str = "normal") -> bool:
+        """智能释放显存，考虑模型优先级"""
+        target_config = self.get_model_config(target_model_name)
+        if not target_config:
+            return False
+        
+        target_required = _parse_memory_size(target_config.get('required_memory', 0))
+        mem_info = self.gpu_monitor.get_memory_usage()
+        
+        if not mem_info:
+            return False
+        
+        available_memory = mem_info.get('available', 0)
+        needed_memory = target_required + self.get_min_available_memory()
+        
+        if available_memory >= needed_memory:
+            return True
+        
+        models_to_stop = []
+        priority_order = {"critical": 0, "high": 1, "normal": 2, "low": 3}
+        target_priority = priority_order.get(priority, 2)
+        
+        with self._model_lock:
+            for model_name in list(self.running_models.keys()):
+                if model_name == target_model_name:
+                    continue
+                
+                config = self.get_model_config(model_name)
+                if config and config.get('keep_alive', False):
+                    model_priority = priority_order.get(config.get('priority', 'normal'), 2)
+                    if model_priority <= target_priority:
+                        continue
+                
+                model_priority_val = priority_order.get(config.get('priority', 'normal'), 2) if config else 2
+                models_to_stop.append((model_name, model_priority_val, config.get('required_memory', 0)))
+        
+        models_to_stop.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        
+        for model_name, _, _ in models_to_stop:
+            await self.stop_model(model_name)
+            
+            gpu_status = self.gpu_monitor.get_gpu_status()
+            if gpu_status and gpu_status.get('available_memory', 0) >= needed_memory:
+                return True
+        
+        return False
+    
     async def preload_models(self):
         """预热所有配置为预加载的模型"""
-        for model_name in self.preloaded_models:
+        preload_order = self._get_preload_order()
+        for model_name in preload_order:
             if not self.is_model_running(model_name):
-                await self.start_model(model_name)
+                logger.info(f"Preloading model: {model_name}")
+                success = await self.start_model(model_name)
+                if success:
+                    logger.info(f"Successfully preloaded model: {model_name}")
+                else:
+                    logger.warning(f"Failed to preload model: {model_name}")
+                await asyncio.sleep(2)
+
+    def _get_preload_order(self) -> List[str]:
+        """根据配置获取预加载顺序，优先加载keep_alive的模型"""
+        ordered_models = []
+        keep_alive_models = []
+        normal_models = []
+        
+        for model_name in self.preloaded_models:
+            config = self.get_model_config(model_name)
+            if config and config.get('keep_alive', False):
+                keep_alive_models.append(model_name)
+            else:
+                normal_models.append(model_name)
+        
+        ordered_models.extend(keep_alive_models)
+        ordered_models.extend(normal_models)
+        return ordered_models
+
+    async def _preload_watcher_loop(self):
+        """后台监控预加载模型状态，自动重启异常退出的预加载模型"""
+        while True:
+            try:
+                for model_name in self.preloaded_models:
+                    config = self.get_model_config(model_name)
+                    if config and config.get('keep_alive', False):
+                        if not self.is_model_running(model_name):
+                            logger.warning(f"Preloaded model {model_name} is not running, restarting...")
+                            await self.start_model(model_name)
+            except Exception as e:
+                logger.error(f"Error in preload watcher: {str(e)}")
+            await asyncio.sleep(30)

@@ -1,19 +1,23 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
-import { MessageSquare, Send, Loader2, Bot, User, RefreshCw } from 'lucide-vue-next'
+import { MessageSquare, Send, Loader2, Bot, User, RefreshCw, ChevronDown } from 'lucide-vue-next'
 import { chatCompletionStream, type ChatMessage } from '@/api/client'
 import { useModels } from '@/composables/useModels'
+import { useAppStore } from '@/stores/app'
 
-const { defaultModel } = useModels()
+const { modelStatus, defaultModel } = useModels()
+const store = useAppStore()
 
-const messages = ref<ChatMessage[]>([])
+const messages = ref<(ChatMessage & { timestamp: Date })[]>([])
 const inputMessage = ref('')
 const isLoading = ref(false)
 const chatContainer = ref<HTMLElement | null>(null)
 const streamingMessageId = ref<number | null>(null)
+const selectedModel = ref<string | null>(null)
+const showModelDropdown = ref(false)
 
 const addMessage = (role: 'user' | 'assistant' | 'system', content: string) => {
-  messages.value.push({ role, content })
+  messages.value.push({ role, content, timestamp: new Date() })
   nextTick(() => {
     scrollToBottom()
   })
@@ -44,12 +48,14 @@ const handleSend = async () => {
 
   try {
     const assistantMessageIndex = messages.value.length
-    messages.value.push({ role: 'assistant', content: '' })
+    messages.value.push({ role: 'assistant', content: '', timestamp: new Date() })
     streamingMessageId.value = assistantMessageIndex
+
+    const modelToUse = selectedModel.value || defaultModel.value
 
     await chatCompletionStream(
       {
-        model: defaultModel.value || undefined,
+        model: modelToUse || undefined,
         messages: messages.value.slice(0, -1),
         max_tokens: 1024,
         temperature: 0.7,
@@ -58,18 +64,21 @@ const handleSend = async () => {
         updateStreamingMessage(chunk)
       },
       (error) => {
-        messages.value.push({ role: 'system', content: `Error: ${error.message}` })
+        store.error(`请求失败: ${error.message}`)
+        messages.value.push({ role: 'system', content: `Error: ${error.message}`, timestamp: new Date() })
         streamingMessageId.value = null
       }
     )
 
     streamingMessageId.value = null
+    store.success('消息发送成功')
   } catch (error) {
     if (streamingMessageId.value !== null) {
       messages.value.splice(streamingMessageId.value, 1)
       streamingMessageId.value = null
     }
     const errorMessage = error instanceof Error ? error.message : 'Failed to get response'
+    store.error(errorMessage)
     addMessage('system', `Error: ${errorMessage}`)
   } finally {
     isLoading.value = false
@@ -85,10 +94,29 @@ const handleKeyPress = (event: KeyboardEvent) => {
 
 const clearChat = () => {
   messages.value = []
-  addMessage('system', '欢迎使用 AI 聊天！当前使用的是默认模型。')
+  addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
 }
 
-addMessage('system', '欢迎使用 AI 聊天！当前使用的是默认模型。')
+const selectModel = (modelName: string) => {
+  selectedModel.value = selectedModel.value === modelName ? null : modelName
+  showModelDropdown.value = false
+  if (selectedModel.value) {
+    store.info(`已选择模型: ${modelName}`)
+  } else {
+    store.info('使用默认模型')
+  }
+}
+
+const formatTime = (date: Date) => {
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+const availableModels = () => {
+  if (!modelStatus.value) return []
+  return Object.keys(modelStatus.value).filter((name) => modelStatus.value![name].running)
+}
+
+addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
 </script>
 
 <template>
@@ -100,16 +128,55 @@ addMessage('system', '欢迎使用 AI 聊天！当前使用的是默认模型。
         </div>
         <div>
           <h2 class="text-xl font-semibold text-white">聊天测试</h2>
-          <p class="text-slate-400 text-sm">与默认模型进行对话测试</p>
+          <p class="text-slate-400 text-sm">与 AI 模型进行对话测试</p>
         </div>
       </div>
-      <button
-        @click="clearChat"
-        class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition-colors"
-      >
-        <RefreshCw class="w-4 h-4" />
-        清空
-      </button>
+      <div class="flex items-center gap-2">
+        <div class="relative">
+          <button
+            @click="showModelDropdown = !showModelDropdown"
+            class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition-colors"
+          >
+            <span v-if="selectedModel">{{ selectedModel }}</span>
+            <span v-else-if="defaultModel">{{ defaultModel }} (默认)</span>
+            <span v-else>选择模型</span>
+            <ChevronDown class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showModelDropdown }" />
+          </button>
+          <div
+            v-if="showModelDropdown"
+            class="absolute top-full right-0 mt-1 w-48 bg-slate-700 rounded-lg shadow-lg overflow-hidden z-10"
+          >
+            <button
+              @click="selectModel('')"
+              class="w-full px-4 py-2 text-left hover:bg-slate-600 text-slate-300 text-sm transition-colors"
+              :class="{ 'bg-slate-600': !selectedModel }"
+            >
+              {{ defaultModel ? `${defaultModel} (默认)` : '无默认模型' }}
+            </button>
+            <div class="border-t border-slate-600 my-1"></div>
+            <button
+              v-for="model in availableModels()"
+              :key="model"
+              @click="selectModel(model)"
+              class="w-full px-4 py-2 text-left hover:bg-slate-600 text-slate-300 text-sm transition-colors flex items-center gap-2"
+              :class="{ 'bg-slate-600': selectedModel === model }"
+            >
+              <span class="w-2 h-2 rounded-full bg-green-500"></span>
+              {{ model }}
+            </button>
+            <div v-if="availableModels().length === 0" class="px-4 py-2 text-slate-500 text-sm">
+              暂无运行中的模型
+            </div>
+          </div>
+        </div>
+        <button
+          @click="clearChat"
+          class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition-colors"
+        >
+          <RefreshCw class="w-4 h-4" />
+          清空
+        </button>
+      </div>
     </div>
 
     <div
@@ -134,18 +201,25 @@ addMessage('system', '欢迎使用 AI 聊天！当前使用的是默认模型。
           <Bot v-else-if="message.role === 'assistant'" class="w-5 h-5 text-white" />
         </div>
         <div
-          class="max-w-[80%] px-4 py-2 rounded-lg"
-          :class="{
-            'bg-blue-600/20 text-blue-200 rounded-br-none': message.role === 'user',
-            'bg-slate-700 text-white rounded-bl-none': message.role === 'assistant',
-            'bg-slate-700/50 text-slate-300 rounded-lg': message.role === 'system',
-          }"
+          class="max-w-[80%]"
         >
-          <p class="text-sm whitespace-pre-wrap">{{ message.content }}</p>
-          <span
-            v-if="streamingMessageId === index"
-            class="inline-block w-2 h-4 bg-white/60 ml-1 animate-pulse"
-          ></span>
+          <div
+            class="px-4 py-2 rounded-lg"
+            :class="{
+              'bg-blue-600/20 text-blue-200 rounded-br-none': message.role === 'user',
+              'bg-slate-700 text-white rounded-bl-none': message.role === 'assistant',
+              'bg-slate-700/50 text-slate-300 rounded-lg': message.role === 'system',
+            }"
+          >
+            <p class="text-sm whitespace-pre-wrap">{{ message.content }}</p>
+            <span
+              v-if="streamingMessageId === index"
+              class="inline-block w-2 h-4 bg-white/60 ml-1 animate-pulse"
+            ></span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1 ml-1" :class="{ 'text-right': message.role === 'user' }">
+            {{ formatTime(message.timestamp) }}
+          </p>
         </div>
       </div>
 
@@ -176,8 +250,9 @@ addMessage('system', '欢迎使用 AI 聊天！当前使用的是默认模型。
     </div>
 
     <div class="mt-4 text-center text-slate-500 text-xs">
-      <span v-if="defaultModel">当前模型: {{ defaultModel }}</span>
-      <span v-else>未设置默认模型，请先切换模型</span>
+      <span v-if="selectedModel">当前模型: {{ selectedModel }} (手动选择)</span>
+      <span v-else-if="defaultModel">当前模型: {{ defaultModel }} (默认)</span>
+      <span v-else>未设置模型，请先选择或切换模型</span>
     </div>
   </div>
 </template>

@@ -271,7 +271,7 @@ class GPUMonitor:
         avg_fragmentation = self.get_average_fragmentation()
         
         if fragmentation > 0.1 or avg_fragmentation > 0.05:
-            await self._flush_vllm_cache(vllm_port)
+            await self._perform_memory_cleanup(vllm_port)
             self._last_flush_time = datetime.now()
             return True
         
@@ -284,6 +284,30 @@ class GPUMonitor:
         except Exception:
             pass
     
+    async def _clear_vllm_kv_cache(self, port: int):
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(f"http://localhost:{port}/v1/clear_cache")
+        except Exception:
+            pass
+    
+    async def _adjust_gpu_utilization(self, port: int, utilization: float):
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(
+                    f"http://localhost:{port}/v1/control",
+                    json={"gpu_memory_utilization": utilization}
+                )
+        except Exception:
+            pass
+    
+    async def _perform_memory_cleanup(self, vllm_port: int = 8000):
+        await self._flush_vllm_cache(vllm_port)
+        await asyncio.sleep(1)
+        await self._clear_vllm_kv_cache(vllm_port)
+        await asyncio.sleep(1)
+        await self._adjust_gpu_utilization(vllm_port, 0.9)
+    
     async def optimize_memory_for_model(self, required_memory: int, vllm_port: int = 8000) -> bool:
         mem_info = self.get_memory_usage()
         if not mem_info:
@@ -293,13 +317,23 @@ class GPUMonitor:
         if available >= required_memory:
             return True
         
-        await self._flush_vllm_cache(vllm_port)
-        await asyncio.sleep(2)
+        await self._perform_memory_cleanup(vllm_port)
+        await asyncio.sleep(3)
         
         self._status_cache = None
         self._status_cache_time = None
+        
+        await asyncio.sleep(1)
         mem_info = self.get_memory_usage()
         return mem_info and mem_info.get("available", 0) >= required_memory
+    
+    async def force_memory_cleanup(self, vllm_port: int = 8000) -> bool:
+        """强制执行显存清理"""
+        await self._perform_memory_cleanup(vllm_port)
+        await asyncio.sleep(5)
+        self._status_cache = None
+        self._status_cache_time = None
+        return True
     
     def get_memory_optimization_status(self) -> Dict:
         return {

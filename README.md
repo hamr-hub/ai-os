@@ -33,6 +33,16 @@
 └──────────────────────────┘
 ```
 
+### 解决的问题
+
+| 问题类型 | 具体表现 | 解决方案 |
+|----------|----------|----------|
+| **可靠性问题** | vLLM 未启动时，Node.js 请求长时间挂起超时 | Python 后端自动截断请求并返回错误 |
+| **显存溢出** | 并发请求过多导致 GPU 显存不足 | Redis 队列实现并发控制，保护显存 |
+| **资源浪费** | 模型持续运行占用显存 | 根据请求自动启动/停止模型 |
+| **缺乏监控** | 无法实时了解 GPU 和模型状态 | WebSocket 实时状态推送 |
+| **模型切换慢** | 每次切换模型需要手动启停 | 预加载/常驻策略，秒级切换 |
+
 ### 核心优势
 
 | 特性 | 描述 |
@@ -41,6 +51,8 @@
 | 🎯 **流量削峰** | Redis 队列实现并发控制，保护 GPU 显存 |
 | 🎯 **自动管理** | 根据请求自动启动/停止模型，节省资源 |
 | 🎯 **无缝对接** | 通过自定义渠道配置，原有的用户分组、额度扣费、对话历史直接可用 |
+| 🎯 **实时监控** | WebSocket 推送 GPU 状态和模型状态到前端 |
+| 🎯 **健康检查** | 综合健康评分（0-100），支持告警机制 |
 
 ---
 
@@ -239,9 +251,108 @@ curl http://localhost:5000/manage/queue
 
 ## 📊 监控与告警
 
-- **健康评分**：0-100 分，实时评估系统状态
-- **Prometheus**：`/metrics` 端点导出监控指标
-- **WebSocket**：`/ws/monitor` 实时状态推送
+### 健康评分
+
+系统会计算综合健康评分（0-100）：
+
+| 分数范围 | 状态 | 说明 |
+|----------|------|------|
+| 90-100 | healthy | 健康 |
+| 70-89 | degraded | 降级 |
+| 50-69 | warning | 警告 |
+| 0-49 | critical | 严重 |
+
+### Prometheus 指标
+
+服务暴露 `/metrics` 端点，提供以下指标：
+- 请求总数和错误率
+- 请求延迟分布
+- GPU 内存使用情况
+- GPU 温度
+- 模型状态
+- 队列长度
+
+### WebSocket 监控
+
+连接 `ws://localhost:5000/ws/monitor` 获取实时状态推送。
+
+---
+
+## ⚙️ 配置说明
+
+### 模型配置示例
+
+```yaml
+models:
+  Gemma-4-31B:
+    service: vllm-gemma        # systemd 服务名
+    port: 8000                 # vLLM 监听端口
+    required_memory: 40GB      # 模型所需显存
+    preload: true              # 是否预加载（启动时自动加载）
+    keep_alive: true           # 是否保持运行（不因空闲停止）
+    model_path: /mnt/models/Gemma-4-31B
+    supports_images: false     # 是否支持图像输入
+    description: "模型描述"
+
+settings:
+  concurrency_limit: 32              # 并发请求限制
+  min_available_memory: 4GB          # 最小可用显存阈值
+  request_timeout: 120               # 请求超时（秒）
+  idle_timeout: 600                  # 空闲超时（秒）
+  gpu_memory_utilization: 0.92       # GPU 显存利用率
+```
+
+### 环境变量
+
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `REDIS_URL` | redis://localhost:6379 | Redis 连接地址 |
+| `PORT` | 5000 | 服务端口 |
+| `LOG_LEVEL` | INFO | 日志级别 |
+| `MODEL_BASE_PATH` | /mnt/pve_models | 模型存储路径 |
+
+---
+
+## 🔧 故障排查
+
+### 常见问题
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| GPU 不可用 | 驱动未安装或 CUDA 版本不兼容 | 检查 nvidia-smi，更新驱动 |
+| 模型启动失败 | 显存不足 | 关闭其他模型，增加 min_available_memory |
+| Redis 连接失败 | Redis 未启动 | 启动 Redis 服务 |
+| 服务无法启动 | 端口被占用 | 修改 PORT 环境变量 |
+
+### 日志查看
+
+```bash
+# 查看 AI Controller 日志
+tail -f app-controller/logs/ai_controller.log
+
+# 查看 systemd 日志
+journalctl -u ai-controller -f
+
+# 查看 Docker 日志
+docker-compose logs -f ai-controller
+```
+
+---
+
+## 📈 性能优化
+
+### 显存管理策略
+
+- **保守模式**：`default_memory_strategy: conservative`（显存利用率 0.8）
+- **平衡模式**：`default_memory_strategy: balanced`（显存利用率 0.9）
+- **激进模式**：`default_memory_strategy: aggressive`（显存利用率 0.95）
+
+### 并发控制
+
+根据 GPU 显存和模型大小调整 `concurrency_limit` 参数：
+- 70B 模型：建议 2-4 并发
+- 30B 模型：建议 4-8 并发
+- 10B 模型：建议 8-16 并发
 
 ---
 
@@ -254,3 +365,9 @@ MIT License
 ## 📞 联系方式
 
 如有问题或建议，欢迎提交 Issue 或 PR。
+
+---
+
+**项目版本**: v1.0  
+**最后更新**: 2026-04-21  
+**适用平台**: Linux (NVIDIA GPU)

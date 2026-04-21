@@ -325,7 +325,7 @@ class MetricsCollector:
         score = self.get_health_score()
         return score < threshold
     
-    def get_alert_reasons(self) -> List[str]:
+    def get_alert_reasons(self, gpu_status: Optional[Dict] = None) -> List[str]:
         reasons = []
         
         total = sum(self.request_counts.values())
@@ -340,4 +340,141 @@ class MetricsCollector:
         if avg_response_time > 5:
             reasons.append(f"响应时间过长: {avg_response_time:.2f}s")
         
+        if gpu_status and gpu_status.get("status") == "available":
+            primary = gpu_status.get("primary", {})
+            temp = primary.get("temperature", 0)
+            total_mem = primary.get("total_memory", 1)
+            used_mem = primary.get("used_memory", 0)
+            mem_util = primary.get("memory_utilization", 0)
+            power_draw = primary.get("power_draw", 0)
+            power_limit = primary.get("power_limit", 1)
+            
+            if temp > 90:
+                reasons.append(f"GPU温度过高: {temp}°C")
+            elif temp > 85:
+                reasons.append(f"GPU温度偏高: {temp}°C")
+            
+            if mem_util > 95:
+                reasons.append(f"显存使用率过高: {mem_util}%")
+            elif mem_util > 90:
+                reasons.append(f"显存使用率偏高: {mem_util}%")
+            
+            if used_mem > 0.95 * total_mem:
+                reasons.append(f"显存接近满载")
+            
+            power_percent = (power_draw / power_limit) * 100 if power_limit > 0 else 0
+            if power_percent > 90:
+                reasons.append(f"GPU功耗过高: {power_draw}W/{power_limit}W ({power_percent:.0f}%)")
+        
         return reasons
+    
+    def check_gpu_alerts(self, gpu_status: Dict) -> Dict[str, Dict]:
+        """检查GPU告警阈值"""
+        alerts = {
+            "temperature": {
+                "status": "ok",
+                "value": 0,
+                "threshold": 85,
+                "critical_threshold": 95,
+                "message": ""
+            },
+            "memory": {
+                "status": "ok",
+                "value": 0,
+                "threshold": 90,
+                "critical_threshold": 95,
+                "message": ""
+            },
+            "power": {
+                "status": "ok",
+                "value": 0,
+                "threshold": 85,
+                "critical_threshold": 95,
+                "message": ""
+            },
+            "utilization": {
+                "status": "ok",
+                "value": 0,
+                "threshold": 95,
+                "critical_threshold": 100,
+                "message": ""
+            }
+        }
+        
+        if not gpu_status or gpu_status.get("status") != "available":
+            for key in alerts:
+                alerts[key]["status"] = "unavailable"
+                alerts[key]["message"] = "GPU不可用"
+            return alerts
+        
+        primary = gpu_status.get("primary", {})
+        
+        temp = primary.get("temperature", 0)
+        alerts["temperature"]["value"] = temp
+        if temp >= 95:
+            alerts["temperature"]["status"] = "critical"
+            alerts["temperature"]["message"] = f"GPU温度严重过高: {temp}°C"
+        elif temp >= 85:
+            alerts["temperature"]["status"] = "warning"
+            alerts["temperature"]["message"] = f"GPU温度偏高: {temp}°C"
+        
+        mem_util = primary.get("memory_utilization", 0)
+        alerts["memory"]["value"] = mem_util
+        if mem_util >= 95:
+            alerts["memory"]["status"] = "critical"
+            alerts["memory"]["message"] = f"显存使用率严重过高: {mem_util}%"
+        elif mem_util >= 90:
+            alerts["memory"]["status"] = "warning"
+            alerts["memory"]["message"] = f"显存使用率偏高: {mem_util}%"
+        
+        power_limit = primary.get("power_limit", 1)
+        power_draw = primary.get("power_draw", 0)
+        power_percent = (power_draw / power_limit) * 100 if power_limit > 0 else 0
+        alerts["power"]["value"] = round(power_percent, 1)
+        if power_percent >= 95:
+            alerts["power"]["status"] = "critical"
+            alerts["power"]["message"] = f"GPU功耗严重过高: {power_draw}W"
+        elif power_percent >= 85:
+            alerts["power"]["status"] = "warning"
+            alerts["power"]["message"] = f"GPU功耗偏高: {power_draw}W"
+        
+        util = primary.get("utilization", 0)
+        alerts["utilization"]["value"] = util
+        if util >= 100:
+            alerts["utilization"]["status"] = "critical"
+            alerts["utilization"]["message"] = "GPU使用率达到100%"
+        elif util >= 95:
+            alerts["utilization"]["status"] = "warning"
+            alerts["utilization"]["message"] = f"GPU使用率偏高: {util}%"
+        
+        return alerts
+    
+    def get_overall_alert_status(self, gpu_status: Optional[Dict] = None) -> Dict:
+        """获取整体告警状态"""
+        gpu_alerts = self.check_gpu_alerts(gpu_status) if gpu_status else {}
+        alert_reasons = self.get_alert_reasons(gpu_status)
+        
+        has_critical = any(
+            alert.get("status") == "critical" 
+            for alert in gpu_alerts.values()
+        ) or len([r for r in alert_reasons if "严重" in r]) > 0
+        
+        has_warning = any(
+            alert.get("status") == "warning" 
+            for alert in gpu_alerts.values()
+        ) or len(alert_reasons) > 0
+        
+        status = "ok"
+        if has_critical:
+            status = "critical"
+        elif has_warning:
+            status = "warning"
+        
+        return {
+            "status": status,
+            "gpu_alerts": gpu_alerts,
+            "service_alerts": alert_reasons,
+            "has_critical": has_critical,
+            "has_warning": has_warning,
+            "timestamp": datetime.now().isoformat()
+        }

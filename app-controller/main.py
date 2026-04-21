@@ -249,10 +249,14 @@ async def startup_event():
         logger.warning("Failed to connect to Redis, cache updater will not start")
 
     config_watcher.start_watching()
+    
+    await scheduler.preload_models()
+    
     _background_tasks.clear()
     _background_tasks.append(asyncio.create_task(gpu_monitor._update_cache_loop()))
     _background_tasks.append(asyncio.create_task(broadcast_status_loop()))
     _background_tasks.append(asyncio.create_task(save_history_loop()))
+    _background_tasks.append(asyncio.create_task(scheduler._preload_watcher_loop()))
     structured_logger.info("AI Controller service started", action="startup")
 
 @app.on_event("shutdown")
@@ -363,9 +367,52 @@ async def list_models(refresh: Optional[bool] = False):
     
     logger.info("Listing available models")
     models = scheduler.get_available_models()
-    result = {"object": "list", "data": [{"id": m, "object": "model", "created": 0, "owned_by": "local"} for m in models]}
+    
+    model_list = []
+    for model_name in models:
+        config = scheduler.get_model_config(model_name)
+        model_info = {
+            "id": model_name,
+            "object": "model",
+            "created": 0,
+            "owned_by": "local",
+            "running": scheduler.is_model_running(model_name),
+            "supports_images": scheduler.get_model_supports_images(model_name),
+            "description": config.get("description", "") if config else "",
+            "service": config.get("service", "") if config else "",
+            "port": config.get("port", 8000) if config else 8000
+        }
+        model_list.append(model_info)
+    
+    result = {"object": "list", "data": model_list}
     
     cache_service.set(cache_key, result, ttl_seconds=300)
+    return result
+
+@app.get("/v1/models/{model_name}")
+async def get_model_info(model_name: str):
+    """获取单个模型的详细信息"""
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+    
+    config = scheduler.get_model_config(model_name)
+    
+    result = {
+        "id": model_name,
+        "object": "model",
+        "created": 0,
+        "owned_by": "local",
+        "running": scheduler.is_model_running(model_name),
+        "active_requests": scheduler.get_active_requests(model_name),
+        "supports_images": scheduler.get_model_supports_images(model_name),
+        "description": config.get("description", "") if config else "",
+        "service": config.get("service", "") if config else "",
+        "port": config.get("port", 8000) if config else 8000,
+        "required_memory": config.get("required_memory", "") if config else "",
+        "preload": config.get("preload", False) if config else False,
+        "keep_alive": config.get("keep_alive", False) if config else False
+    }
+    
     return result
 
 def count_image_content(request_data: Dict) -> Tuple[bool, int]:
@@ -486,28 +533,91 @@ async def chat_completions(request: ChatCompletionRequest):
         if stream:
             stream_client = get_vllm_stream_client()
             stream_request = stream_client.build_request('POST', vllm_url, json=request_data)
-            response = await stream_client.send(stream_request, stream=True)
-            response.raise_for_status()
+            
+            try:
+                response = await stream_client.send(stream_request, stream=True)
+                response.raise_for_status()
+            except httpx.HTTPError as e:
+                logger.error(f"Failed to establish stream connection to vLLM: {str(e)}")
+                raise ModelServiceUnavailableException(model_name, str(e))
+
+            chat_completion_id = f"chatcmpl-{os.urandom(12).hex()}"
 
             async def generate():
+                last_activity = datetime.now()
+                heartbeat_interval = 10
+                sent_heartbeat = False
+                
                 try:
                     async for chunk in response.aiter_lines():
+                        current_time = datetime.now()
+                        
+                        if (current_time - last_activity).total_seconds() > heartbeat_interval:
+                            if not sent_heartbeat:
+                                yield ": heartbeat\n\n"
+                                sent_heartbeat = True
+                        else:
+                            sent_heartbeat = False
+                        
                         if chunk.startswith("data: "):
                             chunk_data = chunk[6:]
+                            last_activity = datetime.now()
+                            
                             if chunk_data == "[DONE]":
+                                yield f"data: {json.dumps({
+                                    'id': chat_completion_id,
+                                    'object': 'chat.completion.chunk',
+                                    'created': int(current_time.timestamp()),
+                                    'model': model_name,
+                                    'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]
+                                })}\n\n"
                                 yield "data: [DONE]\n\n"
                                 break
+                            
                             try:
                                 json_chunk = json.loads(chunk_data)
-                                json_chunk['id'] = f"chatcmpl-{os.urandom(12).hex()}"
+                                json_chunk['id'] = chat_completion_id
                                 json_chunk['model'] = model_name
                                 yield f"data: {json.dumps(json_chunk)}\n\n"
-                            except:
+                            except json.JSONDecodeError:
+                                logger.warning(f"Failed to parse vLLM stream chunk: {chunk_data[:100]}...")
                                 yield f"data: {chunk_data}\n\n"
+                        elif chunk.strip():
+                            logger.debug(f"Non-data chunk received: {chunk[:50]}...")
+                            
+                except asyncio.TimeoutError:
+                    logger.error(f"Stream timeout for model {model_name}")
+                    yield f"data: {json.dumps({
+                        'id': chat_completion_id,
+                        'object': 'chat.completion.chunk',
+                        'created': int(datetime.now().timestamp()),
+                        'model': model_name,
+                        'choices': [{'index': 0, 'delta': {'content': '[Stream timeout]'}, 'finish_reason': 'error'}]
+                    })}\n\n"
+                    yield "data: [DONE]\n\n"
+                except httpx.HTTPError as e:
+                    logger.error(f"Stream error for model {model_name}: {str(e)}")
+                    yield f"data: {json.dumps({
+                        'id': chat_completion_id,
+                        'object': 'chat.completion.chunk',
+                        'created': int(datetime.now().timestamp()),
+                        'model': model_name,
+                        'choices': [{'index': 0, 'delta': {'content': '[Stream error]'}, 'finish_reason': 'error'}]
+                    })}\n\n"
+                    yield "data: [DONE]\n\n"
+                except Exception as e:
+                    logger.error(f"Unexpected stream error for model {model_name}: {str(e)}")
                 finally:
-                    await response.aclose()
+                    try:
+                        await response.aclose()
+                    except:
+                        pass
 
-            return StreamingResponse(generate(), media_type="text/event-stream")
+            return StreamingResponse(generate(), media_type="text/event-stream", headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Transfer-Encoding": "chunked"
+            })
 
         request_client = get_vllm_request_client()
         response = await request_client.post(vllm_url, json=request_data)
@@ -1016,6 +1126,24 @@ async def clear_default_model():
     """清除默认模型设置"""
     scheduler.clear_default_model()
     return {"status": "success", "message": "Default model cleared"}
+
+@app.get("/v1/status")
+async def get_api_status():
+    """OpenAI兼容的健康检查端点，供AIClient2API健康检查使用"""
+    gpu_status = gpu_monitor.get_gpu_status()
+    models = scheduler.get_available_models()
+    running_models = [m for m in models if scheduler.is_model_running(m)]
+    
+    result = {
+        "status": "healthy" if gpu_status else "degraded",
+        "timestamp": datetime.now().isoformat(),
+        "gpu_available": gpu_status is not None,
+        "available_models": len(models),
+        "running_models": len(running_models),
+        "models": [{"name": m, "running": scheduler.is_model_running(m)} for m in models]
+    }
+    
+    return result
 
 @app.get("/manage/metrics")
 async def get_metrics():
