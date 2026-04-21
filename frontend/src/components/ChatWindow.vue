@@ -1,65 +1,76 @@
 <script setup lang="ts">
-import { ref, nextTick, computed } from 'vue'
-import { MessageSquare, Send, Loader2, Bot, User, Paperclip, Smile, Image, Mic, Check, CheckCheck } from 'lucide-vue-next'
-import { chatCompletion, type ChatMessage } from '@/api/client'
+import { ref, nextTick } from 'vue'
+import { MessageSquare, Send, Loader2, Bot, User, RefreshCw } from 'lucide-vue-next'
+import { chatCompletionStream, type ChatMessage } from '@/api/client'
 import { useModels } from '@/composables/useModels'
 
 const { defaultModel } = useModels()
 
-interface ChatMessageWithStatus extends ChatMessage {
-  id: number
-  status: 'sending' | 'sent' | 'received'
-}
-
-const messages = ref<ChatMessageWithStatus[]>([])
+const messages = ref<ChatMessage[]>([])
 const inputMessage = ref('')
 const isLoading = ref(false)
 const chatContainer = ref<HTMLElement | null>(null)
-const messageIdCounter = ref(0)
+const streamingMessageId = ref<number | null>(null)
 
-const isInputDisabled = computed(() => isLoading.value || !inputMessage.value.trim())
-
-const addMessage = (role: 'user' | 'assistant' | 'system', content: string, status: 'sending' | 'sent' | 'received' = 'received') => {
-  messages.value.push({
-    id: messageIdCounter.value++,
-    role,
-    content,
-    status
-  })
+const addMessage = (role: 'user' | 'assistant' | 'system', content: string) => {
+  messages.value.push({ role, content })
   nextTick(() => {
-    if (chatContainer.value) {
-      chatContainer.value.scrollTop = chatContainer.value.scrollHeight
-    }
+    scrollToBottom()
   })
 }
 
+const updateStreamingMessage = (content: string) => {
+  if (streamingMessageId.value !== null) {
+    messages.value[streamingMessageId.value].content += content
+    nextTick(() => {
+      scrollToBottom()
+    })
+  }
+}
+
+const scrollToBottom = () => {
+  if (chatContainer.value) {
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight
+  }
+}
+
 const handleSend = async () => {
-  if (isInputDisabled.value) return
-  
+  if (!inputMessage.value.trim() || isLoading.value) return
+
   const userMessage = inputMessage.value.trim()
   inputMessage.value = ''
-  
-  const messageId = messageIdCounter.value
-  addMessage('user', userMessage, 'sending')
-  
+  addMessage('user', userMessage)
   isLoading.value = true
-  
+
   try {
-    const response = await chatCompletion({
-      model: defaultModel.value || undefined,
-      messages: messages.value.map(m => ({ role: m.role, content: m.content })),
-      max_tokens: 1024,
-      temperature: 0.7
-    })
-    
-    messages.value.find(m => m.id === messageId)!.status = 'sent'
-    
-    if (response.choices && response.choices.length > 0) {
-      addMessage('assistant', response.choices[0].message.content, 'received')
-    }
+    const assistantMessageIndex = messages.value.length
+    messages.value.push({ role: 'assistant', content: '' })
+    streamingMessageId.value = assistantMessageIndex
+
+    await chatCompletionStream(
+      {
+        model: defaultModel.value || undefined,
+        messages: messages.value.slice(0, -1),
+        max_tokens: 1024,
+        temperature: 0.7,
+      },
+      (chunk) => {
+        updateStreamingMessage(chunk)
+      },
+      (error) => {
+        messages.value.push({ role: 'system', content: `Error: ${error.message}` })
+        streamingMessageId.value = null
+      }
+    )
+
+    streamingMessageId.value = null
   } catch (error) {
+    if (streamingMessageId.value !== null) {
+      messages.value.splice(streamingMessageId.value, 1)
+      streamingMessageId.value = null
+    }
     const errorMessage = error instanceof Error ? error.message : 'Failed to get response'
-    addMessage('system', `Error: ${errorMessage}`, 'received')
+    addMessage('system', `Error: ${errorMessage}`)
   } finally {
     isLoading.value = false
   }
@@ -72,12 +83,17 @@ const handleKeyPress = (event: KeyboardEvent) => {
   }
 }
 
-addMessage('system', '欢迎使用 AI 聊天！当前使用的是默认模型。', 'received')
+const clearChat = () => {
+  messages.value = []
+  addMessage('system', '欢迎使用 AI 聊天！当前使用的是默认模型。')
+}
+
+addMessage('system', '欢迎使用 AI 聊天！当前使用的是默认模型。')
 </script>
 
 <template>
-  <div class="bg-slate-800 rounded-xl p-6 h-full flex flex-col">
-    <div class="flex items-center justify-between mb-4">
+  <div class="bg-slate-800 rounded-xl p-6">
+    <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
           <MessageSquare class="w-6 h-6 text-white" />
@@ -87,105 +103,81 @@ addMessage('system', '欢迎使用 AI 聊天！当前使用的是默认模型。
           <p class="text-slate-400 text-sm">与默认模型进行对话测试</p>
         </div>
       </div>
-      <div v-if="defaultModel" class="px-3 py-1 bg-blue-600/20 text-blue-400 rounded-full text-sm">
-        {{ defaultModel }}
-      </div>
+      <button
+        @click="clearChat"
+        class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition-colors"
+      >
+        <RefreshCw class="w-4 h-4" />
+        清空
+      </button>
     </div>
 
     <div
       ref="chatContainer"
-      class="flex-1 overflow-y-auto bg-slate-900 rounded-lg p-4 space-y-4 mb-4 min-h-[200px]"
+      class="h-64 overflow-y-auto bg-slate-900 rounded-lg p-4 mb-4 space-y-4"
     >
       <div
         v-for="(message, index) in messages"
-        :key="message.id"
+        :key="index"
         class="flex gap-3"
         :class="{ 'flex-row-reverse': message.role === 'user' }"
       >
         <div
-          class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+          class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
           :class="{
             'bg-blue-600': message.role === 'user',
             'bg-purple-600': message.role === 'assistant',
-            'bg-slate-600': message.role === 'system'
+            'bg-slate-600': message.role === 'system',
           }"
         >
           <User v-if="message.role === 'user'" class="w-5 h-5 text-white" />
           <Bot v-else-if="message.role === 'assistant'" class="w-5 h-5 text-white" />
         </div>
-        <div class="flex flex-col max-w-[80%]" :class="{ 'items-end': message.role === 'user' }">
-          <div
-            class="px-4 py-3 rounded-lg"
-            :class="{
-              'bg-blue-600/20 text-blue-200 rounded-br-md': message.role === 'user',
-              'bg-slate-700 text-white rounded-bl-md': message.role === 'assistant',
-              'bg-slate-700/50 text-slate-300 rounded-lg': message.role === 'system'
-            }"
-          >
-            <p class="text-sm whitespace-pre-wrap leading-relaxed">{{ message.content }}</p>
-          </div>
-          <div v-if="message.role === 'user'" class="flex items-center gap-1 mt-1">
-            <Loader2 v-if="message.status === 'sending'" class="w-3 h-3 text-slate-500 animate-spin" />
-            <Check v-else-if="message.status === 'sent'" class="w-3 h-3 text-slate-500" />
-            <CheckCheck v-else class="w-3 h-3 text-green-500" />
-            <span class="text-xs text-slate-500 ml-1">
-              {{ message.status === 'sending' ? '发送中...' : message.status === 'sent' ? '已发送' : '已送达' }}
-            </span>
-          </div>
+        <div
+          class="max-w-[80%] px-4 py-2 rounded-lg"
+          :class="{
+            'bg-blue-600/20 text-blue-200 rounded-br-none': message.role === 'user',
+            'bg-slate-700 text-white rounded-bl-none': message.role === 'assistant',
+            'bg-slate-700/50 text-slate-300 rounded-lg': message.role === 'system',
+          }"
+        >
+          <p class="text-sm whitespace-pre-wrap">{{ message.content }}</p>
+          <span
+            v-if="streamingMessageId === index"
+            class="inline-block w-2 h-4 bg-white/60 ml-1 animate-pulse"
+          ></span>
         </div>
       </div>
 
-      <div v-if="isLoading" class="flex items-center gap-2 text-slate-400 animate-pulse">
-        <div class="flex gap-1">
-          <span class="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-          <span class="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-          <span class="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
-        </div>
+      <div v-if="isLoading && streamingMessageId === null" class="flex items-center gap-2 text-slate-400">
+        <Loader2 class="w-4 h-4 animate-spin" />
         <span class="text-sm">正在思考...</span>
       </div>
     </div>
 
-    <div class="bg-slate-700/50 rounded-xl p-3">
-      <div class="flex items-center gap-2 mb-2">
-        <button class="p-2 hover:bg-slate-600 rounded-lg text-slate-400 hover:text-white transition-colors">
-          <Paperclip class="w-5 h-5" />
-        </button>
-        <button class="p-2 hover:bg-slate-600 rounded-lg text-slate-400 hover:text-white transition-colors">
-          <Image class="w-5 h-5" />
-        </button>
-        <div class="flex-1 relative">
-          <textarea
-            v-model="inputMessage"
-            @keydown="handleKeyPress"
-            placeholder="输入消息..."
-            rows="2"
-            class="w-full bg-transparent text-white placeholder-slate-500 border-none outline-none resize-none text-sm leading-relaxed"
-            :disabled="isLoading"
-          ></textarea>
-        </div>
-        <button class="p-2 hover:bg-slate-600 rounded-lg text-slate-400 hover:text-white transition-colors">
-          <Smile class="w-5 h-5" />
-        </button>
-        <button class="p-2 hover:bg-slate-600 rounded-lg text-slate-400 hover:text-white transition-colors">
-          <Mic class="w-5 h-5" />
-        </button>
-      </div>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span v-if="!defaultModel" class="text-xs text-yellow-500">
-            ⚠️ 未设置默认模型
-          </span>
-        </div>
-        <button
-          @click="handleSend"
-          :disabled="isInputDisabled"
-          class="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
-        >
-          <Loader2 v-if="isLoading" class="w-4 h-4 animate-spin" />
-          <Send v-else class="w-4 h-4" />
-          <span>发送</span>
-        </button>
-      </div>
+    <div class="flex gap-3">
+      <input
+        v-model="inputMessage"
+        @keydown="handleKeyPress"
+        type="text"
+        placeholder="输入消息..."
+        class="flex-1 bg-slate-700 text-white border border-slate-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
+        :disabled="isLoading"
+      />
+      <button
+        @click="handleSend"
+        :disabled="isLoading || !inputMessage.trim()"
+        class="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2"
+      >
+        <Loader2 v-if="isLoading" class="w-4 h-4 animate-spin" />
+        <Send v-else class="w-4 h-4" />
+        <span>发送</span>
+      </button>
+    </div>
+
+    <div class="mt-4 text-center text-slate-500 text-xs">
+      <span v-if="defaultModel">当前模型: {{ defaultModel }}</span>
+      <span v-else>未设置默认模型，请先切换模型</span>
     </div>
   </div>
 </template>

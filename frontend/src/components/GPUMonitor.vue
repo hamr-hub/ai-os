@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useGPU } from '@/composables/useGPU'
-import { Activity, Thermometer, Zap, Cpu, MemoryStick, Fan } from 'lucide-vue-next'
+import { Activity, Thermometer, Zap, Cpu, MemoryStick, Fan, RefreshCw, Pause, Play } from 'lucide-vue-next'
 
-const { gpuSummary, loading, error, formatMemory } = useGPU()
+const { gpuSummary, loading, error, isRefreshing, isAutoRefreshEnabled, refresh, toggleAutoRefresh, formatMemory } = useGPU()
 
 const getStatusColor = (value: number, warning = 70, danger = 90): string => {
   if (value >= danger) return 'text-red-500'
@@ -19,13 +19,34 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
 
 <template>
   <div class="bg-slate-800 rounded-xl p-6">
-    <div class="flex items-center gap-3 mb-6">
-      <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-        <Cpu class="w-6 h-6 text-white" />
+    <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+          <Cpu class="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h2 class="text-xl font-semibold text-white">GPU 监控</h2>
+          <p class="text-slate-400 text-sm">实时监控 GPU 状态和性能指标</p>
+        </div>
       </div>
-      <div>
-        <h2 class="text-xl font-semibold text-white">GPU 监控</h2>
-        <p class="text-slate-400 text-sm">实时监控 GPU 状态和性能指标</p>
+      <div class="flex items-center gap-2">
+        <button
+          @click="refresh"
+          :disabled="isRefreshing"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-700 disabled:opacity-50 text-slate-300 rounded-lg text-sm transition-all"
+        >
+          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isRefreshing }" />
+          <span>{{ isRefreshing ? '刷新中' : '刷新' }}</span>
+        </button>
+        <button
+          @click="toggleAutoRefresh"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors"
+          :class="isAutoRefreshEnabled ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'"
+          :title="isAutoRefreshEnabled ? '暂停自动刷新' : '开启自动刷新'"
+        >
+          <Pause v-if="isAutoRefreshEnabled" class="w-4 h-4" />
+          <Play v-else class="w-4 h-4" />
+        </button>
       </div>
     </div>
 
@@ -46,7 +67,7 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
 
     <div v-else>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-slate-700/50 rounded-lg p-4">
+        <div class="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors">
           <div class="flex items-center gap-2 mb-2">
             <MemoryStick class="w-5 h-5 text-blue-400" />
             <span class="text-slate-400 text-sm">显存使用</span>
@@ -59,7 +80,7 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
           </p>
         </div>
 
-        <div class="bg-slate-700/50 rounded-lg p-4">
+        <div class="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors">
           <div class="flex items-center gap-2 mb-2">
             <Activity class="w-5 h-5 text-green-400" />
             <span class="text-slate-400 text-sm">GPU 利用率</span>
@@ -69,7 +90,7 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
           </p>
         </div>
 
-        <div class="bg-slate-700/50 rounded-lg p-4">
+        <div class="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors">
           <div class="flex items-center gap-2 mb-2">
             <Thermometer class="w-5 h-5 text-orange-400" />
             <span class="text-slate-400 text-sm">温度</span>
@@ -79,7 +100,7 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
           </p>
         </div>
 
-        <div class="bg-slate-700/50 rounded-lg p-4">
+        <div class="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors">
           <div class="flex items-center gap-2 mb-2">
             <Zap class="w-5 h-5 text-yellow-400" />
             <span class="text-slate-400 text-sm">功耗</span>
@@ -103,7 +124,7 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
           </div>
           <div class="h-3 bg-slate-700 rounded-full overflow-hidden">
             <div
-              class="h-full rounded-full transition-all duration-300"
+              class="h-full rounded-full transition-all duration-500 ease-out"
               :class="getProgressColor(gpuSummary?.current?.memory_utilization || 0)"
               :style="{ width: `${gpuSummary?.current?.memory_utilization || 0}%` }"
             ></div>
@@ -119,7 +140,7 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
           </div>
           <div class="h-3 bg-slate-700 rounded-full overflow-hidden">
             <div
-              class="h-full rounded-full transition-all duration-300"
+              class="h-full rounded-full transition-all duration-500 ease-out"
               :class="getProgressColor(gpuSummary?.current?.utilization || 0)"
               :style="{ width: `${gpuSummary?.current?.utilization || 0}%` }"
             ></div>
@@ -135,7 +156,7 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
           </div>
           <div class="h-3 bg-slate-700 rounded-full overflow-hidden">
             <div
-              class="h-full rounded-full transition-all duration-300"
+              class="h-full rounded-full transition-all duration-500 ease-out"
               :class="getProgressColor(gpuSummary?.current?.power_percent || 0)"
               :style="{ width: `${gpuSummary?.current?.power_percent || 0}%` }"
             ></div>

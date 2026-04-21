@@ -1,4 +1,4 @@
-import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
+import axios from 'axios'
 import type { GPUStatus, GPUSummary, ModelStatus, ModelsResponse, ActionResponse } from '@/types'
 
 const BASE_URL = '/api'
@@ -7,27 +7,6 @@ const client = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
 })
-
-client.interceptors.request.use(
-  (config: AxiosRequestConfig) => {
-    return config
-  },
-  (error) => {
-    console.error('Request error:', error)
-    return Promise.reject(error)
-  }
-)
-
-client.interceptors.response.use(
-  (response: AxiosResponse) => {
-    return response
-  },
-  (error) => {
-    const errorMessage = error.response?.data?.message || error.message || '请求失败'
-    console.error('Response error:', errorMessage)
-    return Promise.reject(new Error(errorMessage))
-  }
-)
 
 export async function getGPUStatus(refresh = false): Promise<GPUStatus> {
   const response = await client.get<GPUStatus>('/manage/gpu', {

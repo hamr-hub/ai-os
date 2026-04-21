@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useModels } from '@/composables/useModels'
-import { Server, Play, Square, CheckCircle, Loader2, Star, StarOff, Zap } from 'lucide-vue-next'
+import { Server, RefreshCw, Pause, Play as PlayIcon, Star, StarOff, Loader2, Play, Square, Zap, CheckCircle } from 'lucide-vue-next'
 
-const { modelStatus, defaultModel, loading, error, actionLoading, handleStartModel, handleStopModel, handleSwitchAndSetDefault, handleSetDefaultModel, handleClearDefaultModel } = useModels()
+const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, isAutoRefreshEnabled, refresh, toggleAutoRefresh, handleStartModel, handleStopModel, handleSwitchAndSetDefault, handleSetDefaultModel, handleClearDefaultModel } = useModels()
 </script>
 
 <template>
@@ -17,12 +17,31 @@ const { modelStatus, defaultModel, loading, error, actionLoading, handleStartMod
           <p class="text-slate-400 text-sm">管理和控制 AI 模型服务</p>
         </div>
       </div>
-      <div v-if="defaultModel" class="flex items-center gap-2 bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-sm">
-        <Star class="w-4 h-4 fill-current" />
-        <span>默认: {{ defaultModel }}</span>
-        <button @click="handleClearDefaultModel" class="hover:text-yellow-300 transition-colors">
-          <StarOff class="w-4 h-4" />
+      <div class="flex items-center gap-2">
+        <button
+          @click="refresh"
+          :disabled="isRefreshing"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-700 disabled:opacity-50 text-slate-300 rounded-lg text-sm transition-all"
+        >
+          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isRefreshing }" />
+          <span>{{ isRefreshing ? '刷新中' : '刷新' }}</span>
         </button>
+        <button
+          @click="toggleAutoRefresh"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors"
+          :class="isAutoRefreshEnabled ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'"
+          :title="isAutoRefreshEnabled ? '暂停自动刷新' : '开启自动刷新'"
+        >
+          <Pause v-if="isAutoRefreshEnabled" class="w-4 h-4" />
+          <PlayIcon v-else class="w-4 h-4" />
+        </button>
+        <div v-if="defaultModel" class="flex items-center gap-2 bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-sm">
+          <Star class="w-4 h-4 fill-current" />
+          <span>默认: {{ defaultModel }}</span>
+          <button @click="handleClearDefaultModel" class="hover:text-yellow-300 transition-colors">
+            <StarOff class="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
 
@@ -46,13 +65,13 @@ const { modelStatus, defaultModel, loading, error, actionLoading, handleStartMod
         <div
           v-for="(status, modelName) in modelStatus"
           :key="modelName"
-          class="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700 transition-colors"
+          class="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700 transition-all duration-200"
         >
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-3">
               <div
-                class="w-3 h-3 rounded-full"
-                :class="status.running ? 'bg-green-500 animate-pulse' : 'bg-slate-500'"
+                class="w-3 h-3 rounded-full transition-all duration-300"
+                :class="status.running ? 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50' : 'bg-slate-500'"
               ></div>
               <span class="text-white font-medium">{{ modelName }}</span>
               <span v-if="defaultModel === modelName" class="text-yellow-400 text-xs flex items-center gap-1">
@@ -61,7 +80,7 @@ const { modelStatus, defaultModel, loading, error, actionLoading, handleStartMod
               </span>
             </div>
             <span
-              class="px-3 py-1 rounded-full text-xs font-medium"
+              class="px-3 py-1 rounded-full text-xs font-medium transition-colors"
               :class="status.running ? 'bg-green-500/20 text-green-400' : 'bg-slate-600 text-slate-300'"
             >
               {{ status.running ? '运行中' : '已停止' }}
@@ -92,7 +111,7 @@ const { modelStatus, defaultModel, loading, error, actionLoading, handleStartMod
               v-if="!status.running"
               @click="handleStartModel(modelName as string)"
               :disabled="actionLoading === modelName"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200"
             >
               <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
               <Play v-else class="w-4 h-4" />
@@ -103,7 +122,7 @@ const { modelStatus, defaultModel, loading, error, actionLoading, handleStartMod
               v-if="status.running"
               @click="handleStopModel(modelName as string)"
               :disabled="actionLoading === modelName"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200"
             >
               <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
               <Square v-else class="w-4 h-4" />
@@ -113,7 +132,7 @@ const { modelStatus, defaultModel, loading, error, actionLoading, handleStartMod
             <button
               @click="handleSwitchAndSetDefault(modelName as string)"
               :disabled="actionLoading === modelName"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200"
               title="切换模型并设为默认"
             >
               <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
@@ -124,7 +143,7 @@ const { modelStatus, defaultModel, loading, error, actionLoading, handleStartMod
             <button
               @click="handleSetDefaultModel(modelName as string)"
               :disabled="actionLoading === modelName || defaultModel === modelName"
-              class="flex items-center justify-center gap-2 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              class="flex items-center justify-center gap-2 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-all duration-200"
               :title="defaultModel === modelName ? '已是默认模型' : '设为默认模型'"
             >
               <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />

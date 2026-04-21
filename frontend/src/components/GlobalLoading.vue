@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useGlobalState } from '@/composables/useGlobalState'
-import { Loader2 } from 'lucide-vue-next'
 
 const { isLoading, loadingMessage } = useGlobalState()
 </script>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { TestTube, CheckCircle, XCircle, Loader2, AlertCircle, Sparkles, MessageCircle, Eye, Cpu, AlertTriangle, Clock, Gauge } from 'lucide-vue-next'
 import { testModel, type ModelTestResult } from '@/api/client'
 import { useModels } from '@/composables/useModels'
@@ -89,11 +89,6 @@ const formatDuration = (ms?: number) => {
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(2)}s`
 }
-
-const overallStatusColor = computed(() => {
-  if (!testResult.value?.report) return 'bg-gray-500'
-  return getStatusBgColor(testResult.value.report.overall_status)
-})
 </script>
 
 <template>

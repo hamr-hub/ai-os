@@ -120,4 +120,68 @@ export function useModels() {
 
   const startAutoRefresh = () => {
     if (refreshInterval) return
-    refreshInterval =
+    refreshInterval = window.setInterval(fetchModelStatus, 5000)
+  }
+
+  const stopAutoRefresh = () => {
+    if (refreshInterval) {
+      clearInterval(refreshInterval)
+      refreshInterval = null
+    }
+  }
+
+  const toggleAutoRefresh = () => {
+    if (refreshInterval) {
+      stopAutoRefresh()
+    } else {
+      startAutoRefresh()
+    }
+  }
+
+  const isAutoRefreshEnabled = computed(() => refreshInterval !== null)
+
+  const modelList = computed(() => {
+    if (!modelStatus.value) return []
+    return Object.entries(modelStatus.value).map(([name, status]) => ({
+      name,
+      ...status,
+    }))
+  })
+
+  const runningModelsCount = computed(() => {
+    if (!modelStatus.value) return 0
+    return Object.values(modelStatus.value).filter((m) => m.running).length
+  })
+
+  onMounted(() => {
+    fetchModelStatus()
+    startAutoRefresh()
+  })
+
+  onUnmounted(() => {
+    stopAutoRefresh()
+  })
+
+  return {
+    modelStatus,
+    modelList,
+    defaultModel,
+    loading,
+    error,
+    actionLoading,
+    isRefreshing,
+    isAutoRefreshEnabled,
+    fetchModelStatus,
+    refresh,
+    startAutoRefresh,
+    stopAutoRefresh,
+    toggleAutoRefresh,
+    handleStartModel,
+    handleStopModel,
+    handleSwitchModel,
+    handleSwitchAndSetDefault,
+    handleSetDefaultModel,
+    handleClearDefaultModel,
+    runningModelsCount,
+  }
+}
