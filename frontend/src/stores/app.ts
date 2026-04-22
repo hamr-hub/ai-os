@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 export interface ToastMessage {
   id: number
@@ -11,7 +11,39 @@ export interface ToastMessage {
 export const useAppStore = defineStore('app', () => {
   const toasts = ref<ToastMessage[]>([])
   const sidebarCollapsed = ref(false)
+  const theme = ref<'light' | 'dark' | 'system'>('system')
+  const actualTheme = ref<'light' | 'dark'>('dark')
   let toastId = 0
+
+  const updateActualTheme = () => {
+    if (theme.value === 'system') {
+      actualTheme.value = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    } else {
+      actualTheme.value = theme.value
+    }
+    document.documentElement.setAttribute('data-theme', actualTheme.value)
+  }
+
+  watch(theme, updateActualTheme, { immediate: true })
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (theme.value === 'system') {
+      updateActualTheme()
+    }
+  })
+
+  const setTheme = (newTheme: 'light' | 'dark' | 'system') => {
+    theme.value = newTheme
+    localStorage.setItem('theme', newTheme)
+  }
+
+  const initTheme = () => {
+    const saved = localStorage.getItem('theme') as 'light' | 'dark' | 'system' | null
+    if (saved) {
+      theme.value = saved
+    }
+    updateActualTheme()
+  }
 
   const addToast = (type: ToastMessage['type'], message: string, duration = 3000) => {
     const id = ++toastId
@@ -45,9 +77,13 @@ export const useAppStore = defineStore('app', () => {
   return {
     toasts,
     sidebarCollapsed,
+    theme,
+    actualTheme,
     addToast,
     removeToast,
     toggleSidebar,
+    setTheme,
+    initTheme,
     success,
     error,
     warning,

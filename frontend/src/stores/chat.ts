@@ -1,0 +1,153 @@
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+
+export interface Message {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp: Date
+}
+
+export interface Conversation {
+  id: string
+  title: string
+  messages: Message[]
+  createdAt: Date
+  updatedAt: Date
+}
+
+export const useChatStore = defineStore('chat', () => {
+  const conversations = ref<Conversation[]>([])
+  const activeConversation = ref<string | null>(null)
+
+  const currentConversation = computed(() => {
+    return conversations.value.find(c => c.id === activeConversation.value)
+  })
+
+  const generateId = () => {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2)
+  }
+
+  const createConversation = (title = '新会话') => {
+    const conv: Conversation = {
+      id: generateId(),
+      title,
+      messages: [],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+    conversations.value.unshift(conv)
+    activeConversation.value = conv.id
+    saveToStorage()
+    return conv
+  }
+
+  const selectConversation = (id: string) => {
+    if (conversations.value.find(c => c.id === id)) {
+      activeConversation.value = id
+    }
+  }
+
+  const deleteConversation = (id: string) => {
+    const index = conversations.value.findIndex(c => c.id === id)
+    if (index !== -1) {
+      conversations.value.splice(index, 1)
+      if (activeConversation.value === id) {
+        activeConversation.value = conversations.value[0]?.id || null
+      }
+      saveToStorage()
+    }
+  }
+
+  const updateConversationTitle = (id: string, title: string) => {
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv) {
+      conv.title = title
+      conv.updatedAt = new Date()
+      saveToStorage()
+    }
+  }
+
+  const addMessage = (conversationId: string, role: Message['role'], content: string) => {
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv) {
+      const message: Message = {
+        id: generateId(),
+        role,
+        content,
+        timestamp: new Date()
+      }
+      conv.messages.push(message)
+      conv.updatedAt = new Date()
+      
+      if (conv.title === '新会话' && role === 'user') {
+        conv.title = content.slice(0, 20) || '新会话'
+      }
+      
+      saveToStorage()
+      return message
+    }
+    return null
+  }
+
+  const updateMessage = (conversationId: string, messageId: string, content: string) => {
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv) {
+      const message = conv.messages.find(m => m.id === messageId)
+      if (message) {
+        message.content = content
+        conv.updatedAt = new Date()
+        saveToStorage()
+      }
+    }
+  }
+
+  const clearMessages = (conversationId: string) => {
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv) {
+      conv.messages = []
+      conv.updatedAt = new Date()
+      saveToStorage()
+    }
+  }
+
+  const saveToStorage = () => {
+    localStorage.setItem('chat-conversations', JSON.stringify(conversations.value))
+  }
+
+  const loadFromStorage = () => {
+    const saved = localStorage.getItem('chat-conversations')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        conversations.value = parsed.map((c: Conversation) => ({
+          ...c,
+          createdAt: new Date(c.createdAt),
+          updatedAt: new Date(c.updatedAt),
+          messages: c.messages.map((m: Message) => ({
+            ...m,
+            timestamp: new Date(m.timestamp)
+          }))
+        }))
+        activeConversation.value = conversations.value[0]?.id || null
+      } catch (e) {
+        console.error('Failed to load conversations:', e)
+      }
+    }
+  }
+
+  loadFromStorage()
+
+  return {
+    conversations,
+    activeConversation,
+    currentConversation,
+    createConversation,
+    selectConversation,
+    deleteConversation,
+    updateConversationTitle,
+    addMessage,
+    updateMessage,
+    clearMessages,
+  }
+})

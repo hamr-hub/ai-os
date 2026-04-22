@@ -1,36 +1,27 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
-import { MessageSquare, Send, Loader2, Bot, User, RefreshCw, ChevronDown, Sparkles } from 'lucide-vue-next'
+import { ref, nextTick, computed, watch } from 'vue'
+import { Send, Loader2, Bot, User, Sparkles, StopCircle } from 'lucide-vue-next'
 import { chatCompletionStream, type ChatMessage } from '@/api/client'
 import { useModels } from '@/composables/useModels'
 import { useAppStore } from '@/stores/app'
+import { useChatStore } from '@/stores/chat'
 
-const { modelStatus, defaultModel } = useModels()
-const store = useAppStore()
+const { defaultModel } = useModels()
+const appStore = useAppStore()
+const chatStore = useChatStore()
 
-const messages = ref<(ChatMessage & { timestamp: Date })[]>([])
 const inputMessage = ref('')
 const isLoading = ref(false)
 const chatContainer = ref<HTMLElement | null>(null)
-const streamingMessageId = ref<number | null>(null)
-const selectedModel = ref<string | null>(null)
-const showModelDropdown = ref(false)
+const streamingMessageId = ref<string | null>(null)
+const abortController = ref<AbortController | null>(null)
 
-const addMessage = (role: 'user' | 'assistant' | 'system', content: string) => {
-  messages.value.push({ role, content, timestamp: new Date() })
-  nextTick(() => {
-    scrollToBottom()
-  })
-}
+const currentConv = computed(() => chatStore.currentConversation)
+const messages = computed(() => currentConv.value?.messages || [])
 
-const updateStreamingMessage = (content: string) => {
-  if (streamingMessageId.value !== null) {
-    messages.value[streamingMessageId.value].content += content
-    nextTick(() => {
-      scrollToBottom()
-    })
-  }
-}
+watch(currentConv, () => {
+  nextTick(() => scrollToBottom())
+}, { immediate: true })
 
 const scrollToBottom = () => {
   if (chatContainer.value) {
@@ -38,8 +29,15 @@ const scrollToBottom = () => {
   }
 }
 
+const addMessage = (role: 'user' | 'assistant' | 'system', content: string) => {
+  if (!currentConv.value) return null
+  const message = chatStore.addMessage(currentConv.value.id, role, content)
+  nextTick(() => scrollToBottom())
+  return message
+}
+
 const handleSend = async () => {
-  if (!inputMessage.value.trim() || isLoading.value) return
+  if (!inputMessage.value.trim() || isLoading.value || !currentConv.value) return
 
   const userMessage = inputMessage.value.trim()
   inputMessage.value = ''
@@ -47,41 +45,59 @@ const handleSend = async () => {
   isLoading.value = true
 
   try {
-    const assistantMessageIndex = messages.value.length
-    messages.value.push({ role: 'assistant', content: '', timestamp: new Date() })
-    streamingMessageId.value = assistantMessageIndex
+    const assistantMessage = addMessage('assistant', '')
+    if (!assistantMessage) return
+    
+    streamingMessageId.value = assistantMessage.id
+    abortController.value = new AbortController()
 
-    const modelToUse = selectedModel.value || defaultModel.value
+    const apiMessages: ChatMessage[] = messages.value
+      .filter(m => m.role !== 'system')
+      .slice(0, -1)
+      .map(m => ({ role: m.role, content: m.content }))
 
     await chatCompletionStream(
       {
-        model: modelToUse || undefined,
-        messages: messages.value.slice(0, -1),
-        max_tokens: 1024,
+        model: defaultModel.value || undefined,
+        messages: apiMessages,
+        max_tokens: 2048,
         temperature: 0.7,
       },
       (chunk) => {
-        updateStreamingMessage(chunk)
+        if (streamingMessageId.value && currentConv.value) {
+          const msg = currentConv.value.messages.find(m => m.id === streamingMessageId.value)
+          if (msg) {
+            msg.content += chunk
+            nextTick(() => scrollToBottom())
+          }
+        }
       },
       (error) => {
-        store.error(`请求失败: ${error.message}`)
-        messages.value.push({ role: 'system', content: `Error: ${error.message}`, timestamp: new Date() })
+        appStore.error(`请求失败: ${error.message}`)
         streamingMessageId.value = null
-      }
+      },
+      abortController.value.signal
     )
 
     streamingMessageId.value = null
-    store.success('消息发送成功')
   } catch (error) {
-    if (streamingMessageId.value !== null) {
-      messages.value.splice(streamingMessageId.value, 1)
-      streamingMessageId.value = null
+    if (error instanceof Error && error.name === 'AbortError') {
+      return
     }
     const errorMessage = error instanceof Error ? error.message : 'Failed to get response'
-    store.error(errorMessage)
+    appStore.error(errorMessage)
     addMessage('system', `Error: ${errorMessage}`)
   } finally {
     isLoading.value = false
+    abortController.value = null
+  }
+}
+
+const handleStop = () => {
+  if (abortController.value) {
+    abortController.value.abort()
+    isLoading.value = false
+    streamingMessageId.value = null
   }
 }
 
@@ -92,170 +108,131 @@ const handleKeyPress = (event: KeyboardEvent) => {
   }
 }
 
-const clearChat = () => {
-  messages.value = []
-  addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
-}
-
-const selectModel = (modelName: string) => {
-  selectedModel.value = selectedModel.value === modelName ? null : modelName
-  showModelDropdown.value = false
-  if (selectedModel.value) {
-    store.info(`已选择模型: ${modelName}`)
-  } else {
-    store.info('使用默认模型')
-  }
-}
-
 const formatTime = (date: Date) => {
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-const availableModels = () => {
-  if (!modelStatus.value) return []
-  return Object.keys(modelStatus.value).filter((name) => modelStatus.value![name].running)
+const handleNewChat = () => {
+  chatStore.createConversation()
 }
-
-addMessage('system', '欢迎使用 AI 聊天！选择模型后开始对话。')
 </script>
 
 <template>
-  <div class="bg-slate-800/80 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 card-hover">
-    <div class="flex items-center justify-between mb-6">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl flex items-center justify-center gradient-blue">
-          <MessageSquare class="w-6 h-6 text-white" />
+  <div class="flex flex-col h-full bg-primary">
+    <div v-if="!currentConv" class="flex-1 flex items-center justify-center noise-overlay">
+      <div class="text-center scale-in">
+        <div class="w-20 h-20 mx-auto mb-5 rounded-2xl gradient-primary flex items-center justify-center shadow-lg animate-float">
+          <Sparkles class="w-10 h-10 text-white" />
         </div>
-        <div>
-          <h2 class="text-xl font-semibold text-white">聊天测试</h2>
-          <p class="text-slate-400 text-sm">与 AI 模型进行对话测试</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <div class="relative">
-          <button
-            @click="showModelDropdown = !showModelDropdown"
-            class="flex items-center gap-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-all"
-          >
-            <span v-if="selectedModel">{{ selectedModel }}</span>
-            <span v-else-if="defaultModel">{{ defaultModel }} (默认)</span>
-            <span v-else>选择模型</span>
-            <ChevronDown class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showModelDropdown }" />
-          </button>
-          <div
-            v-if="showModelDropdown"
-            class="absolute top-full right-0 mt-2 w-52 bg-slate-700 rounded-xl shadow-xl overflow-hidden z-20 scale-in"
-          >
-            <button
-              @click="selectModel('')"
-              class="w-full px-4 py-2.5 text-left hover:bg-slate-600 text-slate-300 text-sm transition-all"
-              :class="{ 'bg-slate-600': !selectedModel }"
-            >
-              {{ defaultModel ? `${defaultModel} (默认)` : '无默认模型' }}
-            </button>
-            <div class="border-t border-slate-600 my-1"></div>
-            <button
-              v-for="model in availableModels()"
-              :key="model"
-              @click="selectModel(model)"
-              class="w-full px-4 py-2.5 text-left hover:bg-slate-600 text-slate-300 text-sm transition-all flex items-center gap-3"
-              :class="{ 'bg-slate-600': selectedModel === model }"
-            >
-              <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-              {{ model }}
-            </button>
-            <div v-if="availableModels().length === 0" class="px-4 py-3 text-slate-500 text-sm text-center">
-              暂无运行中的模型
-            </div>
-          </div>
-        </div>
+        <h2 class="text-2xl font-semibold text-primary mb-2">欢迎使用 AI 聊天</h2>
+        <p class="text-secondary mb-6">选择或创建一个会话开始对话</p>
         <button
-          @click="clearChat"
-          class="flex items-center gap-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-all"
+          @click="handleNewChat"
+          class="px-6 py-3 gradient-primary hover:opacity-90 text-white rounded-xl transition-all btn-glow border-glow"
         >
-          <RefreshCw class="w-4 h-4" />
-          清空
+          创建新会话
         </button>
       </div>
     </div>
 
-    <div
-      ref="chatContainer"
-      class="h-72 overflow-y-auto bg-slate-900/50 rounded-xl p-4 mb-4 space-y-4"
-    >
+    <template v-else>
       <div
-        v-for="(message, index) in messages"
-        :key="index"
-        class="flex gap-3 fade-in"
-        :class="{ 'flex-row-reverse': message.role === 'user' }"
+        ref="chatContainer"
+        class="flex-1 overflow-y-auto p-6 space-y-5 scrollbar-thin"
       >
-        <div
-          class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-          :class="{
-            'gradient-blue': message.role === 'user',
-            'gradient-purple': message.role === 'assistant',
-            'bg-slate-600': message.role === 'system',
-          }"
-        >
-          <User v-if="message.role === 'user'" class="w-5 h-5 text-white" />
-          <Bot v-else-if="message.role === 'assistant'" class="w-5 h-5 text-white" />
-          <Sparkles v-else class="w-5 h-5 text-white" />
+        <div v-if="messages.length === 0" class="text-center py-16 text-muted">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-tertiary flex items-center justify-center">
+            <Bot class="w-8 h-8 opacity-50" />
+          </div>
+          <p class="text-sm">发送消息开始对话</p>
         </div>
-        <div class="max-w-[80%]">
+
+        <div
+          v-for="message in messages"
+          :key="message.id"
+          class="flex gap-4 fade-in"
+          :class="{ 'flex-row-reverse': message.role === 'user' }"
+        >
           <div
-            class="px-4 py-3 rounded-xl"
+            class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md"
             :class="{
-              'bg-blue-500/20 text-blue-200 rounded-tr-none': message.role === 'user',
-              'bg-slate-700/50 text-white rounded-tl-none': message.role === 'assistant',
-              'bg-slate-700/30 text-slate-300 rounded-xl': message.role === 'system',
+              'gradient-blue': message.role === 'user',
+              'gradient-purple': message.role === 'assistant',
+              'bg-tertiary': message.role === 'system',
             }"
           >
-            <p class="text-sm whitespace-pre-wrap">{{ message.content }}</p>
-            <span
-              v-if="streamingMessageId === index"
-              class="inline-flex gap-1 ml-1"
-            >
-              <span class="w-2 h-4 bg-white/60 rounded animate-bounce" style="animation-delay: 0ms"></span>
-              <span class="w-2 h-4 bg-white/60 rounded animate-bounce" style="animation-delay: 150ms"></span>
-              <span class="w-2 h-4 bg-white/60 rounded animate-bounce" style="animation-delay: 300ms"></span>
-            </span>
+            <User v-if="message.role === 'user'" class="w-5 h-5 text-white" />
+            <Bot v-else-if="message.role === 'assistant'" class="w-5 h-5 text-white" />
+            <Sparkles v-else class="w-5 h-5 text-white" />
           </div>
-          <p class="text-xs text-slate-500 mt-1 ml-1" :class="{ 'text-right': message.role === 'user' }">
-            {{ formatTime(message.timestamp) }}
-          </p>
+
+          <div class="flex-1 max-w-[80%]">
+            <div
+              class="px-5 py-3 rounded-2xl shadow-sm"
+              :class="{
+                'gradient-blue text-white rounded-tr-md': message.role === 'user',
+                'bg-secondary text-primary rounded-tl-md border border-primary': message.role === 'assistant',
+                'bg-tertiary text-secondary rounded-xl': message.role === 'system',
+              }"
+            >
+              <p class="text-sm whitespace-pre-wrap leading-relaxed text-balance">{{ message.content }}</p>
+
+              <span
+                v-if="streamingMessageId === message.id"
+                class="inline-flex gap-1 ml-1 mt-1"
+              >
+                <span class="w-1.5 h-3 bg-white/60 rounded animate-bounce" style="animation-delay: 0ms"></span>
+                <span class="w-1.5 h-3 bg-white/60 rounded animate-bounce" style="animation-delay: 150ms"></span>
+                <span class="w-1.5 h-3 bg-white/60 rounded animate-bounce" style="animation-delay: 300ms"></span>
+              </span>
+            </div>
+            <p
+              class="text-xs text-muted mt-2 ml-1"
+              :class="{ 'text-right': message.role === 'user' }"
+            >
+              {{ formatTime(message.timestamp) }}
+            </p>
+          </div>
+        </div>
+
+        <div v-if="isLoading && !streamingMessageId" class="flex items-center gap-2 text-muted py-4">
+          <Loader2 class="w-4 h-4 animate-spin" />
+          <span class="text-sm">正在思考...</span>
         </div>
       </div>
 
-      <div v-if="isLoading && streamingMessageId === null" class="flex items-center gap-2 text-slate-400 justify-center py-4">
-        <Loader2 class="w-4 h-4 animate-spin" />
-        <span class="text-sm">正在思考...</span>
+      <div class="p-5 border-t border-primary bg-secondary/50 backdrop-blur-sm">
+        <div class="flex gap-3 items-end max-w-4xl mx-auto">
+          <textarea
+            v-model="inputMessage"
+            @keydown="handleKeyPress"
+            placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+            class="flex-1 bg-input text-primary border border-secondary rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all placeholder:text-muted resize-none min-h-[52px] max-h-40 scrollbar-thin"
+            :disabled="isLoading"
+            rows="1"
+          ></textarea>
+          <button
+            v-if="!isLoading"
+            @click="handleSend"
+            :disabled="!inputMessage.trim()"
+            class="w-12 h-12 gradient-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all flex items-center justify-center btn-glow shadow-lg flex-shrink-0"
+          >
+            <Send class="w-5 h-5" />
+          </button>
+          <button
+            v-else
+            @click="handleStop"
+            class="w-12 h-12 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-all flex items-center justify-center shadow-lg flex-shrink-0"
+          >
+            <StopCircle class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="mt-3 text-center text-xs text-muted">
+          <span v-if="defaultModel">当前模型: {{ defaultModel }}</span>
+          <span v-else>未选择模型</span>
+        </div>
       </div>
-    </div>
-
-    <div class="flex gap-3">
-      <input
-        v-model="inputMessage"
-        @keydown="handleKeyPress"
-        type="text"
-        placeholder="输入消息..."
-        class="flex-1 bg-slate-700/50 text-white border border-slate-600/50 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-all"
-        :disabled="isLoading"
-      />
-      <button
-        @click="handleSend"
-        :disabled="isLoading || !inputMessage.trim()"
-        class="px-6 py-3 gradient-blue hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all flex items-center gap-2 btn-glow"
-      >
-        <Loader2 v-if="isLoading" class="w-4 h-4 animate-spin" />
-        <Send v-else class="w-4 h-4" />
-        <span>发送</span>
-      </button>
-    </div>
-
-    <div class="mt-4 text-center text-slate-500 text-xs">
-      <span v-if="selectedModel">当前模型: {{ selectedModel }} (手动选择)</span>
-      <span v-else-if="defaultModel">当前模型: {{ defaultModel }} (默认)</span>
-      <span v-else>未设置模型，请先选择或切换模型</span>
-    </div>
+    </template>
   </div>
 </template>

@@ -102,11 +102,13 @@ export async function chatCompletion(request: ChatCompletionRequest): Promise<Ch
 export async function chatCompletionStream(
   request: Omit<ChatCompletionRequest, 'stream'>,
   onChunk: (content: string) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   try {
     const response = await client.post('/v1/chat/completions', { ...request, stream: true }, {
       responseType: 'stream',
+      signal,
     })
 
     const stream = response.data as ReadableStream
