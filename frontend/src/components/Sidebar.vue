@@ -102,8 +102,8 @@ const themeLabel = computed(() => {
   z-index: 50;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-card);
+  border-right: 1px solid var(--border-card);
 }
 
 .logo-section {
@@ -111,7 +111,7 @@ const themeLabel = computed(() => {
   align-items: center;
   gap: 12px;
   padding: 20px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .logo-icon {
@@ -133,7 +133,7 @@ const themeLabel = computed(() => {
 .logo-title {
   font-size: 16px;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-primary);
   letter-spacing: -0.5px;
 }
 
@@ -152,7 +152,7 @@ const themeLabel = computed(() => {
   gap: 12px;
   padding: 12px 14px;
   border-radius: 10px;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 14px;
   font-weight: 500;
   transition: all 0.2s ease;
@@ -164,14 +164,18 @@ const themeLabel = computed(() => {
 }
 
 .nav-item:hover {
-  color: #f1f5f9;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .nav-item.active {
   color: #22c55e;
   background: rgba(34, 197, 94, 0.1);
   position: relative;
+}
+
+[data-theme='dark'] .nav-item.active {
+  background: rgba(34, 197, 94, 0.15);
 }
 
 .nav-item.active::before {
@@ -200,7 +204,7 @@ const themeLabel = computed(() => {
 
 .bottom-section {
   padding: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   gap: 4px;

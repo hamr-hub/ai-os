@@ -11,22 +11,14 @@ import {
   Thermometer,
   Zap,
   MemoryStick,
-  Fan,
   ChevronDown,
   Plus,
-  Play,
-  Pause,
-  MoreHorizontal,
-  Image,
-  Maximize2,
-  Monitor,
-  Layers,
   Gauge,
   Wind,
-  Lightbulb,
   Battery,
-  HardDrive,
-  Info
+  Layers,
+  Image,
+  Monitor,
 } from 'lucide-vue-next'
 
 const { modelStatus, runningModelsCount } = useModels()
@@ -72,12 +64,12 @@ const performanceModes = [
 ]
 
 const gpuMetrics = computed(() => [
-  { label: '核心温度', value: '62', unit: '°C', icon: Thermometer, color: 'text-green-500' },
-  { label: '显存温度', value: '68', unit: '°C', icon: Thermometer, color: 'text-green-500' },
-  { label: '核心频率', value: '2520', unit: 'MHz', icon: Zap, color: 'text-blue-500' },
-  { label: '显存频率', value: '10502', unit: 'MHz', icon: MemoryStick, color: 'text-blue-500' },
-  { label: '核心电压', value: '1.050', unit: 'v', icon: Zap, color: 'text-purple-500' },
-  { label: '功耗', value: '320', unit: 'W', icon: Zap, color: 'text-orange-500' },
+  { label: '核心温度', value: '62', unit: '°C', icon: Thermometer, color: 'success' as const },
+  { label: '显存温度', value: '68', unit: '°C', icon: Thermometer, color: 'success' as const },
+  { label: '核心频率', value: '2520', unit: 'MHz', icon: Zap, color: 'info' as const },
+  { label: '显存频率', value: '10502', unit: 'MHz', icon: MemoryStick, color: 'info' as const },
+  { label: '核心电压', value: '1.050', unit: 'v', icon: Zap, color: 'purple' as const },
+  { label: '功耗', value: '320', unit: 'W', icon: Zap, color: 'warning' as const },
 ])
 
 const performanceSliders = [
@@ -148,7 +140,7 @@ const performanceSliders = [
             </div>
             <div class="model-preview">
               <div class="preview-placeholder">
-                <Image class="w-12 h-12 text-gray-300" />
+                <Image class="w-12 h-12" />
               </div>
             </div>
           </div>
@@ -172,7 +164,7 @@ const performanceSliders = [
               </div>
               <div class="gpu-image">
                 <div class="gpu-illustration">
-                  <Cpu class="w-16 h-16 text-gray-400" />
+                  <Cpu class="w-16 h-16" />
                 </div>
               </div>
             </div>
@@ -222,36 +214,19 @@ const performanceSliders = [
                     <stop offset="100%" stop-color="rgba(34, 197, 94, 0)" />
                   </linearGradient>
                 </defs>
-                <!-- Grid lines -->
-                <line x1="0" y1="30" x2="600" y2="30" stroke="#e2e8f0" stroke-width="1" />
-                <line x1="0" y1="60" x2="600" y2="60" stroke="#e2e8f0" stroke-width="1" />
-                <line x1="0" y1="90" x2="600" y2="90" stroke="#e2e8f0" stroke-width="1" />
-                <line x1="0" y1="120" x2="600" y2="120" stroke="#e2e8f0" stroke-width="1" />
-
-                <!-- Green line (Temperature) -->
+                <line x1="0" y1="30" x2="600" y2="30" stroke="currentColor" stroke-width="1" class="grid-line" />
+                <line x1="0" y1="60" x2="600" y2="60" stroke="currentColor" stroke-width="1" class="grid-line" />
+                <line x1="0" y1="90" x2="600" y2="90" stroke="currentColor" stroke-width="1" class="grid-line" />
+                <line x1="0" y1="120" x2="600" y2="120" stroke="currentColor" stroke-width="1" class="grid-line" />
                 <path d="M0,90 Q50,85 100,80 T200,70 T300,65 T400,60 T500,55 T600,50" fill="none" stroke="#22c55e" stroke-width="2" />
                 <path d="M0,90 Q50,85 100,80 T200,70 T300,65 T400,60 T500,55 T600,50 L600,150 L0,150 Z" fill="url(#greenGradient)" />
-
-                <!-- Blue line (Usage) -->
                 <path d="M0,100 Q50,95 100,90 T200,85 T300,75 T400,70 T500,65 T600,60" fill="none" stroke="#3b82f6" stroke-width="2" />
-
-                <!-- Purple line (Memory) -->
                 <path d="M0,120 Q50,115 100,110 T200,105 T300,100 T400,95 T500,90 T600,85" fill="none" stroke="#8b5cf6" stroke-width="2" />
               </svg>
               <div class="chart-labels">
-                <span>12:20</span>
-                <span>12:25</span>
-                <span>12:30</span>
-                <span>12:35</span>
-                <span>12:40</span>
-                <span>12:45</span>
-                <span>12:50</span>
-                <span>12:55</span>
-                <span>13:00</span>
-                <span>13:05</span>
-                <span>13:10</span>
-                <span>13:15</span>
-                <span>13:20</span>
+                <span>12:20</span><span>12:25</span><span>12:30</span><span>12:35</span><span>12:40</span>
+                <span>12:45</span><span>12:50</span><span>12:55</span><span>13:00</span><span>13:05</span>
+                <span>13:10</span><span>13:15</span><span>13:20</span>
               </div>
             </div>
           </div>
@@ -376,31 +351,26 @@ const performanceSliders = [
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  background: var(--bg-primary);
 }
 
-/* Header */
 .header {
   height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+.header-left { display: flex; align-items: center; gap: 12px; }
 
 .header-title {
   font-size: 18px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .header-actions {
@@ -416,19 +386,18 @@ const performanceSliders = [
   padding: 6px 12px;
   border-radius: 6px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-muted);
   background: transparent;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-primary);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .header-btn:hover {
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
-/* Main Content */
 .main-content {
   flex: 1;
   overflow: hidden;
@@ -446,14 +415,16 @@ const performanceSliders = [
   overflow-y: auto;
 }
 
-/* Card */
 .card {
-  background: #ffffff;
+  background: var(--bg-card);
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-card);
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow);
+  transition: all 0.2s ease;
 }
+
+.card:hover { box-shadow: var(--shadow-md); }
 
 .card-header {
   display: flex;
@@ -462,31 +433,18 @@ const performanceSliders = [
   margin-bottom: 16px;
 }
 
-.card-header.justify-between {
-  justify-content: space-between;
-}
+.card-header.justify-between { justify-content: space-between; }
 
-.card-icon {
-  width: 18px;
-  height: 18px;
-  color: #64748b;
-}
+.card-icon { width: 18px; height: 18px; color: var(--text-muted); }
 
-.card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-}
+.card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
 
-/* Model Info */
 .model-info {
   display: flex;
   gap: 20px;
 }
 
-.model-details {
-  flex: 1;
-}
+.model-details { flex: 1; }
 
 .model-header {
   display: flex;
@@ -495,17 +453,9 @@ const performanceSliders = [
   margin-bottom: 4px;
 }
 
-.model-name {
-  font-size: 20px;
-  font-weight: 600;
-  color: #0f172a;
-}
+.model-name { font-size: 20px; font-weight: 600; color: var(--text-primary); }
 
-.model-file {
-  font-size: 13px;
-  color: #94a3b8;
-  margin-bottom: 16px;
-}
+.model-file { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
 
 .model-specs {
   display: grid;
@@ -519,22 +469,15 @@ const performanceSliders = [
   gap: 4px;
 }
 
-.spec-label {
-  font-size: 12px;
-  color: #94a3b8;
-}
+.spec-label { font-size: 12px; color: var(--text-muted); }
 
-.spec-value {
-  font-size: 14px;
-  font-weight: 500;
-  color: #0f172a;
-}
+.spec-value { font-size: 14px; font-weight: 500; color: var(--text-primary); }
 
 .model-preview {
   width: 160px;
   height: 100px;
   border-radius: 8px;
-  background: #f1f5f9;
+  background: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -547,10 +490,10 @@ const performanceSliders = [
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
 }
 
-/* Status Badge */
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -562,27 +505,29 @@ const performanceSliders = [
 }
 
 .status-badge.running {
-  background: #ecfdf5;
+  background: rgba(34, 197, 94, 0.1);
   color: #059669;
+}
+
+[data-theme='dark'] .status-badge.running {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
 }
 
 .status-badge.online {
-  background: #ecfdf5;
+  background: rgba(34, 197, 94, 0.1);
   color: #059669;
 }
 
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #22c55e;
+[data-theme='dark'] .status-badge.online {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
 }
 
-.status-dot.online {
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
-}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
 
-/* GPU Overview */
+.status-dot.online { box-shadow: 0 0 6px rgba(34, 197, 94, 0.5); }
+
 .gpu-overview {
   display: grid;
   grid-template-columns: 200px 1fr;
@@ -595,38 +540,23 @@ const performanceSliders = [
   justify-content: space-between;
 }
 
-.gpu-header {
-  margin-bottom: 16px;
-}
+.gpu-header { margin-bottom: 16px; }
 
-.gpu-brand {
-  font-size: 12px;
-  color: #94a3b8;
-  display: block;
-  margin-bottom: 4px;
-}
+.gpu-brand { font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px; }
 
-.gpu-model {
-  font-size: 24px;
-  font-weight: 700;
-  color: #0f172a;
-  margin-bottom: 8px;
-}
+.gpu-model { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
 
-.gpu-image {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+.gpu-image { display: flex; align-items: center; justify-content: center; }
 
 .gpu-illustration {
   width: 120px;
   height: 80px;
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  background: var(--bg-secondary);
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--text-muted);
 }
 
 .gpu-metrics {
@@ -637,18 +567,13 @@ const performanceSliders = [
 
 .metric-item {
   padding: 12px;
-  background: #f8fafc;
+  background: var(--bg-secondary);
   border-radius: 8px;
 }
 
-.metric-header {
-  margin-bottom: 8px;
-}
+.metric-header { margin-bottom: 8px; }
 
-.metric-label {
-  font-size: 12px;
-  color: #94a3b8;
-}
+.metric-label { font-size: 12px; color: var(--text-muted); }
 
 .metric-value-row {
   display: flex;
@@ -657,24 +582,25 @@ const performanceSliders = [
   margin-bottom: 8px;
 }
 
-.metric-icon {
-  width: 16px;
-  height: 16px;
-}
+.metric-icon { width: 16px; height: 16px; }
 
-.metric-value {
-  font-size: 20px;
-  font-weight: 700;
-}
+.metric-icon.success { color: #22c55e; }
+.metric-icon.info { color: #3b82f6; }
+.metric-icon.warning { color: #f59e0b; }
+.metric-icon.purple { color: #8b5cf6; }
 
-.metric-unit {
-  font-size: 12px;
-  color: #94a3b8;
-}
+.metric-value { font-size: 20px; font-weight: 700; }
+
+.metric-value.success { color: #22c55e; }
+.metric-value.info { color: #3b82f6; }
+.metric-value.warning { color: #f59e0b; }
+.metric-value.purple { color: #8b5cf6; }
+
+.metric-unit { font-size: 12px; color: var(--text-muted); }
 
 .progress-bar {
   height: 4px;
-  background: #e2e8f0;
+  background: var(--bg-tertiary);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -685,14 +611,13 @@ const performanceSliders = [
   border-radius: 2px;
 }
 
-/* Chart */
 .time-range {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .range-btn {
@@ -700,17 +625,15 @@ const performanceSliders = [
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--bg-card);
   font-size: 12px;
-  color: #0f172a;
+  color: var(--text-primary);
   cursor: pointer;
 }
 
-.chart-container {
-  margin-top: 12px;
-}
+.chart-container { margin-top: 12px; }
 
 .chart-legend {
   display: flex;
@@ -724,64 +647,42 @@ const performanceSliders = [
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
+.dot { width: 8px; height: 8px; border-radius: 50%; }
 
-.dot.green {
-  background: #22c55e;
-}
+.dot.green { background: #22c55e; }
+.dot.blue { background: #3b82f6; }
+.dot.purple { background: #8b5cf6; }
+.dot.orange { background: #f59e0b; }
 
-.dot.blue {
-  background: #3b82f6;
-}
+.chart-area { position: relative; color: var(--border-primary); }
 
-.dot.purple {
-  background: #8b5cf6;
-}
+.chart-svg { width: 100%; height: 150px; }
 
-.dot.orange {
-  background: #f59e0b;
-}
-
-.chart-area {
-  position: relative;
-}
-
-.chart-svg {
-  width: 100%;
-  height: 150px;
-}
+.grid-line { opacity: 0.3; }
 
 .chart-labels {
   display: flex;
   justify-content: space-between;
   margin-top: 8px;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
-/* Model Table */
-.header-actions-group {
-  display: flex;
-  gap: 8px;
-}
+.header-actions-group { display: flex; gap: 8px; }
 
 .filter-btn {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--bg-card);
   font-size: 13px;
-  color: #0f172a;
+  color: var(--text-primary);
   cursor: pointer;
 }
 
@@ -797,11 +698,16 @@ const performanceSliders = [
   font-weight: 500;
   border: none;
   cursor: pointer;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  transition: all 0.2s;
 }
 
-.model-table {
-  margin-top: 12px;
+.import-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(34, 197, 94, 0.4);
 }
+
+.model-table { margin-top: 12px; }
 
 .table-header {
   display: grid;
@@ -809,31 +715,28 @@ const performanceSliders = [
   gap: 12px;
   padding: 10px 0;
   font-size: 12px;
-  color: #94a3b8;
-  border-bottom: 1px solid #f1f5f9;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--bg-secondary);
 }
 
-.table-body {
-  max-height: 200px;
-  overflow-y: auto;
-}
+.table-body { max-height: 200px; overflow-y: auto; }
 
 .table-row {
   display: grid;
   grid-template-columns: 2fr 80px 70px 120px 60px;
   gap: 12px;
   padding: 12px 0;
-  border-bottom: 1px solid #f8fafc;
+  border-bottom: 1px solid var(--bg-secondary);
   font-size: 13px;
   align-items: center;
+  transition: background 0.2s;
 }
 
-.table-row.active {
-  background: linear-gradient(90deg, #ecfdf5 0%, transparent 100%);
-  margin: 0 -20px;
-  padding-left: 20px;
-  padding-right: 20px;
-}
+.table-row:hover { background: var(--bg-secondary); }
+
+.table-row.active { background: rgba(34, 197, 94, 0.05); }
+
+[data-theme='dark'] .table-row.active { background: rgba(34, 197, 94, 0.1); }
 
 .model-name-col {
   display: flex;
@@ -841,47 +744,17 @@ const performanceSliders = [
   gap: 2px;
 }
 
-.model-name-col .name {
-  font-weight: 500;
-  color: #0f172a;
-}
+.model-name-col .name { font-weight: 500; color: var(--text-primary); }
 
-.model-name-col .file {
-  font-size: 11px;
-  color: #94a3b8;
-}
+.model-name-col .file { font-size: 11px; color: var(--text-muted); }
 
-.tag {
-  display: inline-flex;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-}
+.text-muted { color: var(--text-muted); }
 
-.tag-green {
-  background: #ecfdf5;
-  color: #059669;
-}
+.status-text { font-size: 12px; color: var(--text-muted); }
 
-.tag-purple {
-  background: #faf5ff;
-  color: #7c3aed;
-}
+.status-text.running { color: #059669; font-weight: 500; }
 
-.tag-blue {
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-.status-text {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.status-text.running {
-  color: #059669;
-}
+[data-theme='dark'] .status-text.running { color: #4ade80; }
 
 .table-footer {
   display: flex;
@@ -889,18 +762,12 @@ const performanceSliders = [
   justify-content: space-between;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--bg-secondary);
 }
 
-.total {
-  font-size: 12px;
-  color: #94a3b8;
-}
+.total { font-size: 12px; color: var(--text-muted); }
 
-.pagination {
-  display: flex;
-  gap: 4px;
-}
+.pagination { display: flex; gap: 4px; }
 
 .page-btn {
   width: 28px;
@@ -909,11 +776,17 @@ const performanceSliders = [
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-card);
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-muted);
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.page-btn:hover:not(.disabled):not(.active) {
+  border-color: var(--border-secondary);
+  color: var(--text-primary);
 }
 
 .page-btn.active {
@@ -922,12 +795,8 @@ const performanceSliders = [
   border-color: transparent;
 }
 
-.page-btn.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+.page-btn.disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Performance Section */
 .custom-btn {
   font-size: 12px;
   color: #3b82f6;
@@ -936,25 +805,18 @@ const performanceSliders = [
   cursor: pointer;
 }
 
-.performance-section {
-  margin-top: 12px;
-}
+.performance-section { margin-top: 12px; }
 
-.preset-modes {
-  margin-bottom: 20px;
-}
+.preset-modes { margin-bottom: 20px; }
 
 .section-label {
   display: block;
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-muted);
   margin-bottom: 10px;
 }
 
-.mode-buttons {
-  display: flex;
-  gap: 8px;
-}
+.mode-buttons { display: flex; gap: 8px; }
 
 .mode-btn {
   flex: 1;
@@ -964,29 +826,28 @@ const performanceSliders = [
   gap: 6px;
   padding: 12px 8px;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-card);
   font-size: 12px;
-  color: #64748b;
+  color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.mode-btn:hover {
-  border-color: #22c55e;
-  color: #0f172a;
-}
+.mode-btn:hover { border-color: #22c55e; color: var(--text-primary); }
 
 .mode-btn.active {
   border-color: #22c55e;
-  background: #ecfdf5;
+  background: rgba(34, 197, 94, 0.1);
   color: #059669;
 }
 
-.mode-icon {
-  width: 20px;
-  height: 20px;
+[data-theme='dark'] .mode-btn.active {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
 }
+
+.mode-icon { width: 20px; height: 20px; }
 
 .sliders-section {
   display: flex;
@@ -995,11 +856,7 @@ const performanceSliders = [
   margin-bottom: 20px;
 }
 
-.slider-item {
-  padding: 12px;
-  background: #f8fafc;
-  border-radius: 8px;
-}
+.slider-item { padding: 12px; background: var(--bg-secondary); border-radius: 8px; }
 
 .slider-header {
   display: flex;
@@ -1008,37 +865,15 @@ const performanceSliders = [
   margin-bottom: 10px;
 }
 
-.slider-label {
-  font-size: 12px;
-  color: #64748b;
-}
+.slider-label { font-size: 12px; color: var(--text-muted); }
 
-.slider-values {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+.slider-values { display: flex; align-items: center; gap: 12px; }
 
-.current-value {
-  font-size: 11px;
-  color: #94a3b8;
-}
+.current-value { font-size: 11px; color: var(--text-muted); }
 
-.target-value {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-  min-width: 40px;
-  text-align: right;
-}
+.target-value { font-size: 14px; font-weight: 600; color: var(--text-primary); min-width: 40px; text-align: right; }
 
-.slider-track {
-  position: relative;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 3px;
-  margin-bottom: 6px;
-}
+.slider-track { position: relative; height: 6px; background: var(--bg-tertiary); border-radius: 3px; margin-bottom: 6px; }
 
 .slider-progress {
   position: absolute;
@@ -1055,7 +890,7 @@ const performanceSliders = [
   transform: translate(-50%, -50%);
   width: 16px;
   height: 16px;
-  background: #ffffff;
+  background: var(--bg-card);
   border: 2px solid #22c55e;
   border-radius: 50%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -1065,13 +900,10 @@ const performanceSliders = [
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
-.action-buttons {
-  display: flex;
-  gap: 12px;
-}
+.action-buttons { display: flex; gap: 12px; }
 
 .apply-btn {
   flex: 1;
@@ -1084,33 +916,37 @@ const performanceSliders = [
   border: none;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  transition: all 0.2s;
+}
+
+.apply-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(34, 197, 94, 0.4);
 }
 
 .reset-btn {
   padding: 10px 24px;
   border-radius: 8px;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
   font-size: 13px;
   font-weight: 500;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-primary);
   cursor: pointer;
+  transition: all 0.2s;
 }
 
-/* Scrollbar */
+.reset-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+
 .left-column::-webkit-scrollbar,
-.right-column::-webkit-scrollbar {
-  width: 4px;
-}
+.right-column::-webkit-scrollbar { width: 4px; }
 
 .left-column::-webkit-scrollbar-track,
-.right-column::-webkit-scrollbar-track {
-  background: transparent;
-}
+.right-column::-webkit-scrollbar-track { background: transparent; }
 
 .left-column::-webkit-scrollbar-thumb,
 .right-column::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--scrollbar-thumb);
   border-radius: 2px;
 }
 </style>

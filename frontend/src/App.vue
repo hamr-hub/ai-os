@@ -16,7 +16,6 @@ onMounted(() => {
   <div class="app-shell">
     <ToastContainer />
     <Sidebar />
-
     <main class="app-main">
       <RouterView v-slot="{ Component }">
         <transition name="page" mode="out-in">
@@ -37,12 +36,12 @@ onMounted(() => {
 
 .app-main {
   flex: 1;
-  margin-left: 200px;
+  margin-left: 220px;
   min-height: 100vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background-color: #f8fafc;
+  background-color: var(--bg-primary);
 }
 
 .app-page {
