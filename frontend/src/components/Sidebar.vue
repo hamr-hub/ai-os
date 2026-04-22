@@ -7,24 +7,23 @@ import {
   Server,
   MessageSquare,
   TestTube,
-  ChevronLeft,
-  ChevronRight,
+  Settings,
   Sun,
   Moon,
   Monitor,
+  Zap,
 } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
-import ConversationList from '@/components/ConversationList.vue'
 
 const router = useRouter()
 const route = useRoute()
 const store = useAppStore()
 
 const navItems = [
-  { name: 'dashboard', label: '仪表盘', icon: LayoutDashboard },
-  { name: 'gpu', label: 'GPU 监控', icon: Cpu },
+  { name: 'dashboard', label: '首页', icon: LayoutDashboard },
+  { name: 'gpu', label: '性能监控', icon: Cpu },
   { name: 'models', label: '模型管理', icon: Server },
-  { name: 'chat', label: '聊天', icon: MessageSquare },
+  { name: 'chat', label: 'AI 聊天', icon: MessageSquare },
   { name: 'test', label: '模型检测', icon: TestTube },
 ]
 
@@ -45,72 +44,49 @@ const themeIcon = computed(() => {
   if (store.theme === 'system') return Monitor
   return store.actualTheme === 'dark' ? Moon : Sun
 })
+
+const themeLabel = computed(() => {
+  if (store.theme === 'system') return '跟随系统'
+  return store.actualTheme === 'dark' ? '深色模式' : '浅色模式'
+})
 </script>
 
 <template>
-  <aside
-    class="sidebar"
-    :style="{ width: store.sidebarCollapsed ? '4rem' : '16rem' }"
-  >
-    <div class="flex items-center gap-3 p-4 border-b border-primary">
-      <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 gradient-primary shadow-lg shadow-primary/25">
-        <Server class="w-6 h-6 text-white" />
+  <aside class="sidebar">
+    <!-- Logo -->
+    <div class="logo-section">
+      <div class="logo-icon">
+        <Zap class="w-6 h-6 text-white" />
       </div>
-      <div v-if="!store.sidebarCollapsed" class="overflow-hidden fade-in">
-        <h1 class="text-lg font-bold text-gradient">AI Controller</h1>
-        <p class="text-xs text-muted truncate">模型管理平台</p>
+      <div class="logo-text">
+        <h1 class="logo-title">GPU Control</h1>
       </div>
     </div>
 
-    <div v-if="route.name === 'chat'" class="flex-1 overflow-hidden">
-      <ConversationList v-if="!store.sidebarCollapsed" />
-      <div v-else class="flex flex-col items-center gap-2 py-4">
-        <button
-          @click="navigateTo('chat')"
-          class="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200"
-          :class="isActive('chat') ? 'gradient-primary text-white shadow-lg' : 'text-muted hover:bg-hover hover:text-primary'"
-        >
-          <MessageSquare class="w-5 h-5" />
-        </button>
-      </div>
-    </div>
-
-    <nav v-else class="flex-1 px-3 py-4 space-y-1">
+    <!-- Navigation -->
+    <nav class="nav-section">
       <button
-        v-for="(item, index) in navItems"
+        v-for="item in navItems"
         :key="item.name"
         @click="navigateTo(item.name)"
-        class="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 relative group"
-        :class="isActive(item.name) ? 'gradient-primary text-white shadow-lg scale-[1.02]' : 'text-secondary hover:bg-hover hover:text-primary hover:scale-[1.02]'"
-        :style="{ animationDelay: `${index * 50}ms` }"
+        class="nav-item"
+        :class="{ active: isActive(item.name) }"
       >
-        <component :is="item.icon" class="w-5 h-5 flex-shrink-0" />
-        <span v-if="!store.sidebarCollapsed" class="font-medium truncate fade-in">{{ item.label }}</span>
-        <div
-          v-if="isActive(item.name) && store.sidebarCollapsed"
-          class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full gradient-primary"
-        ></div>
+        <component :is="item.icon" class="nav-icon" />
+        <span class="nav-label">{{ item.label }}</span>
       </button>
     </nav>
 
-    <div class="p-3 border-t border-primary space-y-2">
-      <button
-        @click="cycleTheme"
-        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-secondary hover:bg-hover hover:text-primary"
-        :title="`当前: ${store.theme === 'system' ? '跟随系统' : store.actualTheme === 'dark' ? '深色' : '浅色'}`"
-      >
-        <component :is="themeIcon" class="w-5 h-5 flex-shrink-0" />
-        <span v-if="!store.sidebarCollapsed" class="text-sm truncate fade-in">
-          {{ store.theme === 'system' ? '跟随系统' : store.actualTheme === 'dark' ? '深色模式' : '浅色模式' }}
-        </span>
+    <!-- Bottom Section -->
+    <div class="bottom-section">
+      <button class="nav-item" @click="cycleTheme">
+        <component :is="themeIcon" class="nav-icon" />
+        <span class="nav-label">{{ themeLabel }}</span>
       </button>
-
-      <button
-        @click="store.toggleSidebar"
-        class="w-full flex items-center justify-center py-2.5 text-muted hover:text-primary hover:bg-hover rounded-xl transition-all duration-200"
-      >
-        <ChevronLeft v-if="!store.sidebarCollapsed" class="w-5 h-5 transition-transform duration-300" />
-        <ChevronRight v-else class="w-5 h-5 transition-transform duration-300" />
+      
+      <button class="nav-item">
+        <Settings class="nav-icon" />
+        <span class="nav-label">设置</span>
       </button>
     </div>
   </aside>
@@ -121,13 +97,112 @@ const themeIcon = computed(() => {
   position: fixed;
   left: 0;
   top: 0;
-  height: 100%;
-  z-index: 40;
+  width: 200px;
+  height: 100vh;
+  z-index: 50;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-secondary);
-  border-right: 1px solid var(--border-primary);
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.5px;
+}
+
+.nav-section {
+  flex: 1;
+  padding: 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+}
+
+.nav-item:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item.active {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+  position: relative;
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  border-radius: 0 3px 3px 0;
+}
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.nav-label {
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bottom-section {
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 </style>

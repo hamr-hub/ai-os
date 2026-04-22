@@ -11,37 +11,37 @@ const getStatusColor = (value: number, warning = 70, danger = 90): string => {
 }
 
 const getProgressColor = (value: number, warning = 70, danger = 90): string => {
-  if (value >= danger) return 'bg-gradient-to-r from-red-500 to-red-600'
-  if (value >= warning) return 'bg-gradient-to-r from-yellow-500 to-orange-500'
-  return 'bg-gradient-to-r from-green-500 to-green-600'
+  if (value >= danger) return 'bg-red-500'
+  if (value >= warning) return 'bg-yellow-500'
+  return 'bg-green-500'
 }
 </script>
 
 <template>
-  <div class="bg-card backdrop-blur-sm rounded-2xl p-6 border border-primary card-hover noise-overlay">
-    <div class="flex items-center justify-between mb-6">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl flex items-center justify-center gradient-blue shadow-lg">
-          <Cpu class="w-6 h-6 text-white" />
+  <div class="gpu-monitor">
+    <div class="monitor-header">
+      <div class="header-left">
+        <div class="icon-wrapper">
+          <Cpu class="w-5 h-5 text-white" />
         </div>
         <div>
-          <h2 class="text-xl font-semibold text-primary">GPU 监控</h2>
-          <p class="text-secondary text-sm">实时监控 GPU 状态和性能指标</p>
+          <h2 class="monitor-title">GPU 监控</h2>
+          <p class="monitor-subtitle">实时监控 GPU 状态和性能指标</p>
         </div>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="header-actions">
         <button
           @click="refresh"
           :disabled="isRefreshing"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-hover hover:opacity-80 disabled:opacity-50 text-secondary rounded-lg text-sm transition-all"
+          class="action-btn"
         >
           <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isRefreshing }" />
-          <span>{{ isRefreshing ? '刷新中' : '刷新' }}</span>
+          <span>刷新</span>
         </button>
         <button
           @click="toggleAutoRefresh"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all"
-          :class="isAutoRefreshEnabled ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-hover text-muted'"
+          class="toggle-btn"
+          :class="{ active: isAutoRefreshEnabled }"
         >
           <Pause v-if="isAutoRefreshEnabled" class="w-4 h-4" />
           <Play v-else class="w-4 h-4" />
@@ -49,107 +49,105 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
       </div>
     </div>
 
-    <div v-if="loading" class="flex flex-col items-center justify-center py-12">
-      <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p class="text-secondary">正在检测 GPU...</p>
+    <div v-if="loading" class="loading-state">
+      <div class="loading-spinner"></div>
+      <p>正在检测 GPU...</p>
     </div>
 
-    <div v-else-if="error" class="text-center py-8">
-      <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-        <Cpu class="w-8 h-8 text-red-400" />
+    <div v-else-if="error" class="error-state">
+      <div class="error-icon">
+        <Cpu class="w-8 h-8 text-red-500" />
       </div>
-      <p class="text-red-400 font-medium">{{ error }}</p>
+      <p>{{ error }}</p>
     </div>
 
-    <div v-else-if="gpuSummary?.status === 'unavailable'" class="text-center py-8">
-      <div class="w-16 h-16 bg-tertiary rounded-full flex items-center justify-center mx-auto mb-4">
-        <Cpu class="w-8 h-8 text-muted" />
+    <div v-else-if="gpuSummary?.status === 'unavailable'" class="empty-state">
+      <div class="empty-icon">
+        <Cpu class="w-8 h-8 text-gray-400" />
       </div>
-      <p class="text-secondary">未检测到 GPU</p>
+      <p>未检测到 GPU</p>
     </div>
 
-    <div v-else>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 stagger-fade-in">
-        <div class="bg-tertiary rounded-xl p-4 hover:bg-hover transition-all duration-200 border border-primary/50">
-          <div class="flex items-center gap-2 mb-2">
-            <MemoryStick class="w-5 h-5 text-blue-400" />
-            <span class="text-secondary text-sm">显存使用</span>
+    <div v-else class="monitor-content">
+      <!-- Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-header">
+            <MemoryStick class="w-5 h-5 text-blue-500" />
+            <span class="stat-label">显存使用</span>
           </div>
-          <p class="text-2xl font-bold text-primary">
+          <p class="stat-value">
             {{ formatMemory(gpuSummary?.current?.used_memory || 0) }}
           </p>
-          <p class="text-muted text-xs mt-1">
+          <p class="stat-sub">
             / {{ formatMemory(gpuSummary?.current?.total_memory || 0) }}
           </p>
         </div>
 
-        <div class="bg-tertiary rounded-xl p-4 hover:bg-hover transition-all duration-200 border border-primary/50">
-          <div class="flex items-center gap-2 mb-2">
-            <Activity class="w-5 h-5 text-green-400" />
-            <span class="text-secondary text-sm">GPU 利用率</span>
+        <div class="stat-card">
+          <div class="stat-header">
+            <Activity class="w-5 h-5 text-green-500" />
+            <span class="stat-label">GPU 利用率</span>
           </div>
-          <p class="text-2xl font-bold" :class="getStatusColor(gpuSummary?.current?.utilization || 0)">
+          <p class="stat-value" :class="getStatusColor(gpuSummary?.current?.utilization || 0)">
             {{ gpuSummary?.current?.utilization || 0 }}%
           </p>
         </div>
 
-        <div class="bg-tertiary rounded-xl p-4 hover:bg-hover transition-all duration-200 border border-primary/50">
-          <div class="flex items-center gap-2 mb-2">
-            <Thermometer class="w-5 h-5 text-orange-400" />
-            <span class="text-secondary text-sm">温度</span>
+        <div class="stat-card">
+          <div class="stat-header">
+            <Thermometer class="w-5 h-5 text-orange-500" />
+            <span class="stat-label">温度</span>
           </div>
-          <p class="text-2xl font-bold" :class="getStatusColor(gpuSummary?.current?.temperature || 0, 75, 90)">
+          <p class="stat-value" :class="getStatusColor(gpuSummary?.current?.temperature || 0, 75, 90)">
             {{ gpuSummary?.current?.temperature || 0 }}°C
           </p>
         </div>
 
-        <div class="bg-tertiary rounded-xl p-4 hover:bg-hover transition-all duration-200 border border-primary/50">
-          <div class="flex items-center gap-2 mb-2">
-            <Zap class="w-5 h-5 text-yellow-400" />
-            <span class="text-secondary text-sm">功耗</span>
+        <div class="stat-card">
+          <div class="stat-header">
+            <Zap class="w-5 h-5 text-yellow-500" />
+            <span class="stat-label">功耗</span>
           </div>
-          <p class="text-2xl font-bold text-primary">
+          <p class="stat-value">
             {{ gpuSummary?.current?.power_draw || 0 }}W
           </p>
-          <p class="text-muted text-xs mt-1">
+          <p class="stat-sub">
             / {{ gpuSummary?.current?.power_limit || 0 }}W
           </p>
         </div>
       </div>
 
-      <div class="space-y-4">
-        <div class="bg-tertiary rounded-xl p-4 border border-primary/30">
-          <div class="flex justify-between items-center mb-2">
-            <div class="flex items-center gap-2">
-              <MemoryStick class="w-4 h-4 text-blue-400" />
-              <span class="text-secondary text-sm">显存占用</span>
+      <!-- Progress Bars -->
+      <div class="progress-section">
+        <div class="progress-item">
+          <div class="progress-header">
+            <div class="progress-label">
+              <MemoryStick class="w-4 h-4 text-blue-500" />
+              <span>显存占用</span>
             </div>
-            <span class="text-secondary text-sm font-medium">
-              {{ gpuSummary?.current?.memory_utilization || 0 }}%
-            </span>
+            <span class="progress-value">{{ gpuSummary?.current?.memory_utilization || 0 }}%</span>
           </div>
-          <div class="h-3 bg-secondary rounded-full overflow-hidden">
+          <div class="progress-track">
             <div
-              class="h-full rounded-full transition-all duration-700 ease-out shadow-inner"
+              class="progress-fill"
               :class="getProgressColor(gpuSummary?.current?.memory_utilization || 0)"
               :style="{ width: `${gpuSummary?.current?.memory_utilization || 0}%` }"
             ></div>
           </div>
         </div>
 
-        <div class="bg-tertiary rounded-xl p-4 border border-primary/30">
-          <div class="flex justify-between items-center mb-2">
-            <div class="flex items-center gap-2">
-              <Activity class="w-4 h-4 text-green-400" />
-              <span class="text-secondary text-sm">GPU 利用率</span>
+        <div class="progress-item">
+          <div class="progress-header">
+            <div class="progress-label">
+              <Activity class="w-4 h-4 text-green-500" />
+              <span>GPU 利用率</span>
             </div>
-            <span class="text-secondary text-sm font-medium">
-              {{ gpuSummary?.current?.utilization || 0 }}%
-            </span>
+            <span class="progress-value">{{ gpuSummary?.current?.utilization || 0 }}%</span>
           </div>
-          <div class="h-3 bg-secondary rounded-full overflow-hidden">
+          <div class="progress-track">
             <div
-              class="h-full rounded-full transition-all duration-700 ease-out shadow-inner"
+              class="progress-fill"
               :class="getProgressColor(gpuSummary?.current?.utilization || 0)"
               :style="{ width: `${gpuSummary?.current?.utilization || 0}%` }"
             ></div>
@@ -157,30 +155,319 @@ const getProgressColor = (value: number, warning = 70, danger = 90): string => {
         </div>
       </div>
 
-      <div class="mt-6 pt-6 border-t border-primary">
-        <div class="flex items-center gap-2 mb-3">
-          <Fan class="w-5 h-5 text-secondary" />
-          <span class="text-secondary text-sm font-medium">详细信息</span>
+      <!-- Details Grid -->
+      <div class="details-section">
+        <div class="details-header">
+          <Fan class="w-4 h-4" />
+          <span>详细信息</span>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div class="bg-tertiary rounded-lg p-3 border border-primary/30">
-            <span class="text-muted text-xs">GPU 名称</span>
-            <p class="text-primary font-medium truncate">{{ gpuSummary?.current?.name || '-' }}</p>
+        <div class="details-grid">
+          <div class="detail-item">
+            <span class="detail-label">GPU 名称</span>
+            <p class="detail-value">{{ gpuSummary?.current?.name || '-' }}</p>
           </div>
-          <div class="bg-tertiary rounded-lg p-3 border border-primary/30">
-            <span class="text-muted text-xs">GPU 数量</span>
-            <p class="text-primary font-medium">{{ gpuSummary?.current?.gpu_count || 0 }}</p>
+          <div class="detail-item">
+            <span class="detail-label">GPU 数量</span>
+            <p class="detail-value">{{ gpuSummary?.current?.gpu_count || 0 }}</p>
           </div>
-          <div class="bg-tertiary rounded-lg p-3 border border-primary/30">
-            <span class="text-muted text-xs">风扇转速</span>
-            <p class="text-primary font-medium">{{ gpuSummary?.current?.fan_speed || 0 }}%</p>
+          <div class="detail-item">
+            <span class="detail-label">风扇转速</span>
+            <p class="detail-value">{{ gpuSummary?.current?.fan_speed || 0 }}%</p>
           </div>
-          <div class="bg-tertiary rounded-lg p-3 border border-primary/30">
-            <span class="text-muted text-xs">可用显存</span>
-            <p class="text-primary font-medium">{{ formatMemory(gpuSummary?.current?.available_memory || 0) }}</p>
+          <div class="detail-item">
+            <span class="detail-label">可用显存</span>
+            <p class="detail-value">{{ formatMemory(gpuSummary?.current?.available_memory || 0) }}</p>
           </div>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.gpu-monitor {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.monitor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.monitor-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.monitor-subtitle {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-btn.active {
+  background: #ecfdf5;
+  border-color: #22c55e;
+  color: #059669;
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #64748b;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #22c55e;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error & Empty States */
+.error-state,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #64748b;
+}
+
+.error-icon,
+.empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #fee2e2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.empty-icon {
+  background: #f1f5f9;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.stat-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+/* Progress Section */
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.progress-item {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.progress-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.progress-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.progress-track {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.progress-fill.bg-green-500 {
+  background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+}
+
+.progress-fill.bg-yellow-500 {
+  background: linear-gradient(90deg, #f59e0b 0%, #ea580c 100%);
+}
+
+.progress-fill.bg-red-500 {
+  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+}
+
+/* Details Section */
+.details-section {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 16px;
+}
+
+.details-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.detail-item {
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.detail-label {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.detail-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+</style>

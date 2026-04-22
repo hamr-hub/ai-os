@@ -3,15 +3,13 @@ import { RouterView } from 'vue-router'
 import Sidebar from '@/components/Sidebar.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
 import { useAppStore } from '@/stores/app'
-import { onMounted, computed } from 'vue'
+import { onMounted } from 'vue'
 
 const store = useAppStore()
 
 onMounted(() => {
   store.initTheme()
 })
-
-const sidebarWidth = computed(() => store.sidebarCollapsed ? '4rem' : '16rem')
 </script>
 
 <template>
@@ -19,10 +17,7 @@ const sidebarWidth = computed(() => store.sidebarCollapsed ? '4rem' : '16rem')
     <ToastContainer />
     <Sidebar />
 
-    <main
-      class="app-main"
-      :style="{ marginLeft: sidebarWidth }"
-    >
+    <main class="app-main">
       <RouterView v-slot="{ Component }">
         <transition name="page" mode="out-in">
           <component :is="Component" class="app-page" />
@@ -37,14 +32,17 @@ const sidebarWidth = computed(() => store.sidebarCollapsed ? '4rem' : '16rem')
   min-height: 100vh;
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  display: flex;
 }
 
 .app-main {
-  height: 100vh;
+  flex: 1;
+  margin-left: 200px;
+  min-height: 100vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: margin-left 0.3s ease;
+  background-color: #f8fafc;
 }
 
 .app-page {
@@ -56,16 +54,16 @@ const sidebarWidth = computed(() => store.sidebarCollapsed ? '4rem' : '16rem')
 
 .page-enter-active,
 .page-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .page-enter-from {
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateY(8px);
 }
 
 .page-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(-8px);
 }
 </style>

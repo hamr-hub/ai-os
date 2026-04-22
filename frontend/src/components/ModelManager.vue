@@ -1,192 +1,314 @@
 <script setup lang="ts">
 import { useModels } from '@/composables/useModels'
-import { Server, RefreshCw, Pause, Play as PlayIcon, Star, StarOff, Loader2, Play, Square, Zap, CheckCircle } from 'lucide-vue-next'
+import { Server, RefreshCw, Pause, Play as PlayIcon, Star, StarOff, Loader2, Play, Square, Zap, CheckCircle, ChevronDown, Plus, Layers } from 'lucide-vue-next'
 
 const { modelStatus, defaultModel, loading, error, actionLoading, isRefreshing, isAutoRefreshEnabled, refresh, toggleAutoRefresh, handleStartModel, handleStopModel, handleSwitchAndSetDefault, handleSetDefaultModel, handleClearDefaultModel } = useModels()
+
+const modelList = [
+  { name: 'Stable Diffusion XL', file: 'sd_xl_base_1.0.safetensors', type: '文生图', size: '6.46 GB', updated: '2024-05-20 14:30', status: '运行中' },
+  { name: 'Real-ESRGAN', file: 'realesrgan-x4plus.pth', type: '超分辨率', size: '67.8 MB', updated: '2024-05-18 10:21', status: '运行' },
+  { name: 'ControlNet v1.1', file: 'control_v11p_sd15.safetensors', type: '控制模型', size: '1.42 GB', updated: '2024-05-15 09:12', status: '运行' },
+  { name: 'Llama 3 8B Instruct', file: 'llama3-8b-instruct.Q4_K_M.gguf', type: '大语言模型', size: '4.92 GB', updated: '2024-05-10 16:45', status: '运行' },
+  { name: 'Anything V5', file: 'anything-v5-PrtRE.safetensors', type: '文生图', size: '4.07 GB', updated: '2024-05-08 11:33', status: '运行' },
+]
 </script>
 
 <template>
-  <div class="bg-card backdrop-blur-sm rounded-2xl p-6 border border-primary card-hover noise-overlay">
-    <div class="flex items-center justify-between mb-6">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl flex items-center justify-center gradient-purple shadow-lg">
-          <Server class="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h2 class="text-xl font-semibold text-primary">模型管理</h2>
-          <p class="text-secondary text-sm">管理和控制 AI 模型服务</p>
-        </div>
+  <div class="model-manager">
+    <div class="manager-header">
+      <div class="header-left">
+        <Layers class="header-icon" />
+        <span class="header-title">模型管理</span>
       </div>
-      <div class="flex items-center gap-2">
-        <button
-          @click="refresh"
-          :disabled="isRefreshing"
-          class="flex items-center gap-1.5 px-3 py-1.5 bg-hover hover:opacity-80 disabled:opacity-50 text-secondary rounded-lg text-sm transition-all"
-        >
-          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isRefreshing }" />
-          <span>{{ isRefreshing ? '刷新中' : '刷新' }}</span>
+      <div class="header-actions">
+        <button class="filter-btn">
+          全部类型
+          <ChevronDown class="w-3 h-3" />
         </button>
-        <button
-          @click="toggleAutoRefresh"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all"
-          :class="isAutoRefreshEnabled ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-hover text-muted'"
-        >
-          <Pause v-if="isAutoRefreshEnabled" class="w-4 h-4" />
-          <PlayIcon v-else class="w-4 h-4" />
+        <button class="import-btn">
+          <Plus class="w-4 h-4" />
+          导入模型
         </button>
-        <div v-if="defaultModel" class="flex items-center gap-2 bg-yellow-500/20 text-yellow-400 px-3 py-1.5 rounded-lg text-sm">
-          <Star class="w-4 h-4 fill-current" />
-          <span>默认: {{ defaultModel }}</span>
-          <button @click="handleClearDefaultModel" class="hover:text-yellow-300 transition-colors">
-            <StarOff class="w-4 h-4" />
-          </button>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <div class="table-header">
+        <span class="col-name">模型名称</span>
+        <span class="col-type">类型</span>
+        <span class="col-size">大小</span>
+        <span class="col-updated">更新时间</span>
+        <span class="col-action">操作</span>
+      </div>
+      <div class="table-body">
+        <div v-for="(model, index) in modelList" :key="model.name" class="table-row" :class="{ active: index === 0 }">
+          <div class="col-name">
+            <div class="model-info">
+              <span class="model-title">{{ model.name }}</span>
+              <span class="model-file">{{ model.file }}</span>
+            </div>
+          </div>
+          <span class="col-type">
+            <span class="tag" :class="{
+              'tag-green': model.type === '文生图',
+              'tag-purple': model.type === '超分辨率' || model.type === '大语言模型',
+              'tag-blue': model.type === '控制模型'
+            }">{{ model.type }}</span>
+          </span>
+          <span class="col-size">{{ model.size }}</span>
+          <span class="col-updated text-muted">{{ model.updated }}</span>
+          <span class="col-action">
+            <span class="status-text" :class="{ running: model.status === '运行中' }">{{ model.status }}</span>
+          </span>
         </div>
       </div>
     </div>
 
-    <div v-if="loading" class="flex flex-col items-center justify-center py-12">
-      <div class="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p class="text-secondary">正在加载模型...</p>
-    </div>
-
-    <div v-else-if="error" class="text-center py-8">
-      <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-        <Server class="w-8 h-8 text-red-400" />
-      </div>
-      <p class="text-red-400 font-medium">{{ error }}</p>
-    </div>
-
-    <div v-else-if="!modelStatus || Object.keys(modelStatus).length === 0" class="text-center py-8">
-      <div class="w-16 h-16 bg-tertiary rounded-full flex items-center justify-center mx-auto mb-4">
-        <Server class="w-8 h-8 text-muted" />
-      </div>
-      <p class="text-secondary">暂无可用模型</p>
-    </div>
-
-    <div v-else>
-      <div class="space-y-3 stagger-fade-in">
-        <div
-          v-for="(status, modelName) in modelStatus"
-          :key="modelName"
-          class="bg-tertiary rounded-xl p-4 hover:bg-hover transition-all duration-200 border border-primary/30"
-        >
-          <div class="flex items-center justify-between mb-3">
-            <div class="flex items-center gap-3">
-              <div
-                class="w-3 h-3 rounded-full transition-all duration-300 shadow-md"
-                :class="status.running ? 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50' : 'bg-gray-500'"
-              ></div>
-              <span class="text-primary font-medium">{{ modelName }}</span>
-              <span v-if="defaultModel === modelName" class="text-yellow-400 text-xs flex items-center gap-1 px-2 py-0.5 bg-yellow-500/20 rounded-full">
-                <Star class="w-3 h-3 fill-current" />
-                默认
-              </span>
-              <span v-if="status.preloaded" class="text-green-400 text-xs flex items-center gap-1 px-2 py-0.5 bg-green-500/20 rounded-full">
-                <CheckCircle class="w-3 h-3" />
-                预加载
-              </span>
-            </div>
-            <span
-              class="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-              :class="status.running ? 'bg-green-500/20 text-green-400' : 'bg-secondary text-secondary'"
-            >
-              {{ status.running ? '运行中' : '已停止' }}
-            </span>
-          </div>
-
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-sm">
-            <div class="bg-secondary rounded-lg p-3 border border-primary/20">
-              <span class="text-muted text-xs">端口</span>
-              <p class="text-primary font-medium">{{ status.port || '-' }}</p>
-            </div>
-            <div class="bg-secondary rounded-lg p-3 border border-primary/20">
-              <span class="text-muted text-xs">服务</span>
-              <p class="text-primary font-medium truncate">{{ status.service || '-' }}</p>
-            </div>
-            <div class="bg-secondary rounded-lg p-3 border border-primary/20">
-              <span class="text-muted text-xs">活跃请求</span>
-              <p class="text-primary font-medium">{{ status.active_requests }}</p>
-            </div>
-            <div class="bg-secondary rounded-lg p-3 border border-primary/20">
-              <span class="text-muted text-xs">预加载</span>
-              <p class="text-primary font-medium">{{ status.preloaded ? '是' : '否' }}</p>
-            </div>
-          </div>
-
-          <div class="flex gap-2">
-            <button
-              v-if="!status.running"
-              @click="handleStartModel(modelName as string)"
-              :disabled="actionLoading === modelName"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 gradient-green hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200 btn-glow shadow-md"
-            >
-              <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
-              <Play v-else class="w-4 h-4" />
-              <span>启动</span>
-            </button>
-
-            <button
-              v-if="status.running"
-              @click="handleStopModel(modelName as string)"
-              :disabled="actionLoading === modelName"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200 shadow-md"
-            >
-              <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
-              <Square v-else class="w-4 h-4" />
-              <span>停止</span>
-            </button>
-
-            <button
-              @click="handleSwitchAndSetDefault(modelName as string)"
-              :disabled="actionLoading === modelName"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 gradient-purple hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200 btn-glow shadow-md"
-              title="切换模型并设为默认"
-            >
-              <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
-              <Zap v-else class="w-4 h-4" />
-              <span>一键切换</span>
-            </button>
-
-            <button
-              @click="handleSetDefaultModel(modelName as string)"
-              :disabled="actionLoading === modelName || defaultModel === modelName"
-              class="flex items-center justify-center gap-2 px-3 py-2.5 bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-600/50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200 shadow-md"
-              :title="defaultModel === modelName ? '已是默认模型' : '设为默认模型'"
-            >
-              <Loader2 v-if="actionLoading === modelName" class="w-4 h-4 animate-spin" />
-              <Star v-else class="w-4 h-4" :class="defaultModel === modelName ? 'fill-current' : ''" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="mt-6 pt-6 border-t border-primary">
-        <div class="flex flex-wrap items-center justify-center gap-6 text-sm">
-          <div class="flex items-center gap-2">
-            <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse shadow-md"></div>
-            <span class="text-secondary">运行中</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-3 h-3 rounded-full bg-gray-500"></div>
-            <span class="text-secondary">已停止</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <CheckCircle class="w-4 h-4 text-green-400" />
-            <span class="text-secondary">预加载</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <Star class="w-4 h-4 text-yellow-400 fill-current" />
-            <span class="text-secondary">默认模型</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <Zap class="w-4 h-4 text-purple-400" />
-            <span class="text-secondary">一键切换</span>
-          </div>
-        </div>
-        <p class="text-center text-muted text-xs mt-3">
-          点击「一键切换」后，AIClient 调用时可不指定模型名，自动使用默认模型
-        </p>
+    <div class="table-footer">
+      <span class="total">共 {{ modelList.length }} 个模型</span>
+      <div class="pagination">
+        <button class="page-btn disabled">&lt;</button>
+        <button class="page-btn active">1</button>
+        <button class="page-btn">2</button>
+        <button class="page-btn">3</button>
+        <button class="page-btn">&gt;</button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.model-manager {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-icon {
+  width: 18px;
+  height: 18px;
+  color: #64748b;
+}
+
+.header-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 13px;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  border-color: #cbd5e1;
+}
+
+.import-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  transition: all 0.2s;
+}
+
+.import-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(34, 197, 94, 0.4);
+}
+
+/* Table */
+.table-container {
+  margin-top: 12px;
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: 2fr 80px 70px 120px 60px;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 12px;
+  color: #94a3b8;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.table-body {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 2fr 80px 70px 120px 60px;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid #f8fafc;
+  font-size: 13px;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.table-row:hover {
+  background: #f8fafc;
+}
+
+.table-row.active {
+  background: linear-gradient(90deg, #ecfdf5 0%, transparent 100%);
+}
+
+.model-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-title {
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.model-file {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.tag {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tag-green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.tag-purple {
+  background: #faf5ff;
+  color: #7c3aed;
+}
+
+.tag-blue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.status-text {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.status-text.running {
+  color: #059669;
+  font-weight: 500;
+}
+
+.text-muted {
+  color: #94a3b8;
+}
+
+/* Footer */
+.table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.total {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.pagination {
+  display: flex;
+  gap: 4px;
+}
+
+.page-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.page-btn:hover:not(.disabled):not(.active) {
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.page-btn.active {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.page-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Scrollbar */
+.table-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.table-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+</style>
