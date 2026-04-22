@@ -6,6 +6,11 @@ import os
 import hashlib
 from datetime import datetime, timedelta
 from functools import wraps
+import logging
+
+from .config import load_config, AppConfig
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
 
@@ -76,20 +81,51 @@ def async_redis_cache(key_prefix: str, expire: int = 60, key_builder: Optional[C
 class RedisClient:
     _instance = None
     _default_expire = 300
-    
+    _config_loaded = False
+
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super(RedisClient, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
-    def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0):
+
+    def __init__(self, host: str = None, port: int = None, db: int = None, config_path: str = None):
         if hasattr(self, '_initialized') and self._initialized:
             return
-        
-        self.host = host
-        self.port = port
-        self.db = db
+
+        config_source = "default"
+
+        if host is not None and port is not None:
+            self.host = host
+            self.port = port
+            self.db = db if db is not None else 0
+            config_source = "parameter"
+        else:
+            try:
+                config = load_config(config_path or "app-controller/config.yaml")
+                if config.settings and config.settings.redis:
+                    self.host = config.settings.redis.host
+                    self.port = config.settings.redis.port
+                    self.db = config.settings.redis.db
+                    config_source = "config"
+                else:
+                    self.host = "localhost"
+                    self.port = 6379
+                    self.db = 0
+            except Exception:
+                self.host = os.getenv("REDIS_HOST", "localhost")
+                try:
+                    self.port = int(os.getenv("REDIS_PORT", "6379"))
+                except ValueError:
+                    self.port = 6379
+                try:
+                    self.db = int(os.getenv("REDIS_DB", "0"))
+                except ValueError:
+                    self.db = 0
+                config_source = "env"
+
+        logger.info(f"[Redis] 连接配置: {self.host}:{self.port} (来源: {config_source})")
+
         self._client = None
         self._initialized = True
         self._cache_stats = {

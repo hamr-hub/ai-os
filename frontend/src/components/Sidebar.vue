@@ -49,15 +49,15 @@ const themeIcon = computed(() => {
 
 <template>
   <aside
-    class="fixed left-0 top-0 h-full z-40 transition-all duration-300 ease-out flex flex-col bg-secondary/95 backdrop-blur-md border-r border-primary"
-    :class="store.sidebarCollapsed ? 'w-16' : 'w-64'"
+    class="sidebar"
+    :style="{ width: store.sidebarCollapsed ? '4rem' : '16rem' }"
   >
     <div class="flex items-center gap-3 p-4 border-b border-primary">
-      <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 gradient-primary shadow-lg">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 gradient-primary shadow-lg shadow-primary/25">
         <Server class="w-6 h-6 text-white" />
       </div>
       <div v-if="!store.sidebarCollapsed" class="overflow-hidden fade-in">
-        <h1 class="text-lg font-bold text-primary truncate">AI Controller</h1>
+        <h1 class="text-lg font-bold text-gradient">AI Controller</h1>
         <p class="text-xs text-muted truncate">模型管理平台</p>
       </div>
     </div>
@@ -67,8 +67,8 @@ const themeIcon = computed(() => {
       <div v-else class="flex flex-col items-center gap-2 py-4">
         <button
           @click="navigateTo('chat')"
-          class="w-10 h-10 rounded-xl flex items-center justify-center transition-all"
-          :class="isActive('chat') ? 'gradient-primary text-white shadow-lg' : 'text-muted hover:bg-hover'"
+          class="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200"
+          :class="isActive('chat') ? 'gradient-primary text-white shadow-lg' : 'text-muted hover:bg-hover hover:text-primary'"
         >
           <MessageSquare class="w-5 h-5" />
         </button>
@@ -81,7 +81,7 @@ const themeIcon = computed(() => {
         :key="item.name"
         @click="navigateTo(item.name)"
         class="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 relative group"
-        :class="isActive(item.name) ? 'gradient-primary text-white shadow-lg scale-[1.02]' : 'text-secondary hover:bg-hover hover:scale-[1.02]'"
+        :class="isActive(item.name) ? 'gradient-primary text-white shadow-lg scale-[1.02]' : 'text-secondary hover:bg-hover hover:text-primary hover:scale-[1.02]'"
         :style="{ animationDelay: `${index * 50}ms` }"
       >
         <component :is="item.icon" class="w-5 h-5 flex-shrink-0" />
@@ -96,7 +96,7 @@ const themeIcon = computed(() => {
     <div class="p-3 border-t border-primary space-y-2">
       <button
         @click="cycleTheme"
-        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-secondary hover:bg-hover"
+        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-secondary hover:bg-hover hover:text-primary"
         :title="`当前: ${store.theme === 'system' ? '跟随系统' : store.actualTheme === 'dark' ? '深色' : '浅色'}`"
       >
         <component :is="themeIcon" class="w-5 h-5 flex-shrink-0" />
@@ -107,11 +107,27 @@ const themeIcon = computed(() => {
 
       <button
         @click="store.toggleSidebar"
-        class="w-full flex items-center justify-center py-2.5 text-muted hover:text-primary hover:bg-hover rounded-xl transition-all"
+        class="w-full flex items-center justify-center py-2.5 text-muted hover:text-primary hover:bg-hover rounded-xl transition-all duration-200"
       >
-        <ChevronLeft v-if="!store.sidebarCollapsed" class="w-5 h-5" />
-        <ChevronRight v-else class="w-5 h-5" />
+        <ChevronLeft v-if="!store.sidebarCollapsed" class="w-5 h-5 transition-transform duration-300" />
+        <ChevronRight v-else class="w-5 h-5 transition-transform duration-300" />
       </button>
     </div>
   </aside>
 </template>
+
+<style scoped>
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100%;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+</style>

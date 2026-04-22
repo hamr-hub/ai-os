@@ -1,0 +1,220 @@
+taskId: T20260422-001
+created: 2026-04-22
+mode: standard
+
+tests:
+  - id: TEST-001
+    priority: P0
+    target: app-controller/core/config.py
+    type: unit
+    given: "环境变量 REDIS_HOST=custom.redis.host 且 REDIS_PORT=6380"
+    when: "加载配置"
+    then: "config.redis_host == 'custom.redis.host' 且 config.redis_port == 6380"
+  
+  - id: TEST-002
+    priority: P0
+    target: app-controller/core/config.py
+    type: unit
+    given: "config.yaml 中 redis.host= yaml.host, redis.port=6380"
+    when: "加载配置（无环境变量）"
+    then: "config.redis_host == 'yaml.host' 且 config.redis_port == 6380"
+  
+  - id: TEST-003
+    priority: P0
+    target: app-controller/core/config.py
+    type: unit
+    given: "无环境变量且无配置文件 redis 字段"
+    when: "加载配置"
+    then: "config.redis_host == 'localhost' 且 config.redis_port == 6379"
+  
+  - id: TEST-004
+    priority: P0
+    target: app-controller/core/redis_client.py
+    type: unit
+    given: "Redis 服务不可用"
+    when: "尝试连接"
+    then: "返回 False 且不影响其他功能"
+  
+  - id: TEST-005
+    priority: P1
+    target: frontend/src/style.css
+    type: build
+    given: "前端项目存在"
+    when: "执行 pnpm build"
+    then: "编译成功无错误"
+  
+  - id: TEST-006
+    priority: P0
+    target: app-controller/scripts/mock_vllm_server.py
+    type: integration
+    given: "Mock 服务运行在 8000 端口"
+    when: "请求 /v1/models"
+    then: "返回包含 mock 模型列表"
+  
+  - id: TEST-007
+    priority: P0
+    target: 整体系统
+    type: e2e
+    given: "前后端服务均已启动"
+    when: "访问前端首页"
+    then: "页面正常渲染，无控制台报错"
+
+tasks:
+  - id: T001
+    title: "添加 Redis 配置到 config.py"
+    type: code
+    priority: P0
+    definition_of_done:
+      - "redis_host 和 redis_port 字段已添加到 SettingsConfig"
+      - "环境变量读取逻辑已实现"
+      - "配置文件读取逻辑已实现"
+      - "默认值 localhost:6379 已设置"
+      - "单元测试通过"
+    acceptance_criteria: ["AC-001", "AC-002", "AC-003"]
+    files:
+      - "app-controller/core/config.py"
+    depends_on: []
+  
+  - id: T002
+    title: "更新 RedisClient 使用配置地址"
+    type: code
+    priority: P0
+    definition_of_done:
+      - "RedisClient 从配置读取 host 和 port"
+      - "配置来源日志已添加"
+      - "连接失败不影响启动"
+      - "单元测试通过"
+    acceptance_criteria: ["AC-001", "AC-002", "AC-003"]
+    files:
+      - "app-controller/core/redis_client.py"
+    depends_on: ["T001"]
+  
+  - id: T003
+    title: "添加 Redis 配置到 config.yaml"
+    type: code
+    priority: P1
+    definition_of_done:
+      - "redis.host 和 redis.port 字段已添加"
+      - "YAML 格式正确"
+      - "配置可被正确解析"
+    acceptance_criteria: ["AC-002"]
+    files:
+      - "app-controller/config.yaml"
+    depends_on: []
+  
+  - id: T004
+    title: "美化日志输出格式"
+    type: code
+    priority: P1
+    definition_of_done:
+      - "彩色日志输出已添加"
+      - "结构化日志格式已实现"
+      - "请求日志已美化"
+      - "编译验证通过"
+    acceptance_criteria: ["AC-007"]
+    files:
+      - "app-controller/core/logger.py"
+    depends_on: []
+  
+  - id: T005
+    title: "优化前端全局样式"
+    type: code
+    priority: P1
+    definition_of_done:
+      - "渐变背景动画已添加"
+      - "卡片阴影效果已优化"
+      - "过渡动画已增强"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC-005"]
+    files:
+      - "frontend/src/style.css"
+    depends_on: []
+  
+  - id: T006
+    title: "优化 Dashboard 视觉效果"
+    type: code
+    priority: P1
+    definition_of_done:
+      - "统计卡片视觉效果已增强"
+      - "悬停动画效果已添加"
+      - "颜色渐变已优化"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC-005", "AC-006"]
+    files:
+      - "frontend/src/views/Dashboard.vue"
+    depends_on: ["T005"]
+  
+  - id: T007
+    title: "优化 Sidebar 交互体验"
+    type: code
+    priority: P1
+    definition_of_done:
+      - "平滑折叠展开动画已实现"
+      - "激活状态指示已增强"
+      - "主题切换按钮已优化"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC-005", "AC-006"]
+    files:
+      - "frontend/src/components/Sidebar.vue"
+    depends_on: ["T005"]
+  
+  - id: T008
+    title: "优化 GPUMonitor 组件样式"
+    type: code
+    priority: P2
+    definition_of_done:
+      - "进度条动画已增强"
+      - "数据展示布局已优化"
+      - "状态指示灯动画已添加"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC-005", "AC-006"]
+    files:
+      - "frontend/src/components/GPUMonitor.vue"
+    depends_on: ["T005"]
+  
+  - id: T009
+    title: "优化 ModelManager 组件样式"
+    type: code
+    priority: P2
+    definition_of_done:
+      - "按钮样式和动画已增强"
+      - "状态标签样式已优化"
+      - "加载动画已添加"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC-005", "AC-006"]
+    files:
+      - "frontend/src/components/ModelManager.vue"
+    depends_on: ["T005"]
+  
+  - id: T010
+    title: "验证 Mock vLLM 服务"
+    type: infra
+    priority: P0
+    definition_of_done:
+      - "/health 接口返回正常"
+      - "/v1/models 返回模型列表"
+      - "/v1/chat/completions 流式响应正常"
+    acceptance_criteria: ["AC-004"]
+    files: []
+    depends_on: []
+    test_exempt: true
+    test_exempt_reason: "基础设施验证任务，无需代码测试"
+  
+  - id: T011
+    title: "前后端接口联调验证"
+    type: infra
+    priority: P0
+    definition_of_done:
+      - "前端可访问后端 API"
+      - "数据正确展示在页面"
+      - "无控制台错误"
+    acceptance_criteria: ["AC-008"]
+    files: []
+    depends_on: ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009"]
+    test_exempt: true
+    test_exempt_reason: "集成验证任务，依赖所有开发任务完成"
+
+commands:
+  test: "cd app-controller && pytest"
+  lint: "cd app-controller && ruff check ."
+  typecheck: "cd frontend && pnpm build"

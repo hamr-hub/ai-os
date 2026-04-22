@@ -16,18 +16,18 @@ const progressSteps = ['初始化', '聊天测试', '工具调用测试', '多�
 
 const handleTest = async () => {
   if (!selectedModel.value || isTesting.value) return
-  
+
   isTesting.value = true
   testResult.value = null
   testProgress.value = 0
-  
+
   try {
     for (let i = 0; i < progressSteps.length; i++) {
       currentTest.value = progressSteps[i]
       testProgress.value = ((i + 1) / progressSteps.length) * 100
       await new Promise(resolve => setTimeout(resolve, 200))
     }
-    
+
     testResult.value = await testModel(selectedModel.value)
     currentTest.value = '完成'
   } catch (error) {
@@ -92,15 +92,15 @@ const formatDuration = (ms?: number) => {
 </script>
 
 <template>
-  <div class="bg-slate-800/80 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 card-hover h-full flex flex-col">
+  <div class="bg-card backdrop-blur-sm rounded-2xl p-6 border border-primary card-hover noise-overlay h-full flex flex-col">
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl flex items-center justify-center gradient-orange">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center gradient-orange shadow-lg">
           <TestTube class="w-6 h-6 text-white" />
         </div>
         <div>
-          <h2 class="text-xl font-semibold text-white">模型检测</h2>
-          <p class="text-slate-400 text-sm">检测模型支持的功能特性</p>
+          <h2 class="text-xl font-semibold text-primary">模型检测</h2>
+          <p class="text-secondary text-sm">检测模型支持的功能特性</p>
         </div>
       </div>
     </div>
@@ -109,7 +109,7 @@ const formatDuration = (ms?: number) => {
       <select
         v-model="selectedModel"
         :disabled="isTesting"
-        class="flex-1 bg-slate-700/50 text-white border border-slate-600/50 rounded-xl px-4 py-3 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/50 transition-all"
+        class="flex-1 bg-input text-primary border border-secondary rounded-xl px-4 py-3 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all"
       >
         <option value="" disabled>选择模型</option>
         <option v-for="(status, modelName) in modelStatus" :key="modelName" :value="modelName">
@@ -119,7 +119,7 @@ const formatDuration = (ms?: number) => {
       <button
         @click="handleTest"
         :disabled="isTesting || !selectedModel"
-        class="px-6 py-3 gradient-orange hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all flex items-center gap-2 btn-glow"
+        class="px-6 py-3 gradient-orange hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all flex items-center gap-2 btn-glow shadow-md"
       >
         <Loader2 v-if="isTesting" class="w-4 h-4 animate-spin" />
         <TestTube v-else class="w-4 h-4" />
@@ -128,25 +128,25 @@ const formatDuration = (ms?: number) => {
     </div>
 
     <div v-if="isTesting" class="mb-4">
-      <div class="bg-slate-700/30 rounded-xl p-4">
+      <div class="bg-tertiary rounded-xl p-4">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-slate-400 text-sm">检测进度</span>
-          <span class="text-white text-sm font-medium">{{ currentTest }}</span>
+          <span class="text-secondary text-sm">检测进度</span>
+          <span class="text-primary text-sm font-medium">{{ currentTest }}</span>
         </div>
-        <div class="h-3 bg-slate-600 rounded-full overflow-hidden">
+        <div class="h-3 bg-secondary rounded-full overflow-hidden">
           <div
             class="h-full gradient-orange rounded-full transition-all duration-300 ease-out"
             :style="{ width: `${testProgress}%` }"
           ></div>
         </div>
         <div class="flex justify-between mt-2">
-          <span class="text-xs text-slate-500">{{ Math.round(testProgress) }}%</span>
+          <span class="text-xs text-muted">{{ Math.round(testProgress) }}%</span>
           <div class="flex gap-1">
             <span
               v-for="(_, index) in progressSteps"
               :key="index"
               class="w-2 h-2 rounded-full transition-all duration-200"
-              :class="index < testProgress / (100 / progressSteps.length) ? 'bg-orange-500' : 'bg-slate-600'"
+              :class="index < testProgress / (100 / progressSteps.length) ? 'bg-orange-500' : 'bg-tertiary'"
             ></span>
           </div>
         </div>
@@ -154,7 +154,7 @@ const formatDuration = (ms?: number) => {
     </div>
 
     <div v-if="testResult" class="flex-1 overflow-y-auto space-y-4">
-      <div class="flex items-center gap-3 p-4 bg-slate-700/30 rounded-xl">
+      <div class="flex items-center gap-3 p-4 bg-tertiary rounded-xl">
         <div class="w-12 h-12 rounded-full flex items-center justify-center" :class="getStatusBgColor(testResult.status) + '/20'">
           <component
             :is="getStatusIcon(testResult.status)"
@@ -163,8 +163,8 @@ const formatDuration = (ms?: number) => {
           />
         </div>
         <div class="flex-1">
-          <p class="font-medium text-white">{{ testResult.message }}</p>
-          <p v-if="testResult.report?.model_name" class="text-sm text-slate-400">
+          <p class="font-medium text-primary">{{ testResult.message }}</p>
+          <p v-if="testResult.report?.model_name" class="text-sm text-secondary">
             模型: {{ testResult.report.model_name }} | 时间: {{ new Date(testResult.report.test_timestamp).toLocaleString('zh-CN') }}
           </p>
         </div>
@@ -201,70 +201,70 @@ const formatDuration = (ms?: number) => {
 
       <div v-if="testResult.report" class="space-y-4">
         <div class="grid grid-cols-3 gap-3">
-          <div class="bg-slate-700/30 rounded-xl p-4 text-center hover:bg-slate-700/50 transition-all duration-200">
+          <div class="bg-tertiary rounded-xl p-4 text-center hover:bg-hover transition-all duration-200 border border-primary/30">
             <div class="w-12 h-12 mx-auto mb-2 rounded-full flex items-center justify-center" :class="getFeatureStatus(testResult.report.feature_support.chat).bgColor">
               <MessageCircle class="w-6 h-6" :class="getFeatureStatus(testResult.report.feature_support.chat).color" />
             </div>
-            <p class="text-white font-medium text-sm mb-1">聊天功能</p>
+            <p class="text-primary font-medium text-sm mb-1">聊天功能</p>
             <span class="px-2 py-1 rounded-full text-xs font-medium" :class="getFeatureStatus(testResult.report.feature_support.chat).bgColor + ' ' + getFeatureStatus(testResult.report.feature_support.chat).color">
               {{ getFeatureStatus(testResult.report.feature_support.chat).text }}
             </span>
           </div>
 
-          <div class="bg-slate-700/30 rounded-xl p-4 text-center hover:bg-slate-700/50 transition-all duration-200">
+          <div class="bg-tertiary rounded-xl p-4 text-center hover:bg-hover transition-all duration-200 border border-primary/30">
             <div class="w-12 h-12 mx-auto mb-2 rounded-full flex items-center justify-center" :class="getFeatureStatus(testResult.report.feature_support.tool_calling).bgColor">
               <Sparkles class="w-6 h-6" :class="getFeatureStatus(testResult.report.feature_support.tool_calling).color" />
             </div>
-            <p class="text-white font-medium text-sm mb-1">工具调用</p>
+            <p class="text-primary font-medium text-sm mb-1">工具调用</p>
             <span class="px-2 py-1 rounded-full text-xs font-medium" :class="getFeatureStatus(testResult.report.feature_support.tool_calling).bgColor + ' ' + getFeatureStatus(testResult.report.feature_support.tool_calling).color">
               {{ getFeatureStatus(testResult.report.feature_support.tool_calling).text }}
             </span>
           </div>
 
-          <div class="bg-slate-700/30 rounded-xl p-4 text-center hover:bg-slate-700/50 transition-all duration-200">
+          <div class="bg-tertiary rounded-xl p-4 text-center hover:bg-hover transition-all duration-200 border border-primary/30">
             <div class="w-12 h-12 mx-auto mb-2 rounded-full flex items-center justify-center" :class="getFeatureStatus(testResult.report.feature_support.multimodal).bgColor">
               <Eye class="w-6 h-6" :class="getFeatureStatus(testResult.report.feature_support.multimodal).color" />
             </div>
-            <p class="text-white font-medium text-sm mb-1">多模态</p>
+            <p class="text-primary font-medium text-sm mb-1">多模态</p>
             <span class="px-2 py-1 rounded-full text-xs font-medium" :class="getFeatureStatus(testResult.report.feature_support.multimodal).bgColor + ' ' + getFeatureStatus(testResult.report.feature_support.multimodal).color">
               {{ getFeatureStatus(testResult.report.feature_support.multimodal).text }}
             </span>
           </div>
         </div>
 
-        <div v-if="testResult.report.performance_metrics" class="bg-slate-700/30 rounded-xl p-4">
-          <h3 class="text-white font-medium mb-3 flex items-center gap-2">
+        <div v-if="testResult.report.performance_metrics" class="bg-tertiary rounded-xl p-4">
+          <h3 class="text-primary font-medium mb-3 flex items-center gap-2">
             <Gauge class="w-4 h-4 text-blue-400" />
             性能指标
           </h3>
           <div class="grid grid-cols-3 gap-3">
-            <div class="text-center p-3 bg-slate-600/30 rounded-lg">
-              <p class="text-slate-400 text-xs mb-1">延迟</p>
-              <p class="text-white text-xl font-bold">{{ testResult.report.performance_metrics.latency_ms }}ms</p>
+            <div class="text-center p-3 bg-secondary rounded-lg">
+              <p class="text-muted text-xs mb-1">延迟</p>
+              <p class="text-primary text-xl font-bold tabular-nums">{{ testResult.report.performance_metrics.latency_ms }}ms</p>
             </div>
-            <div class="text-center p-3 bg-slate-600/30 rounded-lg">
-              <p class="text-slate-400 text-xs mb-1">吞吐量</p>
-              <p class="text-white text-xl font-bold">{{ testResult.report.performance_metrics.throughput }} req/s</p>
+            <div class="text-center p-3 bg-secondary rounded-lg">
+              <p class="text-muted text-xs mb-1">吞吐量</p>
+              <p class="text-primary text-xl font-bold tabular-nums">{{ testResult.report.performance_metrics.throughput }} req/s</p>
             </div>
-            <div class="text-center p-3 bg-slate-600/30 rounded-lg">
-              <p class="text-slate-400 text-xs mb-1">Token/s</p>
-              <p class="text-white text-xl font-bold">{{ testResult.report.performance_metrics.tokens_per_second || '-' }}</p>
+            <div class="text-center p-3 bg-secondary rounded-lg">
+              <p class="text-muted text-xs mb-1">Token/s</p>
+              <p class="text-primary text-xl font-bold tabular-nums">{{ testResult.report.performance_metrics.tokens_per_second || '-' }}</p>
             </div>
           </div>
         </div>
 
-        <div v-if="testResult.report.resource_utilization" class="bg-slate-700/30 rounded-xl p-4">
-          <h3 class="text-white font-medium mb-3 flex items-center gap-2">
+        <div v-if="testResult.report.resource_utilization" class="bg-tertiary rounded-xl p-4">
+          <h3 class="text-primary font-medium mb-3 flex items-center gap-2">
             <Cpu class="w-4 h-4 text-green-400" />
             资源使用
           </h3>
           <div class="grid grid-cols-2 gap-4">
             <div>
               <div class="flex justify-between mb-2">
-                <span class="text-slate-400 text-sm">GPU 利用率</span>
-                <span class="text-slate-300 text-sm font-medium">{{ testResult.report.resource_utilization.gpu_utilization || 0 }}%</span>
+                <span class="text-secondary text-sm">GPU 利用率</span>
+                <span class="text-primary text-sm font-medium">{{ testResult.report.resource_utilization.gpu_utilization || 0 }}%</span>
               </div>
-              <div class="h-3 bg-slate-600 rounded-full overflow-hidden">
+              <div class="h-3 bg-secondary rounded-full overflow-hidden">
                 <div
                   class="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-500"
                   :style="{ width: `${testResult.report.resource_utilization.gpu_utilization || 0}%` }"
@@ -273,10 +273,10 @@ const formatDuration = (ms?: number) => {
             </div>
             <div>
               <div class="flex justify-between mb-2">
-                <span class="text-slate-400 text-sm">显存使用</span>
-                <span class="text-slate-300 text-sm font-medium">{{ testResult.report.resource_utilization.memory_usage || 0 }}%</span>
+                <span class="text-secondary text-sm">显存使用</span>
+                <span class="text-primary text-sm font-medium">{{ testResult.report.resource_utilization.memory_usage || 0 }}%</span>
               </div>
-              <div class="h-3 bg-slate-600 rounded-full overflow-hidden">
+              <div class="h-3 bg-secondary rounded-full overflow-hidden">
                 <div
                   class="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500"
                   :style="{ width: `${testResult.report.resource_utilization.memory_usage || 0}%` }"
@@ -286,8 +286,8 @@ const formatDuration = (ms?: number) => {
           </div>
         </div>
 
-        <div v-if="testResult.report.test_results" class="bg-slate-700/30 rounded-xl p-4">
-          <h3 class="text-white font-medium mb-3 flex items-center gap-2">
+        <div v-if="testResult.report.test_results" class="bg-tertiary rounded-xl p-4">
+          <h3 class="text-primary font-medium mb-3 flex items-center gap-2">
             <Clock class="w-4 h-4 text-purple-400" />
             测试详情
           </h3>
@@ -295,7 +295,7 @@ const formatDuration = (ms?: number) => {
             <div
               v-for="(test, index) in testResult.report.test_results"
               :key="index"
-              class="p-3 bg-slate-600/30 rounded-lg hover:bg-slate-600/50 transition-all duration-200"
+              class="p-3 bg-secondary rounded-lg hover:bg-hover transition-all duration-200"
             >
               <div class="flex items-center justify-between mb-1">
                 <div class="flex items-center gap-2">
@@ -306,17 +306,17 @@ const formatDuration = (ms?: number) => {
                       :class="getStatusColor(test.status)"
                     />
                   </div>
-                  <span class="text-white text-sm font-medium">{{ test.test_name }}</span>
-                  <span class="text-xs px-2 py-0.5 bg-slate-500 rounded">{{ test.feature_type }}</span>
+                  <span class="text-primary text-sm font-medium">{{ test.test_name }}</span>
+                  <span class="text-xs px-2 py-0.5 bg-tertiary rounded">{{ test.feature_type }}</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <span class="text-slate-400 text-xs">{{ formatDuration(test.duration) }}</span>
+                  <span class="text-muted text-xs">{{ formatDuration(test.duration) }}</span>
                   <span class="text-xs px-2 py-0.5 rounded-full" :class="getStatusBgColor(test.status) + '/20 ' + getStatusColor(test.status)">
                     {{ test.status }}
                   </span>
                 </div>
               </div>
-              <p v-if="test.details" class="text-slate-400 text-xs">{{ test.details }}</p>
+              <p v-if="test.details" class="text-secondary text-xs">{{ test.details }}</p>
               <p v-if="test.error" class="text-red-400 text-xs">{{ test.error }}</p>
             </div>
           </div>
@@ -326,11 +326,11 @@ const formatDuration = (ms?: number) => {
 
     <div v-else-if="!isTesting" class="flex-1 flex items-center justify-center">
       <div class="text-center py-8">
-        <div class="w-16 h-16 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-          <TestTube class="w-8 h-8 text-slate-500" />
+        <div class="w-16 h-16 bg-tertiary rounded-full flex items-center justify-center mx-auto mb-4">
+          <TestTube class="w-8 h-8 text-muted" />
         </div>
-        <p class="text-slate-400">选择模型并点击检测按钮</p>
-        <p class="text-slate-500 text-sm mt-1">将检测聊天、工具调用和多模态功能</p>
+        <p class="text-secondary">选择模型并点击检测按钮</p>
+        <p class="text-muted text-sm mt-1">将检测聊天、工具调用和多模态功能</p>
       </div>
     </div>
   </div>

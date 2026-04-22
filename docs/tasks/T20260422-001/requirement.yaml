@@ -1,0 +1,153 @@
+taskId: T20260422-001
+title: "可配置Redis服务地址与系统美化优化"
+source: "用户需求"
+created: 2026-04-22
+developer: heyongxian
+
+explicit_requirements:
+  features:
+    - id: F001
+      description: "Redis服务地址可配置化"
+      details:
+        - "支持通过环境变量 REDIS_HOST/REDIS_PORT 配置"
+        - "支持在 config.yaml 中配置 redis 字段"
+        - "默认值保持 localhost:6379"
+    
+    - id: F002
+      description: "使用 Mock vLLM 服务进行开发测试"
+      details:
+        - "Mock 服务已存在，需验证接口兼容性"
+        - "前端能够连接 Mock 服务并正常显示数据"
+    
+    - id: F003
+      description: "美化 Frontend 页面"
+      details:
+        - "优化 Dashboard 视觉效果"
+        - "增强 Sidebar 交互体验"
+        - "统一色彩体系和组件风格"
+    
+    - id: F004
+      description: "美化 Python 工程"
+      details:
+        - "增强日志输出格式"
+        - "优化错误处理和提示信息"
+        - "代码注释规范化"
+    
+    - id: F005
+      description: "功能验证与接口联调"
+      details:
+        - "前端独立功能正常"
+        - "后端独立功能正常"
+        - "前后端接口联调正常"
+
+  api_endpoints:
+    - path: "/health"
+      method: GET
+      purpose: "健康检查"
+    
+    - path: "/v1/models"
+      method: GET
+      purpose: "获取模型列表"
+    
+    - path: "/v1/chat/completions"
+      method: POST
+      purpose: "聊天补全"
+    
+    - path: "/manage/gpu"
+      method: GET
+      purpose: "获取GPU状态"
+    
+    - path: "/manage/models"
+      method: GET
+      purpose: "获取模型状态"
+
+implicit_requirements:
+  operational_feedback:
+    - "配置修改后需要重启提示"
+    - "Redis 连接失败时需要降级处理"
+    - "前端请求超时需要友好提示"
+  
+  error_handling:
+    - "Redis 连接异常时不影响基础功能"
+    - "Mock 服务异常时前端显示错误状态"
+    - "配置文件格式错误时使用默认值"
+  
+  monitoring:
+    - "Redis 连接状态监控"
+    - "配置热加载支持"
+
+acceptance_criteria:
+  - id: AC-001
+    given: "环境变量设置了 REDIS_HOST=custom.redis.host"
+    when: "启动 app-controller"
+    then: "使用配置的 Redis 地址连接"
+    priority: P0
+  
+  - id: AC-002
+    given: "config.yaml 包含 redis.host 和 redis.port"
+    when: "启动 app-controller"
+    then: "使用配置文件的 Redis 地址（优先级低于环境变量）"
+    priority: P0
+  
+  - id: AC-003
+    given: "未配置 Redis 地址"
+    when: "启动 app-controller"
+    then: "使用默认 localhost:6379"
+    priority: P0
+  
+  - id: AC-004
+    given: "启动 mock_vllm_server"
+    when: "前端访问 /v1/models"
+    then: "正确显示 mock 模型列表"
+    priority: P0
+  
+  - id: AC-005
+    given: "启动前后端服务"
+    when: "访问 Dashboard"
+    then: "显示优化的 UI 组件和动画"
+    priority: P1
+  
+  - id: AC-006
+    given: "前端独立运行"
+    when: "测试所有页面功能"
+    then: "无报错，交互流畅"
+    priority: P1
+  
+  - id: AC-007
+    given: "后端独立运行"
+    when: "测试所有 API 接口"
+    then: "返回正确数据，日志格式清晰"
+    priority: P1
+  
+  - id: AC-008
+    given: "前后端联调"
+    when: "测试完整流程"
+    then: "接口通信正常，数据展示正确"
+    priority: P0
+
+tech_context:
+  frontend:
+    framework: "Vue 3.5 + TypeScript"
+    styling: "Tailwind CSS 4"
+    state_management: "Pinia 3"
+    router: "Vue Router 5"
+  
+  backend:
+    framework: "FastAPI + Python 3.11+"
+    config_format: "YAML"
+    logging: "Python logging"
+    redis_client: "redis-py"
+  
+  existing_patterns:
+    config_pattern: "Pydantic BaseModel + YAML"
+    api_pattern: "FastAPI async endpoints"
+    frontend_api: "Axios client with TypeScript"
+
+complexity_metrics:
+  feature_count: 5
+  acceptance_criteria_count: 8
+  estimated_files: 12
+  business_flows: 3
+  has_tracking: false
+  
+risk_level: LOW

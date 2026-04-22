@@ -99,6 +99,12 @@ export async function chatCompletion(request: ChatCompletionRequest): Promise<Ch
   return response.data
 }
 
+const DONE_SENTINEL = '[DONE]'
+
+/**
+ * Streaming chat completion using native fetch + SSE
+ * (axios responseType:'stream' does not work in browser environments)
+ */
 export async function chatCompletionStream(
   request: Omit<ChatCompletionRequest, 'stream'>,
   onChunk: (content: string) => void,
@@ -106,40 +112,51 @@ export async function chatCompletionStream(
   signal?: AbortSignal
 ): Promise<void> {
   try {
-    const response = await client.post('/v1/chat/completions', { ...request, stream: true }, {
-      responseType: 'stream',
+    const response = await fetch('/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...request, stream: true }),
       signal,
     })
 
-    const stream = response.data as ReadableStream
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
+    }
 
-    const reader = stream.getReader()
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No response body')
+
     const decoder = new TextDecoder('utf-8')
+    let buffer = ''
 
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
 
-      const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n').filter((line: string) => line.trim())
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6)
-          if (data === '[DONE]') return
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+        const data = trimmed.slice(6)
+        if (data === DONE_SENTINEL) return
 
-          try {
-            const json = JSON.parse(data)
-            const content = json.choices?.[0]?.delta?.content
-            if (content) {
-              onChunk(content)
-            }
-          } catch {
+        try {
+          const json = JSON.parse(data)
+          const content = json.choices?.[0]?.delta?.content
+          if (content) {
+            onChunk(content)
           }
+        } catch {
+          // ignore JSON parse errors for incomplete chunks
         }
       }
     }
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error
     if (onError) {
       onError(error instanceof Error ? error : new Error('Stream error'))
     } else {
@@ -185,5 +202,13 @@ export interface ModelTestResult {
 
 export async function testModel(modelName: string): Promise<ModelTestResult> {
   const response = await client.post<ModelTestResult>(`/v1/test/model/${modelName}`)
+  return response.data
+}
+
+/**
+ * Health check endpoint
+ */
+export async function healthCheck(): Promise<{ status: string; version?: string }> {
+  const response = await client.get<{ status: string; version?: string }>('/health')
   return response.data
 }

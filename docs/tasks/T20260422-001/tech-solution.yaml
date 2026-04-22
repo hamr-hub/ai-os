@@ -1,0 +1,129 @@
+taskId: T20260422-001
+created: 2026-04-22
+version: "1.0"
+
+file_changes:
+  - path: app-controller/core/config.py
+    type: modify
+    reason: "添加 Redis 配置支持"
+    implementation_hints:
+      - "在 SettingsConfig 中添加 redis_host 和 redis_port 字段"
+      - "支持环境变量 REDIS_HOST 和 REDIS_PORT"
+      - "支持从 config.yaml 读取 redis.host 和 redis.port"
+      - "默认值 localhost:6379"
+    acceptance_criteria_covered: ["AC-001", "AC-002", "AC-003"]
+  
+  - path: app-controller/core/redis_client.py
+    type: modify
+    reason: "使用配置的 Redis 地址"
+    implementation_hints:
+      - "RedisClient 从配置读取 host 和 port"
+      - "添加配置来源日志输出"
+    acceptance_criteria_covered: ["AC-001", "AC-002", "AC-003"]
+  
+  - path: app-controller/config.yaml
+    type: modify
+    reason: "添加 Redis 配置字段"
+    implementation_hints:
+      - "添加 redis.host 和 redis.port 配置项"
+    acceptance_criteria_covered: ["AC-002"]
+  
+  - path: app-controller/core/logger.py
+    type: modify
+    reason: "美化日志输出格式"
+    implementation_hints:
+      - "添加彩色日志输出"
+      - "结构化日志格式（时间戳、模块、级别）"
+      - "请求日志美化"
+    acceptance_criteria_covered: ["AC-007"]
+  
+  - path: frontend/src/style.css
+    type: modify
+    reason: "增强全局样式和动画"
+    implementation_hints:
+      - "添加渐变背景动画"
+      - "优化卡片阴影效果"
+      - "增强过渡动画"
+    acceptance_criteria_covered: ["AC-005"]
+  
+  - path: frontend/src/views/Dashboard.vue
+    type: modify
+    reason: "优化 Dashboard 视觉效果"
+    implementation_hints:
+      - "增强统计卡片视觉效果"
+      - "添加悬停动画效果"
+      - "优化颜色渐变"
+    acceptance_criteria_covered: ["AC-005"]
+  
+  - path: frontend/src/components/Sidebar.vue
+    type: modify
+    reason: "优化 Sidebar 交互体验"
+    implementation_hints:
+      - "平滑折叠展开动画"
+      - "增强激活状态指示"
+      - "优化主题切换按钮"
+    acceptance_criteria_covered: ["AC-005"]
+  
+  - path: frontend/src/components/GPUMonitor.vue
+    type: modify
+    reason: "优化 GPU 监控组件"
+    implementation_hints:
+      - "增强进度条动画"
+      - "优化数据展示布局"
+      - "添加状态指示灯动画"
+    acceptance_criteria_covered: ["AC-005"]
+  
+  - path: frontend/src/components/ModelManager.vue
+    type: modify
+    reason: "优化模型管理组件"
+    implementation_hints:
+      - "增强按钮样式和动画"
+      - "优化状态标签样式"
+      - "添加加载动画"
+    acceptance_criteria_covered: ["AC-005"]
+
+api_changes: []
+
+state_machines: []
+
+feature_flags: []
+
+rollback_plan:
+  - "保留原有配置文件作为 config.yaml.bak"
+  - "Git 回滚到当前版本"
+  - "前端样式可独立回滚"
+
+implementation_references:
+  - task_id: "T001"
+    reference_path: "app-controller/core/config.py"
+    pattern: "Pydantic BaseModel 配置模式"
+  
+  - task_id: "T002"
+    reference_path: "app-controller/core/redis_client.py"
+    pattern: "单例模式 Redis 客户端"
+
+dependencies:
+  internal:
+    - "app-controller/core/config.py"
+    - "app-controller/core/redis_client.py"
+    - "frontend/src/style.css"
+  external:
+    - "redis-py >= 4.0"
+    - "python-dotenv >= 1.0"
+
+risk_assessment:
+  level: "LOW"
+  reasons:
+    - "配置变更风险低，有默认值兜底"
+    - "样式美化不影响核心功能"
+    - "Mock 服务已验证可用"
+
+testing_strategy:
+  unit_tests:
+    - "测试配置读取优先级（环境变量 > 配置文件 > 默认值）"
+    - "测试 Redis 连接成功和失败场景"
+  integration_tests:
+    - "测试前后端接口联调"
+    - "测试 Mock 服务接口兼容性"
+  e2e_tests:
+    - "完整流程测试：启动服务 → 访问前端 → 验证功能"

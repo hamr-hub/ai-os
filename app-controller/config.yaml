@@ -120,7 +120,12 @@ settings:
   memory_cleanup_delay: 5
   gpu_memory_utilization: 0.92
   default_memory_strategy: balanced
-  
+
+  redis:
+    host: jetson-local.hamr.top
+    port: 6379
+    db: 1
+
   logging:
     log_dir: logs
   

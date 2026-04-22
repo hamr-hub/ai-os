@@ -3,6 +3,28 @@ from typing import Optional, Dict, List, Any
 import yaml
 import os
 
+
+class RedisConfig(BaseModel):
+    host: str = Field(default="localhost")
+    port: int = Field(ge=1, le=65535, default=6379)
+    db: int = Field(ge=0, le=15, default=0)
+
+    @classmethod
+    def from_env(cls) -> "RedisConfig":
+        host = os.getenv("REDIS_HOST") or os.getenv("redis_host") or "localhost"
+        port_str = os.getenv("REDIS_PORT") or os.getenv("redis_port") or "6379"
+        db_str = os.getenv("REDIS_DB") or os.getenv("redis_db") or "0"
+        try:
+            port = int(port_str)
+        except ValueError:
+            port = 6379
+        try:
+            db = int(db_str)
+        except ValueError:
+            db = 0
+        return cls(host=host, port=port, db=db)
+
+
 class ModelConfig(BaseModel):
     service: str
     port: int = Field(ge=1, le=65535)
@@ -47,10 +69,11 @@ class SettingsConfig(BaseModel):
     memory_cleanup_delay: int = Field(ge=1, le=30, default=3)
     gpu_memory_utilization: float = Field(ge=0.5, le=0.99, default=0.9)
     default_memory_strategy: str = "balanced"
-    
+
     queue: QueueConfig = QueueConfig()
     priority: PriorityConfig = PriorityConfig()
     recovery: RecoveryConfig = RecoveryConfig()
+    redis: Optional[RedisConfig] = None
 
     @validator('default_memory_strategy')
     def validate_memory_strategy(cls, v):
@@ -110,17 +133,48 @@ def parse_memory_size(size_str: str) -> int:
         return 0
 
 def load_config(config_path: str) -> AppConfig:
+    raw_config = {}
+
     if os.path.exists(config_path):
         try:
-            with open(config_path, 'r') as f:
-                raw_config = yaml.safe_load(f)
-            return AppConfig(**raw_config)
+            with open(config_path, "r") as f:
+                raw_config = yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
             raise ValueError(f"Invalid YAML in config file: {e}")
-        except ValidationError as e:
-            raise ValueError(f"Config validation failed: {e}")
-    
-    return AppConfig()
+
+    if "settings" not in raw_config:
+        raw_config["settings"] = {}
+
+    if "redis" not in raw_config["settings"] or raw_config["settings"]["redis"] is None:
+        redis_from_env = RedisConfig.from_env()
+        raw_config["settings"]["redis"] = {
+            "host": redis_from_env.host,
+            "port": redis_from_env.port,
+            "db": redis_from_env.db,
+        }
+    else:
+        redis_config = raw_config["settings"]["redis"] or {}
+        env_host = os.getenv("REDIS_HOST") or os.getenv("redis_host")
+        env_port = os.getenv("REDIS_PORT") or os.getenv("redis_port")
+        env_db = os.getenv("REDIS_DB") or os.getenv("redis_db")
+
+        if env_host:
+            redis_config["host"] = env_host
+        if env_port:
+            try:
+                redis_config["port"] = int(env_port)
+            except ValueError:
+                pass
+        if env_db:
+            try:
+                redis_config["db"] = int(env_db)
+            except ValueError:
+                pass
+
+    try:
+        return AppConfig(**raw_config)
+    except ValidationError as e:
+        raise ValueError(f"Config validation failed: {e}")
 
 def validate_config(config: AppConfig) -> List[str]:
     errors = []
