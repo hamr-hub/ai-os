@@ -27,7 +27,7 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 35000, "Server port")
+	port := flag.Int("port", 35001, "Server port")
 	configPath := flag.String("config", "configs/config.yaml", "Config file path")
 	logDir := flag.String("log-dir", "", "Custom log directory")
 	flag.Parse()

@@ -5,7 +5,7 @@ PYTHON ?= python3
 PIP ?= pip3
 VENV ?= .venv
 HOST ?= 0.0.0.0
-PORT ?= 5000
+PORT ?= 35000
 
 # Install dependencies
 install:

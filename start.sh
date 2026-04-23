@@ -6,9 +6,10 @@ cd "$SCRIPT_DIR"
 
 # Configuration
 REDIS_PORT=${REDIS_PORT:-6379}
-CONTROLLER_PORT=${CONTROLLER_PORT:-5000}
+CONTROLLER_PORT=${CONTROLLER_PORT:-35000}
+GO_PORT=${GO_PORT:-35001}
 AICLIENT_PORT=${AICLIENT_PORT:-3000}
-FRONTEND_PORT=${FRONTEND_PORT:-8080}
+FRONTEND_PORT=${FRONTEND_PORT:-30000}
 USE_DOCKER=${USE_DOCKER:-auto}
 
 # Colors for output
@@ -44,9 +45,10 @@ show_help() {
     echo "  -d, --docker        Force using Docker Compose"
     echo "  -n, --native        Force native mode (Python + Node.js)"
     echo "  --redis-port PORT   Set Redis port (default: 6379)"
-    echo "  --controller-port PORT  Set AI Controller port (default: 5000)"
+    echo "  --controller-port PORT  Set AI Controller port (default: 35000)"
+    echo "  --go-port PORT          Set Go VLLM API port (default: 35001)"
     echo "  --aiclient-port PORT    Set AIClient-2-API port (default: 3000)"
-    echo "  --frontend-port PORT    Set Frontend port (default: 8080)"
+    echo "  --frontend-port PORT    Set Frontend port (default: 30000)"
     echo "  --stop              Stop all running services"
     echo "  --status            Show status of services"
     echo "  --restart           Restart all services"
@@ -290,6 +292,7 @@ show_summary() {
     echo "Services:"
     echo "  ${GREEN}Redis${NC}:           localhost:$REDIS_PORT"
     echo "  ${GREEN}AI Controller${NC}:   http://localhost:$CONTROLLER_PORT"
+    echo "  ${GREEN}Go VLLM API${NC}:     http://localhost:$GO_PORT"
     echo "  ${GREEN}AIClient-2-API${NC}:  http://localhost:$AICLIENT_PORT"
     echo "  ${GREEN}Frontend${NC}:        http://localhost:$FRONTEND_PORT"
     echo ""
@@ -332,6 +335,10 @@ main() {
                 ;;
             --controller-port)
                 CONTROLLER_PORT="$2"
+                shift
+                ;;
+            --go-port)
+                GO_PORT="$2"
                 shift
                 ;;
             --aiclient-port)

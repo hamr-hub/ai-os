@@ -2,7 +2,7 @@ services:
   go-vllm-api:
     build: .
     ports:
-      - "35000:35000"
+      - "35001:35001"
     volumes:
       - ./configs/config.yaml:/app/configs/config.yaml:ro
       - /mnt/pve_models:/mnt/pve_models:ro

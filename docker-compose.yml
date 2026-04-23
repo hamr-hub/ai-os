@@ -21,12 +21,12 @@ services:
         max-file: "3"
 
   ai-controller:
-    build: 
+    build:
       context: ./app-controller
       dockerfile: Dockerfile
     container_name: ai-os-controller
     ports:
-      - "5000:5000"
+      - "35000:35000"
     volumes:
       - ./config.yaml:/app/config.yaml
       - ./app-controller/logs:/app/logs
@@ -35,7 +35,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - LOG_LEVEL=INFO
-      - PORT=5000
+      - PORT=35000
       - HOST=0.0.0.0
     depends_on:
       redis:
@@ -49,11 +49,41 @@ services:
               count: all
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:35000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  go-vllm-api:
+    build:
+      context: ./go-vllm-api
+      dockerfile: Dockerfile
+    container_name: ai-os-go-vllm-api
+    ports:
+      - "35001:35001"
+    volumes:
+      - ./go-vllm-api/configs/config.yaml:/app/configs/config.yaml
+      - /mnt/pve_models:/mnt/pve_models
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PORT=35001
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     logging:
       driver: "json-file"
       options:
@@ -93,9 +123,9 @@ services:
       dockerfile: Dockerfile
     container_name: ai-os-frontend
     ports:
-      - "8080:80"
+      - "30000:80"
     environment:
-      - VUE_APP_API_URL=http://localhost:5000
+      - VUE_APP_API_URL=http://localhost:35000
     depends_on:
       ai-controller:
         condition: service_healthy

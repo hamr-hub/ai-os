@@ -33,11 +33,11 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, '/manage'),
       },
       '/v1': {
-        target: 'http://localhost:35000',
+        target: 'http://localhost:35001',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:35000',
+        target: 'http://localhost:35001',
         changeOrigin: true,
       },
     },

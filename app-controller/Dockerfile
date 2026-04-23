@@ -23,6 +23,6 @@ RUN python3 -m venv .venv && \
 
 COPY . .
 
-EXPOSE 5000
+EXPOSE 35000
 
 CMD ["/app/.venv/bin/python", "main.py"]

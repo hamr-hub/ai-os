@@ -19,7 +19,7 @@ COPY configs/config.yaml /app/configs/config.yaml
 
 WORKDIR /app
 
-EXPOSE 35000
+EXPOSE 35001
 
 ENTRYPOINT ["go-vllm-api"]
-CMD ["--config", "configs/config.yaml", "--port", "35000"]
+CMD ["--config", "configs/config.yaml", "--port", "35001"]
