@@ -1,0 +1,162 @@
+taskId: AIOS-FRONTEND-V3
+created: 2026-04-23
+mode: standard
+
+tests:
+  - id: TEST-001
+    priority: P0
+    target: frontend/src/components/Sidebar.vue
+    type: build
+    given: "Sidebar 组件存在"
+    when: "执行 pnpm build"
+    then: "编译成功无错误，侧边栏仅显示 3 个导航项"
+
+  - id: TEST-002
+    priority: P0
+    target: frontend/src/views/Dashboard.vue
+    type: build
+    given: "Dashboard 组件存在"
+    when: "执行 pnpm build"
+    then: "编译成功无错误"
+
+  - id: TEST-003
+    priority: P0
+    target: frontend/src/views/ModelManagement.vue
+    type: build
+    given: "ModelManagement 组件存在"
+    when: "执行 pnpm build"
+    then: "编译成功无错误"
+
+  - id: TEST-004
+    priority: P0
+    target: frontend/src/views/AgentView.vue
+    type: build
+    given: "AgentView 组件存在"
+    when: "执行 pnpm build"
+    then: "编译成功无错误"
+
+  - id: TEST-005
+    priority: P0
+    target: frontend/src/router/index.ts
+    type: build
+    given: "路由配置存在"
+    when: "执行 pnpm build"
+    then: "编译成功无错误"
+
+  - id: TEST-006
+    priority: P0
+    target: 整体前端
+    type: build
+    given: "所有变更完成"
+    when: "执行 pnpm build"
+    then: "完整编译成功无 TypeScript 类型错误"
+
+tasks:
+  - id: T001
+    title: "精简侧边栏导航项为 3 个核心入口"
+    type: code
+    priority: P0
+    definition_of_done:
+      - "navItems 数组只包含 dashboard/models/agent 三项"
+      - "移除 Activity/MessageSquare/BookOpen 图标导入"
+      - "折叠和主题切换功能正常"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC4.1", "AC4.2", "AC4.3", "AC4.4"]
+    files:
+      - "frontend/src/components/Sidebar.vue"
+    depends_on: []
+
+  - id: T002
+    title: "精简路由配置，移除 monitor 路由"
+    type: code
+    priority: P0
+    definition_of_done:
+      - "移除 monitor 路由定义"
+      - "保留 dashboard/models/agent 核心路由"
+      - "保留 chat/docs 路由但不在侧边栏"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC4.1"]
+    files:
+      - "frontend/src/router/index.ts"
+    depends_on: []
+
+  - id: T003
+    title: "重构 Dashboard 页面为四区块布局"
+    type: code
+    priority: P0
+    definition_of_done:
+      - "GPU 监控卡片含 sparkline SVG 趋势图"
+      - "模型列表卡片含 start/stop/switch 操作"
+      - "Token 用量卡片含 prompt/completion/total 统计"
+      - "快捷切换/默认模型设置功能"
+      - "自动刷新逻辑正确（GPU 3s, 模型 5s, Token 10s）"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC1.1", "AC1.2", "AC1.3", "AC1.4", "AC1.5", "AC1.6"]
+    files:
+      - "frontend/src/views/Dashboard.vue"
+    depends_on: ["T002"]
+
+  - id: T004
+    title: "优化模型管理页面布局和检测展示"
+    type: code
+    priority: P1
+    definition_of_done:
+      - "运行模型卡片展示端口、请求数、能力标签"
+      - "检测结果功能矩阵展示优化"
+      - "性能指标表格展示优化"
+      - "资源利用展示优化"
+      - "历史检测记录可展开详情"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC2.1", "AC2.2", "AC2.3", "AC2.4", "AC2.5", "AC2.6"]
+    files:
+      - "frontend/src/views/ModelManagement.vue"
+    depends_on: []
+
+  - id: T005
+    title: "优化 Agent 聊天界面交互体验"
+    type: code
+    priority: P1
+    definition_of_done:
+      - "对话列表侧边栏布局优化"
+      - "模型选择下拉样式优化"
+      - "流式响应渲染优化"
+      - "中断按钮交互优化"
+      - "pnpm build 成功"
+    acceptance_criteria: ["AC3.1", "AC3.2", "AC3.3", "AC3.4", "AC3.5"]
+    files:
+      - "frontend/src/views/AgentView.vue"
+      - "frontend/src/components/AgentChatWindow.vue"
+    depends_on: []
+
+  - id: T006
+    title: "优化全局样式变量和动画效果"
+    type: code
+    priority: P2
+    definition_of_done:
+      - "卡片阴影效果增强"
+      - "动画过渡效果优化"
+      - "渐变背景样式优化"
+      - "pnpm build 成功"
+    acceptance_criteria: []
+    files:
+      - "frontend/src/style.css"
+    depends_on: []
+
+  - id: T007
+    title: "全量构建验证和视觉回归检查"
+    type: infra
+    priority: P0
+    definition_of_done:
+      - "pnpm build 成功无 TypeScript 类型错误"
+      - "各页面正常渲染无控制台报错"
+      - "侧边栏只显示 3 个导航项"
+    acceptance_criteria: ["ALL"]
+    files: []
+    depends_on: ["T001", "T002", "T003", "T004", "T005", "T006"]
+    test_exempt: true
+    test_exempt_reason: "全量验证任务，依赖所有开发任务完成"
+
+commands:
+  test: "cd frontend && pnpm build"
+  lint: "cd frontend && npx eslint src/ --ext .vue,.ts --max-warnings=0"
+  typecheck: "cd frontend && vue-tsc --noEmit"

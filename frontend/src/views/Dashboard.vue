@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useModels } from '@/composables/useModels'
 import { useGPU } from '@/composables/useGPU'
 import { getTokenStats, getGPUHistory } from '@/api/client'
+import LineChart from '@/components/LineChart.vue'
 import type { TokenStats, GPUHistoryEntry } from '@/types'
 import {
   RefreshCw,
@@ -19,6 +20,7 @@ import {
   TrendingUp,
   Activity,
   Box,
+  MemoryStick,
 } from 'lucide-vue-next'
 
 const { modelList, defaultModel, actionLoading, handleStartModel, handleStopModel, handleSwitchAndSetDefault, refresh: refreshModels, isRefreshing: isRefreshingModels } = useModels()
@@ -89,24 +91,24 @@ const statusColor = (value: number, warn = 70, danger = 90) => {
   return 'success'
 }
 
-function buildSparklinePath(entries: GPUHistoryEntry[], key: keyof GPUHistoryEntry, height: number = 28): string {
-  if (!entries.length) return ''
-  const vals = entries.map(e => Number(e[key]) || 0)
-  const max = Math.max(...vals, 1)
-  const min = Math.min(...vals, 0)
-  const range = max - min || 1
-  const w = 100
-  const step = w / Math.max(vals.length - 1, 1)
-  return vals.map((v, i) => {
-    const x = i * step
-    const y = height - ((v - min) / range) * (height - 4) - 2
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
+const formatTimeLabel = (ts: string) => {
+  if (!ts) return ''
+  const d = new Date(ts)
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
-const utilSparkline = computed(() => buildSparklinePath(gpuHistory.value, 'utilization'))
-const tempSparkline = computed(() => buildSparklinePath(gpuHistory.value, 'temperature'))
-const memSparkline = computed(() => buildSparklinePath(gpuHistory.value, 'memory_utilization'))
+const gpuTimeLabels = computed(() => gpuHistory.value.map(e => formatTimeLabel(e.timestamp)))
+
+const sparklineDatasets = (key: keyof GPUHistoryEntry, color: string, bgColor: string) => [{
+  label: '',
+  data: gpuHistory.value.map(e => Number(e[key]) || 0),
+  borderColor: color,
+  backgroundColor: bgColor,
+  fill: true,
+  tension: 0.4,
+  pointRadius: 0,
+  borderWidth: 2,
+}]
 
 const totalTokens = computed(() => tokenStats.value?.total_tokens ?? 0)
 </script>
@@ -137,24 +139,39 @@ const totalTokens = computed(() => tokenStats.value?.total_tokens ?? 0)
           <div class="sparkline-row">
             <div class="sparkline-item">
               <span class="spark-label">利用率</span>
-              <svg class="sparkline" viewBox="0 0 100 28" preserveAspectRatio="none">
-                <path v-if="utilSparkline" :d="utilSparkline" fill="none" stroke="#6366f1" stroke-width="1.5" />
-              </svg>
-              <span class="spark-val">{{ (gpu.utilization ?? 0).toFixed(0) }}%</span>
+              <LineChart
+                :labels="gpuTimeLabels"
+                :datasets="sparklineDatasets('utilization', '#6366f1', 'rgba(99, 102, 241, 0.1)')"
+                :height="60"
+                :show-legend="false"
+                :animate="false"
+                y-unit="%"
+              />
+              <span class="spark-val" :class="statusColor(gpu.utilization ?? 0)">{{ (gpu.utilization ?? 0).toFixed(0) }}%</span>
             </div>
             <div class="sparkline-item">
               <span class="spark-label">温度</span>
-              <svg class="sparkline" viewBox="0 0 100 28" preserveAspectRatio="none">
-                <path v-if="tempSparkline" :d="tempSparkline" fill="none" stroke="#f59e0b" stroke-width="1.5" />
-              </svg>
-              <span class="spark-val">{{ gpu.temperature ?? '--' }}°C</span>
+              <LineChart
+                :labels="gpuTimeLabels"
+                :datasets="sparklineDatasets('temperature', '#f59e0b', 'rgba(245, 158, 11, 0.1)')"
+                :height="60"
+                :show-legend="false"
+                :animate="false"
+                y-unit="°C"
+              />
+              <span class="spark-val" :class="statusColor(gpu.temperature ?? 0, 65, 85)">{{ gpu.temperature ?? '--' }}°C</span>
             </div>
             <div class="sparkline-item">
               <span class="spark-label">显存</span>
-              <svg class="sparkline" viewBox="0 0 100 28" preserveAspectRatio="none">
-                <path v-if="memSparkline" :d="memSparkline" fill="none" stroke="#06b6d4" stroke-width="1.5" />
-              </svg>
-              <span class="spark-val">{{ (gpu.memory_utilization ?? 0).toFixed(0) }}%</span>
+              <LineChart
+                :labels="gpuTimeLabels"
+                :datasets="sparklineDatasets('memory_utilization', '#06b6d4', 'rgba(6, 182, 212, 0.1)')"
+                :height="60"
+                :show-legend="false"
+                :animate="false"
+                y-unit="%"
+              />
+              <span class="spark-val" :class="statusColor(gpu.memory_utilization ?? 0)">{{ (gpu.memory_utilization ?? 0).toFixed(0) }}%</span>
             </div>
           </div>
           <div class="metrics-row">
@@ -303,7 +320,12 @@ const totalTokens = computed(() => tokenStats.value?.total_tokens ?? 0)
 .card {
   background: var(--bg-card); border-radius: 12px;
   border: 1px solid var(--border-card); padding: 20px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3), 0 0 1px rgba(99, 102, 241, 0.1);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+.card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 8px rgba(99, 102, 241, 0.08);
+  transform: translateY(-1px);
 }
 
 .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
@@ -328,7 +350,9 @@ const totalTokens = computed(() => tokenStats.value?.total_tokens ?? 0)
 .sparkline-item { display: flex; flex-direction: column; gap: 4px; }
 .spark-label { font-size: 11px; color: var(--text-muted); }
 .spark-val { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.sparkline { width: 100%; height: 28px; display: block; }
+.spark-val.success { color: #22c55e; }
+.spark-val.warning { color: #f59e0b; }
+.spark-val.danger { color: #ef4444; }
 
 .metrics-row { display: flex; gap: 12px; margin-top: 12px; }
 .mini-metric { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 10px; background: var(--bg-secondary); border-radius: 8px; }

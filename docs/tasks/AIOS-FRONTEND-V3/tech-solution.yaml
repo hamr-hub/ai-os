@@ -1,0 +1,86 @@
+taskId: AIOS-FRONTEND-V3
+version: "1.0"
+platform: Web
+
+meta:
+  title: "前端菜单和页面优化重构"
+  platform: Web
+  requirement_confidence: high
+  requirement_version: "1.0"
+
+scope:
+  in_scope:
+    - "Dashboard 页面重构：整合 GPU 监控、模型列表、Token 用量、一键切换"
+    - "模型管理页面优化：运行模型卡片、模型检测、检测历史"
+    - "Agent 聊天界面优化：流式对话、模型选择、对话管理"
+    - "侧边栏导航精简：仅保留 Dashboard/模型管理/Agent 3 项"
+  out_of_scope:
+    - "后端 API 新增或修改"
+    - "ChatView（独立聊天页面）保留但不作为核心导航"
+    - "DocsView 保留但不作为核心导航"
+    - "MonitorView 移除独立路由，合并到 Dashboard"
+
+file_changes:
+  - path: "frontend/src/components/Sidebar.vue"
+    action: modify
+    description: "精简导航为 3 项：Dashboard/LayoutDashboard、模型管理/Server、Agent/Bot。移除 monitor/chat/docs 导航项，保留主题切换和折叠功能"
+    risk: low
+
+  - path: "frontend/src/router/index.ts"
+    action: modify
+    description: "移除 monitor 路由，保留 dashboard/models/agent 核心路由，chat/docs 路由保留但不在侧边栏显示"
+    risk: low
+
+  - path: "frontend/src/views/Dashboard.vue"
+    action: modify
+    description: "重构 Dashboard 为四区块布局：GPU 监控（sparkline 趋势图）、模型列表（一键操作）、Token 用量（统计+按模型分布）、快捷切换"
+    risk: medium
+
+  - path: "frontend/src/views/ModelManagement.vue"
+    action: modify
+    description: "优化模型卡片布局：运行模型展示端口/请求数/能力标签，检测结果功能矩阵，性能指标表格，资源利用展示，历史检测列表"
+    risk: medium
+
+  - path: "frontend/src/views/AgentView.vue"
+    action: modify
+    description: "优化 Agent 界面布局：对话列表侧边栏、模型选择下拉、Markdown 渲染、中断按钮优化"
+    risk: medium
+
+  - path: "frontend/src/components/AgentChatWindow.vue"
+    action: modify
+    description: "优化流式响应显示、tool_calls 渲染、中断按钮交互、模型选择下拉样式"
+    risk: low
+
+  - path: "frontend/src/style.css"
+    action: modify
+    description: "优化全局样式变量：增强卡片阴影、渐变背景、动画过渡效果"
+    risk: low
+
+validation:
+  acceptance:
+    - criterion: "侧边栏仅显示 Dashboard/模型管理/Agent 3 个导航项"
+      ac_ref: "AC4.1"
+      test_type: visual
+    - criterion: "Dashboard GPU 卡片展示 sparkline 趷势图"
+      ac_ref: "AC1.2"
+      test_type: visual
+    - criterion: "模型管理页检测历史可展开查看详情"
+      ac_ref: "AC2.6"
+      test_type: visual
+    - criterion: "Agent 界面支持流式对话和中断响应"
+      ac_ref: "AC3.1/AC3.5"
+      test_type: functional
+    - criterion: "pnpm build 无错误"
+      ac_ref: "ALL"
+      test_type: build
+
+risks:
+  - level: P2
+    description: "Dashboard 重构涉及布局大改，需确保自动刷新逻辑不受影响"
+    mitigation: "复用现有 composables（useGPU/useModels/useTokenStats），仅改视图层"
+
+  - level: P2
+    description: "移除 monitor/chat/docs 导航项后，用户可能找不到这些页面"
+    mitigation: "路由保留，仅从侧边栏隐藏；后续可通过设置或快捷键访问"
+
+rollback_plan: "git checkout -- frontend/src/ 回滚所有前端变更"

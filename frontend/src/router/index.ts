@@ -17,6 +17,21 @@ const routes: RouteRecordRaw[] = [
     name: 'agent',
     component: () => import('@/views/AgentView.vue'),
   },
+  {
+    path: '/chat',
+    name: 'chat',
+    component: () => import('@/views/ChatView.vue'),
+  },
+  {
+    path: '/docs',
+    name: 'docs',
+    component: () => import('@/views/DocsView.vue'),
+  },
+  {
+    path: '/docs/:slug',
+    name: 'docs-slug',
+    component: () => import('@/views/DocsView.vue'),
+  },
 ]
 
 const router = createRouter({
