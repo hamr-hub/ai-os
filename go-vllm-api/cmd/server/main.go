@@ -39,7 +39,7 @@ func main() {
 	if err != nil {
 		zapLogger.Fatal("load config", zap.Error(err))
 	}
-	zapLogger.Info("config loaded", zap.String("path", *configPath))
+	zapLogger.Info("config loaded", zap.String("path", *configPath), zap.Int("models", len(cfg.Models)))
 
 	redisRepo := repository.NewRedisRepo(
 		cfg.Settings.Redis.Host,
@@ -62,6 +62,17 @@ func main() {
 	wsManager := service.NewWSManager(zapLogger)
 	cacheUpdater := service.NewCacheUpdater(gpuMonitor, scheduler, cacheService, zapLogger)
 
+	vllmManager := service.NewVLLMManager(&cfg.VLLM, zapLogger)
+	llamaCppMgr := service.NewLlamaCppManager(zapLogger)
+	llamaCppMgr.SetDefaults(
+		cfg.LlamaCpp.ModelsBasePath,
+		cfg.LlamaCpp.DefaultNGPULayers,
+		cfg.LlamaCpp.DefaultCtxSize,
+		cfg.LlamaCpp.DefaultHost,
+		cfg.LlamaCpp.ServerModule,
+	)
+	modelTesting := service.NewModelTestingFramework(zapLogger)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -75,7 +86,15 @@ func main() {
 	configWatcher := config.NewConfigWatcher(*configPath, zapLogger)
 	configWatcher.RegisterCallback(func(newCfg *config.AppConfig) {
 		scheduler.SetConfig(newCfg)
-		zapLogger.Info("config reloaded via watcher")
+		vllmManager.SetConfig(&newCfg.VLLM)
+		llamaCppMgr.SetDefaults(
+			newCfg.LlamaCpp.ModelsBasePath,
+			newCfg.LlamaCpp.DefaultNGPULayers,
+			newCfg.LlamaCpp.DefaultCtxSize,
+			newCfg.LlamaCpp.DefaultHost,
+			newCfg.LlamaCpp.ServerModule,
+		)
+		zapLogger.Info("config reloaded via watcher", zap.Int("models", len(newCfg.Models)))
 	})
 	if err := configWatcher.Start(); err != nil {
 		zapLogger.Warn("config watcher start failed", zap.Error(err))
@@ -84,7 +103,7 @@ func main() {
 	scheduler.PreloadModels(ctx)
 	go scheduler.PreloadWatcherLoop(ctx)
 
-	go broadcastStatusLoop(ctx, gpuMonitor, scheduler, wsManager, zapLogger)
+	go broadcastStatusLoop(ctx, gpuMonitor, scheduler, wsManager, metricsCollector, zapLogger)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -97,9 +116,15 @@ func main() {
 	rateLimiter := middleware.NewRateLimitMiddlewareWithLimiter(100, 60, scheduler.GetRateLimiter())
 	r.Use(rateLimiter.Handler())
 
-	v1Handler := v1handler.NewV1Handler(scheduler, gpuMonitor, vllmProxy, metricsCollector, cacheService)
 	sysCollector := service.NewSystemStatusCollector(zapLogger)
-	manageHandler := manage.NewManageHandler(scheduler, gpuMonitor, sysCtl, sysCollector, metricsCollector, cacheService, cacheUpdater, wsManager)
+
+	v1Handler := v1handler.NewV1Handler(scheduler, gpuMonitor, vllmProxy, metricsCollector, cacheService)
+	manageHandler := manage.NewManageHandler(
+		scheduler, gpuMonitor, sysCtl, sysCollector,
+		metricsCollector, cacheService, cacheUpdater, wsManager,
+		vllmManager, llamaCppMgr, modelTesting,
+		redisRepo, *configPath,
+	)
 	healthHandler := health.NewHealthHandler(gpuMonitor, scheduler, metricsCollector, cacheService, promExporter)
 	wsHandler := ws.NewWSHandler(wsManager, zapLogger)
 
@@ -128,6 +153,7 @@ func main() {
 	configWatcher.Stop()
 	cacheUpdater.Stop()
 	gpuMonitor.Stop()
+	llamaCppMgr.CleanupAll()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
@@ -137,7 +163,7 @@ func main() {
 	zapLogger.Info("server exited")
 }
 
-func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service.Scheduler, ws *service.WSManager, l *zap.Logger) {
+func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service.Scheduler, ws *service.WSManager, mc *service.MetricsCollector, l *zap.Logger) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -158,6 +184,7 @@ func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service
 				}
 			}
 			ws.BroadcastStatus(gpuSummary, modelStatus)
+			mc.SaveGPUHistory(gpuSummary)
 		}
 	}
 }

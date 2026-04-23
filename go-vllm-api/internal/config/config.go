@@ -15,6 +15,7 @@ type AppConfig struct {
 	Models   map[string]ModelConfig `yaml:"models"`
 	Settings SettingsConfig         `yaml:"settings"`
 	VLLM     VLLMConfig             `yaml:"vllm"`
+	LlamaCpp LlamaCppConfig         `yaml:"llama_cpp"`
 }
 
 type ModelConfig struct {
@@ -29,6 +30,12 @@ type ModelConfig struct {
 	SupportsImageGeneration bool  `yaml:"supports_image_generation"`
 	Description            string `yaml:"description"`
 	ConcurrencyLimit       int    `yaml:"concurrency_limit"`
+
+	NGPULayers int      `yaml:"n_gpu_layers"`
+	CtxSize    int      `yaml:"ctx_size"`
+	NThreads   int      `yaml:"n_threads"`
+	Host       string   `yaml:"host"`
+	ExtraArgs  []string `yaml:"extra_args"`
 }
 
 type SettingsConfig struct {
@@ -85,6 +92,14 @@ type VLLMConfig struct {
 	DefaultMaxModelLen         int     `yaml:"default_max_model_len"`
 }
 
+type LlamaCppConfig struct {
+	ServerModule     string `yaml:"server_module"`
+	ModelsBasePath   string `yaml:"models_base_path"`
+	DefaultNGPULayers int   `yaml:"default_n_gpu_layers"`
+	DefaultCtxSize    int   `yaml:"default_ctx_size"`
+	DefaultHost       string `yaml:"default_host"`
+}
+
 func ParseMemorySize(sizeStr string) int64 {
 	if sizeStr == "" {
 		return 0
@@ -135,8 +150,36 @@ func Load(path string) (*AppConfig, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parse config yaml: %w", err)
 	}
+
+	if c.LlamaCpp.DefaultNGPULayers == 0 {
+		c.LlamaCpp.DefaultNGPULayers = -1
+	}
+	if c.LlamaCpp.DefaultCtxSize == 0 {
+		c.LlamaCpp.DefaultCtxSize = 4096
+	}
+	if c.LlamaCpp.DefaultHost == "" {
+		c.LlamaCpp.DefaultHost = "0.0.0.0"
+	}
+	if c.LlamaCpp.ServerModule == "" {
+		c.LlamaCpp.ServerModule = "llama_cpp.server"
+	}
+	if c.LlamaCpp.ModelsBasePath == "" {
+		c.LlamaCpp.ModelsBasePath = c.VLLM.ModelBasePath
+	}
+
 	cfg = &c
 	return cfg, nil
+}
+
+func Save(path string, c *AppConfig) error {
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write config file: %w", err)
+	}
+	return nil
 }
 
 func DefaultConfigPath() string {

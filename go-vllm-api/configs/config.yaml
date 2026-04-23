@@ -19,6 +19,52 @@ models:
     supports_images: false
     description: "Qwen3 235B AWQ"
 
+  Qwen3.6-35B-Instruct:
+    service: vllm
+    port: 8000
+    required_memory: 40GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/Qwen3.6-35B-Instruct
+    supports_images: true
+    supports_tool_calling: true
+    description: "Qwen3.6 35B with vision and tool calling"
+
+  llama-3.3-70b-instruct:
+    service: vllm
+    port: 8000
+    required_memory: 80GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/llama-3.3-70b-instruct
+    supports_images: false
+    supports_tool_calling: true
+    description: "Llama 3.3 70B Instruct"
+
+  Gemma-4-31B-GGUF-Q4:
+    service: llama_cpp
+    port: 8001
+    required_memory: 20GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/Gemma-4-31B-GGUF-Q4
+    n_gpu_layers: -1
+    ctx_size: 8192
+    host: "0.0.0.0"
+    description: "Gemma 4 31B GGUF Q4 via llama.cpp"
+
+  Qwen3.6-35B-GGUF-Q4:
+    service: llama_cpp
+    port: 8002
+    required_memory: 20GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/Qwen3.6-35B-GGUF-Q4
+    n_gpu_layers: -1
+    ctx_size: 8192
+    host: "0.0.0.0"
+    description: "Qwen3.6 35B GGUF Q4 via llama.cpp"
+
 settings:
   concurrency_limit: 32
   min_available_memory: 4GB
@@ -60,3 +106,10 @@ vllm:
   default_port: 8000
   default_gpu_memory_utilization: 0.92
   default_max_model_len: 32768
+
+llama_cpp:
+  server_module: llama_cpp.server
+  models_base_path: /mnt/pve_models
+  default_n_gpu_layers: -1
+  default_ctx_size: 4096
+  default_host: "0.0.0.0"

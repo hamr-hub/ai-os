@@ -1,10 +1,13 @@
 package manage
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
+	"go-vllm-api/internal/config"
+	"go-vllm-api/internal/repository"
 	"go-vllm-api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -19,9 +22,28 @@ type ManageHandler struct {
 	cache          *service.CacheService
 	cacheUpdater   *service.CacheUpdater
 	wsManager      *service.WSManager
+	vllmManager    *service.VLLMManager
+	llamaCppMgr    *service.LlamaCppManager
+	modelTesting   *service.ModelTestingFramework
+	redis          *repository.RedisRepo
+	configPath     string
 }
 
-func NewManageHandler(scheduler *service.Scheduler, gpuMonitor *service.GPUMonitor, sysCtl *service.SystemController, sysCollector *service.SystemStatusCollector, metrics *service.MetricsCollector, cache *service.CacheService, cacheUpdater *service.CacheUpdater, wsManager *service.WSManager) *ManageHandler {
+func NewManageHandler(
+	scheduler *service.Scheduler,
+	gpuMonitor *service.GPUMonitor,
+	sysCtl *service.SystemController,
+	sysCollector *service.SystemStatusCollector,
+	metrics *service.MetricsCollector,
+	cache *service.CacheService,
+	cacheUpdater *service.CacheUpdater,
+	wsManager *service.WSManager,
+	vllmManager *service.VLLMManager,
+	llamaCppMgr *service.LlamaCppManager,
+	modelTesting *service.ModelTestingFramework,
+	redis *repository.RedisRepo,
+	configPath string,
+) *ManageHandler {
 	return &ManageHandler{
 		scheduler:    scheduler,
 		gpuMonitor:   gpuMonitor,
@@ -31,6 +53,11 @@ func NewManageHandler(scheduler *service.Scheduler, gpuMonitor *service.GPUMonit
 		cache:        cache,
 		cacheUpdater: cacheUpdater,
 		wsManager:    wsManager,
+		vllmManager:  vllmManager,
+		llamaCppMgr:  llamaCppMgr,
+		modelTesting: modelTesting,
+		redis:        redis,
+		configPath:   configPath,
 	}
 }
 
@@ -39,6 +66,8 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	{
 		m.GET("/gpu", h.GetGPUStatus)
 		m.GET("/gpu/summary", h.GetGPUSummary)
+		m.GET("/gpu/history", h.GetGPUHistory)
+		m.POST("/gpu/history/config", h.ConfigureGPUHistory)
 		m.GET("/models", h.GetModelStatus)
 		m.GET("/models/summary", h.ModelsSummary)
 		m.POST("/models/:model_name/start", h.StartModel)
@@ -50,6 +79,12 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.GET("/queue", h.GetQueueStatus)
 		m.GET("/preload", h.GetPreload)
 		m.POST("/preload/:model_name", h.PreloadModel)
+		m.GET("/preload/status", h.GetPreloadStatus)
+		m.POST("/preload/:model_name/enable", h.EnablePreload)
+		m.POST("/preload/:model_name/disable", h.DisablePreload)
+		m.GET("/preload/all", h.EnableAllPreload)
+		m.GET("/token/stats", h.GetTokenStats)
+		m.GET("/token-stats", h.GetTokenStats)
 		m.GET("/metrics", h.GetMetrics)
 		m.POST("/metrics/reset", h.ResetMetrics)
 		m.GET("/health/alert", h.CheckAlertStatus)
@@ -57,9 +92,21 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.POST("/cache/refresh", h.RefreshCache)
 		m.GET("/cache/stats", h.GetCacheStats)
 		m.GET("/config", h.GetConfig)
+		m.PUT("/config", h.UpdateConfig)
 		m.POST("/config/reload", h.ReloadConfig)
+		m.GET("/service/status", h.GetServiceStatus)
+		m.POST("/service/start", h.StartService)
+		m.POST("/service/stop", h.StopService)
+		m.POST("/service/restart", h.RestartService)
 		m.GET("/system/status", h.SystemStatus)
 		m.GET("/websocket/connections", h.GetWebSocketConnections)
+		m.GET("/redis/health", h.RedisHealth)
+		m.GET("/redis/keys", h.RedisKeys)
+		m.DELETE("/redis/flush", h.RedisFlush)
+		m.GET("/monitor/all", h.MonitorAll)
+		m.GET("/llama_cpp/models", h.GetLlamaCppModels)
+		m.GET("/llama_cpp/status", h.GetLlamaCppStatus)
+		m.GET("/vllm/models", h.GetVLLMModels)
 	}
 
 	api := rg.Group("/api/v1")
@@ -93,15 +140,22 @@ func (h *ManageHandler) GetGPUStatus(c *gin.Context) {
 }
 
 func (h *ManageHandler) GetGPUSummary(c *gin.Context) {
-	status := h.gpuMonitor.GetStatus()
-	if status == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "unavailable",
-			"current": nil,
-			"history": []interface{}{},
-		})
+	cacheKey := "api:manage:gpu:summary"
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		c.JSON(http.StatusOK, cached)
 		return
 	}
+
+	status := h.gpuMonitor.GetStatus()
+	history := h.metrics.GetGPUHistory(20)
+
+	if status == nil {
+		result := gin.H{"status": "unavailable", "current": nil, "history": history}
+		h.cache.Set(cacheKey, result, 30)
+		c.JSON(http.StatusOK, result)
+		return
+	}
+
 	current := gin.H{
 		"name":              status.Name,
 		"gpu_count":         status.GPUCount,
@@ -115,11 +169,41 @@ func (h *ManageHandler) GetGPUSummary(c *gin.Context) {
 		"available_memory":  status.AvailableMemory,
 		"total_memory":      status.TotalMemory,
 	}
-	c.JSON(http.StatusOK, gin.H{
+
+	result := gin.H{
 		"status":  "available",
 		"current": current,
-		"history": []interface{}{},
+		"history": history,
+	}
+	h.cache.Set(cacheKey, result, 30)
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *ManageHandler) GetGPUHistory(c *gin.Context) {
+	limit := 100
+	if v := c.Query("limit"); v != "" {
+		if n, err := fmt.Sscanf(v, "%d", &limit); err == nil && n > 0 {
+			_ = n
+		}
+	}
+	history := h.metrics.GetGPUHistory(limit)
+	c.JSON(http.StatusOK, gin.H{
+		"history":  history,
+		"count":    len(history),
+		"timestamp": time.Now().Format(time.RFC3339),
 	})
+}
+
+func (h *ManageHandler) ConfigureGPUHistory(c *gin.Context) {
+	var req struct {
+		Enabled  bool `json:"enabled"`
+		MaxDays  int  `json:"max_days"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "configured", "enabled": req.Enabled, "max_days": req.MaxDays})
 }
 
 func (h *ManageHandler) GetModelStatus(c *gin.Context) {
@@ -141,6 +225,12 @@ func (h *ManageHandler) GetModelStatus(c *gin.Context) {
 }
 
 func (h *ManageHandler) ModelsSummary(c *gin.Context) {
+	cacheKey := "api:manage:models:summary"
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		c.JSON(http.StatusOK, cached)
+		return
+	}
+
 	models := h.scheduler.GetAvailableModels()
 	summary := make([]map[string]interface{}, 0)
 	for _, m := range models {
@@ -157,14 +247,18 @@ func (h *ManageHandler) ModelsSummary(c *gin.Context) {
 		if mc != nil {
 			entry["description"] = mc.Description
 			entry["required_memory"] = mc.RequiredMemory
+			entry["backend_type"] = mc.Service
 		}
 		summary = append(summary, entry)
 	}
-	c.JSON(http.StatusOK, gin.H{
+
+	result := gin.H{
 		"models":        summary,
 		"total":         len(summary),
 		"running_model": h.scheduler.GetCurrentModelName(),
-	})
+	}
+	h.cache.Set(cacheKey, result, 3)
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *ManageHandler) StartModel(c *gin.Context) {
@@ -209,6 +303,19 @@ func (h *ManageHandler) SwitchModel(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
 		return
 	}
+
+	mc := h.scheduler.GetModelConfig(modelName)
+	if mc != nil && mc.Service == "vllm" {
+		err := h.vllmManager.SwitchModelWithTest(c.Request.Context(), mc.ModelPath, modelName, mc.Port)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Failed to switch model %s: %v", modelName, err)})
+			return
+		}
+		h.scheduler.MarkModelSelected(modelName)
+		c.JSON(http.StatusOK, gin.H{"status": "switched", "model": modelName})
+		return
+	}
+
 	ok := h.scheduler.SwitchModel(c.Request.Context(), modelName)
 	if !ok {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Failed to switch to model %s, insufficient memory", modelName)})
@@ -238,6 +345,12 @@ func (h *ManageHandler) ClearDefaultModel(c *gin.Context) {
 }
 
 func (h *ManageHandler) GetQueueStatus(c *gin.Context) {
+	cacheKey := "api:manage:queue:status"
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		c.JSON(http.StatusOK, cached)
+		return
+	}
+
 	models := h.scheduler.GetAvailableModels()
 	info := make(map[string]interface{})
 	for _, m := range models {
@@ -247,6 +360,7 @@ func (h *ManageHandler) GetQueueStatus(c *gin.Context) {
 			"can_accept":         h.scheduler.CanAcceptRequest(m),
 		}
 	}
+	h.cache.Set(cacheKey, info, 3)
 	c.JSON(http.StatusOK, info)
 }
 
@@ -257,12 +371,31 @@ func (h *ManageHandler) GetPreload(c *gin.Context) {
 	})
 }
 
+func (h *ManageHandler) GetPreloadStatus(c *gin.Context) {
+	models := h.scheduler.GetAvailableModels()
+	details := make([]map[string]interface{}, 0)
+	for _, m := range models {
+		mc := h.scheduler.GetModelConfig(m)
+		details = append(details, gin.H{
+			"name":      m,
+			"preloaded": h.scheduler.IsModelPreloaded(m),
+			"running":   h.scheduler.IsModelRunning(m),
+			"keep_alive": func() bool { if mc != nil { return mc.KeepAlive }; return false }(),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"models":    details,
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+}
+
 func (h *ManageHandler) PreloadModel(c *gin.Context) {
 	modelName := c.Param("model_name")
 	if !h.scheduler.IsModelAvailable(modelName) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
 		return
 	}
+	h.scheduler.SchedulePreload(modelName)
 	ok, _ := h.scheduler.StartModel(c.Request.Context(), modelName)
 	if ok {
 		c.JSON(http.StatusOK, gin.H{"status": "preloaded", "model": modelName})
@@ -271,8 +404,60 @@ func (h *ManageHandler) PreloadModel(c *gin.Context) {
 	}
 }
 
+func (h *ManageHandler) EnablePreload(c *gin.Context) {
+	modelName := c.Param("model_name")
+	if !h.scheduler.IsModelAvailable(modelName) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
+		return
+	}
+	h.scheduler.SchedulePreload(modelName)
+	c.JSON(http.StatusOK, gin.H{"status": "enabled", "model": modelName})
+}
+
+func (h *ManageHandler) DisablePreload(c *gin.Context) {
+	modelName := c.Param("model_name")
+	if !h.scheduler.IsModelAvailable(modelName) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
+		return
+	}
+	h.scheduler.CancelPreload(modelName)
+	c.JSON(http.StatusOK, gin.H{"status": "disabled", "model": modelName})
+}
+
+func (h *ManageHandler) EnableAllPreload(c *gin.Context) {
+	models := h.scheduler.GetAvailableModels()
+	for _, m := range models {
+		h.scheduler.SchedulePreload(m)
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "all_enabled", "count": len(models)})
+}
+
+func (h *ManageHandler) GetTokenStats(c *gin.Context) {
+	cacheKey := "api:manage:token:stats"
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		c.JSON(http.StatusOK, cached)
+		return
+	}
+	stats := h.metrics.GetTokenStats()
+	result := gin.H{
+		"prompt_tokens":     stats.PromptTokens,
+		"completion_tokens": stats.CompletionTokens,
+		"total_tokens":      stats.TotalTokens,
+		"timestamp":         time.Now().Format(time.RFC3339),
+	}
+	h.cache.Set(cacheKey, result, 10)
+	c.JSON(http.StatusOK, result)
+}
+
 func (h *ManageHandler) GetMetrics(c *gin.Context) {
-	c.JSON(http.StatusOK, h.metrics.GetMetrics())
+	cacheKey := "api:manage:metrics"
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		c.JSON(http.StatusOK, cached)
+		return
+	}
+	result := h.metrics.GetMetrics()
+	h.cache.Set(cacheKey, result, 10)
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *ManageHandler) ResetMetrics(c *gin.Context) {
@@ -282,18 +467,29 @@ func (h *ManageHandler) ResetMetrics(c *gin.Context) {
 }
 
 func (h *ManageHandler) CheckAlertStatus(c *gin.Context) {
+	cacheKey := "api:manage:health:alert"
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		c.JSON(http.StatusOK, cached)
+		return
+	}
+
 	gpuStatus := h.gpuMonitor.GetStatus()
 	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus)
+	alertStatus := h.metrics.GetOverallAlertStatus(gpuStatus)
 	overallScore := 0.0
 	if v, ok := healthInfo["overall"].(float64); ok {
 		overallScore = v
 	}
-	c.JSON(http.StatusOK, gin.H{
+
+	result := gin.H{
 		"should_alert": overallScore < 70,
 		"health_score": overallScore,
 		"status":       healthInfo["status"],
-		"timestamp":     time.Now().Format(time.RFC3339),
-	})
+		"alert_status": alertStatus,
+		"timestamp":    time.Now().Format(time.RFC3339),
+	}
+	h.cache.Set(cacheKey, result, 10)
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *ManageHandler) GetCacheStatus(c *gin.Context) {
@@ -311,6 +507,7 @@ func (h *ManageHandler) RefreshCache(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "all_refreshed"})
 		return
 	}
+	h.cache.Delete("api:" + endpoint)
 	c.JSON(http.StatusOK, gin.H{"status": "refreshed", "endpoint": endpoint})
 }
 
@@ -319,20 +516,241 @@ func (h *ManageHandler) GetCacheStats(c *gin.Context) {
 }
 
 func (h *ManageHandler) GetConfig(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "config endpoint - use POST /manage/config/reload to reload"})
+	cfg := h.scheduler.GetModelConfig("")
+	_ = cfg
+	c.JSON(http.StatusOK, gin.H{
+		"models":   h.scheduler.GetAvailableModels(),
+		"message":  "Use PUT /manage/config to update config",
+	})
+}
+
+func (h *ManageHandler) UpdateConfig(c *gin.Context) {
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	cfg, err := config.Load(h.configPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load config: %v", err)})
+		return
+	}
+
+	if models, ok := updates["models"].(map[string]interface{}); ok {
+		for name, v := range models {
+			if mData, ok := v.(map[string]interface{}); ok {
+				mc := config.ModelConfig{}
+				if s, ok := mData["service"].(string); ok { mc.Service = s }
+				if p, ok := mData["port"].(float64); ok { mc.Port = int(p) }
+				if rm, ok := mData["required_memory"].(string); ok { mc.RequiredMemory = rm }
+				if pre, ok := mData["preload"].(bool); ok { mc.Preload = pre }
+				if ka, ok := mData["keep_alive"].(bool); ok { mc.KeepAlive = ka }
+				if mp, ok := mData["model_path"].(string); ok { mc.ModelPath = mp }
+				if desc, ok := mData["description"].(string); ok { mc.Description = desc }
+				if si, ok := mData["supports_images"].(bool); ok { mc.SupportsImages = si }
+				cfg.Models[name] = mc
+			}
+		}
+	}
+
+	if err := config.Save(h.configPath, cfg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save config: %v", err)})
+		return
+	}
+
+	h.scheduler.SetConfig(cfg)
+	c.JSON(http.StatusOK, gin.H{"status": "updated", "message": "Config saved and applied"})
 }
 
 func (h *ManageHandler) ReloadConfig(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "reloaded"})
+	cfg, err := config.Load(h.configPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to reload config: %v", err)})
+		return
+	}
+	h.scheduler.SetConfig(cfg)
+	c.JSON(http.StatusOK, gin.H{"status": "reloaded", "models_count": len(cfg.Models)})
+}
+
+func (h *ManageHandler) GetServiceStatus(c *gin.Context) {
+	serviceName := c.Query("service")
+	if serviceName == "" {
+		serviceName = "vllm"
+	}
+	status := h.sysCtl.GetServiceStatus(serviceName)
+	info := h.sysCtl.GetServiceInfo(serviceName)
+	c.JSON(http.StatusOK, gin.H{
+		"service": serviceName,
+		"status":  status,
+		"info":    info,
+	})
+}
+
+func (h *ManageHandler) StartService(c *gin.Context) {
+	var req struct {
+		Service string `json:"service" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ok := h.sysCtl.StartService(req.Service)
+	if ok {
+		c.JSON(http.StatusOK, gin.H{"status": "started", "service": req.Service})
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to start service %s", req.Service)})
+	}
+}
+
+func (h *ManageHandler) StopService(c *gin.Context) {
+	var req struct {
+		Service string `json:"service" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ok := h.sysCtl.StopService(req.Service)
+	if ok {
+		c.JSON(http.StatusOK, gin.H{"status": "stopped", "service": req.Service})
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to stop service %s", req.Service)})
+	}
+}
+
+func (h *ManageHandler) RestartService(c *gin.Context) {
+	var req struct {
+		Service string `json:"service" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ok := h.sysCtl.RestartService(req.Service)
+	if ok {
+		c.JSON(http.StatusOK, gin.H{"status": "restarted", "service": req.Service})
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to restart service %s", req.Service)})
+	}
 }
 
 func (h *ManageHandler) SystemStatus(c *gin.Context) {
+	cacheKey := "api:manage:system:status"
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		c.JSON(http.StatusOK, cached)
+		return
+	}
 	result := h.sysCollector.GetSystemStatus()
+	h.cache.Set(cacheKey, result, 10)
 	c.JSON(http.StatusOK, result)
 }
 
 func (h *ManageHandler) GetWebSocketConnections(c *gin.Context) {
 	c.JSON(http.StatusOK, h.wsManager.GetConnectionStats())
+}
+
+func (h *ManageHandler) RedisHealth(c *gin.Context) {
+	if h.redis == nil || !h.redis.IsConnected() {
+		c.JSON(http.StatusOK, gin.H{"status": "disconnected"})
+		return
+	}
+	ctx := context.Background()
+	info, err := h.redis.Info(ctx)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "connected", "info": info})
+}
+
+func (h *ManageHandler) RedisKeys(c *gin.Context) {
+	if h.redis == nil || !h.redis.IsConnected() {
+		c.JSON(http.StatusOK, gin.H{"keys": []string{}, "count": 0})
+		return
+	}
+	pattern := c.Query("pattern")
+	if pattern == "" {
+		pattern = "ai_controller:*"
+	}
+	c.JSON(http.StatusOK, gin.H{"pattern": pattern, "message": "Key listing requires SCAN support"})
+}
+
+func (h *ManageHandler) RedisFlush(c *gin.Context) {
+	if h.redis == nil || !h.redis.IsConnected() {
+		c.JSON(http.StatusOK, gin.H{"status": "no_redis"})
+		return
+	}
+	ctx := context.Background()
+	h.redis.Delete(ctx, "ai_controller:*")
+	c.JSON(http.StatusOK, gin.H{"status": "flushed"})
+}
+
+func (h *ManageHandler) MonitorAll(c *gin.Context) {
+	gpuStatus := h.gpuMonitor.GetStatus()
+	models := h.scheduler.GetAvailableModels()
+	modelStatus := make(map[string]interface{})
+	for _, m := range models {
+		mc := h.scheduler.GetModelConfig(m)
+		modelStatus[m] = gin.H{
+			"running":         h.scheduler.IsModelRunning(m),
+			"port":            h.scheduler.GetModelPort(m),
+			"service":         h.scheduler.GetModelService(m),
+			"active_requests": h.scheduler.GetActiveRequests(m),
+			"preloaded":       h.scheduler.IsModelPreloaded(m),
+			"backend_type":    func() string { if mc != nil { return mc.Service }; return "" }(),
+		}
+	}
+
+	queueStatus := make(map[string]interface{})
+	for _, m := range models {
+		queueStatus[m] = gin.H{
+			"active_requests": h.scheduler.GetActiveRequests(m),
+			"can_accept":      h.scheduler.CanAcceptRequest(m),
+		}
+	}
+
+	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus)
+	serviceStatus := gin.H{
+		"vllm": h.sysCtl.GetServiceStatus("vllm"),
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"gpu":      gpuStatus,
+		"models":   modelStatus,
+		"queue":    queueStatus,
+		"health":   healthInfo,
+		"service":  serviceStatus,
+		"system":   h.sysCollector.GetSystemStatus(),
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+}
+
+func (h *ManageHandler) GetLlamaCppModels(c *gin.Context) {
+	ggufModels := h.llamaCppMgr.ScanGGUFModels()
+	serverStatus := h.llamaCppMgr.GetServerStatus()
+	c.JSON(http.StatusOK, gin.H{
+		"gguf_models":  ggufModels,
+		"running_servers": serverStatus,
+		"timestamp":    time.Now().Format(time.RFC3339),
+	})
+}
+
+func (h *ManageHandler) GetLlamaCppStatus(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"servers":  h.llamaCppMgr.GetServerStatus(),
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+}
+
+func (h *ManageHandler) GetVLLMModels(c *gin.Context) {
+	models := h.vllmManager.ScanModels()
+	serviceStatus := h.vllmManager.GetVLLMServiceStatus()
+	c.JSON(http.StatusOK, gin.H{
+		"available_models": models,
+		"service_status":   serviceStatus,
+		"timestamp":        time.Now().Format(time.RFC3339),
+	})
 }
 
 func (h *ManageHandler) NodeIntegrationStatus(c *gin.Context) {
@@ -389,6 +807,8 @@ func (h *ManageHandler) ModelInfo(c *gin.Context) {
 	if mc != nil {
 		info["description"] = mc.Description
 		info["required_memory"] = mc.RequiredMemory
+		info["backend_type"] = mc.Service
+		info["keep_alive"] = mc.KeepAlive
 	}
 	c.JSON(http.StatusOK, info)
 }
