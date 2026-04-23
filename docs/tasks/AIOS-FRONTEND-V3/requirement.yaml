@@ -1,0 +1,67 @@
+taskId: AIOS-FRONTEND-V3
+title: 前端菜单和页面优化重构
+source: 用户需求
+developer: hyx
+status: in_progress
+created: "2026-04-22"
+
+requirements:
+  - id: R1
+    title: Dashboard 页面优化
+    description: |
+      重构 Dashboard 页面，整合四大模块：
+      1. GPU 监控 - 实时 GPU 状态、温度、显存使用率、历史趋势
+      2. 模型列表 - 所有可用模型、运行状态、一键切换
+      3. Token 用量 - Prompt/Completion/Total 统计、按模型分布
+      4. 一键切换 - 快速切换运行模型
+    acceptance_criteria:
+      - AC1.1: GPU 监控卡片展示 GPU 名称、VRAM 使用率、温度、利用率
+      - AC1.2: GPU 监控支持历史趋势迷你图（sparkline）
+      - AC1.3: 模型列表展示所有模型状态（运行/停止），支持一键启动/切换/停止
+      - AC1.4: Token 用量卡片展示 prompt/completion/total 统计及按模型分布
+      - AC1.5: 默认模型标记和快速设置
+      - AC1.6: 数据自动刷新（GPU 3s，模型 5s，Token 10s）
+
+  - id: R2
+    title: 模型管理页面
+    description: |
+      新的模型管理页面，展示运行模型和模型检测功能：
+      1. 当前运行模型展示 - 端口、请求数、能力标签
+      2. 模型检测 - 检测模型是否支持：对话/多模态/工具调用/图片生成
+      3. 检测结果展示 - 功能支持状态、性能指标、资源利用
+      4. 历史检测记录 - 展示历次检测的摘要和时间
+    acceptance_criteria:
+      - AC2.1: 运行模型卡片展示端口、请求数、能力标签（多模态/工具调用/图片生成）
+      - AC2.2: 可选择模型执行检测（调用 /v1/test/model/{name}）
+      - AC2.3: 检测结果展示功能支持矩阵（对话/多模态/工具调用/图片生成 通过/失败）
+      - AC2.4: 检测结果展示性能指标（Token/s、延迟、通过率）
+      - AC2.5: 检测结果展示资源利用（GPU 温度、利用率、显存、耗时）
+      - AC2.6: 历史检测记录列表，可展开查看详情
+
+  - id: R3
+    title: Agent 聊天界面
+    description: |
+      简单的 Agent 交互界面，连接已部署模型：
+      1. 简洁的对话 UI - 消息气泡、流式响应
+      2. 模型选择 - 使用当前运行的模型
+      3. 对话管理 - 新建/切换/删除对话
+      4. 后续可扩展为 Hermes Agent 接入
+    acceptance_criteria:
+      - AC3.1: 支持流式对话（SSE），实时显示 AI 响应
+      - AC3.2: 支持模型选择（下拉选择运行中的模型）
+      - AC3.3: 对话列表管理（新建/切换/删除）
+      - AC3.4: 消息支持 Markdown 渲染
+      - AC3.5: 支持中断正在进行的响应
+
+  - id: R4
+    title: 导航菜单优化
+    description: |
+      优化侧边栏导航，简化菜单项：
+      1. Dashboard - 仪表盘
+      2. 模型管理 - 模型列表和检测
+      3. Agent - 聊天交互界面
+    acceptance_criteria:
+      - AC4.1: 侧边栏只保留 3 个核心导航项
+      - AC4.2: 导航图标清晰、活跃状态高亮
+      - AC4.3: 支持折叠/展开
+      - AC4.4: 主题切换保留

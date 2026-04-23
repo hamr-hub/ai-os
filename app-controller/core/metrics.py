@@ -21,7 +21,9 @@ class MetricsCollector:
         self.image_request_sizes: List[int] = []
         self.image_response_times: List[float] = []
         self.image_error_counts: Dict[str, int] = defaultdict(int)
-        
+
+        self.token_usage: Dict[str, int] = defaultdict(int)
+
         self._load_from_redis()
     
     def _get_key(self, name: str) -> str:
@@ -79,6 +81,11 @@ class MetricsCollector:
             data = redis_client.get_json(image_error_counts_key)
             if data:
                 self.image_error_counts = defaultdict(int, data)
+
+            token_usage_key = self._get_key("token_usage")
+            data = redis_client.get_json(token_usage_key)
+            if data:
+                self.token_usage = defaultdict(int, data)
         except Exception as e:
             logger.error(f"Failed to load metrics from Redis: {e}")
     
@@ -113,6 +120,9 @@ class MetricsCollector:
             
             image_error_counts_key = self._get_key("image_error_counts")
             redis_client.set_json(image_error_counts_key, dict(self.image_error_counts))
+
+            token_usage_key = self._get_key("token_usage")
+            redis_client.set_json(token_usage_key, dict(self.token_usage))
         except Exception as e:
             logger.error(f"Failed to save metrics to Redis: {e}")
     
@@ -148,6 +158,36 @@ class MetricsCollector:
         
         if status_code >= 400:
             self.image_error_counts[endpoint] += 1
+
+    def record_token_usage(self, model_name: str, prompt_tokens: int = 0, completion_tokens: int = 0):
+        self.token_usage[f"{model_name}:prompt_tokens"] += prompt_tokens
+        self.token_usage[f"{model_name}:completion_tokens"] += completion_tokens
+        self.token_usage[f"{model_name}:total_tokens"] += prompt_tokens + completion_tokens
+        self.token_usage["total_prompt_tokens"] += prompt_tokens
+        self.token_usage["total_completion_tokens"] += completion_tokens
+        self.token_usage["total_tokens"] += prompt_tokens + completion_tokens
+        self._save_to_redis()
+
+    def get_token_stats(self) -> Dict:
+        model_stats = {}
+        seen_models = set()
+        for key, value in self.token_usage.items():
+            if ":" in key:
+                model, token_type = key.split(":", 1)
+                if model not in seen_models:
+                    seen_models.add(model)
+                    model_stats[model] = {
+                        "prompt_tokens": self.token_usage.get(f"{model}:prompt_tokens", 0),
+                        "completion_tokens": self.token_usage.get(f"{model}:completion_tokens", 0),
+                        "total_tokens": self.token_usage.get(f"{model}:total_tokens", 0),
+                    }
+        return {
+            "total_prompt_tokens": self.token_usage.get("total_prompt_tokens", 0),
+            "total_completion_tokens": self.token_usage.get("total_completion_tokens", 0),
+            "total_tokens": self.token_usage.get("total_tokens", 0),
+            "models": model_stats,
+            "timestamp": datetime.now().isoformat()
+        }
     
     def record_gpu_status(self, gpu_status: Dict):
         self.gpu_status_history.append({
@@ -242,7 +282,9 @@ class MetricsCollector:
         self.image_request_sizes.clear()
         self.image_response_times.clear()
         self.image_error_counts.clear()
-        
+
+        self.token_usage.clear()
+
         if redis_client.is_connected():
             try:
                 pattern = f"{self.redis_prefix}*"

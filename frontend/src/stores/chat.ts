@@ -6,12 +6,15 @@ export interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: Date
+  toolCalls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>
 }
 
 export interface Conversation {
   id: string
   title: string
   messages: Message[]
+  model: string | null
+  systemPrompt: string
   createdAt: Date
   updatedAt: Date
 }
@@ -28,11 +31,13 @@ export const useChatStore = defineStore('chat', () => {
     return Date.now().toString(36) + Math.random().toString(36).substr(2)
   }
 
-  const createConversation = (title = '新会话') => {
+  const createConversation = (title = '新会话', model: string | null = null) => {
     const conv: Conversation = {
       id: generateId(),
       title,
       messages: [],
+      model,
+      systemPrompt: '',
       createdAt: new Date(),
       updatedAt: new Date()
     }
@@ -68,6 +73,24 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  const setConversationModel = (id: string, model: string | null) => {
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv) {
+      conv.model = model
+      conv.updatedAt = new Date()
+      saveToStorage()
+    }
+  }
+
+  const setConversationSystemPrompt = (id: string, prompt: string) => {
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv) {
+      conv.systemPrompt = prompt
+      conv.updatedAt = new Date()
+      saveToStorage()
+    }
+  }
+
   const addMessage = (conversationId: string, role: Message['role'], content: string) => {
     const conv = conversations.value.find(c => c.id === conversationId)
     if (conv) {
@@ -79,11 +102,11 @@ export const useChatStore = defineStore('chat', () => {
       }
       conv.messages.push(message)
       conv.updatedAt = new Date()
-      
+
       if (conv.title === '新会话' && role === 'user') {
         conv.title = content.slice(0, 20) || '新会话'
       }
-      
+
       saveToStorage()
       return message
     }
@@ -122,10 +145,13 @@ export const useChatStore = defineStore('chat', () => {
         const parsed = JSON.parse(saved)
         conversations.value = parsed.map((c: Conversation) => ({
           ...c,
+          model: c.model ?? null,
+          systemPrompt: c.systemPrompt ?? '',
           createdAt: new Date(c.createdAt),
           updatedAt: new Date(c.updatedAt),
           messages: c.messages.map((m: Message) => ({
             ...m,
+            toolCalls: m.toolCalls ?? [],
             timestamp: new Date(m.timestamp)
           }))
         }))
@@ -146,6 +172,8 @@ export const useChatStore = defineStore('chat', () => {
     selectConversation,
     deleteConversation,
     updateConversationTitle,
+    setConversationModel,
+    setConversationSystemPrompt,
     addMessage,
     updateMessage,
     clearMessages,

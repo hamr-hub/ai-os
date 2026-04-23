@@ -1,0 +1,34 @@
+services:
+  go-vllm-api:
+    build: .
+    ports:
+      - "35000:35000"
+    volumes:
+      - ./configs/config.yaml:/app/configs/config.yaml:ro
+      - /mnt/pve_models:/mnt/pve_models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis_data:

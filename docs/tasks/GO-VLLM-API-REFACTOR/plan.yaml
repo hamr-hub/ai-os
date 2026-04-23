@@ -1,0 +1,39 @@
+tasks:
+  - id: T1
+    title: "修复编译错误"
+    description: "修复 logger/prometheus/redis/cors/watcher/ws_manager/cache_updater/gpu_monitor/manage_handler 中的编译错误"
+    files: [internal/pkg/logger/logger.go, internal/pkg/prometheus/prometheus.go, internal/repository/redis.go, internal/middleware/cors.go, internal/config/watcher.go, internal/service/ws_manager.go, internal/service/cache_updater.go, internal/service/gpu_monitor.go, internal/handler/manage/manage.go]
+    test_cmd: "go build ./..."
+    status: completed
+
+  - id: T2
+    title: "ChatMessage 支持 multimodal content part + OpenAI 兼容字段"
+    description: "增加 ContentVal 类型支持 string/[]ContentPart，增加 ToolDefinition/ToolCall/ResponseFormat/LogprobsResult"
+    files: [internal/model/chat.go, internal/handler/v1/chat.go]
+    depends: [T1]
+    test_cmd: "go build ./..."
+    status: completed
+
+  - id: T3
+    title: "限流中间件接入 Redis + 超时中间件"
+    description: "middleware/ratelimit.go 接入 service.RateLimiter (Redis)，增加 Timeout 中间件"
+    files: [internal/middleware/ratelimit.go, internal/service/rate_limiter.go, internal/service/scheduler.go, cmd/server/main.go]
+    depends: [T1]
+    test_cmd: "go build ./..."
+    status: completed
+
+  - id: T4
+    title: "创建部署配置文件"
+    description: "创建 configs/config.yaml, Dockerfile, docker-compose.yml"
+    files: [configs/config.yaml, Dockerfile, docker-compose.yml]
+    depends: []
+    test_cmd: "go build ./..."
+    status: completed
+
+  - id: T5
+    title: "编译验证 + vet"
+    description: "确保 go build, go vet 均通过"
+    files: []
+    depends: [T1, T2, T3, T4]
+    test_cmd: "go build ./... && go vet ./..."
+    status: pending

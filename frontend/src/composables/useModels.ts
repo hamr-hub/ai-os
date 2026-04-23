@@ -1,6 +1,6 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import {
-  getModelStatus,
+  getModelsStatus,
   startModel,
   stopModel,
   switchModel,
@@ -27,7 +27,7 @@ export function useModels() {
     }
     error.value = null
     try {
-      modelStatus.value = await getModelStatus()
+      modelStatus.value = await getModelsStatus()
       const defaultModelResult = await getDefaultModel()
       defaultModel.value = defaultModelResult.default_model
     } catch (err) {

@@ -1,0 +1,53 @@
+# app-controller Python → go-vllm-api Go 重构技术方案
+
+## 项目概述
+
+将 Python FastAPI 后端 app-controller 重构为 Go Gin 后端 go-vllm-api，实现 API 端点完全对齐、OpenAI API 兼容性增强、Redis 缓存和限流接入。
+
+## 架构对照
+
+```
+Python                          Go
+─────────────                   ─────────
+FastAPI + Uvicorn               Gin + net/http
+redis.asyncio                   go-redis/v9
+watchdog                        fsnotify
+httpx.AsyncClient               http.Client
+pydantic BaseModel              Go struct + yaml tag
+asyncio                         goroutine + context
+```
+
+## 核心变更清单
+
+### file_changes:
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| internal/model/chat.go | MODIFY | 增加 ContentVal/ContentPart/ImageURLPart/ToolDefinition/ToolCall/ResponseFormat/LogprobsResult |
+| internal/model/embedding.go | KEEP | Input 已为 interface{} 支持 string 和 []string |
+| internal/model/image.go | KEEP | 完全对齐 Python |
+| internal/model/service.go | KEEP | ServiceControlRequest/APIStatus 对齐 |
+| internal/pkg/logger/logger.go | MODIFY | 修复 zapcore.Open → os.OpenFile |
+| internal/pkg/prometheus/prometheus.go | MODIFY | 修复 Desc()/Handler 类型，增加 statusLabel |
+| internal/repository/redis.go | MODIFY | 修复 Watch 签名，Info 返回 map[string]map[string]string |
+| internal/middleware/ratelimit.go | MODIFY | 接入 service.RateLimiter + Timeout 中间件 |
+| internal/middleware/tracking.go | MODIFY | 移除 Timeout 函数（已在 ratelimit.go） |
+| internal/middleware/cors.go | MODIFY | 移除未使用 time import |
+| internal/config/watcher.go | MODIFY | 移除未使用 os import |
+| internal/service/rate_limiter.go | MODIFY | 增加 CanAcceptClientRequest 方法 |
+| internal/service/scheduler.go | MODIFY | 增加 GetRateLimiter 方法 |
+| internal/service/ws_manager.go | MODIFY | 修复 for range 索引问题 |
+| internal/service/cache_updater.go | MODIFY | 修复 unused gpuStatus 变量 |
+| internal/service/gpu_monitor.go | MODIFY | 移除 unused bufio/json import |
+| cmd/server/main.go | MODIFY | 使用 NewRateLimitMiddlewareWithLimiter |
+| configs/config.yaml | CREATE | Go 版配置文件 |
+| Dockerfile | CREATE | Go 多阶段构建 |
+| docker-compose.yml | CREATE | Go 版部署配置 |
+
+## 风险评估
+
+| 风险项 | 等级 | 处理策略 |
+|--------|------|----------|
+| Redis 不可用 | LOW | CacheService/RateLimiter 自动降级到内存 |
+| GPU 监控失败 | MEDIUM | nvidia-smi 不可用时返回 unavailable |
+| 流式 SSE 代理 | MEDIUM | 已实现 heartbeat + scanner |

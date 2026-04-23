@@ -1,0 +1,192 @@
+taskId: AIOS-FRONTEND-V2
+title: "ai-os 前端三大模块迭代完善"
+source: "用户需求描述"
+priority: P0
+platform: Web
+
+modules:
+  - id: dashboard
+    name: "Dashboard 控制台"
+    description: |
+      展示 GPU 监控、模型列表、一键切换、Token 用量统计。
+      当前状态：GPU监控已有真实数据，模型列表已有，一键切换已有，但缺少 Token 用量展示和 GPU 历史图表。
+    features:
+      - id: F1.1
+        name: "GPU 监控卡片"
+        status: done
+        description: "显示 GPU 名称、显存、利用率、温度、功耗，带动态颜色阈值"
+      - id: F1.2
+        name: "GPU 历史趋势图"
+        status: gap
+        description: "显示温度/利用率/显存的时间序列折线图"
+        ac:
+          - "展示最近60条GPU历史数据点"
+          - "3条折线：温度(绿)、GPU利用率(蓝)、显存占用率(紫)"
+          - "X轴时间标签，6个刻度"
+          - "无数据时显示'暂无数据'"
+      - id: F1.3
+        name: "运行中模型列表"
+        status: done
+        description: "显示当前运行模型、端口、请求数、默认标识、停止按钮"
+      - id: F1.4
+        name: "模型列表 + 一键切换"
+        status: done
+        description: "显示所有模型状态，支持一键切换(切换+设为默认)"
+      - id: F1.5
+        name: "Token 用量统计"
+        status: gap
+        description: "展示总 Token 数、Prompt Token、Completion Token 按模型分布"
+        ac:
+          - "展示全局总 Token 数、总 Prompt Token、总 Completion Token"
+          - "后端 /manage/token-stats 端点已实现（metrics.py 有方法，需添加路由）"
+          - "数据每10秒自动刷新"
+      - id: F1.6
+        name: "请求统计"
+        status: done
+        description: "展示总请求数、对话请求数、错误数、平均延迟"
+
+  - id: model-management
+    name: "模型管理"
+    description: |
+      展示当前运行模型，模型能力检测（对话/多模态/工具调用/图片生成），检测历史记录。
+      当前状态：ModelManagement.vue 已有4能力检测UI，但类型定义不完整（multimodal/image_generation字段用 as any），检测历史缺少展开详情。
+    features:
+      - id: F2.1
+        name: "运行中模型展示"
+        status: done
+        description: "卡片式展示运行模型，含端口、请求数、默认标识、操作按钮"
+      - id: F2.2
+        name: "已停止模型列表"
+        status: done
+        description: "列表展示已停止模型，含切换和启动按钮"
+      - id: F2.3
+        name: "模型能力检测 - 4项"
+        status: gap
+        description: "检测模型是否支持对话/多模态/工具调用/图片生成"
+        ac:
+          - "4个能力检测卡片：对话(MessageSquare)、多模态(Eye)、工具调用(Wrench)、图片生成(Image)"
+          - "feature_support 类型需包含 multimodal 和 image_generation 字段（当前 types/index.ts 缺失）"
+          - "后端 test/model 需在 feature_support 中返回 multimodal 和 image_generation 字段"
+          - "支持/不支持用 CheckCircle/XCircle 图标区分"
+      - id: F2.4
+        name: "检测性能指标"
+        status: done
+        description: "展示 avg_tps、avg_latency、pass_rate、tests_passed/total"
+      - id: F2.5
+        name: "资源使用"
+        status: partial
+        description: "展示 GPU 温度、利用率、显存、检测耗时"
+        ac:
+          - "resource_utilization.gpu 需包含 end_temperature 和 end_utilization 字段"
+          - "当前 types 缺少这两个字段定义"
+      - id: F2.6
+        name: "检测历史"
+        status: gap
+        description: "展示历史检测记录，支持展开查看详情"
+        ac:
+          - "列表展示模型名、状态、时间"
+          - "点击展开显示4项能力检测结果（含 multimodal 和 image_generation）"
+          - "展开时自动加载该模型的最新检测报告"
+      - id: F2.7
+        name: "检测详情"
+        status: done
+        description: "展示每项测试的名称、状态、耗时、错误信息"
+
+  - id: agent-chat
+    name: "Agent 聊天界面"
+    description: |
+      简单的 agent 交互界面，连接本地部署模型，后续可扩展 hermes agent。
+      当前状态：ChatWindow 有模型选择和系统提示词，但缺少 agent 风格 UI 和 tool_calls 展示。
+    features:
+      - id: F3.1
+        name: "会话管理"
+        status: done
+        description: "创建/选择/删除会话，每个会话独立模型和系统提示词"
+      - id: F3.2
+        name: "模型选择"
+        status: done
+        description: "顶栏下拉选择运行中模型，选择后保存到会话"
+      - id: F3.3
+        name: "系统提示词"
+        status: done
+        description: "可折叠面板，设定 AI 角色，应用后下次消息生效"
+      - id: F3.4
+        name: "流式对话"
+        status: done
+        description: "SSE 流式接收 AI 回复，支持中断"
+      - id: F3.5
+        name: "Tool Calls 展示"
+        status: gap
+        description: "展示 AI 返回的 tool_calls 信息，为后续 agent 扩展预留"
+        ac:
+          - "消息中若包含 tool_calls，显示为可折叠的代码块"
+          - "展示 function name 和 arguments"
+          - "UI 风格与 assistant 消息区分"
+      - id: F3.6
+        name: "Agent 风格布局"
+        status: gap
+        description: "左侧会话列表 + 右侧聊天区，顶部模型选择和系统提示词"
+        ac:
+          - "侧栏显示会话历史，支持新建/切换/删除"
+          - "聊天区顶部显示当前模型和系统提示词开关"
+          - "消息区底部输入框，支持 Enter 发送/Shift+Enter 换行"
+
+gaps:
+  - id: G1
+    module: dashboard
+    feature: F1.2
+    type: missing
+    severity: P1
+    description: "GPU 历史趋势图缺失，已有 GPU history API 但前端未集成"
+    fix: "Dashboard.vue 中添加 SVG 图表区域，调用 getGPUHistory() 绑定数据"
+
+  - id: G2
+    module: dashboard
+    feature: F1.5
+    type: missing
+    severity: P1
+    description: "Token 用量统计缺失，后端 metrics.py 有方法但缺少路由"
+    fix: "1. routes/manage.py 添加 GET /manage/token-stats 端点 2. Dashboard.vue 添加 token 展示区域"
+
+  - id: G3
+    module: model-management
+    feature: F2.3
+    type: type_gap
+    severity: P1
+    description: "feature_support 类型缺少 multimodal 和 image_generation 字段，用 as any 绕过"
+    fix: "types/index.ts TestReport.feature_support 增加 multimodal: boolean 和 image_generation: boolean"
+
+  - id: G4
+    module: model-management
+    feature: F2.5
+    type: type_gap
+    severity: P2
+    description: "resource_utilization.gpu 缺少 end_temperature 和 end_utilization 类型定义"
+    fix: "types/index.ts GPU 资源类型添加这两个可选字段"
+
+  - id: G5
+    module: model-management
+    feature: F2.6
+    type: incomplete
+    severity: P2
+    description: "检测历史展开详情不完整，缺少 multimodal/image_generation 的展示"
+    fix: "ModelManagement.vue history-detail 中增加4项能力展示"
+
+  - id: G6
+    module: agent-chat
+    feature: F3.5
+    type: missing
+    severity: P2
+    description: "tool_calls 展示缺失，Message 类型有 toolCalls 字段但 UI 未渲染"
+    fix: "ChatWindow.vue 中添加 tool_calls 渲染逻辑"
+
+  - id: G7
+    module: agent-chat
+    feature: F3.6
+    type: partial
+    severity: P2
+    description: "Agent 风格布局基本具备，但顶部交互可优化"
+    fix: "优化 ChatWindow 顶栏交互体验"
+
+verdict: PASS
+rationale: "3大模块需求明确，7个gap均为可修复的技术问题，无P0阻塞项"

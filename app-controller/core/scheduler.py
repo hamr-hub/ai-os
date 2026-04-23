@@ -166,6 +166,14 @@ class Scheduler:
     def get_model_supports_images(self, model_name: str) -> bool:
         config = self.get_model_config(model_name)
         return config.get('supports_images', False) if config else False
+
+    def get_model_supports_tool_calling(self, model_name: str) -> bool:
+        config = self.get_model_config(model_name)
+        return config.get('supports_tool_calling', False) if config else False
+
+    def get_model_supports_image_generation(self, model_name: str) -> bool:
+        config = self.get_model_config(model_name)
+        return config.get('supports_image_generation', False) if config else False
     
     def get_model_name(self, model_name: str) -> Optional[str]:
         """获取配置中的实际模型名称"""
@@ -440,82 +448,6 @@ class Scheduler:
         
         return success
     
-    async def _free_up_memory(self, target_model_name: str) -> bool:
-        target_config = self.get_model_config(target_model_name)
-        if not target_config:
-            return False
-        
-        target_required = _parse_memory_size(target_config.get('required_memory', 0))
-        mem_info = self.gpu_monitor.get_memory_usage()
-        
-        if not mem_info:
-            return False
-        
-        available_memory = mem_info.get('available', 0)
-        needed_memory = target_required + self.get_min_available_memory()
-        
-        if available_memory >= needed_memory:
-            return True
-        
-        models_to_stop = []
-        with self._model_lock:
-            for model_name in list(self.running_models.keys()):
-                if model_name == target_model_name:
-                    continue
-                
-                config = self.get_model_config(model_name)
-                if config and config.get('keep_alive', False):
-                    continue
-                
-                models_to_stop.append((model_name, config.get('required_memory', 0)))
-        
-        models_to_stop.sort(key=lambda x: x[1], reverse=True)
-        
-        for model_name, _ in models_to_stop:
-            await self.stop_model(model_name)
-            
-            gpu_status = self.gpu_monitor.get_gpu_status()
-            if gpu_status and gpu_status.get('available_memory', 0) >= needed_memory:
-                return True
-        
-        return False
-    
-    async def switch_model(self, target_model_name: str, priority: str = "normal") -> bool:
-        """智能切换到目标模型，自动处理显存管理"""
-        if not self.is_model_available(target_model_name):
-            return False
-        
-        if self.is_model_running(target_model_name):
-            self.mark_model_selected(target_model_name)
-            return True
-        
-        success = await self._free_up_memory(target_model_name, priority)
-        if not success:
-            return False
-
-        success = await self.start_model(target_model_name)
-        if success:
-            self.mark_model_selected(target_model_name)
-        return success
-    
-    async def switch_model_with_fallback(self, target_model_name: str, fallback_model: str = None) -> bool:
-        """带降级策略的模型切换"""
-        try:
-            success = await self.switch_model(target_model_name)
-            if success:
-                return True
-            
-            if fallback_model and fallback_model != target_model_name:
-                logger.info(f"Primary switch to {target_model_name} failed, trying fallback {fallback_model}")
-                return await self.switch_model(fallback_model)
-            
-            return False
-        except Exception as e:
-            logger.error(f"Error switching model: {str(e)}")
-            if fallback_model and fallback_model != target_model_name:
-                return await self.switch_model(fallback_model)
-            return False
-    
     async def _free_up_memory(self, target_model_name: str, priority: str = "normal") -> bool:
         """智能释放显存，考虑模型优先级"""
         target_config = self.get_model_config(target_model_name)
@@ -562,7 +494,43 @@ class Scheduler:
                 return True
         
         return False
-    
+
+    async def switch_model(self, target_model_name: str, priority: str = "normal") -> bool:
+        """智能切换到目标模型，自动处理显存管理"""
+        if not self.is_model_available(target_model_name):
+            return False
+
+        if self.is_model_running(target_model_name):
+            self.mark_model_selected(target_model_name)
+            return True
+
+        success = await self._free_up_memory(target_model_name, priority)
+        if not success:
+            return False
+
+        success = await self.start_model(target_model_name)
+        if success:
+            self.mark_model_selected(target_model_name)
+        return success
+
+    async def switch_model_with_fallback(self, target_model_name: str, fallback_model: str = None) -> bool:
+        """带降级策略的模型切换"""
+        try:
+            success = await self.switch_model(target_model_name)
+            if success:
+                return True
+
+            if fallback_model and fallback_model != target_model_name:
+                logger.info(f"Primary switch to {target_model_name} failed, trying fallback {fallback_model}")
+                return await self.switch_model(fallback_model)
+
+            return False
+        except Exception as e:
+            logger.error(f"Error switching model: {str(e)}")
+            if fallback_model and fallback_model != target_model_name:
+                return await self.switch_model(fallback_model)
+            return False
+
     async def preload_models(self):
         """预热所有配置为预加载的模型"""
         preload_order = self._get_preload_order()

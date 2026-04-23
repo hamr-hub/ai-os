@@ -8,24 +8,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Dashboard.vue'),
   },
   {
-    path: '/gpu',
-    name: 'gpu',
-    component: () => import('@/views/GPUView.vue'),
-  },
-  {
     path: '/models',
     name: 'models',
-    component: () => import('@/views/ModelsView.vue'),
+    component: () => import('@/views/ModelManagement.vue'),
   },
   {
-    path: '/chat',
-    name: 'chat',
-    component: () => import('@/views/ChatView.vue'),
-  },
-  {
-    path: '/test',
-    name: 'test',
-    component: () => import('@/views/TestView.vue'),
+    path: '/agent',
+    name: 'agent',
+    component: () => import('@/views/AgentView.vue'),
   },
 ]
 

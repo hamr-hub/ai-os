@@ -1,0 +1,97 @@
+taskId: AIOS-FRONTEND-V2
+version: "1.0"
+platform: Web
+
+architecture:
+  frontend: "Vue 3.5 + TypeScript + Pinia + Vite 6"
+  backend: "Python FastAPI"
+  styling: "Tailwind CSS 4 + CSS Variables (dark/light theme)"
+
+file_changes:
+  - path: "frontend/src/types/index.ts"
+    action: modify
+    description: "TestReport.feature_support 添加 multimodal 和 image_generation; GPU 资源类型添加 end_temperature/end_utilization"
+    risk: low
+
+  - path: "app-controller/routes/manage.py"
+    action: modify
+    description: "添加 GET /manage/token-stats 端点，调用 metrics.get_token_stats()"
+    risk: low
+
+  - path: "frontend/src/api/client.ts"
+    action: modify
+    description: "确保 getTokenStats()、getGPUHistory()、testModel() 等函数与后端对齐"
+    risk: low
+
+  - path: "frontend/src/views/Dashboard.vue"
+    action: modify
+    description: "添加 GPU 历史趋势图（SVG）、Token 用量统计区域、刷新集成"
+    risk: medium
+
+  - path: "frontend/src/views/ModelManagement.vue"
+    action: modify
+    description: "修复 featureItems 的 as any 类型转换；完善检测历史展开详情；添加 multimodal/image_generation 到 feature-mini"
+    risk: medium
+
+  - path: "frontend/src/components/ChatWindow.vue"
+    action: modify
+    description: "添加 tool_calls 消息渲染（可折叠代码块）；优化顶栏交互"
+    risk: medium
+
+  - path: "frontend/src/stores/chat.ts"
+    action: modify
+    description: "确保 Message.toolCalls 类型定义与后端对齐"
+    risk: low
+
+implementation_plan:
+  - task: T1
+    title: "修复类型定义 (types/index.ts)"
+    files: ["frontend/src/types/index.ts"]
+    changes:
+      - "TestReport.feature_support 添加 multimodal: boolean, image_generation: boolean"
+      - "resource_utilization.gpu 添加 end_temperature?: number, end_utilization?: number"
+    test: "npm run build 验证类型正确"
+
+  - task: T2
+    title: "后端添加 token-stats 路由"
+    files: ["app-controller/routes/manage.py"]
+    changes:
+      - "添加 GET /manage/token-stats 端点，调用 metrics.get_token_stats()，带10秒缓存"
+    test: "curl /manage/token-stats 返回 token 统计数据"
+
+  - task: T3
+    title: "API Client 对齐"
+    files: ["frontend/src/api/client.ts"]
+    changes:
+      - "确保 getTokenStats() 调用 /manage/token-stats"
+      - "确保 getGPUHistory() 调用 /manage/gpu/history"
+      - "确保 testModel() 调用 /v1/test/model/{name}"
+    test: "npm run build 验证无类型错误"
+
+  - task: T4
+    title: "Dashboard 添加 GPU 历史图 + Token 统计"
+    files: ["frontend/src/views/Dashboard.vue"]
+    changes:
+      - "添加 GPU 历史趋势图（SVG 折线图：温度/利用率/显存）"
+      - "添加 Token 用量统计区域（总 Token / Prompt / Completion）"
+      - "集成 fetchGPUHistory() 和 fetchTokenStats() 到自动刷新"
+    test: "npm run build + 手动验证页面渲染"
+
+  - task: T5
+    title: "模型管理类型修复 + 检测历史完善"
+    files: ["frontend/src/views/ModelManagement.vue"]
+    changes:
+      - "featureItems 中移除 as any 类型转换，使用正确的类型字段"
+      - "检测历史展开详情添加 4 项能力展示（含 multimodal/image_generation）"
+    test: "npm run build 验证无类型错误"
+
+  - task: T6
+    title: "ChatWindow 添加 tool_calls 展示"
+    files: ["frontend/src/components/ChatWindow.vue"]
+    changes:
+      - "消息气泡中检测 toolCalls 字段，渲染为可折叠代码块"
+      - "显示 function name 和 arguments（JSON 格式化）"
+      - "与 assistant 消息样式区分（左侧紫色边框）"
+    test: "npm run build + 手动验证 tool_calls 渲染"
+
+rollback_plan: "git checkout -- 命令回滚所有变更"

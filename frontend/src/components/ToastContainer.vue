@@ -6,29 +6,19 @@ const store = useAppStore()
 
 const getToastIcon = (type: string) => {
   switch (type) {
-    case 'success':
-      return CheckCircle
-    case 'error':
-      return XCircle
-    case 'warning':
-      return AlertTriangle
-    case 'info':
-    default:
-      return Info
+    case 'success': return CheckCircle
+    case 'error': return XCircle
+    case 'warning': return AlertTriangle
+    case 'info': default: return Info
   }
 }
 
 const getToastClass = (type: string) => {
   switch (type) {
-    case 'success':
-      return 'bg-green-500/20 border-green-500/40 text-green-400'
-    case 'error':
-      return 'bg-red-500/20 border-red-500/40 text-red-400'
-    case 'warning':
-      return 'bg-yellow-500/20 border-yellow-500/40 text-yellow-400'
-    case 'info':
-    default:
-      return 'bg-blue-500/20 border-blue-500/40 text-blue-400'
+    case 'success': return 'toast-success'
+    case 'error': return 'toast-error'
+    case 'warning': return 'toast-warning'
+    case 'info': default: return 'toast-info'
   }
 }
 </script>
@@ -39,14 +29,16 @@ const getToastClass = (type: string) => {
       <div
         v-for="toast in store.toasts"
         :key="toast.id"
-        class="flex items-start gap-3 px-4 py-3.5 rounded-xl border backdrop-blur-md shadow-xl hover:shadow-2xl transition-shadow duration-200"
+        class="flex items-start gap-3 px-4 py-3.5 rounded-xl backdrop-blur-md shadow-xl transition-shadow duration-200"
         :class="getToastClass(toast.type)"
       >
         <component :is="getToastIcon(toast.type)" class="w-5 h-5 flex-shrink-0 mt-0.5" />
         <p class="flex-1 text-sm font-medium leading-relaxed">{{ toast.message }}</p>
         <button
           @click="store.removeToast(toast.id)"
-          class="flex-shrink-0 p-1 rounded-lg hover:bg-white/10 transition-colors"
+          class="flex-shrink-0 p-1 rounded-lg transition-colors"
+          :class="getToastClass(toast.type)"
+          style="opacity: 0.7; hover:opacity: 1"
         >
           <X class="w-4 h-4" />
         </button>

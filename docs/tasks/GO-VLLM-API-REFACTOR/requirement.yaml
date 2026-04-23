@@ -1,0 +1,79 @@
+taskId: GO-VLLM-API-REFACTOR
+title: "app-controller Python FastAPI → go-vllm-api Go Gin 重构"
+source: "app-controller Python → Go 迁移"
+developer: heyongxian
+createdAt: 2026-04-22
+status: in_progress
+
+requirements:
+  - id: R1
+    title: "API 端点完全对齐"
+    description: "17 个 API 端点（health 2, manage 12, v1 3）全部迁移到 Go Gin 实现"
+    priority: P0
+    acceptanceCriteria:
+      - "GET /health 返回基础健康状态"
+      - "GET /health/detailed 返回含 GPU/模型/Redis 详细状态"
+      - "GET /manage/models 返回所有配置模型"
+      - "POST /manage/models/:model_name/start 启动模型服务"
+      - "POST /manage/models/:model_name/stop 停止模型服务"
+      - "POST /manage/models/:model_name/switch 切换模型"
+      - "GET /manage/gpu 返回 GPU 状态"
+      - "POST /v1/chat/completions 支持流式和非流式"
+      - "POST /v1/embeddings 代理嵌入请求"
+      - "POST /v1/images/generations 代理图像请求"
+      - "GET /ws/monitor WebSocket 实时推送"
+
+  - id: R2
+    title: "OpenAI API 兼容性"
+    description: "Chat/Embedding/Image API 完全兼容 OpenAI 格式，支持 multimodal content、tools、logprobs"
+    priority: P0
+    acceptanceCriteria:
+      - "ChatMessage.content 支持 string 和 []ContentPart (multimodal)"
+      - "ChatCompletionRequest 支持 tools/tool_choice/response_format/logprobs"
+      - "EmbeddingRequest.input 支持 string 和 []string"
+      - "流式 SSE 响应格式正确"
+
+  - id: R3
+    title: "Redis 缓存和限流"
+    description: "CacheService 使用 Redis 存储，限流中间件使用 Redis 令牌桶"
+    priority: P0
+    acceptanceCriteria:
+      - "CacheService 支持 Redis 读写和本地内存降级"
+      - "限流中间件接入 service.RateLimiter (Redis)"
+      - "Redis 不可用时自动降级到内存实现"
+
+  - id: R4
+    title: "GPU 监控和模型调度"
+    description: "nvidia-smi GPU 监控、模型调度器（VRAM 检查/自动启动/切换）"
+    priority: P0
+    acceptanceCriteria:
+      - "GPU 监控定时刷新缓存"
+      - "模型启动前检查 VRAM"
+      - "支持 auto_start/preload/keep_alive 配置"
+      - "模型切换时自动释放内存"
+
+  - id: R5
+    title: "配置热更新"
+    description: "watchdog 监听 config.yaml 变更，自动重新加载配置"
+    priority: P1
+    acceptanceCriteria:
+      - "config.yaml 变更后 2 秒内触发回调"
+      - "Scheduler 接收新配置并更新运行时状态"
+
+  - id: R6
+    title: "Docker 容器化部署"
+    description: "Go 多阶段构建 Dockerfile + docker-compose.yml"
+    priority: P1
+    acceptanceCriteria:
+      - "多阶段构建镜像大小 < 50MB"
+      - "docker-compose 包含 go-vllm-api + redis"
+      - "支持 NVIDIA GPU 透传"
+
+  - id: R7
+    title: "请求超时和追踪"
+    description: "请求超时中间件 + request_id 追踪"
+    priority: P0
+    acceptanceCriteria:
+      - "非流式请求可配置超时"
+      - "每个请求带 X-Request-ID"
+      - "请求日志包含 method/path/status/duration"

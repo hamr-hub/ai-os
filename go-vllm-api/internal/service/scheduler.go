@@ -1,0 +1,483 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"go-vllm-api/internal/config"
+	"go-vllm-api/internal/repository"
+
+	"go.uber.org/zap"
+)
+
+type Scheduler struct {
+	logger        *zap.Logger
+	gpuMonitor    *GPUMonitor
+	sysCtl        *SystemController
+	redis         *repository.RedisRepo
+	cfg           *config.AppConfig
+	runningModels map[string]time.Time
+	preloaded     map[string]bool
+	modelLastUsed map[string]time.Time
+	defaultModel  string
+	mu            sync.Mutex
+	rateLimiter   *RateLimiter
+}
+
+func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig) *Scheduler {
+	s := &Scheduler{
+		logger:        logger,
+		gpuMonitor:    gpuMonitor,
+		sysCtl:        sysCtl,
+		redis:         redis,
+		cfg:           cfg,
+		runningModels: make(map[string]time.Time),
+		preloaded:     make(map[string]bool),
+		modelLastUsed: make(map[string]time.Time),
+		rateLimiter:   NewRateLimiter(redis, logger),
+	}
+	s.initPreloaded()
+	return s
+}
+
+func (s *Scheduler) GetRateLimiter() *RateLimiter {
+	return s.rateLimiter
+}
+
+func (s *Scheduler) initPreloaded() {
+	for name, mc := range s.cfg.Models {
+		if mc.Preload {
+			s.preloaded[name] = true
+		}
+	}
+}
+
+func (s *Scheduler) SetConfig(cfg *config.AppConfig) {
+	s.mu.Lock()
+	s.cfg = cfg
+	s.mu.Unlock()
+}
+
+func (s *Scheduler) GetAvailableModels() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var models []string
+	for name := range s.cfg.Models {
+		models = append(models, name)
+	}
+	return models
+}
+
+func (s *Scheduler) FindMatchingModel(name string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.cfg.Models[name]; ok {
+		return name
+	}
+	lower := strings.ToLower(name)
+	for cfgName := range s.cfg.Models {
+		if strings.ToLower(cfgName) == lower {
+			return cfgName
+		}
+	}
+	for cfgName := range s.cfg.Models {
+		cfgLower := strings.ToLower(cfgName)
+		if strings.Contains(cfgLower, lower) || strings.Contains(lower, cfgLower) {
+			return cfgName
+		}
+	}
+	for cfgName := range s.cfg.Models {
+		normInput := strings.ReplaceAll(strings.ToLower(name), "-", "")
+		normCfg := strings.ReplaceAll(strings.ToLower(cfgName), "-", "")
+		if strings.Contains(normInput, normCfg) || strings.Contains(normCfg, normInput) {
+			return cfgName
+		}
+	}
+	return ""
+}
+
+func (s *Scheduler) IsModelAvailable(name string) bool {
+	return s.FindMatchingModel(name) != ""
+}
+
+func (s *Scheduler) GetModelConfig(name string) *config.ModelConfig {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	matched := s.FindMatchingModel(name)
+	if matched == "" {
+		return nil
+	}
+	mc := s.cfg.Models[matched]
+	return &mc
+}
+
+func (s *Scheduler) GetModelPort(name string) int {
+	mc := s.GetModelConfig(name)
+	if mc != nil {
+		return mc.Port
+	}
+	return 8000
+}
+
+func (s *Scheduler) GetModelService(name string) string {
+	mc := s.GetModelConfig(name)
+	if mc != nil {
+		return mc.Service
+	}
+	return ""
+}
+
+func (s *Scheduler) GetModelPath(name string) string {
+	mc := s.GetModelConfig(name)
+	if mc != nil {
+		return mc.ModelPath
+	}
+	return name
+}
+
+func (s *Scheduler) GetModelSupportsImages(name string) bool {
+	mc := s.GetModelConfig(name)
+	if mc != nil {
+		return mc.SupportsImages
+	}
+	return false
+}
+
+func (s *Scheduler) IsModelRunning(name string) bool {
+	matched := s.FindMatchingModel(name)
+	if matched == "" {
+		return false
+	}
+	port := s.GetModelPort(matched)
+	if port > 0 && s.sysCtl.GetProcessInfo(port) {
+		s.mu.Lock()
+		if _, ok := s.runningModels[matched]; !ok {
+			s.runningModels[matched] = time.Now()
+		}
+		s.mu.Unlock()
+		return true
+	}
+	s.mu.Lock()
+	delete(s.runningModels, matched)
+	s.mu.Unlock()
+	return false
+}
+
+func (s *Scheduler) GetMinAvailableMemory() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return config.ParseMemorySize(s.cfg.Settings.MinAvailableMemory)
+}
+
+func (s *Scheduler) GetConcurrencyLimit() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg.Settings.ConcurrencyLimit
+}
+
+func (s *Scheduler) AcquireRequest(model string) bool {
+	limit := s.GetConcurrencyLimit()
+	return s.rateLimiter.AcquireRequest(model, limit)
+}
+
+func (s *Scheduler) ReleaseRequest(model string) {
+	s.rateLimiter.ReleaseRequest(model)
+	s.mu.Lock()
+	s.modelLastUsed[model] = time.Now()
+	s.mu.Unlock()
+}
+
+func (s *Scheduler) GetActiveRequests(model string) int {
+	return s.rateLimiter.GetActiveRequests(model)
+}
+
+func (s *Scheduler) CanAcceptRequest(model string) bool {
+	if !s.IsModelAvailable(model) {
+		return false
+	}
+	mem := s.gpuMonitor.GetMemoryUsage()
+	if mem == nil || mem.Available < s.GetMinAvailableMemory() {
+		return false
+	}
+	return s.rateLimiter.CanAcceptRequest(model, s.GetConcurrencyLimit())
+}
+
+func (s *Scheduler) IsQueueAvailable(model string) bool {
+	return s.rateLimiter.GetTotalQueueLength(model) < 100
+}
+
+func (s *Scheduler) GetQueueLength(model string) int {
+	return s.rateLimiter.GetTotalQueueLength(model)
+}
+
+func (s *Scheduler) WaitForSlot(ctx context.Context, model string, timeout time.Duration) bool {
+	return s.rateLimiter.WaitForSlot(ctx, model, s.GetConcurrencyLimit(), timeout)
+}
+
+func (s *Scheduler) IsModelPreloaded(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.preloaded[name]
+}
+
+func (s *Scheduler) GetPreloadedModels() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var models []string
+	for name := range s.preloaded {
+		models = append(models, name)
+	}
+	return models
+}
+
+func (s *Scheduler) GetCurrentModelName() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var running []string
+	for name := range s.cfg.Models {
+		if s.IsModelRunning(name) {
+			running = append(running, name)
+		}
+	}
+	if len(running) == 0 {
+		return ""
+	}
+	var used []string
+	for _, m := range running {
+		if t, ok := s.modelLastUsed[m]; ok {
+			used = append(used, m)
+			_ = t
+		}
+	}
+	if len(used) > 0 {
+		latest := used[0]
+		latestTime := s.modelLastUsed[latest]
+		for _, m := range used[1:] {
+			if s.modelLastUsed[m].After(latestTime) {
+				latest = m
+				latestTime = s.modelLastUsed[m]
+			}
+		}
+		return latest
+	}
+	return running[0]
+}
+
+func (s *Scheduler) GetDefaultModel() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.defaultModel != "" && s.IsModelAvailable(s.defaultModel) {
+		return s.defaultModel
+	}
+	return ""
+}
+
+func (s *Scheduler) SetDefaultModel(name string) bool {
+	if !s.IsModelAvailable(name) {
+		return false
+	}
+	s.mu.Lock()
+	s.defaultModel = name
+	s.mu.Unlock()
+	return true
+}
+
+func (s *Scheduler) ClearDefaultModel() {
+	s.mu.Lock()
+	s.defaultModel = ""
+	s.mu.Unlock()
+}
+
+func (s *Scheduler) MarkModelSelected(name string) {
+	s.mu.Lock()
+	s.modelLastUsed[name] = time.Now()
+	s.mu.Unlock()
+}
+
+func (s *Scheduler) SchedulePreload(name string) bool {
+	if !s.IsModelAvailable(name) {
+		return false
+	}
+	s.mu.Lock()
+	s.preloaded[name] = true
+	if mc, ok := s.cfg.Models[name]; ok {
+		mc.Preload = true
+		s.cfg.Models[name] = mc
+	}
+	s.mu.Unlock()
+	return true
+}
+
+func (s *Scheduler) CancelPreload(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.preloaded[name] {
+		return false
+	}
+	delete(s.preloaded, name)
+	if mc, ok := s.cfg.Models[name]; ok {
+		mc.Preload = false
+		s.cfg.Models[name] = mc
+	}
+	return true
+}
+
+func (s *Scheduler) StartModel(ctx context.Context, name string) (bool, error) {
+	matched := s.FindMatchingModel(name)
+	if matched == "" {
+		return false, fmt.Errorf("model not found: %s", name)
+	}
+	mc := s.GetModelConfig(matched)
+	if mc == nil {
+		return false, fmt.Errorf("model config not found: %s", name)
+	}
+	if s.sysCtl.IsServiceRunning(mc.Service) {
+		s.mu.Lock()
+		s.runningModels[matched] = time.Now()
+		s.mu.Unlock()
+		return true, nil
+	}
+	mem := s.gpuMonitor.GetMemoryUsage()
+	if mem != nil {
+		requiredMem := config.ParseMemorySize(mc.RequiredMemory)
+		if mem.Available < requiredMem+s.GetMinAvailableMemory() {
+			ok, err := s.freeUpMemory(ctx, matched)
+			if !ok {
+				return false, fmt.Errorf("insufficient memory: %w", err)
+			}
+		}
+	}
+	success := s.sysCtl.StartService(mc.Service)
+	if success {
+		s.mu.Lock()
+		s.runningModels[matched] = time.Now()
+		s.mu.Unlock()
+		s.logger.Info("model started", zap.String("model", matched))
+	} else {
+		s.logger.Error("failed to start model", zap.String("model", matched))
+	}
+	return success, nil
+}
+
+func (s *Scheduler) StopModel(ctx context.Context, name string) bool {
+	matched := s.FindMatchingModel(name)
+	if matched == "" {
+		return false
+	}
+	mc := s.GetModelConfig(matched)
+	if mc == nil {
+		return false
+	}
+	success := s.sysCtl.StopService(mc.Service)
+	if success {
+		s.mu.Lock()
+		delete(s.runningModels, matched)
+		s.mu.Unlock()
+		s.logger.Info("model stopped", zap.String("model", matched))
+	}
+	return success
+}
+
+func (s *Scheduler) SwitchModel(ctx context.Context, name string) bool {
+	matched := s.FindMatchingModel(name)
+	if matched == "" {
+		return false
+	}
+	mc := s.GetModelConfig(matched)
+	if mc == nil {
+		return false
+	}
+	mem := s.gpuMonitor.GetMemoryUsage()
+	if mem != nil {
+		requiredMem := config.ParseMemorySize(mc.RequiredMemory)
+		if mem.Available < requiredMem+s.GetMinAvailableMemory() {
+			ok, _ := s.freeUpMemory(ctx, matched)
+			if !ok {
+				return false
+			}
+		}
+	}
+	return s.sysCtl.StartService(mc.Service)
+}
+
+func (s *Scheduler) freeUpMemory(ctx context.Context, targetModel string) (bool, error) {
+	s.mu.Lock()
+	var toStop []string
+	for name := range s.runningModels {
+		if name == targetModel {
+			continue
+		}
+		mc := s.GetModelConfig(name)
+		if mc != nil && mc.KeepAlive {
+			continue
+		}
+		toStop = append(toStop, name)
+	}
+	s.mu.Unlock()
+
+	for _, name := range toStop {
+		s.StopModel(ctx, name)
+		mem := s.gpuMonitor.GetMemoryUsage()
+		if mem != nil {
+			mc := s.GetModelConfig(targetModel)
+			if mc != nil {
+				required := config.ParseMemorySize(mc.RequiredMemory)
+				if mem.Available >= required+s.GetMinAvailableMemory() {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, fmt.Errorf("could not free enough memory")
+}
+
+func (s *Scheduler) PreloadModels(ctx context.Context) {
+	s.mu.Lock()
+	var preloadOrder []string
+	var keepAlive []string
+	var normal []string
+	for name := range s.preloaded {
+		mc := s.GetModelConfig(name)
+		if mc != nil && mc.KeepAlive {
+			keepAlive = append(keepAlive, name)
+		} else {
+			normal = append(normal, name)
+		}
+	}
+	preloadOrder = append(preloadOrder, keepAlive...)
+	preloadOrder = append(preloadOrder, normal...)
+	s.mu.Unlock()
+
+	for _, name := range preloadOrder {
+		if !s.IsModelRunning(name) {
+			s.logger.Info("preloading model", zap.String("model", name))
+			ok, _ := s.StartModel(ctx, name)
+			if ok {
+				s.logger.Info("preloaded model", zap.String("model", name))
+			} else {
+				s.logger.Warn("failed to preload model", zap.String("model", name))
+			}
+			time.Sleep(2 * time.Second)
+		}
+	}
+}
+
+func (s *Scheduler) PreloadWatcherLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(30 * time.Second):
+			for name := range s.preloaded {
+				mc := s.GetModelConfig(name)
+				if mc != nil && mc.KeepAlive && !s.IsModelRunning(name) {
+					s.logger.Warn("preloaded model not running, restarting", zap.String("model", name))
+					s.StartModel(ctx, name)
+				}
+			}
+		}
+	}
+}

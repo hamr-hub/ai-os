@@ -1,14 +1,23 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
+import Markdown from 'unplugin-vue-markdown/vite'
 import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [vue(), tailwindcss()],
+  plugins: [
+    vue({
+      include: [/\.vue$/, /\.md$/],
+    }),
+    Markdown({
+      wrapperClasses: 'markdown-body',
+    }),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
-    }
+      '@': resolve(__dirname, 'src'),
+    },
   },
   server: {
     port: 30000,
@@ -16,8 +25,11 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:35000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
-      }
-    }
-  }
+      },
+      '/v1': {
+        target: 'http://localhost:35000',
+        changeOrigin: true,
+      },
+    },
+  },
 })

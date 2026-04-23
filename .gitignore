@@ -1,2 +1,4 @@
 __pycache__
 .codeflicker
+.DS_Store
+.serena/

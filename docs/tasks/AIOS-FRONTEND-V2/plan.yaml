@@ -1,0 +1,90 @@
+taskId: AIOS-FRONTEND-V2
+mode: standard
+
+tasks:
+  - id: T1
+    title: "修复类型定义 (types/index.ts)"
+    priority: P1
+    status: pending
+    files:
+      - frontend/src/types/index.ts
+    steps:
+      - "TestReport.feature_support 添加 multimodal: boolean 和 image_generation: boolean"
+      - "resource_utilization.gpu 添加 end_temperature?: number 和 end_utilization?: number"
+    test_command: "cd frontend && npm run build"
+    depends_on: []
+
+  - id: T2
+    title: "后端添加 token-stats 路由"
+    priority: P1
+    status: pending
+    files:
+      - app-controller/routes/manage.py
+    steps:
+      - "在 manage_router 中添加 GET /manage/token-stats 端点"
+      - "调用 metrics.get_token_stats()，10秒 Redis 缓存"
+    test_command: "cd app-controller && python -c 'from routes.manage import manage_router; print(len(manage_router.routes))'"
+    depends_on: []
+
+  - id: T3
+    title: "API Client 对齐"
+    priority: P1
+    status: pending
+    files:
+      - frontend/src/api/client.ts
+    steps:
+      - "确认 getTokenStats() → /manage/token-stats"
+      - "确认 getGPUHistory() → /manage/gpu/history"
+      - "确认 testModel() → /v1/test/model/{name}"
+      - "确认 getTestReports() → /v1/test/reports"
+      - "确认 getTestReport(name) → /v1/test/report/{name}"
+      - "确认 getMetrics() → /manage/metrics"
+    test_command: "cd frontend && npm run build"
+    depends_on:
+      - T1
+
+  - id: T4
+    title: "Dashboard 添加 GPU 历史图 + Token 统计"
+    priority: P1
+    status: pending
+    files:
+      - frontend/src/views/Dashboard.vue
+    steps:
+      - "添加 import getGPUHistory, getTokenStats from client"
+      - "添加 gpuHistory 和 tokenStatsData 响应式变量"
+      - "添加 fetchGPUHistory() 和 fetchTokenStats() 函数"
+      - "添加 SVG 折线图：温度/利用率/显存三条曲线"
+      - "添加 Token 用量统计网格：总Token/Prompt/Completion"
+      - "集成到 onMounted 和刷新按钮"
+    test_command: "cd frontend && npm run build"
+    depends_on:
+      - T3
+
+  - id: T5
+    title: "模型管理类型修复 + 检测历史完善"
+    priority: P2
+    status: pending
+    files:
+      - frontend/src/views/ModelManagement.vue
+    steps:
+      - "featureItems 中使用正确的类型字段替代 as any"
+      - "检测历史展开详情添加4项能力展示（对话/多模态/工具调用/图片生成）"
+      - "展开时调用 getTestReport(name) 获取完整数据"
+    test_command: "cd frontend && npm run build"
+    depends_on:
+      - T1
+
+  - id: T6
+    title: "ChatWindow 添加 tool_calls 展示"
+    priority: P2
+    status: pending
+    files:
+      - frontend/src/components/ChatWindow.vue
+    steps:
+      - "消息渲染中检测 message.toolCalls 字段"
+      - "渲染为可折叠代码块，显示 function name + arguments"
+      - "紫色左边框样式区分"
+      - "添加折叠/展开交互"
+    test_command: "cd frontend && npm run build"
+    depends_on:
+      - T1

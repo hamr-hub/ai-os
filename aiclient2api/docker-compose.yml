@@ -1,6 +1,6 @@
 services:
   aiclient:
-    image: aiclient-proxy:latest
+    image: justlikemaki/aiclient-2-api:latest
     container_name: aiclient
     restart: always
     ports:
@@ -10,4 +10,3 @@ services:
     volumes:
       - ./data:/app/data
       - ./configs:/configs
-    network_mode: host

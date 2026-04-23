@@ -1,0 +1,62 @@
+models:
+  Gemma-4-31B-Abliterated:
+    service: vllm
+    port: 8000
+    required_memory: 40GB
+    preload: true
+    keep_alive: true
+    model_path: /mnt/pve_models/Gemma-4-31B-Abliterated
+    supports_images: false
+    description: "Gemma 4 31B Abliterated"
+
+  Qwen3-235B-A22B-Instruct-2507-AWQ:
+    service: vllm
+    port: 8000
+    required_memory: 120GB
+    preload: false
+    keep_alive: false
+    model_path: /mnt/pve_models/Qwen3-235B-A22B-Instruct-2507-AWQ
+    supports_images: false
+    description: "Qwen3 235B AWQ"
+
+settings:
+  concurrency_limit: 32
+  min_available_memory: 4GB
+  request_timeout: 120
+  model_start_timeout: 120
+  preload_timeout: 300
+  idle_timeout: 600
+  memory_flush_interval: 300
+  memory_cleanup_delay: 5
+  gpu_memory_utilization: 0.92
+  default_memory_strategy: balanced
+
+  redis:
+    host: localhost
+    port: 6379
+    db: 1
+
+  logging:
+    log_dir: logs
+
+  queue:
+    max_length: 100
+    poll_interval: 0.5
+    wait_timeout: 30
+
+  priority:
+    default: normal
+    enabled: true
+
+  recovery:
+    max_restart_attempts: 3
+    restart_cooldown: 60
+    watchdog_check_interval: 5
+
+vllm:
+  service_name: vllm
+  start_script: /root/ai-suite/start_vllm.sh
+  model_base_path: /mnt/pve_models
+  default_port: 8000
+  default_gpu_memory_utilization: 0.92
+  default_max_model_len: 32768

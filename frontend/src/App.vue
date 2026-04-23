@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterView } from 'vue-router'
 import Sidebar from '@/components/Sidebar.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
@@ -10,13 +11,15 @@ const store = useAppStore()
 onMounted(() => {
   store.initTheme()
 })
+
+const mainMargin = computed(() => store.sidebarCollapsed ? '64px' : '220px')
 </script>
 
 <template>
   <div class="app-shell">
     <ToastContainer />
     <Sidebar />
-    <main class="app-main">
+    <main class="app-main" :style="{ marginLeft: mainMargin }">
       <RouterView v-slot="{ Component }">
         <transition name="page" mode="out-in">
           <component :is="Component" class="app-page" />
@@ -36,12 +39,12 @@ onMounted(() => {
 
 .app-main {
   flex: 1;
-  margin-left: 220px;
   min-height: 100vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-primary);
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .app-page {
