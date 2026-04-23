@@ -20,7 +20,7 @@ export async function getGPUSummary(): Promise<GPUSummary> {
 }
 
 export async function getModelsStatus(): Promise<ModelStatus> {
-  const { data } = await client.get<ModelStatus>('/models/status')
+  const { data } = await client.get<ModelStatus>('/models')
   return data
 }
 
@@ -40,9 +40,8 @@ export async function stopModel(name: string): Promise<ActionResponse> {
 }
 
 export async function switchModel(name: string, testEnabled = true): Promise<ActionResponse> {
-  const { data } = await client.post<ActionResponse>('/models/switch', {
-    model_name: name,
-    test_enabled: testEnabled,
+  const { data } = await client.post<ActionResponse>(`/models/${name}/switch`, null, {
+    params: { test_enabled: testEnabled },
   })
   return data
 }
@@ -53,13 +52,20 @@ export async function runModelTest(name: string): Promise<TestResponse> {
 }
 
 export async function getTestResults(name: string): Promise<TestResponse> {
-  const { data } = await v1Client.get<TestResponse>(`/test/results/${name}`)
+  const { data } = await v1Client.get<TestResponse>(`/test/report/${name}`)
   return data
 }
 
 export async function getTestHistory(): Promise<TestHistoryEntry[]> {
-  const { data } = await v1Client.get<TestHistoryEntry[]>('/test/history')
-  return data
+  const { data } = await v1Client.get<{ status: string; reports: Record<string, any> }>('/test/reports')
+  const reports = data.reports || {}
+  return Object.entries(reports).map(([model_name, report]) => ({
+    model_name,
+    timestamp: report.test_timestamp || '',
+    status: report.overall_status || 'unknown',
+    overall_status: report.overall_status,
+    duration: report.resource_utilization?.test_duration_seconds,
+  }))
 }
 
 export async function getTokenStats(): Promise<TokenStats> {
@@ -73,7 +79,7 @@ export async function getGPUHistory(count: number = 60): Promise<{ history: GPUH
 }
 
 export async function healthCheck(): Promise<{ status: string }> {
-  const { data } = await client.get<{ status: string }>('/health')
+  const { data } = await axios.get<{ status: string }>('/health')
   return data
 }
 

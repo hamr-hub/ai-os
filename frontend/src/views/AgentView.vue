@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import AgentChatWindow from '@/components/AgentChatWindow.vue'
-import { useChatStore } from '@/stores/chat'
+import { useAgentChatStore } from '@/stores/agentChat'
 import { useModels } from '@/composables/useModels'
 import { Bot, PanelLeft, Plus, MessageSquare, Trash2, X } from 'lucide-vue-next'
 
-const chatStore = useChatStore()
+const agentChatStore = useAgentChatStore()
 const { defaultModel } = useModels()
 const showSidebar = ref(true)
 
 const handleNewChat = () => {
-  chatStore.createConversation('新会话', defaultModel.value)
+  agentChatStore.createConversation('新会话', defaultModel.value)
 }
 
 const formatTime = (date: Date) => {
@@ -43,11 +43,11 @@ const formatTime = (date: Date) => {
 
         <div class="sidebar-list scrollbar-thin">
           <div
-            v-for="conv in chatStore.conversations"
+            v-for="conv in agentChatStore.conversations"
             :key="conv.id"
-            @click="chatStore.selectConversation(conv.id)"
+            @click="agentChatStore.selectConversation(conv.id)"
             class="conv-item"
-            :class="{ active: chatStore.activeConversation === conv.id }"
+            :class="{ active: agentChatStore.activeConversation === conv.id }"
           >
             <Bot class="w-4 h-4 flex-shrink-0" />
             <div class="conv-info">
@@ -58,12 +58,12 @@ const formatTime = (date: Date) => {
                   : formatTime(conv.updatedAt) }}
               </p>
             </div>
-            <button @click.stop="chatStore.deleteConversation(conv.id)" class="conv-delete" title="删除">
+            <button @click.stop="agentChatStore.deleteConversation(conv.id)" class="conv-delete" title="删除">
               <Trash2 class="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div v-if="chatStore.conversations.length === 0" class="sidebar-empty">
+          <div v-if="agentChatStore.conversations.length === 0" class="sidebar-empty">
             <Bot class="w-6 h-6 opacity-40" />
             <p>暂无会话</p>
             <p class="sub">点击上方按钮创建新会话</p>
@@ -71,7 +71,7 @@ const formatTime = (date: Date) => {
         </div>
 
         <div class="sidebar-footer">
-          <span>共 {{ chatStore.conversations.length }} 个会话</span>
+          <span>共 {{ agentChatStore.conversations.length }} 个会话</span>
         </div>
       </div>
     </transition>

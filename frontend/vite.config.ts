@@ -22,11 +22,21 @@ export default defineConfig({
   server: {
     port: 30000,
     proxy: {
+      '/api/manage': {
+        target: 'http://localhost:35000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
       '/api': {
         target: 'http://localhost:35000',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '/manage'),
       },
       '/v1': {
+        target: 'http://localhost:35000',
+        changeOrigin: true,
+      },
+      '/health': {
         target: 'http://localhost:35000',
         changeOrigin: true,
       },

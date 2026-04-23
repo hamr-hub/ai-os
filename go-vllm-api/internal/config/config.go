@@ -18,15 +18,17 @@ type AppConfig struct {
 }
 
 type ModelConfig struct {
-	Service         string `yaml:"service"`
-	Port            int    `yaml:"port"`
-	RequiredMemory  string `yaml:"required_memory"`
-	Preload         bool   `yaml:"preload"`
-	KeepAlive       bool   `yaml:"keep_alive"`
-	ModelPath       string `yaml:"model_path"`
-	SupportsImages  bool   `yaml:"supports_images"`
-	Description     string `yaml:"description"`
-	ConcurrencyLimit int   `yaml:"concurrency_limit"`
+	Service                string `yaml:"service"`
+	Port                   int    `yaml:"port"`
+	RequiredMemory         string `yaml:"required_memory"`
+	Preload                bool   `yaml:"preload"`
+	KeepAlive              bool   `yaml:"keep_alive"`
+	ModelPath              string `yaml:"model_path"`
+	SupportsImages         bool   `yaml:"supports_images"`
+	SupportsToolCalling    bool   `yaml:"supports_tool_calling"`
+	SupportsImageGeneration bool  `yaml:"supports_image_generation"`
+	Description            string `yaml:"description"`
+	ConcurrencyLimit       int    `yaml:"concurrency_limit"`
 }
 
 type SettingsConfig struct {

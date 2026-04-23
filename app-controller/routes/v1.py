@@ -136,7 +136,7 @@ async def get_model_info(model_name: str):
         "running": scheduler.is_model_running(model_name),
         "active_requests": scheduler.get_active_requests(model_name),
         "supports_images": scheduler.get_model_supports_images(model_name),
-        "description": config.get("description", "") if config else "",
+        "description": config.get("description", "") if config else " ",
         "service": config.get("service", "") if config else "",
         "port": config.get("port", 8000) if config else 8000,
         "required_memory": config.get("required_memory", "") if config else "",

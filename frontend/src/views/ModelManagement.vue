@@ -77,7 +77,7 @@ const getCapabilityBadges = (modelName: string): Array<{ label: string; icon: an
   const badges: Array<{ label: string; icon: any; color: string }> = []
   badges.push({ label: '对话', icon: MessageSquare, color: '#6366f1' })
   if (caps?.tool_calling) badges.push({ label: '工具调用', icon: Wrench, color: '#3b82f6' })
-  if ((caps as any)?.image_generation) badges.push({ label: '图片生成', icon: Image, color: '#8b5cf6' })
+  if (caps?.image_generation) badges.push({ label: '图片生成', icon: Image, color: '#8b5cf6' })
   const model = modelList.value.find(m => m.name === modelName)
   if (model?.supports_images) badges.push({ label: '多模态', icon: Eye, color: '#f59e0b' })
   return badges
@@ -141,9 +141,9 @@ const featureItems = computed(() => {
   const fs = testResult.value?.report?.feature_support
   return [
     { key: 'chat', label: '对话', icon: MessageSquare, supported: fs?.chat ?? false },
-    { key: 'multimodal', label: '多模态', icon: Eye, supported: (fs as any)?.multimodal ?? false },
+    { key: 'multimodal', label: '多模态', icon: Eye, supported: fs?.multimodal ?? false },
     { key: 'tools', label: '工具调用', icon: Wrench, supported: fs?.tool_calling ?? false },
-    { key: 'image_gen', label: '图片生成', icon: Image, supported: (fs as any)?.image_generation ?? false },
+    { key: 'image_gen', label: '图片生成', icon: Image, supported: fs?.image_generation ?? false },
   ]
 })
 

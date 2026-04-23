@@ -5,6 +5,7 @@ import { chatCompletionStream, type ChatMessage } from '@/api/client'
 import { useModels } from '@/composables/useModels'
 import { useAppStore } from '@/stores/app'
 import { useChatStore } from '@/stores/chat'
+import { renderMarkdown } from '@/composables/useMarkdown'
 
 const { modelList, defaultModel } = useModels()
 const appStore = useAppStore()
@@ -154,15 +155,7 @@ const copyMessage = async (id: string, content: string) => {
 }
 
 const renderContent = (content: string): string => {
-  return content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-      const langLabel = lang ? `<span class="code-lang">${lang}</span>` : ''
-      return `<pre class="code-block">${langLabel}<code>${code.trim()}</code></pre>`
-    })
-    .replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>')
+  return renderMarkdown(content)
 }
 
 const autoResize = (event: Event) => {
@@ -239,7 +232,8 @@ const autoResize = (event: Event) => {
               'bubble-bot': message.role === 'assistant',
               'bubble-sys': message.role === 'system',
             }">
-              <p class="msg-text" v-html="renderContent(message.content)"></p>
+              <div v-if="message.role === 'assistant'" class="msg-text markdown-body" v-html="renderContent(message.content)"></div>
+              <p v-else class="msg-text">{{ message.content }}</p>
 
               <div v-if="message.toolCalls?.length" class="tool-calls-block">
                 <div v-for="tc in message.toolCalls" :key="tc.id" class="tool-call-item">
@@ -469,23 +463,99 @@ const autoResize = (event: Event) => {
 .model-info { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); }
 .model-warn { color: #f59e0b; }
 
-:deep(.inline-code) {
-  background: var(--bg-tertiary); color: #f59e0b;
-  padding: 0.15em 0.4em; border-radius: 4px;
-  font-family: 'Fira Code', monospace; font-size: 0.85em;
+:deep(.markdown-body) {
+  white-space: normal;
+  word-break: break-word;
 }
-:deep(.code-block) {
-  background: var(--bg-tertiary); border: 1px solid var(--border-primary);
-  border-radius: 8px; padding: 12px 14px; margin: 8px 0;
-  overflow-x: auto; position: relative;
+:deep(.markdown-body p) {
+  margin: 0 0 8px;
 }
-:deep(.code-block code) {
-  font-family: 'Fira Code', monospace; font-size: 0.82em;
-  line-height: 1.6; color: var(--text-primary); white-space: pre;
+:deep(.markdown-body p:last-child) {
+  margin-bottom: 0;
+}
+:deep(.markdown-body ul), :deep(.markdown-body ol) {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+:deep(.markdown-body blockquote) {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-left: 3px solid #6366f1;
+  background: rgba(99,102,241,0.06);
+  color: var(--text-secondary);
+}
+:deep(.markdown-body h1), :deep(.markdown-body h2), :deep(.markdown-body h3) {
+  margin: 12px 0 6px;
+  font-weight: 600;
+}
+:deep(.markdown-body h1) { font-size: 18px; }
+:deep(.markdown-body h2) { font-size: 16px; }
+:deep(.markdown-body h3) { font-size: 14px; }
+:deep(.markdown-body a) {
+  color: #6366f1;
+  text-decoration: underline;
+}
+:deep(.markdown-body table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+:deep(.markdown-body th), :deep(.markdown-body td) {
+  border: 1px solid var(--border-primary);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+:deep(.markdown-body th) {
+  background: var(--bg-secondary);
+  font-weight: 600;
+}
+:deep(.markdown-body img) {
+  max-width: 100%;
+  border-radius: 8px;
+}
+:deep(.markdown-body code) {
+  background: var(--bg-tertiary);
+  color: #f59e0b;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-family: 'Fira Code', 'SF Mono', monospace;
+  font-size: 0.85em;
+}
+:deep(.markdown-body pre) {
+  background: #1a1b26;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 0;
+  margin: 8px 0;
+  overflow-x: auto;
+  position: relative;
+}
+:deep(.markdown-body pre code) {
+  display: block;
+  padding: 12px 14px;
+  background: transparent;
+  color: #a9b1d6;
+  font-family: 'Fira Code', 'SF Mono', monospace;
+  font-size: 0.82em;
+  line-height: 1.6;
+  white-space: pre;
+  border-radius: 0;
 }
 :deep(.code-lang) {
+  position: absolute; top: 6px; right: 50px;
+  font-size: 0.7em; color: #565f89; text-transform: uppercase;
+  z-index: 2;
+}
+:deep(.code-copy-btn) {
   position: absolute; top: 6px; right: 10px;
-  font-size: 0.7em; color: var(--text-muted); text-transform: uppercase;
+  padding: 2px 8px; border-radius: 4px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+  color: #565f89; font-size: 11px; cursor: pointer; z-index: 2;
+  transition: all 0.2s;
+}
+:deep(.code-copy-btn:hover) {
+  background: rgba(255,255,255,0.15);
+  color: #a9b1d6;
 }
 
 @keyframes bounce {

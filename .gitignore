@@ -2,3 +2,4 @@ __pycache__
 .codeflicker
 .DS_Store
 .serena/
+go-vllm-api/server

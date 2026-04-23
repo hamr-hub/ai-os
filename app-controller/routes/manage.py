@@ -120,7 +120,10 @@ async def get_model_status(refresh: Optional[bool] = False):
             "service": scheduler.get_model_service(model),
             "active_requests": scheduler.get_active_requests(model),
             "preloaded": scheduler.is_model_preloaded(model),
-            "last_used": scheduler.get_model_last_used(model).isoformat() if scheduler.get_model_last_used(model) else None
+            "last_used": scheduler.get_model_last_used(model).isoformat() if scheduler.get_model_last_used(model) else None,
+            "supports_images": scheduler.get_model_supports_images(model),
+            "supports_tool_calling": scheduler.get_model_supports_tool_calling(model),
+            "supports_image_generation": scheduler.get_model_supports_image_generation(model),
         }
 
     cache_service.set(cache_key, status, ttl_seconds=5)
@@ -688,7 +691,10 @@ async def get_monitor_all():
             "service": scheduler.get_model_service(model),
             "active_requests": scheduler.get_active_requests(model),
             "preloaded": scheduler.is_model_preloaded(model),
-            "last_used": scheduler.get_model_last_used(model).isoformat() if scheduler.get_model_last_used(model) else None
+            "last_used": scheduler.get_model_last_used(model).isoformat() if scheduler.get_model_last_used(model) else None,
+            "supports_images": scheduler.get_model_supports_images(model),
+            "supports_tool_calling": scheduler.get_model_supports_tool_calling(model),
+            "supports_image_generation": scheduler.get_model_supports_image_generation(model),
         }
 
     queue_info = {}

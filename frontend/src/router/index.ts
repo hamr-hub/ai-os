@@ -8,19 +8,24 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Dashboard.vue'),
   },
   {
+    path: '/monitor',
+    name: 'monitor',
+    component: () => import('@/views/MonitorView.vue'),
+  },
+  {
     path: '/models',
     name: 'models',
     component: () => import('@/views/ModelManagement.vue'),
   },
   {
-    path: '/agent',
-    name: 'agent',
-    component: () => import('@/views/AgentView.vue'),
-  },
-  {
     path: '/chat',
     name: 'chat',
     component: () => import('@/views/ChatView.vue'),
+  },
+  {
+    path: '/agent',
+    name: 'agent',
+    component: () => import('@/views/AgentView.vue'),
   },
   {
     path: '/docs',
@@ -31,6 +36,11 @@ const routes: RouteRecordRaw[] = [
     path: '/docs/:slug',
     name: 'docs-slug',
     component: () => import('@/views/DocsView.vue'),
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('@/views/Dashboard.vue'),
   },
 ]
 
