@@ -477,8 +477,9 @@ const changeTimeRange = (range: '1m' | '5m' | '15m' | '1h' | '6h') => {
 .range-btn.active {
   color: #fff; background: var(--color-primary);
   border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
-.range-btn:hover:not(.active) { color: var(--text-primary); }
+.range-btn:hover:not(.active) { color: var(--text-primary); border-color: var(--border-secondary); }
 
 .header-btn {
   display: flex; align-items: center; gap: 6px;
@@ -514,10 +515,28 @@ const changeTimeRange = (range: '1m' | '5m' | '15m' | '1h' | '6h') => {
   background: var(--bg-card); border-radius: 12px;
   border: 1px solid var(--border-card); padding: 20px;
   box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+  animation: fade-in 0.4s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.card:hover::before { opacity: 0.4; }
+.card:hover {
+  border-color: rgba(99, 102, 241, 0.25);
+  box-shadow: var(--shadow-md), 0 0 8px rgba(99, 102, 241, 0.06);
 }
 
 .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-.card-icon { width: 18px; height: 18px; color: var(--text-muted); }
+.card-icon { width: 18px; height: 18px; color: var(--color-primary); filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3)); }
 .card-icon.warm { color: #f59e0b; }
 .card-icon.power { color: #ef4444; }
 .card-icon.blue { color: #3b82f6; }
@@ -531,6 +550,7 @@ const changeTimeRange = (range: '1m' | '5m' | '15m' | '1h' | '6h') => {
   color: #22c55e; background: rgba(34, 197, 94, 0.15);
   border: 1px solid rgba(34, 197, 94, 0.3);
   animation: pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.2);
 }
 
 .count-badge { margin-left: auto; font-size: 12px; color: var(--text-muted); background: var(--bg-secondary); padding: 2px 8px; border-radius: 10px; }
@@ -547,7 +567,9 @@ const changeTimeRange = (range: '1m' | '5m' | '15m' | '1h' | '6h') => {
 .stat-item {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 12px; background: var(--bg-secondary); border-radius: 8px;
+  border: 1px solid transparent; transition: all 0.2s;
 }
+.stat-item:hover { border-color: var(--border-primary); transform: translateY(-1px); }
 .stat-icon { width: 16px; height: 16px; color: var(--text-muted); }
 .stat-label { font-size: 12px; color: var(--text-muted); }
 .stat-val { font-size: 16px; font-weight: 700; color: var(--text-primary); }

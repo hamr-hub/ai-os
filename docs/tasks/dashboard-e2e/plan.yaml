@@ -1,0 +1,173 @@
+task_id: dashboard-e2e
+version: v1
+created_at: "2026-04-23"
+
+tasks:
+  - id: T1
+    title: 添加SystemStatus/QueueStatus/HealthAlert类型定义
+    priority: P0
+    phase: phase1_api_types
+    file_changes:
+      - path: frontend/src/types/index.ts
+        action: modify
+    test_changes:
+      - path: frontend/tests/types/index.test.ts
+        description: 验证类型定义正确导出
+    ac: ["types/index.ts新增SystemStatus(含cpu/memory/disk子结构),QueueStatus(含每个模型active_requests/concurrency_limit/can_accept),HealthAlert(含should_alert/health_score/status/alert_reasons)"]
+
+  - id: T2
+    title: 添加getSystemStatus/getQueueStatus/getHealthAlert API函数
+    priority: P0
+    phase: phase1_api_types
+    file_changes:
+      - path: frontend/src/api/client.ts
+        action: modify
+    test_changes:
+      - path: frontend/tests/api/client.test.ts
+        description: 验证API函数调用正确URL
+    ac: ["client.ts新增3个API函数，调用/manage/system/status,/manage/queue,/manage/health/alert"]
+
+  - id: T3
+    title: 创建useSystemData composable
+    priority: P0
+    phase: phase1_api_types
+    file_changes:
+      - path: frontend/src/composables/useSystemData.ts
+        action: create
+    test_changes:
+      - path: frontend/tests/composables/useSystemData.test.ts
+        description: 验证composable正确获取和轮询数据
+    ac: ["useSystemData composable统一管理system/queue/health数据获取，10秒轮询，提供refresh方法"]
+
+  - id: T4
+    title: Go后端SystemStatus完善 - 返回实际CPU/内存/磁盘数据
+    priority: P1
+    phase: phase3_go_backend
+    file_changes:
+      - path: go-vllm-api/internal/service/system.go
+        action: create
+      - path: go-vllm-api/internal/handler/manage/manage.go
+        action: modify
+    ac: ["Go后端SystemStatus返回与Python后端一致的数据结构(cpu/memory/disk)，不再只返回timestamp"]
+
+  - id: T5
+    title: Dashboard重构 - 使用useTokenStats composable
+    priority: P1
+    phase: phase2_dashboard_features
+    file_changes:
+      - path: frontend/src/views/Dashboard.vue
+        action: modify
+    test_changes:
+      - path: frontend/e2e/dashboard.spec.ts
+        description: E2E验证token数据正确显示
+    ac: ["Dashboard使用useTokenStats替代内联fetchTokenStats逻辑，移除重复代码"]
+
+  - id: T6
+    title: Dashboard新增系统状态卡片
+    priority: P0
+    phase: phase2_dashboard_features
+    file_changes:
+      - path: frontend/src/views/Dashboard.vue
+        action: modify
+    test_changes:
+      - path: frontend/e2e/dashboard.spec.ts
+        description: E2E验证系统状态卡片渲染
+    ac: ["Dashboard显示CPU/内存/磁盘使用率卡片，进度条+阈值颜色，数据从useSystemData获取"]
+
+  - id: T7
+    title: Dashboard新增队列状态卡片
+    priority: P0
+    phase: phase2_dashboard_features
+    file_changes:
+      - path: frontend/src/views/Dashboard.vue
+        action: modify
+    test_changes:
+      - path: frontend/e2e/dashboard.spec.ts
+        description: E2E验证队列状态卡片渲染
+    ac: ["Dashboard显示请求队列卡片，各模型队列请求数，warning状态标记"]
+
+  - id: T8
+    title: Dashboard新增健康告警卡片
+    priority: P1
+    phase: phase2_dashboard_features
+    file_changes:
+      - path: frontend/src/views/Dashboard.vue
+        action: modify
+    test_changes:
+      - path: frontend/e2e/dashboard.spec.ts
+        description: E2E验证健康告警卡片渲染
+    ac: ["Dashboard显示健康告警卡片，状态颜色标记，告警列表可展开"]
+
+  - id: T9
+    title: Dashboard添加loading骨架屏和错误处理
+    priority: P0
+    phase: phase2_dashboard_features
+    file_changes:
+      - path: frontend/src/views/Dashboard.vue
+        action: modify
+    test_changes:
+      - path: frontend/e2e/dashboard.spec.ts
+        description: E2E验证loading和错误状态
+    ac: ["首次加载显示骨架屏，API失败显示可重试提示，模型操作失败Toast通知"]
+
+  - id: T10
+    title: Dashboard响应式布局优化
+    priority: P1
+    phase: phase2_dashboard_features
+    file_changes:
+      - path: frontend/src/views/Dashboard.vue
+        action: modify
+    test_changes:
+      - path: frontend/e2e/dashboard.spec.ts
+        description: E2E验证响应式布局在不同宽度下正确渲染
+    ac: ["grid 3列>1200px, 2列768-1200px, 1列<768px"]
+
+  - id: T11
+    title: 搭建Playwright E2E测试框架
+    priority: P0
+    phase: phase4_e2e_tests
+    file_changes:
+      - path: frontend/playwright.config.ts
+        action: create
+      - path: frontend/package.json
+        action: modify
+    ac: ["安装Playwright依赖，配置playwright.config.ts，添加test:e2e脚本"]
+
+  - id: T12
+    title: 编写Dashboard E2E测试
+    priority: P0
+    phase: phase4_e2e_tests
+    file_changes:
+      - path: frontend/e2e/dashboard.spec.ts
+        action: create
+    ac: ["Dashboard页面加载/渲染/数据展示/交互(刷新/模型操作)/导航跳转测试全部覆盖"]
+
+  - id: T13
+    title: 搭建Vitest单元测试框架
+    priority: P1
+    phase: phase5_unit_tests
+    file_changes:
+      - path: frontend/vitest.config.ts
+        action: create
+      - path: frontend/package.json
+        action: modify
+      - path: frontend/vite.config.ts
+        action: modify
+    ac: ["安装vitest和@vue/test-utils，配置vitest.config.ts，添加test:unit脚本"]
+
+  - id: T14
+    title: 编写composables和store单元测试
+    priority: P1
+    phase: phase5_unit_tests
+    file_changes:
+      - path: frontend/tests/composables/useTokenStats.test.ts
+        action: create
+      - path: frontend/tests/composables/useGPU.test.ts
+        action: create
+      - path: frontend/tests/composables/useModels.test.ts
+        action: create
+      - path: frontend/tests/composables/useSystemData.test.ts
+        action: create
+      - path: frontend/tests/stores/app.test.ts
+        action: create
+    ac: ["useTokenStats/useGPU/useModels/useSystemData composable和app store的单元测试全部覆盖"]

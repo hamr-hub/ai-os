@@ -11,20 +11,22 @@ import (
 )
 
 type ManageHandler struct {
-	scheduler   *service.Scheduler
-	gpuMonitor  *service.GPUMonitor
-	sysCtl      *service.SystemController
-	metrics     *service.MetricsCollector
-	cache       *service.CacheService
-	cacheUpdater *service.CacheUpdater
-	wsManager   *service.WSManager
+	scheduler      *service.Scheduler
+	gpuMonitor     *service.GPUMonitor
+	sysCtl         *service.SystemController
+	sysCollector   *service.SystemStatusCollector
+	metrics        *service.MetricsCollector
+	cache          *service.CacheService
+	cacheUpdater   *service.CacheUpdater
+	wsManager      *service.WSManager
 }
 
-func NewManageHandler(scheduler *service.Scheduler, gpuMonitor *service.GPUMonitor, sysCtl *service.SystemController, metrics *service.MetricsCollector, cache *service.CacheService, cacheUpdater *service.CacheUpdater, wsManager *service.WSManager) *ManageHandler {
+func NewManageHandler(scheduler *service.Scheduler, gpuMonitor *service.GPUMonitor, sysCtl *service.SystemController, sysCollector *service.SystemStatusCollector, metrics *service.MetricsCollector, cache *service.CacheService, cacheUpdater *service.CacheUpdater, wsManager *service.WSManager) *ManageHandler {
 	return &ManageHandler{
 		scheduler:    scheduler,
 		gpuMonitor:   gpuMonitor,
 		sysCtl:       sysCtl,
+		sysCollector: sysCollector,
 		metrics:      metrics,
 		cache:        cache,
 		cacheUpdater: cacheUpdater,
@@ -92,17 +94,32 @@ func (h *ManageHandler) GetGPUStatus(c *gin.Context) {
 
 func (h *ManageHandler) GetGPUSummary(c *gin.Context) {
 	status := h.gpuMonitor.GetStatus()
-	summary := gin.H{"status": "unavailable"}
-	if status != nil {
-		summary = gin.H{
-			"status":    "available",
-			"name":      status.Name,
-			"used":      status.UsedMemory,
-			"available": status.AvailableMemory,
-			"total":     status.TotalMemory,
-		}
+	if status == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "unavailable",
+			"current": nil,
+			"history": []interface{}{},
+		})
+		return
 	}
-	c.JSON(http.StatusOK, summary)
+	current := gin.H{
+		"name":              status.Name,
+		"gpu_count":         status.GPUCount,
+		"utilization":       status.Utilization,
+		"temperature":       status.Temperature,
+		"power_draw":        status.PowerDraw,
+		"power_limit":       status.PowerLimit,
+		"power_percent":     status.PowerPercent,
+		"memory_utilization": status.MemoryUtilization,
+		"used_memory":       status.UsedMemory,
+		"available_memory":  status.AvailableMemory,
+		"total_memory":      status.TotalMemory,
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "available",
+		"current": current,
+		"history": []interface{}{},
+	})
 }
 
 func (h *ManageHandler) GetModelStatus(c *gin.Context) {
@@ -110,11 +127,14 @@ func (h *ManageHandler) GetModelStatus(c *gin.Context) {
 	status := make(map[string]interface{})
 	for _, m := range models {
 		status[m] = gin.H{
-			"running":         h.scheduler.IsModelRunning(m),
-			"port":            h.scheduler.GetModelPort(m),
-			"service":         h.scheduler.GetModelService(m),
-			"active_requests": h.scheduler.GetActiveRequests(m),
-			"preloaded":       h.scheduler.IsModelPreloaded(m),
+			"running":                  h.scheduler.IsModelRunning(m),
+			"port":                     h.scheduler.GetModelPort(m),
+			"service":                  h.scheduler.GetModelService(m),
+			"active_requests":          h.scheduler.GetActiveRequests(m),
+			"preloaded":                h.scheduler.IsModelPreloaded(m),
+			"supports_images":          h.scheduler.GetModelSupportsImages(m),
+			"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(m),
+			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
 		}
 	}
 	c.JSON(http.StatusOK, status)
@@ -126,13 +146,15 @@ func (h *ManageHandler) ModelsSummary(c *gin.Context) {
 	for _, m := range models {
 		mc := h.scheduler.GetModelConfig(m)
 		entry := gin.H{
-			"name":     m,
-			"running":  h.scheduler.IsModelRunning(m),
-			"preloaded": h.scheduler.IsModelPreloaded(m),
-			"port":     h.scheduler.GetModelPort(m),
+			"name":                     m,
+			"running":                  h.scheduler.IsModelRunning(m),
+			"preloaded":                h.scheduler.IsModelPreloaded(m),
+			"port":                     h.scheduler.GetModelPort(m),
+			"supports_images":          h.scheduler.GetModelSupportsImages(m),
+			"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(m),
+			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
 		}
 		if mc != nil {
-			entry["supports_images"] = mc.SupportsImages
 			entry["description"] = mc.Description
 			entry["required_memory"] = mc.RequiredMemory
 		}
@@ -305,7 +327,8 @@ func (h *ManageHandler) ReloadConfig(c *gin.Context) {
 }
 
 func (h *ManageHandler) SystemStatus(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"timestamp": time.Now().Format(time.RFC3339)})
+	result := h.sysCollector.GetSystemStatus()
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *ManageHandler) GetWebSocketConnections(c *gin.Context) {
@@ -318,13 +341,15 @@ func (h *ManageHandler) NodeIntegrationStatus(c *gin.Context) {
 	modelStatuses := make(map[string]interface{})
 	for _, m := range models {
 		modelStatuses[m] = gin.H{
-			"available":       h.scheduler.IsModelAvailable(m),
-			"running":         h.scheduler.IsModelRunning(m),
-			"preloaded":       h.scheduler.IsModelPreloaded(m),
-			"port":            h.scheduler.GetModelPort(m),
-			"supports_images":  h.scheduler.GetModelSupportsImages(m),
-			"active_requests":  h.scheduler.GetActiveRequests(m),
-			"can_accept":       h.scheduler.CanAcceptRequest(m),
+			"available":                h.scheduler.IsModelAvailable(m),
+			"running":                  h.scheduler.IsModelRunning(m),
+			"preloaded":                h.scheduler.IsModelPreloaded(m),
+			"port":                     h.scheduler.GetModelPort(m),
+			"supports_images":          h.scheduler.GetModelSupportsImages(m),
+			"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(m),
+			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
+			"active_requests":          h.scheduler.GetActiveRequests(m),
+			"can_accept":               h.scheduler.CanAcceptRequest(m),
 		}
 	}
 
@@ -348,16 +373,18 @@ func (h *ManageHandler) ModelInfo(c *gin.Context) {
 	}
 	mc := h.scheduler.GetModelConfig(modelName)
 	info := gin.H{
-		"name":             modelName,
-		"available":        true,
-		"running":          h.scheduler.IsModelRunning(modelName),
-		"preloaded":        h.scheduler.IsModelPreloaded(modelName),
-		"port":             h.scheduler.GetModelPort(modelName),
-		"model_path":       h.scheduler.GetModelPath(modelName),
-		"service":          h.scheduler.GetModelService(modelName),
-		"supports_images":  h.scheduler.GetModelSupportsImages(modelName),
-		"active_requests":  h.scheduler.GetActiveRequests(modelName),
-		"can_accept":       h.scheduler.CanAcceptRequest(modelName),
+		"name":                     modelName,
+		"available":                true,
+		"running":                  h.scheduler.IsModelRunning(modelName),
+		"preloaded":                h.scheduler.IsModelPreloaded(modelName),
+		"port":                     h.scheduler.GetModelPort(modelName),
+		"model_path":               h.scheduler.GetModelPath(modelName),
+		"service":                  h.scheduler.GetModelService(modelName),
+		"supports_images":          h.scheduler.GetModelSupportsImages(modelName),
+		"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(modelName),
+		"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(modelName),
+		"active_requests":          h.scheduler.GetActiveRequests(modelName),
+		"can_accept":               h.scheduler.CanAcceptRequest(modelName),
 	}
 	if mc != nil {
 		info["description"] = mc.Description

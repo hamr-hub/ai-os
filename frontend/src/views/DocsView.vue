@@ -222,6 +222,7 @@ const currentDocItem = computed(() => findDocItem(currentDoc.value))
   color: var(--color-primary);
   background: rgba(var(--color-primary-rgb), 0.1);
   font-weight: 500;
+  box-shadow: 0 1px 4px rgba(var(--color-primary-rgb), 0.15);
 }
 
 .docs-content {

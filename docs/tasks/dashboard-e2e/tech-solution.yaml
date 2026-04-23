@@ -1,0 +1,114 @@
+task_id: dashboard-e2e
+version: v1
+created_at: "2026-04-23"
+
+architecture:
+  frontend: Vue3+Vite+TypeScript+Pinia+Chart.js
+  backend: Go-Gin+Python-FastAPI(dual-backend)
+
+file_changes:
+  - path: frontend/src/types/index.ts
+    action: modify
+    description: 添加SystemStatus, QueueStatus, HealthAlert类型定义
+  - path: frontend/src/api/client.ts
+    action: modify
+    description: 添加getSystemStatus, getQueueStatus, getHealthAlert API函数
+  - path: frontend/src/views/Dashboard.vue
+    action: modify
+    description: 重构Dashboard，使用useTokenStats composable，添加系统状态/队列/健康告警卡片，添加loading骨架屏和错误处理，响应式布局
+  - path: frontend/src/composables/useSystemData.ts
+    action: create
+    description: 新建composable，统一管理system/queue/health数据的获取和轮询
+  - path: frontend/vite.config.ts
+    action: modify
+    description: 添加vitest配置
+  - path: frontend/package.json
+    action: modify
+    description: 添加vitest, @vue/test-utils, playwright, test脚本
+  - path: frontend/e2e/dashboard.spec.ts
+    action: create
+    description: Playwright E2E测试 - Dashboard页面
+  - path: frontend/e2e/navigation.spec.ts
+    action: create
+    description: Playwright E2E测试 - 导航跳转
+  - path: frontend/tests/composables/useTokenStats.test.ts
+    action: create
+    description: Vitest单元测试 - useTokenStats
+  - path: frontend/tests/composables/useGPU.test.ts
+    action: create
+    description: Vitest单元测试 - useGPU
+  - path: frontend/tests/composables/useModels.test.ts
+    action: create
+    description: Vitest单元测试 - useModels
+  - path: frontend/tests/stores/app.test.ts
+    action: create
+    description: Vitest单元测试 - app store
+  - path: frontend/vitest.config.ts
+    action: create
+    description: Vitest配置文件
+  - path: frontend/playwright.config.ts
+    action: create
+    description: Playwright配置文件
+  - path: go-vllm-api/internal/handler/manage/manage.go
+    action: modify
+    description: SystemStatus接口返回实际CPU/内存/磁盘数据(使用psutil对应Go库)
+  - path: go-vllm-api/internal/service/system.go
+    action: create
+    description: Go版本的系统状态采集服务
+
+implementation_plan:
+  phase1_api_types:
+    description: "Phase 1: 类型定义和API函数"
+    steps:
+      - 在types/index.ts添加SystemStatus, QueueStatus, HealthAlert类型
+      - 在api/client.ts添加getSystemStatus, getQueueStatus, getHealthAlert函数
+      - 创建useSystemData composable
+
+  phase2_dashboard_features:
+    description: "Phase 2: Dashboard功能完善"
+    steps:
+      - Dashboard使用useTokenStats替代内联token逻辑
+      - 使用useSystemData composable获取系统/队列/健康数据
+      - 新增系统状态卡片(CPU/内存/磁盘)
+      - 新增队列状态卡片
+      - 新增健康告警卡片
+      - 添加loading骨架屏组件
+      - 添加错误处理UI(可重试)
+      - 模型操作失败Toast通知
+      - 响应式grid布局(3/2/1列自适应)
+
+  phase3_go_backend:
+    description: "Phase 3: Go后端SystemStatus完善"
+    steps:
+      - 创建system.go服务，采集CPU/内存/磁盘数据
+      - 修改SystemStatus handler返回完整数据
+
+  phase4_e2e_tests:
+    description: "Phase 4: Playwright E2E测试"
+    steps:
+      - 安装Playwright依赖
+      - 配置playwright.config.ts
+      - 编写Dashboard加载和渲染测试
+      - 编写Dashboard数据展示测试
+      - 编写Dashboard交互测试
+      - 编写导航跳转测试
+
+  phase5_unit_tests:
+    description: "Phase 5: Vitest单元测试"
+    steps:
+      - 安装vitest和@vue/test-utils
+      - 配置vitest.config.ts
+      - 编写composables测试
+      - 编写app store测试
+
+risk_analysis:
+  - risk: Go后端SystemStatus返回空数据，前端卡片显示异常
+    mitigation: 前端做降级处理，数据为空或接口失败时显示"数据不可用"
+  - risk: Playwright E2E测试需要后端服务运行
+    mitigation: 使用mock API server或Vite dev server + API mock
+  - risk: Dashboard重构可能影响现有功能
+    mitigation: 保持现有composable接口不变，仅替换内部调用方式
+
+rollback_plan:
+  - 所有新增卡片和功能独立封装，可通过v-if控制显示
+  - Git revert即可回退所有变更

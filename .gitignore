@@ -3,3 +3,5 @@ __pycache__
 .DS_Store
 .serena/
 go-vllm-api/server
+frontend/playwright-report/
+frontend/test-results/

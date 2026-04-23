@@ -146,6 +146,30 @@ func (s *Scheduler) GetModelSupportsImages(name string) bool {
 	return false
 }
 
+func (s *Scheduler) GetModelSupportsToolCalling(name string) bool {
+	mc := s.GetModelConfig(name)
+	if mc != nil {
+		return mc.SupportsToolCalling
+	}
+	return false
+}
+
+func (s *Scheduler) GetModelSupportsImageGeneration(name string) bool {
+	mc := s.GetModelConfig(name)
+	if mc != nil {
+		return mc.SupportsImageGeneration
+	}
+	return false
+}
+
+func (s *Scheduler) GetModelBackendType(name string) string {
+	mc := s.GetModelConfig(name)
+	if mc != nil {
+		return mc.Service
+	}
+	return ""
+}
+
 func (s *Scheduler) IsModelRunning(name string) bool {
 	matched := s.FindMatchingModel(name)
 	if matched == "" {

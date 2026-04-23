@@ -464,13 +464,19 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
   background: var(--bg-card); border-radius: 12px;
   border: 1px solid var(--border-card); padding: 20px;
   box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+  animation: fade-in 0.4s ease-out;
+}
+.card:hover {
+  border-color: rgba(99, 102, 241, 0.25);
+  box-shadow: var(--shadow-md), 0 0 8px rgba(99, 102, 241, 0.06);
 }
 
 .card-header {
   display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
 }
 
-.card-icon { width: 18px; height: 18px; color: var(--text-muted); }
+.card-icon { width: 18px; height: 18px; color: var(--color-primary); filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3)); }
 .card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
 .section-count { font-size: 11px; color: var(--text-muted); background: var(--bg-secondary); padding: 1px 6px; border-radius: 8px; margin-left: auto; }
 .section-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5; }
@@ -481,6 +487,11 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
   position: relative; padding: 14px;
   background: var(--bg-secondary); border-radius: 10px;
   border-left: 3px solid #22c55e; transition: all 0.2s;
+}
+.model-card:hover {
+  transform: translateX(4px);
+  border-left-color: var(--color-primary);
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.1);
 }
 
 .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
@@ -530,7 +541,7 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
   background: var(--bg-secondary); border-radius: 8px;
   transition: background 0.2s;
 }
-.model-item:hover { background: var(--bg-tertiary); }
+.model-item:hover { background: var(--bg-tertiary); transform: translateX(2px); }
 
 .item-info { display: flex; flex-direction: column; gap: 2px; }
 .item-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
@@ -562,9 +573,10 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
   padding: 8px 16px; border-radius: 8px;
   background: linear-gradient(135deg, #6366f1, #4f46e5);
   color: #fff; font-size: 13px; font-weight: 500;
-  border: none; cursor: pointer; transition: opacity 0.2s;
+  border: none; cursor: pointer; transition: all 0.2s;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
 }
-.test-btn:hover:not(:disabled) { opacity: 0.9; }
+.test-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4); }
 .test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .error-banner {

@@ -1,7 +1,8 @@
 import axios from 'axios'
 import type {
   GPUSummary, GPUHistoryEntry, ModelStatus, ModelsResponse,
-  ActionResponse, TestResponse, TestHistoryEntry, TokenStats
+  ActionResponse, TestResponse, TestHistoryEntry, TokenStats,
+  SystemStatus, QueueStatus, HealthAlert
 } from '@/types'
 
 const client = axios.create({
@@ -95,6 +96,21 @@ export async function setDefaultModel(modelName: string): Promise<ActionResponse
 
 export async function clearDefaultModel(): Promise<ActionResponse> {
   const { data } = await client.delete<ActionResponse>('/manage/default-model')
+  return data
+}
+
+export async function getSystemStatus(): Promise<SystemStatus> {
+  const { data } = await client.get<SystemStatus>('/manage/system/status')
+  return data
+}
+
+export async function getQueueStatus(): Promise<QueueStatus> {
+  const { data } = await client.get<QueueStatus>('/manage/queue')
+  return data
+}
+
+export async function getHealthAlert(): Promise<HealthAlert> {
+  const { data } = await client.get<HealthAlert>('/manage/health/alert')
   return data
 }
 

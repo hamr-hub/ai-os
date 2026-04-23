@@ -153,8 +153,12 @@ const toggleCollapse = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.3);
+  box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.3), 0 0 20px rgba(var(--color-primary-rgb), 0.15);
   flex-shrink: 0;
+  transition: box-shadow 0.3s;
+}
+.sidebar:hover .logo-icon {
+  box-shadow: 0 4px 16px rgba(var(--color-primary-rgb), 0.4), 0 0 30px rgba(var(--color-primary-rgb), 0.2);
 }
 
 .logo-title {
@@ -236,6 +240,7 @@ const toggleCollapse = () => {
 .nav-item:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+  transform: translateX(2px);
 }
 
 .nav-item.active {

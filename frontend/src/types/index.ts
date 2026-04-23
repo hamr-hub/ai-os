@@ -179,6 +179,51 @@ export interface ModelWithTest extends ModelInfo {
   performance?: TestReport['performance_metrics']
 }
 
+export interface SystemCpuStatus {
+  percent: number
+  cores: number
+  cores_physical: number
+}
+
+export interface SystemMemoryStatus {
+  total_mb: number
+  available_mb: number
+  used_mb: number
+  percent: number
+}
+
+export interface SystemDiskStatus {
+  total_gb: number
+  used_gb: number
+  free_gb: number
+  percent: number
+}
+
+export interface SystemStatus {
+  cpu: SystemCpuStatus
+  memory: SystemMemoryStatus
+  disk: SystemDiskStatus
+  timestamp: string
+}
+
+export interface QueueModelEntry {
+  active_requests: number
+  concurrency_limit: number
+  can_accept: boolean
+}
+
+export interface QueueStatus {
+  [modelName: string]: QueueModelEntry
+}
+
+export interface HealthAlert {
+  should_alert: boolean
+  health_score: number
+  status: 'healthy' | 'degraded' | 'unhealthy'
+  alert_reasons: string[]
+  timestamp: string
+}
+
 export interface TokenModelStats {
   prompt_tokens: number
   completion_tokens: number

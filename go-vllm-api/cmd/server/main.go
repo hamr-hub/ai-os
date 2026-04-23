@@ -98,7 +98,8 @@ func main() {
 	r.Use(rateLimiter.Handler())
 
 	v1Handler := v1handler.NewV1Handler(scheduler, gpuMonitor, vllmProxy, metricsCollector, cacheService)
-	manageHandler := manage.NewManageHandler(scheduler, gpuMonitor, sysCtl, metricsCollector, cacheService, cacheUpdater, wsManager)
+	sysCollector := service.NewSystemStatusCollector(zapLogger)
+	manageHandler := manage.NewManageHandler(scheduler, gpuMonitor, sysCtl, sysCollector, metricsCollector, cacheService, cacheUpdater, wsManager)
 	healthHandler := health.NewHealthHandler(gpuMonitor, scheduler, metricsCollector, cacheService, promExporter)
 	wsHandler := ws.NewWSHandler(wsManager, zapLogger)
 

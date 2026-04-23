@@ -128,9 +128,10 @@ const formatTime = (date: Date) => {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
 }
-.new-chat-btn:hover { opacity: 0.9; }
+.new-chat-btn:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); }
 
 .close-btn {
   width: 32px;
@@ -162,11 +163,13 @@ const formatTime = (date: Date) => {
   cursor: pointer;
   transition: all 0.2s;
   color: var(--text-secondary);
+  border: 1px solid transparent;
 }
-.conv-item:hover { background: var(--bg-secondary); }
+.conv-item:hover { background: var(--bg-secondary); border-color: var(--border-primary); }
 .conv-item.active {
   background: linear-gradient(135deg, #6366f1, #4f46e5);
   color: #fff;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.25);
 }
 
 .conv-info { flex: 1; min-width: 0; }
