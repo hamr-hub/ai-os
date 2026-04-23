@@ -442,11 +442,11 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
 
 .icon-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; border-radius: 6px;
-  border: 1px solid var(--border-primary); background: var(--bg-card);
-  color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+  width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid var(--border-primary); background: var(--bg-secondary);
+  color: var(--text-muted); cursor: pointer; transition: all 0.25s;
 }
-.icon-btn:hover:not(:disabled) { color: var(--text-primary); }
+.icon-btn:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2); }
 .icon-btn:disabled { opacity: 0.5; }
 .icon-btn.small { width: 28px; height: 28px; }
 
@@ -461,22 +461,25 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
 }
 
 .card {
-  background: var(--bg-card); border-radius: 12px;
+  background: var(--bg-card); border-radius: 14px;
   border: 1px solid var(--border-card); padding: 20px;
   box-shadow: var(--shadow);
   transition: all 0.3s ease;
   animation: fade-in 0.4s ease-out;
+  position: relative; overflow: hidden;
 }
 .card:hover {
   border-color: rgba(99, 102, 241, 0.25);
-  box-shadow: var(--shadow-md), 0 0 8px rgba(99, 102, 241, 0.06);
+  box-shadow: var(--shadow-md), 0 0 12px rgba(99, 102, 241, 0.08);
+  transform: translateY(-1px);
 }
 
 .card-header {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
 }
 
-.card-icon { width: 18px; height: 18px; color: var(--color-primary); filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3)); }
+.card-icon { width: 18px; height: 18px; color: var(--color-primary); filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3)); transition: transform 0.2s; }
+.card:hover .card-icon { transform: scale(1.1); }
 .card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
 .section-count { font-size: 11px; color: var(--text-muted); background: var(--bg-secondary); padding: 1px 6px; border-radius: 8px; margin-left: auto; }
 .section-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5; }
@@ -570,13 +573,13 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
 
 .test-btn {
   display: flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border-radius: 8px;
+  padding: 8px 16px; border-radius: 10px;
   background: linear-gradient(135deg, #6366f1, #4f46e5);
   color: #fff; font-size: 13px; font-weight: 500;
-  border: none; cursor: pointer; transition: all 0.2s;
+  border: none; cursor: pointer; transition: all 0.25s;
   box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
 }
-.test-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4); }
+.test-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4); }
 .test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .error-banner {
@@ -602,10 +605,11 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
 .feature-card {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 14px 8px; background: var(--bg-secondary);
-  border-radius: 8px; border: 1px solid var(--border-primary);
-  transition: border-color 0.2s;
+  border-radius: 10px; border: 1px solid var(--border-primary);
+  transition: border-color 0.2s, transform 0.2s;
 }
 .feature-card.supported { border-color: rgba(34, 197, 94, 0.3); }
+.feature-card:hover { transform: translateY(-2px); }
 .feature-icon { width: 20px; height: 20px; color: var(--text-muted); }
 .feature-card.supported .feature-icon { color: #22c55e; }
 .feature-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }

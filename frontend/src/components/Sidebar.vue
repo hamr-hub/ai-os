@@ -241,11 +241,13 @@ const toggleCollapse = () => {
   color: var(--text-primary);
   background: var(--bg-hover);
   transform: translateX(2px);
+  box-shadow: 0 0 8px rgba(var(--color-primary-rgb), 0.05);
 }
 
 .nav-item.active {
   color: var(--color-primary);
   background: rgba(var(--color-primary-rgb), 0.1);
+  box-shadow: 0 0 12px rgba(var(--color-primary-rgb), 0.08);
 }
 
 [data-theme='dark'] .nav-item.active {
