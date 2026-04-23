@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, nextTick, computed, watch } from 'vue'
-import { Send, Loader2, Bot, User, Sparkles, StopCircle, Copy, Check, ChevronDown, Settings, Wrench } from 'lucide-vue-next'
+import { ref, nextTick, computed, watch, onMounted } from 'vue'
+import { Send, Loader2, Bot, User, Sparkles, StopCircle, Copy, Check, ChevronDown, Settings, Wrench, MessageSquare, RefreshCw } from 'lucide-vue-next'
 import { chatCompletionStream, type ChatMessage } from '@/api/client'
 import { useModels } from '@/composables/useModels'
 import { useAppStore } from '@/stores/app'
@@ -163,6 +163,12 @@ const autoResize = (event: Event) => {
   el.style.height = 'auto'
   el.style.height = Math.min(el.scrollHeight, 160) + 'px'
 }
+
+onMounted(() => {
+  if (!currentConv.value) {
+    chatStore.createConversation('新会话', activeModel.value || null)
+  }
+})
 </script>
 
 <template>
