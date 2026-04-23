@@ -7,20 +7,19 @@ AI OS 支持多种部署场景，可根据环境选择对应的 Docker Compose �
 | 场景 | 说明 | 文档 |
 |------|------|------|
 | 开发环境 | 前后端独立运行，热更新 | [开发环境部署](./docker-compose-dev.md) |
-| 生产环境 | 全栈容器化部署 (4 服务) | [生产环境部署](./docker-compose-prod.md) |
+| 生产环境 | 全栈容器化部署 (5 服务) | [生产环境部署](./docker-compose-prod.md) |
 | GPU 环境 | GPU 加速推理 + vLLM | [GPU 环境部署](./docker-compose-gpu.md) |
 
 ## 端口对照表
 
 | 服务 | 开发端口 | Docker 端口 | 说明 |
 |------|---------|-------------|------|
-| 前端 Vite | 30000 | 8080→80 | 开发模式 Vite dev server；生产模式 Nginx |
-| 后端 FastAPI | 35000 (proxy) / 5000 (.env) | 5000 | Vite 代理到 35000，.env 和 Docker 使用 5000 |
-| aiclient2api | 3000 | 3000 | API 网关层 |
+| 前端 Vite/Nginx | 30000 | 30000→80 | 开发 Vite / 生产 Nginx |
+| Python 后端 FastAPI | 35000 | 35000 | 管理接口 `/manage/*` |
+| Go 后端 go-vllm-api | 35001 | 35001 | 推理接口 `/v1/*` |
+| aiclient2api | 3000 | 3000 | API 网关 (Docker部署) |
 | Redis | 6379 | 6379 | 缓存 / 消息队列 |
 | vLLM | 8000 | 8000 (容器内) | 模型推理服务，Docker 内部访问 |
-
-> **注意**：开发环境中 Vite 配置代理 `/api` 和 `/v1` 到 `localhost:35000`，如果后端实际监听 5000 端口，需确保代理目标正确或后端监听 35000。
 
 ## 快速启动
 
@@ -47,26 +46,35 @@ docker compose logs -f
 ### 开发环境
 
 ```bash
-# 终端 1: 启动后端
+# 终端 1: 启动 Python 后端
 cd app-controller
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-python main.py
+python main.py              # http://localhost:35000
 
-# 终端 2: 启动前端
+# 终端 2: 启动 Go 后端
+cd go-vllm-api
+go run cmd/server/main.go --port 35001  # http://localhost:35001
+
+# 终端 3: 启动前端
 cd frontend
 pnpm install
-pnpm dev
+pnpm dev                    # http://localhost:30000
+
+# 终端 4: 启动 aiclient2api (Docker)
+cd aiclient2api
+docker compose up -d        # http://localhost:3000
 ```
 
 ## 服务架构
 
 ```
-用户 → 前端 (8080/30000)
+用户 → 前端 (30000)
          ↓
      aiclient2api (3000) — API 网关 / 鉴权
          ↓
-     app-controller (5000) — 业务逻辑
+     go-vllm-api (35001) — 推理接口 /v1
+     app-controller (35000) — 管理接口 /manage
          ↓
      vLLM (8000) — 模型推理
          ↓
@@ -80,7 +88,8 @@ pnpm dev
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `HOST` | 0.0.0.0 | 监听地址 |
-| `PORT` | 5000 | 后端端口 |
+| `PORT` | 35000 | Python 后端端口 |
+| `GO_PORT` | 35001 | Go 后端端口 |
 | `CLIENT_PORT` | 3000 | aiclient2api 端口 |
 | `REDIS_URL` | redis://localhost:6379 | Redis 连接 |
 | `SECRET_KEY` | your-secret-key-here | 安全密钥 |
@@ -92,8 +101,11 @@ pnpm dev
 各服务均提供健康检查端点：
 
 ```bash
-# 后端
-curl http://localhost:5000/health
+# Python 后端
+curl http://localhost:35000/health
+
+# Go 后端
+curl http://localhost:35001/health
 
 # aiclient2api
 curl http://localhost:3000/health

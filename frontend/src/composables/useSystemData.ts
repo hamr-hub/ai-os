@@ -7,11 +7,16 @@ export function useSystemData(intervalMs = 10000) {
   const queueStatus = ref<QueueStatus | null>(null)
   const healthAlert = ref<HealthAlert | null>(null)
   const loading = ref(false)
+  const isRefreshing = ref(false)
   const error = ref<string | null>(null)
   let timer: number | null = null
 
-  const fetch = async () => {
-    loading.value = true
+  const fetch = async (manualRefresh = false) => {
+    if (manualRefresh) {
+      isRefreshing.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       systemStatus.value = await getSystemStatus()
@@ -29,10 +34,11 @@ export function useSystemData(intervalMs = 10000) {
       console.error('Failed to fetch health alert:', err)
     }
     loading.value = false
+    isRefreshing.value = false
   }
 
   const refresh = () => {
-    fetch()
+    fetch(true)
   }
 
   const startPolling = () => {
@@ -61,6 +67,7 @@ export function useSystemData(intervalMs = 10000) {
     queueStatus,
     healthAlert,
     loading,
+    isRefreshing,
     error,
     refresh,
     fetch,

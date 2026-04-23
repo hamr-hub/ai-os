@@ -56,7 +56,7 @@ python main.py
 ### 使用 Uvicorn
 ```bash
 cd app-controller
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 35000
 ```
 
 ### 运行测试

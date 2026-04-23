@@ -356,7 +356,7 @@ settings:
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
 | REDIS_URL | redis://localhost:6379 | Redis连接地址 |
-| PORT | 5000 | 服务端口 |
+| PORT | 35000 | 服务端口 |
 | LOG_LEVEL | INFO | 日志级别 |
 
 ### 9.3 启动方式
@@ -368,7 +368,7 @@ python main.py
 
 **生产模式：**
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 5000 --workers 4
+uvicorn main:app --host 0.0.0.0 --port 35000 --workers 4
 ```
 
 **Docker部署：**

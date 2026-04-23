@@ -2,10 +2,10 @@
 
 ## 架构说明
 
-生产环境使用根目录 `docker-compose.yml` 一键部署全部 4 个服务。
+生产环境使用根目录 `docker-compose.yml` 一键部署全部 5 个服务。
 
 ```
-用户 → Nginx (8080→80) → aiclient2api (3000) → app-controller (5000) → Redis (6379)
+用户 → Nginx (30000→80) → aiclient2api (3000) → app-controller (35000) / go-vllm-api (35001) → Redis (6379)
                             ↓
                          vLLM (8000, 容器内)
 ```
@@ -15,9 +15,10 @@
 | 服务 | 容器名 | 端口映射 | 基础镜像 |
 |------|--------|---------|---------|
 | redis | ai-os-redis | 6379:6379 | redis:7.2-alpine |
-| ai-controller | ai-os-controller | 5000:5000 | nvidia/cuda:12.1.1 (自建) |
+| ai-controller | ai-os-controller | 35000:35000 | nvidia/cuda:12.1.1 (自建) |
+| go-vllm-api | ai-os-go-vllm-api | 35001:35001 | go-vllm-api (自建) |
 | aiclient | ai-os-aiclient | 3000:3000 | justlikemaki/aiclient-2-api:latest |
-| frontend | ai-os-frontend | 8080:80 | nginx:alpine (自建) |
+| frontend | ai-os-frontend | 30000:80 | nginx:alpine (自建) |
 
 ## 启动步骤
 
@@ -48,19 +49,21 @@ docker compose up -d
 docker compose ps
 
 # 预期输出：
-# ai-os-redis       running   0.0.0.0:6379->6379/tcp
-# ai-os-controller  running   0.0.0.0:5000->5000/tcp
-# ai-os-aiclient    running   0.0.0.0:3000->3000/tcp
-# ai-os-frontend    running   0.0.0.0:8080->80/tcp
+# ai-os-redis          running   0.0.0.0:6379->6379/tcp
+# ai-os-controller     running   0.0.0.0:35000->35000/tcp
+# ai-os-go-vllm-api    running   0.0.0.0:35001->35001/tcp
+# ai-os-aiclient       running   0.0.0.0:3000->3000/tcp
+# ai-os-frontend       running   0.0.0.0:30000->80/tcp
 ```
 
 ### 3. 验证
 
 ```bash
 # 检查各服务健康状态
-curl http://localhost:5000/health
+curl http://localhost:35000/health
+curl http://localhost:35001/health
 curl http://localhost:3000/health
-curl http://localhost:8080
+curl http://localhost:30000
 
 # Redis 连接
 docker exec ai-os-redis redis-cli ping
@@ -73,14 +76,15 @@ docker exec ai-os-redis redis-cli ping
 
 | 端口 | 服务 | 用途 |
 |------|------|------|
-| 8080 | frontend | 用户访问入口 |
-| 5000 | ai-controller | API 服务（可设为内部） |
+| 30000 | frontend | 用户访问入口 |
+| 35000 | ai-controller | Python API 管理接口（可设为内部） |
+| 35001 | go-vllm-api | Go API 推理接口（可设为内部） |
 | 3000 | aiclient | API 网关（可设为内部） |
 | 6379 | Redis | 缓存服务（建议仅内网） |
 
 ### 安全建议
 
-- 仅对外暴露 8080（前端 Nginx）
+- 仅对外暴露 30000（前端 Nginx）
 - Redis (6379) 绑定内网，禁止公网访问
 - 后端和网关通过 Docker 内部网络通信
 
@@ -92,7 +96,11 @@ redis:
 
 ai-controller:
   ports:
-    - "127.0.0.1:5000:5000"  # 仅本机访问
+    - "127.0.0.1:35000:35000"  # 仅本机访问
+
+go-vllm-api:
+  ports:
+    - "127.0.0.1:35001:35001"  # 仅本机访问
 
 aiclient:
   ports:
@@ -104,6 +112,14 @@ aiclient:
 前端容器使用 `frontend/nginx.conf`，关键配置：
 
 ```nginx
+upstream python_backend {
+    server ai-controller:35000;
+}
+
+upstream go_backend {
+    server go-vllm-api:35001;
+}
+
 server {
     listen 80;
     root /usr/share/nginx/html;
@@ -114,9 +130,13 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # API 代理（容器内）
-    location /api/ {
-        proxy_pass http://localhost:5000/;
+    # API 代理（容器间使用 Docker 服务名）
+    location /api/manage/ {
+        proxy_pass http://python_backend/manage/;
+    }
+
+    location /v1/ {
+        proxy_pass http://go_backend/v1/;
     }
 
     # 静态资源缓存
@@ -126,7 +146,7 @@ server {
 }
 ```
 
-> **注意**：Docker 容器内 Nginx 代理到 `localhost:5000`，即同容器内的后端。如果前后端是独立容器，应改为 Docker 服务名 `http://ai-controller:5000`。
+> **注意**：Docker 容器内 Nginx 使用 Docker 服务名（`ai-controller:35000`、`go-vllm-api:35001`）进行代理，而不是 localhost。
 
 ## 数据持久化
 

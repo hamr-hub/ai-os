@@ -199,7 +199,7 @@ docker-compose down
 1. 进入「渠道管理」→「添加渠道」
 2. 配置：
    - 类型：Custom / OpenAI
-   - Base URL：`http://localhost:5000/v1`
+   - Base URL：`http://localhost:35001/v1`
    - API Key：任意值（本地验证）
 
 ### 模型自动同步
@@ -235,16 +235,16 @@ Python 控制层会自动将配置的模型列表同步到 AIClient-2-API，无�
 
 ```bash
 # 查看 GPU 状态
-curl http://localhost:5000/manage/gpu
+curl http://localhost:35000/manage/gpu
 
 # 启动模型
-curl -X POST http://localhost:5000/manage/models/Gemma-4-31B/start
+curl -X POST http://localhost:35000/manage/models/Gemma-4-31B/start
 
 # 健康检查
-curl http://localhost:5000/health
+curl http://localhost:35000/health
 
 # 查看队列
-curl http://localhost:5000/manage/queue
+curl http://localhost:35000/manage/queue
 ```
 
 ---
@@ -274,7 +274,7 @@ curl http://localhost:5000/manage/queue
 
 ### WebSocket 监控
 
-连接 `ws://localhost:5000/ws/monitor` 获取实时状态推送。
+连接 `ws://localhost:35000/ws/monitor` 获取实时状态推送。
 
 ---
 
@@ -307,7 +307,7 @@ settings:
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
 | `REDIS_URL` | redis://localhost:6379 | Redis 连接地址 |
-| `PORT` | 5000 | 服务端口 |
+| `PORT` | 35000 | 服务端口 |
 | `LOG_LEVEL` | INFO | 日志级别 |
 | `MODEL_BASE_PATH` | /mnt/pve_models | 模型存储路径 |
 

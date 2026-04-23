@@ -10,29 +10,29 @@
 ┌─────────────────────────────────────────────────────────┐
 │                     用户界面层                            │
 │                    Vue 3 Frontend                        │
-│                  (localhost:5173)                        │
+│                  (localhost:30000)                        │
 └────────────────────┬────────────────────────────────────┘
                      │ HTTP/WebSocket
-                     ▼
-┌─────────────────────────────────────────────────────────┐
-│                   API 网关层                              │
-│                  aiclient2api                            │
-│                 (localhost:3000)                         │
-└────────────────────┬────────────────────────────────────┘
-                     │ HTTP
-                     ▼
-┌─────────────────────────────────────────────────────────┐
-│                   业务逻辑层                              │
-│               app-controller (FastAPI)                   │
-│                  (localhost:8000)                        │
-└─────────────────────────────────────────────────────────┘
+              ┌──────┴──────┐
+              ▼             ▼
+┌──────────────────┐ ┌───────────────────────────────────┐
+│  API 网关层       │ │        业务逻辑层                  │
+│  aiclient2api    │ │  app-controller (FastAPI) :35000   │
+│  (localhost:3000)│ │  go-vllm-api (Go) :35001          │
+└──────────────────┘ └──────────────┬────────────────────┘
+                                    │
+                                    ▼
+                     ┌──────────────────────────────────┐
+                     │        推理层                      │
+                     │     vLLM Instance (:8000)         │
+                     └──────────────────────────────────┘
 ```
 
 ---
 
 ## 模块说明
 
-### Frontend (Vue 3)
+### Frontend (Vue 3) - 端口 30000
 
 **技术栈**
 - Vue 3.5 + TypeScript
@@ -53,6 +53,12 @@ frontend/src/
 └── types/         # 类型定义
 ```
 
+**代理路由**
+- `/api/manage/*` → Python 后端 (35000)
+- `/api/*` → Python 后端 (35000)
+- `/v1/*` → Go 后端 (35001)
+- `/health` → Go 后端 (35001)
+
 **状态管理**
 - `useAppStore`: 全局应用状态
 - `useUserStore`: 用户信息
@@ -60,7 +66,7 @@ frontend/src/
 
 ---
 
-### App Controller (Python FastAPI)
+### App Controller (Python FastAPI) - 端口 35000
 
 **技术栈**
 - Python 3.11+
@@ -81,21 +87,53 @@ app-controller/
 - RESTful 风格
 - JSON 响应格式
 - 统一错误处理
+- 管理接口 `/manage/*`
 
 ---
 
-### AIClient2API (网关)
+### Go VLLM API (Go Gin) - 端口 35001
+
+**技术栈**
+- Go 1.26+
+- Gin Web Framework
+- vLLM Proxy
+- WebSocket
+
+**核心模块**
+```
+go-vllm-api/
+├── cmd/server/     # 入口
+├── internal/       # 内部模块
+│   ├── config/    # 配置
+│   ├── handler/   # 请求处理
+│   ├── proxy/     # vLLM 代理
+│   ├── service/   # 业务逻辑
+│   └── middleware/ # 中间件
+└── configs/       # 配置文件
+```
+
+**API 设计**
+- OpenAI 兼容接口 `/v1/*`
+- 管理接口 `/manage/*`
+- WebSocket `/ws/*`
+- 健康检查 `/health`
+
+---
+
+### AIClient2API (网关) - 端口 3000 (Docker部署)
 
 **职责**
-- API 路由转发
+- API 转发到 go-vllm-api (35001)
 - 请求鉴权
 - 流量控制
+
+参考 https://github.com/justlovemaki/AIClient-2-API 的 Docker 方式部署。
 
 ```
 aiclient2api/
 ├── configs/       # 配置文件
-├── python/        # Python 模块
-└── docker-compose.yml
+├── docker-compose.yml
+└── data/          # 数据目录
 ```
 
 ---
@@ -108,13 +146,12 @@ User Action
     ↓
 Vue Component
     ↓
-API Module (axios)
+API Module (axios) → Vite/Nginx proxy
+    ↓                          ↓
+/api/manage → app-controller (35000)
+/v1 → go-vllm-api (35001)
     ↓
-aiclient2api (Gateway)
-    ↓
-app-controller (FastAPI)
-    ↓
-Database/External API
+aiclient2api (3000) → go-vllm-api (35001)
     ↓
 Response
 ```
@@ -134,6 +171,19 @@ Component Re-render
 
 ---
 
+## 端口映射
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| frontend | 30000 | Vue 3 前端 |
+| app-controller | 35000 | Python FastAPI 后端 |
+| go-vllm-api | 35001 | Go 后端 |
+| aiclient2api | 3000 | API 网关 (Docker部署) |
+| Redis | 6379 | 缓存/队列 |
+| vLLM | 8000 | 模型推理 (容器内) |
+
+---
+
 ## 技术决策
 
 ### 为什么选择 Vue 3?
@@ -148,6 +198,12 @@ Component Re-render
 - 类型安全 (Pydantic)
 - 性能优秀
 
+### 为什么增加 Go 后端?
+- 高性能 HTTP 代理
+- 低延迟 vLLM 请求转发
+- WebSocket 实时推送更高效
+- 与 Python 后端职责分离
+
 ### 为什么多模块?
 - 前后端分离
 - API 网关统一管理
@@ -161,48 +217,39 @@ Component Re-render
 ### 开发环境
 ```bash
 # 前端
-cd frontend && pnpm dev
+cd frontend && pnpm dev        # http://localhost:30000
 
-# 后端
-cd app-controller && python main.py
+# Python 后端
+cd app-controller && python main.py  # http://localhost:35000
 
-# 网关
-cd aiclient2api && docker-compose up
+# Go 后端
+cd go-vllm-api && go run cmd/server/main.go --port 35001  # http://localhost:35001
+
+# 网关 (Docker)
+cd aiclient2api && docker-compose up -d  # http://localhost:3000
 ```
 
-### 生产环境
+### 生产环境 (Docker)
 ```yaml
 # docker-compose.yml
 services:
   frontend:
-    build: ./frontend
     ports:
-      - "80:80"
+      - "30000:80"         # 前端
   
-  gateway:
-    build: ./aiclient2api
+  ai-controller:
     ports:
-      - "3000:3000"
+      - "35000:35000"     # Python 后端
   
-  backend:
-    build: ./app-controller
+  go-vllm-api:
     ports:
-      - "8000:8000"
+      - "35001:35001"     # Go 后端
+  
+  aiclient:
+    ports:
+      - "3000:3000"       # API 网关
 ```
 
 ---
 
-## 扩展点
-
-### 前端扩展
-- 新增页面: `views/` + Router 配置
-- 新增组件: `components/`
-- 新增 API: `api/` + `types/`
-
-### 后端扩展
-- 新增路由: `api/` 目录
-- 新增业务: `core/` 目录
-
----
-
-> 更新于 2026-04-22
+> 更新于 2026-04-23

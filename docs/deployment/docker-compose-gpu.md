@@ -5,7 +5,7 @@
 GPU 环境在标准生产部署基础上增加 NVIDIA GPU 支持，用于 vLLM 模型推理加速。
 
 ```
-用户 → Nginx (8080) → aiclient2api (3000) → app-controller (5000)
+用户 → Nginx (30000) → aiclient2api (3000) → app-controller (35000) / go-vllm-api (35001)
                                                   ↓
                                               vLLM (8000, GPU)
                                                   ↓
@@ -131,10 +131,10 @@ docker exec ai-os-controller nvidia-smi
 
 ```bash
 # 检查模型列表
-curl http://localhost:5000/api/models
+curl http://localhost:35000/api/models
 
 # 发送测试请求
-curl http://localhost:5000/v1/chat/completions \
+curl http://localhost:35001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Gemma-4-31B-Abliterated",
@@ -178,7 +178,7 @@ nvidia-smi -l 5   # 每 5 秒刷新
 docker exec ai-os-controller nvidia-smi
 
 # 通过 API 查询
-curl http://localhost:5000/api/gpu/status
+curl http://localhost:35000/api/gpu/status
 ```
 
 ## 性能调优
@@ -250,4 +250,4 @@ cd app-controller
 docker compose up -d
 ```
 
-此方式启动后端 + Redis，GPU 自动启用，端口 5000 + 6379。
+此方式启动后端 + Redis，GPU 自动启用，端口 35000 + 6379。

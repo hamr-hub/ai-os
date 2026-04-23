@@ -48,7 +48,7 @@
       "concurrencyLimit": 32,
       "queueLimit": 100,
       "OPENAI_API_KEY": "123456",
-      "OPENAI_BASE_URL": "http://localhost:5000",
+      "OPENAI_BASE_URL": "http://localhost:35001",
       "supportedModels": [
         "Gemma-4-31B-Abliterated",
         "Qwen3.6-35B-A3B",
@@ -123,7 +123,7 @@ python test_aiclient_integration.py
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `PORT` | 5000 | 服务监听端口 |
+| `PORT` | 35000 | 服务监听端口 |
 | `HOST` | 0.0.0.0 | 监听地址 |
 | `REDIS_URL` | redis://localhost:6379 | Redis 连接地址 |
 | `LOG_LEVEL` | INFO | 日志级别 |

@@ -5,7 +5,7 @@ import statistics
 from typing import Dict, List, Tuple
 from datetime import datetime
 
-BASE_URL = "http://192.168.7.103:5000"
+BASE_URL = "http://192.168.7.103:35000"
 
 API_ENDPOINTS = [
     # OpenAI兼容API

@@ -5,11 +5,16 @@ import type { TokenStats } from '@/types'
 export function useTokenStats(intervalMs = 10000) {
   const stats = ref<TokenStats | null>(null)
   const loading = ref(false)
+  const isRefreshing = ref(false)
   const error = ref<string | null>(null)
   let timer: number | null = null
 
-  const fetch = async () => {
-    loading.value = true
+  const fetch = async (manualRefresh = false) => {
+    if (manualRefresh) {
+      isRefreshing.value = true
+    } else {
+      loading.value = true
+    }
     error.value = null
     try {
       stats.value = await getTokenStats()
@@ -17,7 +22,12 @@ export function useTokenStats(intervalMs = 10000) {
       error.value = err instanceof Error ? err.message : 'Failed to fetch token stats'
     } finally {
       loading.value = false
+      isRefreshing.value = false
     }
+  }
+
+  const refresh = () => {
+    fetch(true)
   }
 
   const startPolling = () => {
@@ -55,6 +65,7 @@ export function useTokenStats(intervalMs = 10000) {
   return {
     stats,
     loading,
+    isRefreshing,
     error,
     totalTokens,
     promptTokens,
@@ -62,6 +73,7 @@ export function useTokenStats(intervalMs = 10000) {
     modelStats,
     formatTokens,
     fetch,
+    refresh,
     startPolling,
     stopPolling,
   }

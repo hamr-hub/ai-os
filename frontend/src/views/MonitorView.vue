@@ -483,11 +483,11 @@ const changeTimeRange = (range: '1m' | '5m' | '15m' | '1h' | '6h') => {
 
 .header-btn {
   display: flex; align-items: center; gap: 6px;
-  padding: 6px 12px; border-radius: 6px; font-size: 13px;
-  color: var(--text-muted); background: transparent;
-  border: 1px solid var(--border-primary); cursor: pointer; transition: all 0.2s;
+  padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  color: var(--text-muted); background: var(--bg-secondary);
+  border: 1px solid var(--border-primary); cursor: pointer; transition: all 0.25s;
 }
-.header-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.header-btn:hover { background: var(--color-primary); color: #fff; border-color: var(--color-primary); box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3); }
 
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
 .badge.online { background: rgba(34, 197, 94, 0.1); color: #059669; }

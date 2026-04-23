@@ -7,8 +7,9 @@
 | 测试对象 | 访问地址 | 端口 |
 |---------|---------|------|
 | 前端页面 | http://localhost:30000 | 30000 |
-| 后端 API | http://localhost:5000 | 5000 |
-| API 文档 | http://localhost:5000/docs | 5000 |
+| Python 后端 API | http://localhost:35000 | 35000 |
+| Python API 文档 | http://localhost:35000/docs | 35000 |
+| Go 后端 API | http://localhost:35001 | 35001 |
 | aiclient2api | http://localhost:3000 | 3000 |
 | Redis | localhost:6379 | 6379 |
 
@@ -16,27 +17,34 @@
 
 | 测试对象 | 访问地址 | 端口 |
 |---------|---------|------|
-| 前端页面 | http://localhost:8080 | 8080 |
-| 后端 API | http://localhost:5000 | 5000 |
-| API 文档 | http://localhost:5000/docs | 5000 |
+| 前端页面 | http://localhost:30000 | 30000 |
+| Python 后端 API | http://localhost:35000 | 35000 |
+| Go 后端 API | http://localhost:35001 | 35001 |
 | aiclient2api | http://localhost:3000 | 3000 |
 
 ## 健康检查测试
 
-### 1. 后端服务
+### 1. Python 后端服务
 
 ```bash
 # 基础健康检查
-curl -s http://localhost:5000/health | python -m json.tool
-
-# 开发环境（如果代理到 35000）
 curl -s http://localhost:35000/health | python -m json.tool
 
 # API 版本信息
-curl -s http://localhost:5000/api/version
+curl -s http://localhost:35000/api/version
 ```
 
-### 2. aiclient2api 网关
+### 2. Go 后端服务
+
+```bash
+# 基础健康检查
+curl -s http://localhost:35001/health | python -m json.tool
+
+# 模型列表
+curl -s http://localhost:35001/v1/models | python -m json.tool
+```
+
+### 3. aiclient2api 网关
 
 ```bash
 # 健康检查
@@ -46,7 +54,7 @@ curl -s http://localhost:3000/health
 curl -s http://localhost:3000/api/models
 ```
 
-### 3. Redis 连接
+### 4. Redis 连接
 
 ```bash
 # 直接连接
@@ -59,51 +67,47 @@ docker exec ai-os-redis redis-cli ping
 docker exec ai-os-redis redis-cli info server
 ```
 
-### 4. 前端页面
+### 5. 前端页面
 
 ```bash
 # 页面可访问性
 curl -s -o /dev/null -w "%{http_code}" http://localhost:30000
 # 预期输出：200
-
-# Docker 前端
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080
-# 预期输出：200
 ```
 
 ## 接口联调测试
 
-### 1. 模型管理接口
+### 1. 模型管理接口 (Python 后端 35000)
 
 ```bash
 # 获取模型列表
-curl -s http://localhost:5000/api/models | python -m json.tool
+curl -s http://localhost:35000/manage/models | python -m json.tool
 
 # 启动模型
-curl -X POST http://localhost:5000/api/models/Gemma-4-31B-Abliterated/start
+curl -X POST http://localhost:35000/manage/models/Gemma-4-31B-Abliterated/start
 
 # 停止模型
-curl -X POST http://localhost:5000/api/models/Gemma-4-31B-Abliterated/stop
+curl -X POST http://localhost:35000/manage/models/Gemma-4-31B-Abliterated/stop
 
 # 设为默认模型
-curl -X POST http://localhost:5000/api/models/Gemma-4-31B-Abliterated/default
+curl -X POST http://localhost:35000/manage/models/Gemma-4-31B-Abliterated/default
 ```
 
-### 2. GPU 监控接口
+### 2. GPU 监控接口 (Python 后端 35000)
 
 ```bash
 # GPU 状态
-curl -s http://localhost:5000/api/gpu/status | python -m json.tool
+curl -s http://localhost:35000/manage/gpu | python -m json.tool
 
 # GPU 历史数据
-curl -s "http://localhost:5000/api/gpu/history?count=120" | python -m json.tool
+curl -s "http://localhost:35000/manage/gpu/history?count=120" | python -m json.tool
 ```
 
-### 3. 聊天补全接口
+### 3. 聊天补全接口 (Go 后端 35001)
 
 ```bash
-# 通过后端直接调用
-curl http://localhost:5000/v1/chat/completions \
+# 通过 Go 后端直接调用
+curl http://localhost:35001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Gemma-4-31B-Abliterated",
@@ -121,7 +125,7 @@ curl http://localhost:3000/v1/chat/completions \
   }'
 
 # 流式响应测试
-curl http://localhost:5000/v1/chat/completions \
+curl http://localhost:35001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Gemma-4-31B-Abliterated",
@@ -131,11 +135,11 @@ curl http://localhost:5000/v1/chat/completions \
   }'
 ```
 
-### 4. 指标接口
+### 4. 指标接口 (Go 后端 35001)
 
 ```bash
 # 系统指标
-curl -s http://localhost:5000/api/metrics | python -m json.tool
+curl -s http://localhost:35001/manage/metrics | python -m json.tool
 ```
 
 ## 前端 E2E 测试
@@ -143,7 +147,7 @@ curl -s http://localhost:5000/api/metrics | python -m json.tool
 ### 手动测试流程
 
 1. **仪表盘页面**
-   - 访问 http://localhost:30000（开发）或 http://localhost:8080（Docker）
+   - 访问 http://localhost:30000
    - 验证 GPU 监控数据显示
    - 验证模型列表加载
    - 验证使用统计图表渲染
@@ -188,25 +192,29 @@ docker compose ps
 echo "2. 测试 Redis..."
 docker exec ai-os-redis redis-cli ping
 
-# 3. 后端健康检查
-echo "3. 测试后端..."
-curl -sf http://localhost:5000/health && echo " OK" || echo " FAIL"
+# 3. Python 后端健康检查
+echo "3. 测试 Python 后端..."
+curl -sf http://localhost:35000/health && echo " OK" || echo " FAIL"
 
-# 4. aiclient2api 健康检查
-echo "4. 测试 aiclient2api..."
+# 4. Go 后端健康检查
+echo "4. 测试 Go 后端..."
+curl -sf http://localhost:35001/health && echo " OK" || echo " FAIL"
+
+# 5. aiclient2api 健康检查
+echo "5. 测试 aiclient2api..."
 curl -sf http://localhost:3000/health && echo " OK" || echo " FAIL"
 
-# 5. 前端页面
-echo "5. 测试前端..."
-curl -sf http://localhost:8080 > /dev/null && echo " OK" || echo " FAIL"
+# 6. 前端页面
+echo "6. 测试前端..."
+curl -sf http://localhost:30000 > /dev/null && echo " OK" || echo " FAIL"
 
-# 6. API 代理链路
-echo "6. 测试 API 代理..."
-curl -sf http://localhost:8080/api/models > /dev/null && echo " OK" || echo " FAIL"
+# 7. API 代理链路
+echo "7. 测试 API 代理..."
+curl -sf http://localhost:30000/api/models > /dev/null && echo " OK" || echo " FAIL"
 
-# 7. 模型列表
-echo "7. 获取模型列表..."
-curl -s http://localhost:5000/api/models | python -m json.tool
+# 8. 模型列表
+echo "8. 获取模型列表..."
+curl -s http://localhost:35000/manage/models | python -m json.tool
 
 echo "=== 测试完成 ==="
 ```
@@ -224,6 +232,7 @@ docker exec ai-os-controller ping -c 1 aiclient
 # 端口映射验证
 docker port ai-os-frontend
 docker port ai-os-controller
+docker port ai-os-go-vllm-api
 docker port ai-os-aiclient
 docker port ai-os-redis
 ```
@@ -233,13 +242,17 @@ docker port ai-os-redis
 ### API 延迟测试
 
 ```bash
-# 后端直接访问延迟
+# Python 后端延迟
 curl -o /dev/null -s -w "Total: %{time_total}s\n" \
-  http://localhost:5000/api/models
+  http://localhost:35000/manage/models
+
+# Go 后端延迟
+curl -o /dev/null -s -w "Total: %{time_total}s\n" \
+  http://localhost:35001/health
 
 # 通过 Nginx 代理延迟
 curl -o /dev/null -s -w "Total: %{time_total}s\n" \
-  http://localhost:8080/api/models
+  http://localhost:30000/api/models
 
 # 通过 aiclient2api 网关延迟
 curl -o /dev/null -s -w "Total: %{time_total}s\n" \
@@ -253,7 +266,7 @@ curl -o /dev/null -s -w "Total: %{time_total}s\n" \
 # go install github.com/rakyll/hey@latest
 
 # 50 并发，100 请求
-hey -n 100 -c 50 http://localhost:5000/api/models
+hey -n 100 -c 50 http://localhost:35001/v1/models
 ```
 
 ## 常见测试问题
@@ -265,8 +278,11 @@ hey -n 100 -c 50 http://localhost:5000/api/models
 **解决**：修改 `frontend/nginx.conf`，确保容器内代理地址使用 Docker 服务名
 
 ```nginx
-location /api/ {
-    proxy_pass http://ai-controller:5000/;  # 使用 Docker 服务名
+location /api/manage/ {
+    proxy_pass http://python_backend/manage/;  # upstream: ai-controller:35000
+}
+location /v1/ {
+    proxy_pass http://go_backend/v1/;          # upstream: go-vllm-api:35001
 }
 ```
 
@@ -289,7 +305,7 @@ docker exec ai-os-controller env | grep REDIS
 
 ### 问题 3：GPU 不可用
 
-**原因**：NVIDIA Container Toolkit 未安装或 GPU 驱动问题
+**原因**：NVIDIA Container Toolkit 未安装或 GPU 动动问题
 
 **解决**：
 

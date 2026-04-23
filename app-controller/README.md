@@ -152,7 +152,7 @@ make prod     # 生产模式
 python main.py
 ```
 
-服务将在 `http://localhost:5000` 启动
+服务将在 `http://localhost:35000` 启动
 
 ### 使用 systemd 部署
 
@@ -180,7 +180,7 @@ journalctl -u ai-controller -f
 3. 配置如下：
    - 渠道名称：`AI Controller`
    - 渠道类型：`OpenAI`
-   - API 地址：`http://localhost:5000/v1`
+   - API 地址：`http://localhost:35001/v1`
    - API Key：任意值（当前版本不校验）
 4. 保存并启用渠道
 

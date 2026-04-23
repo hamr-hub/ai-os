@@ -5,7 +5,7 @@ The AI Controller is a Python FastAPI service that manages local LLM models, pro
 
 ## Base URL
 ```
-http://localhost:5000
+http://localhost:35000
 ```
 
 ## API Endpoints

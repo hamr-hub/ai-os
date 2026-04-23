@@ -2,7 +2,7 @@ import requests
 import json
 import time
 
-CONTROLLER_URL = "http://localhost:5000"
+CONTROLLER_URL = "http://localhost:35000"
 VLLM_URL = "http://localhost:8000"
 
 def test_vllm_direct():
