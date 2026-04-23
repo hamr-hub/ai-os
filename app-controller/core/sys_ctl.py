@@ -16,13 +16,14 @@ class SystemController:
             self._use_sudo = False
         else:
             self._use_sudo = os.geteuid() != 0 if hasattr(os, 'geteuid') else True
-        
+
         self._restart_attempts: Dict[str, int] = {}
         self._last_restart_time: Dict[str, datetime] = {}
         self._max_restart_attempts = 3
         self._restart_cooldown = 60
         self._watchdog_enabled = False
         self._watchdog_tasks: Dict[str, asyncio.Task] = {}
+        self._managed_processes: Dict[str, subprocess.Popen] = {}
     
     def _supports_systemctl(self) -> bool:
         return os.name != 'nt' and shutil.which('systemctl') is not None
@@ -211,3 +212,71 @@ class SystemController:
     
     def set_restart_cooldown(self, seconds: int):
         self._restart_cooldown = seconds
+
+    def start_managed_process(self, service_key: str, cmd: list, **popen_kwargs) -> bool:
+        try:
+            kwargs = {
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.PIPE,
+            }
+            if os.name != 'nt':
+                kwargs["preexec_fn"] = os.setpgrp
+            kwargs.update(popen_kwargs)
+
+            logger.info(f"Starting managed process [{service_key}]: {' '.join(cmd)}")
+            proc = subprocess.Popen(cmd, **kwargs)
+            self._managed_processes[service_key] = proc
+            logger.info(f"Managed process [{service_key}] started, PID={proc.pid}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start managed process [{service_key}]: {e}")
+            return False
+
+    def stop_managed_process(self, service_key: str, timeout: int = 10) -> bool:
+        proc = self._managed_processes.get(service_key)
+        if not proc:
+            logger.info(f"No managed process found for [{service_key}]")
+            return True
+
+        if proc.poll() is not None:
+            self._managed_processes.pop(service_key, None)
+            logger.info(f"Managed process [{service_key}] already exited")
+            return True
+
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+
+            self._managed_processes.pop(service_key, None)
+            logger.info(f"Managed process [{service_key}] stopped")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to stop managed process [{service_key}]: {e}")
+            return False
+
+    def is_managed_process_running(self, service_key: str) -> bool:
+        proc = self._managed_processes.get(service_key)
+        if not proc:
+            return False
+        if proc.poll() is not None:
+            self._managed_processes.pop(service_key, None)
+            return False
+        return True
+
+    def get_managed_process_info(self, service_key: str) -> Optional[Dict[str, Any]]:
+        proc = self._managed_processes.get(service_key)
+        if not proc:
+            return None
+        return {
+            "pid": proc.pid,
+            "running": proc.poll() is None,
+            "returncode": proc.returncode,
+        }
+
+    def cleanup_all_managed_processes(self):
+        for key in list(self._managed_processes.keys()):
+            self.stop_managed_process(key)

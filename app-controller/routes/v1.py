@@ -64,7 +64,16 @@ def _ws_manager():
     return m.ws_manager
 
 
-def get_vllm_request_client(request: Request) -> httpx.AsyncClient:
+def get_backend_url(model_name: str, scheduler) -> str:
+    port = scheduler.get_model_port(model_name)
+    return f"http://localhost:{port}"
+
+def get_backend_model_name(model_name: str, scheduler) -> str:
+    backend_type = scheduler.get_model_backend_type(model_name)
+    model_config = scheduler.get_model_config(model_name)
+    if backend_type == 'llama_cpp':
+        return model_config.get('model_path', model_name) if model_config else model_name
+    return model_config.get('model_path', model_name) if model_config else model_name
     client = getattr(request.app.state, "vllm_request_client", None)
     if client is None:
         raise RuntimeError("vLLM request client not initialized")
@@ -102,6 +111,7 @@ async def list_models(refresh: Optional[bool] = False):
             "supports_images": scheduler.get_model_supports_images(model_name),
             "description": config.get("description", "") if config else "",
             "service": config.get("service", "") if config else "",
+            "backend_type": scheduler.get_model_backend_type(model_name),
             "port": config.get("port", 8000) if config else 8000
         }
         model_list.append(model_info)
@@ -204,10 +214,12 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
             await asyncio.sleep(5)
 
         vllm_port = scheduler.get_model_port(model_name)
-        vllm_url = f"http://localhost:{vllm_port}/v1/chat/completions"
+        backend_url = get_backend_url(model_name, scheduler)
+        vllm_url = f"{backend_url}/v1/chat/completions"
 
         model_config = scheduler.get_model_config(model_name)
-        vllm_model_name = model_config.get('model_path', model_name) if model_config else model_name
+        backend_type = scheduler.get_model_backend_type(model_name)
+        vllm_model_name = get_backend_model_name(model_name, scheduler)
 
         request_data = body.model_dump(exclude_unset=True)
         request_data['model'] = vllm_model_name
@@ -444,7 +456,8 @@ async def generate_image(request: Request, body: ImageGenerationRequest):
         await asyncio.sleep(5)
 
     vllm_port = scheduler.get_model_port(body.model)
-    vllm_url = f"http://localhost:{vllm_port}/v1/images/generations"
+    backend_url = get_backend_url(body.model, scheduler)
+    vllm_url = f"{backend_url}/v1/images/generations"
 
     try:
         req_data = {
@@ -491,7 +504,8 @@ async def create_embeddings(request: Request, body: EmbeddingRequest):
         await asyncio.sleep(5)
 
     vllm_port = scheduler.get_model_port(model_name)
-    vllm_url = f"http://localhost:{vllm_port}/v1/embeddings"
+    backend_url = get_backend_url(model_name, scheduler)
+    vllm_url = f"{backend_url}/v1/embeddings"
 
     slot_acquired = False
     try:
@@ -504,7 +518,7 @@ async def create_embeddings(request: Request, body: EmbeddingRequest):
         slot_acquired = True
 
         req_data = {
-            "model": scheduler.get_model_path(model_name) or model_name,
+            "model": get_backend_model_name(model_name, scheduler),
             "input": body.input,
             "encoding_format": body.encoding_format
         }

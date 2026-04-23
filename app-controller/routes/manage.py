@@ -25,6 +25,7 @@ config_watcher = _config_watcher
 logger = _logger
 redis_client = _redis_client
 from core.vllm_manager import switch_vllm_model_with_test
+from core.llama_cpp_manager import llama_cpp_manager, test_llama_cpp_model
 from middleware.error_handler import ModelNotFoundException
 
 manage_router = APIRouter(prefix="/manage")
@@ -206,6 +207,23 @@ async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True):
     _clear_model_caches()
 
     if test_enabled:
+        backend_type = scheduler.get_model_backend_type(model_name)
+
+        if backend_type == 'llama_cpp':
+            port = scheduler.get_model_port(model_name)
+            test_result = await test_llama_cpp_model(model_name, port)
+
+            if not test_result.get("success", False):
+                error_msg = test_result.get("message", "Unknown error during model test")
+                raise HTTPException(status_code=503, detail=f"Model switch successful but self-test failed: {error_msg}")
+
+            return {
+                "status": "switched_and_tested",
+                "model": model_name,
+                "backend_type": "llama_cpp",
+                "test_result": test_result
+            }
+
         model_config = scheduler.get_model_config(model_name)
         model_path = model_config.get('model_path', model_name) if model_config else model_name
 
@@ -218,6 +236,7 @@ async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True):
         return {
             "status": "switched_and_tested",
             "model": model_name,
+            "backend_type": "vllm",
             "test_result": test_result.get("test_result")
         }
 
@@ -814,3 +833,18 @@ async def get_token_stats():
     result = metrics.get_token_stats()
     cache_service.set(cache_key, result, ttl_seconds=10)
     return result
+
+
+@manage_router.get("/llama_cpp/models")
+async def list_llama_cpp_models():
+    return {"models": scan_gguf_models(), "running": llama_cpp_manager.get_all_running_models()}
+
+
+@manage_router.get("/llama_cpp/status")
+async def llama_cpp_status():
+    models = scheduler.get_available_models()
+    llama_models = [m for m in models if scheduler.get_model_backend_type(m) == 'llama_cpp']
+    status = {}
+    for model_name in llama_models:
+        status[model_name] = llama_cpp_manager.get_server_status(model_name)
+    return {"models": status, "total": len(llama_models)}

@@ -18,6 +18,7 @@ from core.deps import (
     _background_tasks, _on_config_changed
 )
 from core.vllm_manager import switch_vllm_model_with_test
+from core.llama_cpp_manager import llama_cpp_manager
 from middleware.error_handler import (
     http_exception_handler,
     generic_exception_handler,
@@ -183,6 +184,9 @@ async def shutdown_event():
     if stream_client is not None:
         await stream_client.aclose()
         app.state.vllm_stream_client = None
+
+    llama_cpp_manager.cleanup_all()
+    sys_controller.cleanup_all_managed_processes()
 
     structured_logger.info("AI Controller service stopped", action="shutdown")
 

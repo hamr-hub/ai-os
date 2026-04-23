@@ -8,6 +8,7 @@ from typing import Dict, Optional, List, Set
 from datetime import datetime, timedelta
 from .rate_limiter import RateLimiter
 from core.cache_service import cache_service
+from core.llama_cpp_manager import llama_cpp_manager
 
 logger = logging.getLogger("ai_controller.scheduler")
 
@@ -52,6 +53,7 @@ class Scheduler:
         self._model_lock = threading.Lock()
         self._init_preloaded_models()
         self._default_model = None
+        self._register_llama_cpp_models()
     
     def _load_config(self) -> Dict:
         cached_config = cache_service.get("ai_controller:cache:config")
@@ -98,6 +100,21 @@ class Scheduler:
         for model_name, model_config in self.config.get('models', {}).items():
             if model_config.get('preload', False):
                 self.preloaded_models.add(model_name)
+
+    def _register_llama_cpp_models(self):
+        for model_name, model_config in self.config.get('models', {}).items():
+            service = model_config.get('service', '')
+            if service == 'llama_cpp':
+                llama_cpp_manager.register_model(model_name, model_config)
+
+    def get_model_backend_type(self, model_name: str) -> str:
+        config = self.get_model_config(model_name)
+        if not config:
+            return 'unknown'
+        service = config.get('service', '')
+        if service == 'llama_cpp':
+            return 'llama_cpp'
+        return 'vllm'
     
     def get_available_models(self) -> List[str]:
         return list(self.config.get('models', {}).keys())
@@ -191,8 +208,23 @@ class Scheduler:
         cached = cache_service.get(cache_key)
         if cached is not None:
             return cached
-        
+
         with self._model_lock:
+            backend_type = self.get_model_backend_type(model_name)
+
+            if backend_type == 'llama_cpp':
+                running = llama_cpp_manager.is_server_running(model_name)
+                if running:
+                    if model_name not in self.running_models:
+                        self.running_models[model_name] = datetime.now()
+                    cache_service.set(cache_key, True, ttl=3)
+                    return True
+
+                if model_name in self.running_models:
+                    del self.running_models[model_name]
+                cache_service.set(cache_key, False, ttl=3)
+                return False
+
             port = self.get_model_port(model_name)
             if port:
                 process_info = self.sys_controller.get_process_info(port)
@@ -201,10 +233,10 @@ class Scheduler:
                         self.running_models[model_name] = datetime.now()
                     cache_service.set(cache_key, True, ttl=3)
                     return True
-            
+
             if model_name in self.running_models:
                 del self.running_models[model_name]
-            
+
             cache_service.set(cache_key, False, ttl=3)
             return False
     
@@ -397,16 +429,44 @@ class Scheduler:
         config = self.get_model_config(model_name)
         if not config:
             return False
-        
+
         service_name = config.get('service')
         if not service_name:
             return False
-        
+
+        backend_type = self.get_model_backend_type(model_name)
+
+        if backend_type == 'llama_cpp':
+            if llama_cpp_manager.is_server_running(model_name):
+                with self._model_lock:
+                    self.running_models[model_name] = datetime.now()
+                return True
+
+            mem_info = self.gpu_monitor.get_memory_usage()
+            if mem_info:
+                required_memory = _parse_memory_size(config.get('required_memory', 0))
+                if mem_info.get('available', 0) < required_memory + self.get_min_available_memory():
+                    success = await self._free_up_memory(model_name)
+                    if not success:
+                        return False
+
+            success = llama_cpp_manager.start_server(model_name)
+            if success:
+                with self._model_lock:
+                    self.running_models[model_name] = datetime.now()
+
+                preload_timeout = self.config.get('settings', {}).get('preload_timeout', 120)
+                await asyncio.sleep(min(15, preload_timeout))
+
+                await self._send_warmup_request(model_name)
+
+            return success
+
         if self.sys_controller.is_service_running(service_name):
             with self._model_lock:
                 self.running_models[model_name] = datetime.now()
             return True
-        
+
         mem_info = self.gpu_monitor.get_memory_usage()
         if mem_info:
             required_memory = _parse_memory_size(config.get('required_memory', 0))
@@ -414,38 +474,49 @@ class Scheduler:
                 success = await self._free_up_memory(model_name)
                 if not success:
                     return False
-        
+
         success = self.sys_controller.start_service(service_name)
         if success:
             with self._model_lock:
                 self.running_models[model_name] = datetime.now()
-            
+
             preload_timeout = self.config.get('settings', {}).get('preload_timeout', 120)
             await asyncio.sleep(min(30, preload_timeout))
-            
+
             await self._send_warmup_request(model_name)
-            
+
             gpu_util = self.config.get('settings', {}).get('gpu_memory_utilization', 0.9)
             await self._adjust_gpu_utilization(model_name, gpu_util)
-        
+
         return success
     
     async def stop_model(self, model_name: str) -> bool:
         config = self.get_model_config(model_name)
         if not config:
             return False
-        
+
+        backend_type = self.get_model_backend_type(model_name)
+
+        if backend_type == 'llama_cpp':
+            success = llama_cpp_manager.stop_server(model_name)
+            if success:
+                await self._cleanup_memory_fragmentation()
+                with self._model_lock:
+                    if model_name in self.running_models:
+                        del self.running_models[model_name]
+            return success
+
         service_name = config.get('service')
         if not service_name:
             return False
-        
+
         success = self.sys_controller.stop_service(service_name)
         if success:
             await self._cleanup_memory_fragmentation()
             with self._model_lock:
                 if model_name in self.running_models:
                     del self.running_models[model_name]
-        
+
         return success
     
     async def _free_up_memory(self, target_model_name: str, priority: str = "normal") -> bool:

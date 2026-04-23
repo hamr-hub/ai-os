@@ -32,6 +32,15 @@ class ModelConfig(BaseModel):
     preload: bool = False
     keep_alive: bool = True
     model_path: Optional[str] = None
+    supports_images: bool = False
+    supports_tool_calling: bool = False
+    supports_image_generation: bool = False
+    description: Optional[str] = None
+    n_gpu_layers: int = -1
+    ctx_size: int = 4096
+    n_threads: Optional[int] = None
+    host: str = "0.0.0.0"
+    extra_args: List[str] = []
 
     @validator('required_memory')
     def validate_memory_format(cls, v):
@@ -82,9 +91,18 @@ class SettingsConfig(BaseModel):
             raise ValueError(f"Invalid memory strategy: {v}. Must be one of {valid_strategies}")
         return v
 
+class LlamaCppConfig(BaseModel):
+    server_module: str = "llama_cpp.server"
+    models_base_path: str = "/mnt/pve_models"
+    default_n_gpu_layers: int = -1
+    default_ctx_size: int = 4096
+    default_host: str = "0.0.0.0"
+
 class AppConfig(BaseModel):
     models: Dict[str, ModelConfig] = {}
     settings: SettingsConfig = SettingsConfig()
+    vllm: Optional[Dict[str, Any]] = None
+    llama_cpp: Optional[LlamaCppConfig] = None
 
     def get_model(self, model_name: str) -> Optional[ModelConfig]:
         return self.models.get(model_name)

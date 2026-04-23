@@ -9,6 +9,17 @@ from core.monitor import GPUMonitor
 from core.websocket_manager import WebSocketManager
 from core.metrics import MetricsCollector
 
+def _build_backend_url(scheduler: Scheduler, model_name: str) -> str:
+    port = scheduler.get_model_port(model_name)
+    return f"http://localhost:{port}"
+
+def _build_backend_model_name(scheduler: Scheduler, model_name: str) -> str:
+    backend_type = scheduler.get_model_backend_type(model_name)
+    model_config = scheduler.get_model_config(model_name)
+    if backend_type == 'llama_cpp':
+        return model_config.get('model_path', model_name) if model_config else model_name
+    return model_config.get('model_path', model_name) if model_config else model_name
+
 class AIClientInterface:
     def __init__(self, scheduler: Scheduler, gpu_monitor: GPUMonitor, ws_manager: WebSocketManager, metrics: MetricsCollector):
         self.scheduler = scheduler
@@ -90,16 +101,15 @@ class AIClientInterface:
                         }
                     }
                 await asyncio.sleep(5)
-            
-            vllm_port = self.scheduler.get_model_port(model_name)
-            vllm_url = f"http://localhost:{vllm_port}"
-            
+
+            vllm_url = _build_backend_url(self.scheduler, model_name)
+
             model_config = self.scheduler.get_model_config(model_name)
-            vllm_model_name = model_config.get('model_path', model_name) if model_config else model_name
-            
+            vllm_model_name = _build_backend_model_name(self.scheduler, model_name)
+
             payload = request_data.copy()
             payload['model'] = vllm_model_name
-            
+
             client = self._get_client(vllm_url)
             response = await client.post("/v1/chat/completions", json=payload)
             response.raise_for_status()
@@ -163,16 +173,15 @@ class AIClientInterface:
                     })
                     return
                 await asyncio.sleep(5)
-            
-            vllm_port = self.scheduler.get_model_port(model_name)
-            vllm_url = f"http://localhost:{vllm_port}"
-            
+
+            vllm_url = _build_backend_url(self.scheduler, model_name)
+
             model_config = self.scheduler.get_model_config(model_name)
-            vllm_model_name = model_config.get('model_path', model_name) if model_config else model_name
-            
+            vllm_model_name = _build_backend_model_name(self.scheduler, model_name)
+
             payload = request_data.copy()
             payload['model'] = vllm_model_name
-            
+
             timeout = httpx.Timeout(connect=10.0, read=120.0, write=60.0, pool=60.0)
             
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -245,7 +254,7 @@ class AIClientInterface:
         config = self.scheduler.get_model_config(model_name)
         if not config:
             return None
-        
+
         return {
             "id": model_name,
             "object": "model",
@@ -254,6 +263,7 @@ class AIClientInterface:
             "running": self.scheduler.is_model_running(model_name),
             "port": config.get("port"),
             "service": config.get("service"),
+            "backend_type": self.scheduler.get_model_backend_type(model_name),
             "required_memory": config.get("required_memory"),
             "supports_images": config.get("supports_images", False),
             "description": config.get("description", "")
@@ -290,11 +300,10 @@ class AIClientInterface:
                         }
                     }
                 await asyncio.sleep(5)
-            
-            vllm_port = self.scheduler.get_model_port(model_name)
-            vllm_url = f"http://localhost:{vllm_port}"
-            
-            model_path = self.scheduler.get_model_path(model_name) or model_name
+
+            vllm_url = _build_backend_url(self.scheduler, model_name)
+
+            model_path = _build_backend_model_name(self.scheduler, model_name)
             
             payload = {
                 "model": model_path,
