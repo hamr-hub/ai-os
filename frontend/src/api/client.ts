@@ -203,6 +203,8 @@ export interface ChatCompletionRequest {
   stream?: boolean
   max_tokens?: number
   temperature?: number
+  // Disable thinking mode for models that support it (DeepSeek R1, Qwen, etc.)
+  enable_thinking?: boolean
 }
 
 export interface ChatCompletionResponse {
@@ -238,6 +240,191 @@ export async function chatCompletionStream(
     const response = await fetch(`${serverStore.v1Base}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...request,
+        stream: true,
+        // Explicitly disable thinking mode to avoid reasoning_content errors
+        enable_thinking: false,
+      }),
+      signal,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      // Check for thinking mode error and provide guidance
+      if (errorText.includes('reasoning_content') || errorText.includes('thinking is enabled')) {
+        throw new Error('模型thinking模式错误，请联系后端管理员关闭thinking模式或更新API配置')
+      }
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No response body')
+
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+        const data = trimmed.slice(6)
+        if (data === DONE_SENTINEL) return
+
+        try {
+          const json = JSON.parse(data)
+          // Handle reasoning_content if present (for thinking-enabled models)
+          const reasoningContent = json.choices?.[0]?.delta?.reasoning_content
+          if (reasoningContent) {
+            // Skip reasoning content or handle separately if needed
+            // For now, we just ignore it to avoid mixing with regular content
+          }
+          const content = json.choices?.[0]?.delta?.content
+          if (content) onChunk(content)
+        } catch {}
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error
+    if (onError) onError(error instanceof Error ? error : new Error('Stream error'))
+    else throw error
+  }
+}
+
+// Agent API
+export interface AgentToolCall {
+  name: string
+  arguments: Record<string, unknown>
+}
+
+export interface AgentMessage {
+  role: 'user' | 'assistant' | 'system' | 'tool'
+  content: string
+  tool_calls?: Array<{
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+  }>
+  tool_call_id?: string
+}
+
+export interface AgentRequest {
+  model?: string
+  messages: AgentMessage[]
+  tools?: string[]
+  max_iterations?: number
+  stream?: boolean
+  auto_confirm?: boolean
+}
+
+export interface ToolResult {
+  tool_name: string
+  success: boolean
+  result: unknown
+  error?: string
+  execution_time: number
+}
+
+export async function listAgentTools(categories?: string): Promise<{
+  tools: Array<{ type: string; function: unknown }>
+  categories: string[]
+  count: number
+}> {
+  const serverStore = useServerStore()
+  const params = categories ? { categories } : {}
+  const { data } = await client.get(`${serverStore.manageBase}/agent/tools`, { params })
+  return data
+}
+
+export async function getAgentToolInfo(toolName: string): Promise<{
+  name: string
+  description: string
+  parameters: unknown[]
+  category: string
+  dangerous: boolean
+  requires_confirmation: boolean
+}> {
+  const serverStore = useServerStore()
+  const { data } = await client.get(`${serverStore.manageBase}/agent/tools/${toolName}`)
+  return data
+}
+
+export async function executeToolCall(
+  name: string,
+  args: Record<string, unknown>,
+  autoConfirm = false
+): Promise<ToolResult> {
+  const serverStore = useServerStore()
+  const { data } = await client.post(`${serverStore.manageBase}/agent/execute/${name}`, {
+    name,
+    arguments: args,
+    auto_confirm: autoConfirm,
+  })
+  return data
+}
+
+export async function executeToolBatch(
+  calls: AgentToolCall[],
+  autoConfirm = false
+): Promise<{ results: ToolResult[]; success: boolean }> {
+  const serverStore = useServerStore()
+  const { data } = await client.post(`${serverStore.manageBase}/agent/execute`, {
+    calls,
+    auto_confirm: autoConfirm,
+  })
+  return data
+}
+
+export async function getToolExecutionHistory(limit = 100): Promise<{
+  history: ToolResult[]
+  statistics: unknown
+}> {
+  const serverStore = useServerStore()
+  const { data } = await client.get(`${serverStore.manageBase}/agent/history`, {
+    params: { limit },
+  })
+  return data
+}
+
+export async function clearToolExecutionHistory(): Promise<{ status: string }> {
+  const serverStore = useServerStore()
+  const { data } = await client.delete(`${serverStore.manageBase}/agent/history`)
+  return data
+}
+
+export async function agentChatCompletion(request: AgentRequest): Promise<{
+  id: string
+  model: string
+  message: { role: string; content: string }
+  iterations: number
+  finished: boolean
+}> {
+  const serverStore = useServerStore()
+  const { data } = await client.post(`${serverStore.manageBase}/agent/chat`, {
+    ...request,
+    stream: false,
+  })
+  return data
+}
+
+export async function agentChatStream(
+  request: Omit<AgentRequest, 'stream'>,
+  onChunk: (data: unknown) => void,
+  onError?: (error: Error) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  try {
+    const serverStore = useServerStore()
+    const response = await fetch(`${serverStore.manageBase}/agent/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, stream: true }),
       signal,
     })
@@ -265,13 +452,13 @@ export async function chatCompletionStream(
         const trimmed = line.trim()
         if (!trimmed || !trimmed.startsWith('data: ')) continue
         const data = trimmed.slice(6)
-        if (data === DONE_SENTINEL) return
+        if (data === '[DONE]') return
 
         try {
-          const json = JSON.parse(data)
-          const content = json.choices?.[0]?.delta?.content
-          if (content) onChunk(content)
-        } catch {}
+          onChunk(JSON.parse(data))
+        } catch {
+          onChunk(data)
+        }
       }
     }
   } catch (error) {

@@ -10,6 +10,7 @@ from routes.v1 import v1_router
 from routes.manage import manage_router, integration_router
 from routes.health import health_router
 from routes.websocket import websocket_router
+from routes.agent import agent_router
 from core.deps import (
     scheduler, gpu_monitor, ws_manager, metrics, prometheus,
     cache_service, cache_updater, redis_client,
@@ -46,6 +47,7 @@ app.include_router(manage_router)
 app.include_router(integration_router)
 app.include_router(health_router)
 app.include_router(websocket_router)
+app.include_router(agent_router)
 
 
 @app.middleware("http")
