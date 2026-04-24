@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import Markdown from 'unplugin-vue-markdown/vite'
 import { resolve } from 'path'
 
-const proxyTarget = 'http://ssh.hamr.top:27145'
+const proxyTarget = 'http://localhost:35000'
 
 export default defineConfig({
   plugins: [
