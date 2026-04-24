@@ -63,14 +63,8 @@ func main() {
 	cacheUpdater := service.NewCacheUpdater(gpuMonitor, scheduler, cacheService, zapLogger)
 
 	vllmManager := service.NewVLLMManager(&cfg.VLLM, zapLogger)
-	llamaCppMgr := service.NewLlamaCppManager(zapLogger)
-	llamaCppMgr.SetDefaults(
-		cfg.LlamaCpp.ModelsBasePath,
-		cfg.LlamaCpp.DefaultNGPULayers,
-		cfg.LlamaCpp.DefaultCtxSize,
-		cfg.LlamaCpp.DefaultHost,
-		cfg.LlamaCpp.ServerModule,
-	)
+	llamaCppMgr := service.NewLlamaCppManager(zapLogger, cfg)
+	llamaCppMgr.RegisterModelsFromConfig(cfg)
 	modelTesting := service.NewModelTestingFramework(zapLogger)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -87,13 +81,7 @@ func main() {
 	configWatcher.RegisterCallback(func(newCfg *config.AppConfig) {
 		scheduler.SetConfig(newCfg)
 		vllmManager.SetConfig(&newCfg.VLLM)
-		llamaCppMgr.SetDefaults(
-			newCfg.LlamaCpp.ModelsBasePath,
-			newCfg.LlamaCpp.DefaultNGPULayers,
-			newCfg.LlamaCpp.DefaultCtxSize,
-			newCfg.LlamaCpp.DefaultHost,
-			newCfg.LlamaCpp.ServerModule,
-		)
+		llamaCppMgr.RegisterModelsFromConfig(newCfg)
 		zapLogger.Info("config reloaded via watcher", zap.Int("models", len(newCfg.Models)))
 	})
 	if err := configWatcher.Start(); err != nil {

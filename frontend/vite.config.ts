@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import Markdown from 'unplugin-vue-markdown/vite'
 import { resolve } from 'path'
 
-const proxyTarget = 'http://localhost:35000'
+const backend = process.env.VITE_BACKEND || 'http://localhost:35000'
 
 export default defineConfig({
   plugins: [
@@ -23,31 +23,28 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 30001,
+    port: 30000,
+    strictPort: true,
     proxy: {
       '/manage': {
-        target: proxyTarget,
+        target: backend,
         changeOrigin: true,
       },
       '/api': {
-        target: proxyTarget,
+        target: backend,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/manage'),
       },
-      '/v1/test': {
-        target: proxyTarget,
-        changeOrigin: true,
-      },
       '/v1': {
-        target: proxyTarget,
+        target: backend,
         changeOrigin: true,
       },
       '/health': {
-        target: proxyTarget,
+        target: backend,
         changeOrigin: true,
       },
       '/ws': {
-        target: proxyTarget,
+        target: backend,
         changeOrigin: true,
         ws: true,
       },

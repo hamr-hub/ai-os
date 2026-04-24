@@ -120,6 +120,7 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		v1.POST("/test/model/:model_name", h.RunModelTest)
 		v1.GET("/test/reports", h.GetTestHistory)
 		v1.GET("/test/results/:model_name", h.GetTestResults)
+		v1.GET("/test/report/:model_name", h.GetTestResults)
 	}
 
 	api := rg.Group("/api/v1")

@@ -17,7 +17,7 @@
   --bg-primary: #0a0e1a;
   --bg-secondary: #111827;
   --bg-tertiary: #1e293b;
-  --bg-card: #151b2e;
+  --bg-card: #1a2238;
   --bg-hover: #1e293b;
   --bg-input: #1e293b;
   --bg-sidebar: #060a14;
@@ -30,7 +30,7 @@
 
   --border-primary: rgba(99, 102, 241, 0.12);
   --border-secondary: rgba(99, 102, 241, 0.08);
-  --border-card: rgba(99, 102, 241, 0.15);
+  --border-card: rgba(99, 102, 241, 0.18);
 
   --scrollbar-track: #0f172a;
   --scrollbar-thumb: #334155;

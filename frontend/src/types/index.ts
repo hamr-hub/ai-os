@@ -293,10 +293,10 @@ export interface TokenModelStats {
 
 export interface TokenHistoryEntry {
   timestamp: string
-  total: number
-  prompt: number
-  completion: number
-  model_name?: string
+  total_tokens: number
+  prompt_tokens: number
+  completion_tokens: number
+  models?: Record<string, TokenModelStats>
 }
 
 export interface TokenStats {

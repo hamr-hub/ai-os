@@ -962,7 +962,7 @@ const autoResize = (event: Event) => {
 .msg-input {
   flex: 1;
   padding: 10px 14px;
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid var(--border-primary);
   background: var(--bg-input);
   color: var(--text-primary);

@@ -779,3 +779,142 @@ func (m *GPUMonitor) GetRecommendedUtilization() float64 {
 	}
 	return v
 }
+
+func (m *GPUMonitor) GetHealthScore() float64 {
+	status := m.GetStatus()
+	if status == nil || status.Status != "available" {
+		return 0.0
+	}
+
+	temp := status.Temperature
+	memUtil := status.MemoryUtilization
+
+	tempScore := 100.0
+	if temp > 85 {
+		tempScore = max(0, 100-(temp-85)*5)
+	}
+
+	memScore := 100.0
+	if memUtil > 90 {
+		memScore = max(0, 100-(memUtil-90)*10)
+	}
+
+	throttlePenalty := 0.0
+	if status.Primary != nil {
+		for _, r := range status.Primary.ThrottleReasons {
+			if r == "hw_thermal_slowdown" || r == "sw_thermal_slowdown" {
+				throttlePenalty = 50
+				break
+			}
+		}
+		if throttlePenalty == 0 && len(status.Primary.ThrottleReasons) > 0 {
+			throttlePenalty = 10
+		}
+	}
+
+	score := (tempScore*0.5 + memScore*0.5) - throttlePenalty
+	return max(0, min(100, score))
+}
+
+func (m *GPUMonitor) DetectFragmentation() float64 {
+	status := m.GetStatus()
+	if status == nil {
+		return 0.0
+	}
+	total := float64(status.TotalMemory)
+	used := float64(status.UsedMemory)
+	available := float64(status.AvailableMemory)
+	if total <= 0 {
+		return 0.0
+	}
+	fragmentation := (total - used - available) / total
+	m.mu.Lock()
+	m.fragmentationHist = append(m.fragmentationHist, fragmentation)
+	if len(m.fragmentationHist) > 60 {
+		m.fragmentationHist = m.fragmentationHist[len(m.fragmentationHist)-60:]
+	}
+	m.mu.Unlock()
+	return fragmentation
+}
+
+func (m *GPUMonitor) GetAverageFragmentation() float64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.fragmentationHist) == 0 {
+		return 0.0
+	}
+	sum := 0.0
+	for _, v := range m.fragmentationHist {
+		sum += v
+	}
+	return sum / float64(len(m.fragmentationHist))
+}
+
+type GPUSummary struct {
+	Status      string                 `json:"status"`
+	Current     map[string]interface{} `json:"current"`
+	HealthScore float64                `json:"health_score"`
+	History     []interface{}          `json:"history"`
+}
+
+func (m *GPUMonitor) GetGPUSummary() *GPUSummary {
+	status := m.GetStatus()
+	if status == nil {
+		return &GPUSummary{
+			Status:      "unavailable",
+			Current:     nil,
+			HealthScore: 0.0,
+			History:     []interface{}{},
+		}
+	}
+
+	current := map[string]interface{}{
+		"name":               status.Name,
+		"gpu_count":          status.GPUCount,
+		"utilization":        status.Utilization,
+		"temperature":        status.Temperature,
+		"power_draw":         status.PowerDraw,
+		"power_limit":        status.PowerLimit,
+		"power_percent":      status.PowerPercent,
+		"memory_utilization": status.MemoryUtilization,
+		"used_memory":        status.UsedMemory,
+		"available_memory":   status.AvailableMemory,
+		"total_memory":       status.TotalMemory,
+		"fan_speed":          status.FanSpeed,
+		"clock_sm":           status.ClockSM,
+		"clock_mem":          status.ClockMem,
+	}
+
+	if status.Primary != nil {
+		current["ecc_errors"] = status.Primary.EccErrors
+		current["throttle_reasons"] = status.Primary.ThrottleReasons
+		current["persistence_mode"] = status.Primary.PersistenceMode
+		current["vbios_version"] = status.Primary.VbiosVersion
+	}
+
+	return &GPUSummary{
+		Status:      "available",
+		Current:     current,
+		HealthScore: m.GetHealthScore(),
+		History:     []interface{}{},
+	}
+}
+
+type MemoryOptimizationStatus struct {
+	Strategy              string  `json:"strategy"`
+	Fragmentation         float64 `json:"fragmentation"`
+	AvgFragmentation      float64 `json:"avg_fragmentation"`
+	RecommendedUtilization float64 `json:"recommended_utilization"`
+	LastFlush             string  `json:"last_flush"`
+	FlushInterval         int     `json:"flush_interval"`
+}
+
+func (m *GPUMonitor) GetMemoryOptimizationStatus() *MemoryOptimizationStatus {
+	return &MemoryOptimizationStatus{
+		Strategy:              m.memoryStrategy,
+		Fragmentation:         m.DetectFragmentation(),
+		AvgFragmentation:      m.GetAverageFragmentation(),
+		RecommendedUtilization: m.GetRecommendedUtilization(),
+		FlushInterval:         300,
+	}
+}

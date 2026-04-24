@@ -33,7 +33,10 @@ services:
       - /mnt/pve_models:/mnt/pve_models
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
       - LOG_LEVEL=INFO
       - PORT=35000
       - HOST=0.0.0.0
@@ -71,7 +74,10 @@ services:
       - ./go-vllm-api/configs/config.yaml:/app/configs/config.yaml
       - /mnt/pve_models:/mnt/pve_models
     environment:
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
       - PORT=35001
     depends_on:
       redis:

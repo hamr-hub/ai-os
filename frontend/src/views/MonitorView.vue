@@ -574,7 +574,7 @@ const refreshAll = () => {
 
 .card {
   background: var(--bg-card);
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid var(--border-card);
   padding: 20px;
   box-shadow: var(--shadow);

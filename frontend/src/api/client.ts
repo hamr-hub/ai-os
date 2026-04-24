@@ -354,8 +354,8 @@ export async function listAgentTools(categories?: string): Promise<{
   categories: string[]
   count: number
 }> {
-  const serverStore = useServerStore()
   const params = categories ? { categories } : {}
+  const serverStore = useServerStore()
   const { data } = await client.get(`${serverStore.manageBase}/agent/tools`, { params })
   return data
 }
@@ -378,8 +378,7 @@ export async function executeToolCall(
   args: Record<string, unknown>,
   autoConfirm = false
 ): Promise<ToolResult> {
-  const serverStore = useServerStore()
-  const { data } = await client.post(`${serverStore.manageBase}/agent/execute/${name}`, {
+  const { data } = await client.post(`/agent/execute/${name}`, {
     name,
     arguments: args,
     auto_confirm: autoConfirm,
@@ -391,8 +390,7 @@ export async function executeToolBatch(
   calls: AgentToolCall[],
   autoConfirm = false
 ): Promise<{ results: ToolResult[]; success: boolean }> {
-  const serverStore = useServerStore()
-  const { data } = await client.post(`${serverStore.manageBase}/agent/execute`, {
+  const { data } = await client.post('/agent/execute', {
     calls,
     auto_confirm: autoConfirm,
   })
@@ -403,16 +401,14 @@ export async function getToolExecutionHistory(limit = 100): Promise<{
   history: ToolResult[]
   statistics: unknown
 }> {
-  const serverStore = useServerStore()
-  const { data } = await client.get(`${serverStore.manageBase}/agent/history`, {
+  const { data } = await client.get('/agent/history', {
     params: { limit },
   })
   return data
 }
 
 export async function clearToolExecutionHistory(): Promise<{ status: string }> {
-  const serverStore = useServerStore()
-  const { data } = await client.delete(`${serverStore.manageBase}/agent/history`)
+  const { data } = await client.delete('/agent/history')
   return data
 }
 
@@ -423,8 +419,7 @@ export async function agentChatCompletion(request: AgentRequest): Promise<{
   iterations: number
   finished: boolean
 }> {
-  const serverStore = useServerStore()
-  const { data } = await client.post(`${serverStore.manageBase}/agent/chat`, {
+  const { data } = await client.post('/agent/chat', {
     ...request,
     stream: false,
   })

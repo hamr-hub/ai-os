@@ -180,10 +180,14 @@ class MetricsCollector:
         # Record history entry
         self.token_history.append({
             "timestamp": datetime.now().isoformat(),
-            "total": self.token_usage["total_tokens"],
-            "prompt": self.token_usage["total_prompt_tokens"],
-            "completion": self.token_usage["total_completion_tokens"],
-            "model_name": model_name
+            "total_tokens": self.token_usage["total_tokens"],
+            "prompt_tokens": self.token_usage["total_prompt_tokens"],
+            "completion_tokens": self.token_usage["total_completion_tokens"],
+            "models": {model_name: {
+                "prompt_tokens": self.token_usage.get(f"{model_name}:prompt_tokens", 0),
+                "completion_tokens": self.token_usage.get(f"{model_name}:completion_tokens", 0),
+                "total_tokens": self.token_usage.get(f"{model_name}:total_tokens", 0),
+            }}
         })
 
         if len(self.token_history) > 500:

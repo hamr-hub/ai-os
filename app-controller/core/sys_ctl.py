@@ -12,10 +12,7 @@ logger = logging.getLogger("ai_controller.sys_ctl")
 
 class SystemController:
     def __init__(self):
-        if os.name == 'nt':
-            self._use_sudo = False
-        else:
-            self._use_sudo = os.geteuid() != 0 if hasattr(os, 'geteuid') else True
+        self._use_sudo = False
 
         self._restart_attempts: Dict[str, int] = {}
         self._last_restart_time: Dict[str, datetime] = {}

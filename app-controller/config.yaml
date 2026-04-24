@@ -5,7 +5,7 @@ models:
     required_memory: 40GB
     preload: true
     keep_alive: true
-    model_path: /mnt/pve_models/Gemma-4-31B-Abliterated
+    model_path: /tmp/ai-os-models/Gemma-4-31B-Abliterated
     supports_images: false
     supports_tool_calling: false
     supports_image_generation: false
@@ -17,7 +17,7 @@ models:
     required_memory: 120GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/Qwen3-235B-A22B-Instruct-2507-AWQ
+    model_path: /tmp/ai-os-models/Qwen3-235B-A22B-Instruct-2507-AWQ
     supports_images: false
     description: "Qwen3 235B AWQ 量化模型"
   
@@ -27,7 +27,7 @@ models:
     required_memory: 40GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/Qwen3.6-35B-A3B
+    model_path: /tmp/ai-os-models/Qwen3.6-35B-A3B
     supports_images: false
     description: "Qwen3.6 35B 稀疏激活模型"
   
@@ -37,7 +37,7 @@ models:
     required_memory: 30GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/Qwen3.6-35B-A3B-NVFP4
+    model_path: /tmp/ai-os-models/Qwen3.6-35B-A3B-NVFP4
     supports_images: false
     description: "Qwen3.6 35B NVFP4 量化模型"
   
@@ -47,7 +47,7 @@ models:
     required_memory: 40GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/Qwen3.6-35B-A3B-Uncensored
+    model_path: /tmp/ai-os-models/Qwen3.6-35B-A3B-Uncensored
     supports_images: false
     description: "Qwen3.6 35B 去审查版"
   
@@ -57,7 +57,7 @@ models:
     required_memory: 80GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/llama-3.3-70b-8.0bpw
+    model_path: /tmp/ai-os-models/llama-3.3-70b-8.0bpw
     supports_images: false
     description: "Llama 3.3 70B 8bit 量化模型"
   
@@ -67,7 +67,7 @@ models:
     required_memory: 80GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/llama-3.3-70b-abliterated-gguf
+    model_path: /tmp/ai-os-models/llama-3.3-70b-abliterated-gguf
     supports_images: false
     description: "Llama 3.3 70B GGUF 去审查版"
   
@@ -77,7 +77,7 @@ models:
     required_memory: 70GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/llama-3.3-70b-exl2-6_5
+    model_path: /tmp/ai-os-models/llama-3.3-70b-exl2-6_5
     supports_images: false
     description: "Llama 3.3 70B EXL2 6.5bpw 量化"
   
@@ -87,7 +87,7 @@ models:
     required_memory: 80GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/llama-3.3-70b-exl2-8_0
+    model_path: /tmp/ai-os-models/llama-3.3-70b-exl2-8_0
     supports_images: false
     description: "Llama 3.3 70B EXL2 8.0bpw 量化"
   
@@ -97,7 +97,7 @@ models:
     required_memory: 100GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/midnight-miqu-103b-5.0bpw
+    model_path: /tmp/ai-os-models/midnight-miqu-103b-5.0bpw
     supports_images: false
     description: "Midnight Miqu 103B 5bpw 量化"
   
@@ -107,7 +107,7 @@ models:
     required_memory: 80GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/qwen2.5-72b-exl2-8_0
+    model_path: /tmp/ai-os-models/qwen2.5-72b-exl2-8_0
     supports_images: false
     description: "Qwen2.5 72B EXL2 8.0bpw 量化"
 
@@ -117,7 +117,7 @@ models:
     required_memory: 20GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/Gemma-4-31B-GGUF-Q4/gemma-4-31b-q4_k_m.gguf
+    model_path: /tmp/ai-os-models/Gemma-4-31B-GGUF-Q4/gemma-4-31b-q4_k_m.gguf
     supports_images: false
     n_gpu_layers: -1
     ctx_size: 8192
@@ -129,7 +129,7 @@ models:
     required_memory: 24GB
     preload: false
     keep_alive: false
-    model_path: /mnt/pve_models/Qwen3.6-35B-GGUF-Q4/qwen3.6-35b-q4_k_m.gguf
+    model_path: /tmp/ai-os-models/Qwen3.6-35B-GGUF-Q4/qwen3.6-35b-q4_k_m.gguf
     supports_images: false
     n_gpu_layers: -1
     ctx_size: 8192
@@ -148,9 +148,9 @@ settings:
   default_memory_strategy: balanced
 
   redis:
-    host: jetson-local.hamr.top
+    host: 127.0.0.1
     port: 6379
-    db: 1
+    db: 5
 
   logging:
     log_dir: logs
@@ -171,15 +171,15 @@ settings:
 
 vllm:
   service_name: vllm
-  start_script: /root/ai-suite/start_vllm.sh
-  model_base_path: /mnt/pve_models
+  start_script: /Users/hyx/codespace/ai-os/mocks/start_vllm.sh
+  model_base_path: /tmp/ai-os-models
   default_port: 8000
   default_gpu_memory_utilization: 0.92
   default_max_model_len: 32768
 
 llama_cpp:
   server_module: llama_cpp.server
-  models_base_path: /mnt/pve_models
+  models_base_path: /tmp/ai-os-models
   default_n_gpu_layers: -1
   default_ctx_size: 4096
   default_host: 0.0.0.0

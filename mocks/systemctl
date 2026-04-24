@@ -1,35 +1,23 @@
 #!/Users/hyx/miniforge3/bin/python3
 import sys
-import json
 import os
 import time
 import subprocess
 import signal
 
-STATE_FILE = "/tmp/ai_os_state.json"
-PID_DIR = "/tmp/ai_os_pids"
+# Add current dir to path to import StateManager
+sys.path.append(os.path.dirname(__file__))
+from state_manager import StateManager, PID_DIR
 
 if not os.path.exists(PID_DIR):
     os.makedirs(PID_DIR)
 
 SERVICE_PORTS = {
+    "vllm": 8000,
     "vllm-gemma": 8000,
     "vllm-llama": 8001,
     "vllm-aiclient": 8000
 }
-
-def get_state():
-    if not os.path.exists(STATE_FILE):
-        return {"vllm": {"status": "stopped"}}
-    try:
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"vllm": {"status": "stopped"}}
-
-def save_state(state):
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
 
 def get_pid(service_name):
     pid_file = os.path.join(PID_DIR, f"{service_name}.pid")
@@ -67,24 +55,19 @@ def handle_start(service_name):
     
     port = SERVICE_PORTS.get(service_name, 8000)
     mock_script = os.path.join(os.path.dirname(__file__), "vllm_mock.py")
-    
-    # Use the same python interpreter as systemctl script
     python_exe = sys.executable
-    
     cmd = [python_exe, mock_script, "--port", str(port)]
     
-    # Start in background
-    # Use a log file for debugging
     log_file = open(os.path.join(PID_DIR, f"{service_name}.log"), "a")
     proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, preexec_fn=os.setpgrp)
     
     save_pid(service_name, proc.pid)
     
-    state = get_state()
+    state = StateManager.get_state()
     state["vllm"]["status"] = "loading"
     state["vllm"]["loading_start"] = time.time()
-    state["vllm"]["model"] = service_name
-    save_state(state)
+    state["vllm"]["current_model"] = service_name
+    StateManager.save_state(state)
     
     return 0
 
@@ -93,7 +76,6 @@ def handle_stop(service_name):
     if is_pid_running(pid):
         try:
             os.killpg(os.getpgid(pid), signal.SIGTERM)
-            # wait up to 5s
             for _ in range(50):
                 if not is_pid_running(pid):
                     break
@@ -105,26 +87,34 @@ def handle_stop(service_name):
     
     clear_pid(service_name)
     
-    state = get_state()
-    if state["vllm"].get("model") == service_name:
+    state = StateManager.get_state()
+    if state["vllm"].get("current_model") == service_name:
         state["vllm"]["status"] = "stopped"
-        state["vllm"]["pid"] = 0
-        save_state(state)
+        StateManager.save_state(state)
     return 0
 
 def handle_status(service_name):
     pid = get_pid(service_name)
-    if is_pid_running(pid):
+    if not is_pid_running(pid):
+        print("inactive")
+        return 3
+        
+    StateManager.update_vllm_status()
+    state = StateManager.get_state()
+    status = state.get("vllm", {}).get("status", "stopped")
+    
+    if status in ["active", "loading"]:
         print("active")
         return 0
     else:
         print("inactive")
-        return 3 # systemctl is-active returns 3 for inactive
+        return 3
 
 def handle_show(service_name):
     pid = get_pid(service_name)
     running = is_pid_running(pid)
-    state = get_state()
+    StateManager.update_vllm_status()
+    state = StateManager.get_state()
     
     if running:
         status = state["vllm"]["status"]
@@ -138,6 +128,10 @@ def handle_show(service_name):
             print("SubState=activating")
             print(f"MainPID={pid}")
             print("MemoryCurrent=12000000000")
+        elif status == "error":
+            print("ActiveState=failed")
+            print("SubState=failed")
+            print(f"MainPID={pid}")
         else:
             print("ActiveState=active")
             print("SubState=running")
@@ -168,5 +162,4 @@ elif cmd == "is-active":
 elif cmd == "show":
     sys.exit(handle_show(service_name))
 else:
-    # ignore other commands
     sys.exit(0)

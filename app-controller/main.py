@@ -34,7 +34,7 @@ app = FastAPI(title="AI Controller API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -166,7 +166,7 @@ async def startup_event():
     _background_tasks.append(asyncio.create_task(gpu_monitor._update_cache_loop()))
     _background_tasks.append(asyncio.create_task(broadcast_status_loop()))
     _background_tasks.append(asyncio.create_task(save_history_loop()))
-    _background_tasks.append(asyncio.create_task(scheduler._preload_watcher_loop()))
+    _background_tasks.append(asyncio.create_task(scheduler._health_watcher_loop()))
     structured_logger.info("AI Controller service started", action="startup")
 
 

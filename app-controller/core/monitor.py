@@ -581,16 +581,51 @@ class GPUMonitor:
                            "pcie_rx_throughput", "pcie_tx_throughput", "vbios_version"]:
                     if k in primary:
                         current[k] = primary[k]
+            
+            # Add health score
+            health_score = self.get_health_score(status)
+            
             return {
                 "status": status.get("status", "unavailable"),
                 "current": current,
+                "health_score": health_score,
                 "history": [],
             }
         return {
             "status": "unavailable",
             "current": None,
+            "health_score": 0.0,
             "history": [],
         }
+
+    def get_health_score(self, status: Optional[Dict] = None) -> float:
+        """Calculate a health score based on GPU metrics."""
+        if status is None:
+            status = self.get_gpu_status()
+            
+        if not status or status.get("status") != "available":
+            return 0.0
+            
+        primary = status.get("primary", {})
+        temp = primary.get("temperature", 0)
+        mem_util = primary.get("memory_utilization", 0)
+        
+        # Temperature score: 100 below 85C, drops to 0 at 105C
+        temp_score = max(0, 100 - max(0, temp - 85) * 5)
+        
+        # Memory score: 100 below 90%, drops to 0 at 100%
+        mem_score = max(0, 100 - max(0, mem_util - 90) * 10)
+        
+        # Throttling penalty
+        throttle_reasons = primary.get("throttle_reasons", [])
+        throttle_penalty = 0
+        if any(r in ["hw_thermal_slowdown", "sw_thermal_slowdown"] for r in throttle_reasons):
+            throttle_penalty = 50
+        elif throttle_reasons:
+            throttle_penalty = 10
+            
+        score = (temp_score * 0.5 + mem_score * 0.5) - throttle_penalty
+        return round(max(0, min(100, score)), 2)
 
     def is_memory_available(self, required_bytes: int) -> bool:
         mem_info = self.get_memory_usage()

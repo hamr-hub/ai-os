@@ -88,9 +88,9 @@ test.describe('Dashboard 数据依赖测试', () => {
   })
 
   test('GPU监控sparkline区域', async ({ page }) => {
-    const gpuMetrics = page.locator('.gpu-card .gpu-metrics')
+    const gpuContent = page.locator('.gpu-card .gpu-card-content')
     const emptyState = page.locator('.gpu-card .empty-state')
-    await expect(gpuMetrics.or(emptyState)).toBeVisible({ timeout: 10000 })
+    await expect(gpuContent.or(emptyState)).toBeVisible({ timeout: 10000 })
   })
 
   test('健康告警展开/折叠告警列表', async ({ page }) => {
@@ -110,7 +110,7 @@ test.describe('Dashboard 响应式布局', () => {
     const page = await context.newPage()
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    const grid = page.locator('.grid')
+    const grid = page.locator('.content > .grid')
     const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(3)
     await context.close()
@@ -121,7 +121,7 @@ test.describe('Dashboard 响应式布局', () => {
     const page = await context.newPage()
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    const grid = page.locator('.grid')
+    const grid = page.locator('.content > .grid')
     const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(2)
     await context.close()
@@ -132,7 +132,7 @@ test.describe('Dashboard 响应式布局', () => {
     const page = await context.newPage()
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    const grid = page.locator('.grid')
+    const grid = page.locator('.content > .grid')
     const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(1)
     await context.close()
@@ -359,7 +359,7 @@ test.describe('ModelManagement 页面', () => {
   })
 
   test('刷新按钮可见', async ({ page }) => {
-    await expect(page.locator('.icon-btn')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.page-header .icon-btn')).toBeVisible({ timeout: 15000 })
   })
 
   test('卡片hover效果', async ({ page }) => {
@@ -402,7 +402,7 @@ test.describe('Monitor 页面', () => {
   })
 
   test('切换时间范围', async ({ page }) => {
-    const fiveMinBtn = page.locator('.range-btn').filter({ hasText: '5分钟' })
+    const fiveMinBtn = page.getByRole('button', { name: '5分钟', exact: true })
     await fiveMinBtn.click()
     await expect(fiveMinBtn).toHaveClass(/active/)
   })

@@ -57,16 +57,13 @@ class Scheduler:
         self._register_llama_cpp_models()
     
     def _load_config(self) -> Dict:
-        cached_config = cache_service.get("ai_controller:cache:config")
-        if cached_config is not None:
-            return cached_config
-        
         config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 config = yaml.safe_load(f)
-                cache_service.set("ai_controller:cache:config", config, ttl=60)
-                return config
+                if isinstance(config, dict):
+                    cache_service.set("ai_controller:cache:config", config, ttl=60)
+                    return config
         return self._get_default_config()
     
     def _get_default_config(self) -> Dict:
@@ -221,6 +218,21 @@ class Scheduler:
                     cache_service.set(cache_key, True, ttl=3)
                     return True
 
+                if model_name in self.running_models:
+                    del self.running_models[model_name]
+                cache_service.set(cache_key, False, ttl=3)
+                return False
+
+            if backend_type == 'vllm':
+                from core.vllm_manager import get_current_model_info
+                current_info = get_current_model_info()
+                if current_info and current_info.get('running'):
+                    if current_info.get('name') == model_name:
+                        if model_name not in self.running_models:
+                            self.running_models[model_name] = datetime.now()
+                        cache_service.set(cache_key, True, ttl=3)
+                        return True
+                
                 if model_name in self.running_models:
                     del self.running_models[model_name]
                 cache_service.set(cache_key, False, ttl=3)
@@ -436,6 +448,7 @@ class Scheduler:
             return False
 
         backend_type = self.get_model_backend_type(model_name)
+        model_path = config.get('model_path')
 
         if backend_type == 'llama_cpp':
             if llama_cpp_manager.is_server_running(model_name):
@@ -463,17 +476,38 @@ class Scheduler:
 
             return success
 
-        if self.sys_controller.is_service_running(service_name):
-            with self._model_lock:
-                self.running_models[model_name] = datetime.now()
-            return True
+        # For vLLM, we need to check if the correct model is already loaded
+        if service_name == 'vllm':
+            from core.vllm_manager import get_current_model_info, _update_vllm_script
+            
+            current_info = get_current_model_info()
+            # matched_name is from get_current_model_info which tries to match path to config name
+            if current_info and current_info.get('running') and current_info.get('name') == model_name:
+                logger.info(f"Model {model_name} is already running in vLLM service")
+                with self._model_lock:
+                    self.running_models[model_name] = datetime.now()
+                return True
+            
+            # If service is running with wrong model, stop it first
+            if self.sys_controller.is_service_running(service_name):
+                logger.info(f"vLLM service running with different model, stopping it first")
+                self.sys_controller.stop_service(service_name)
+            
+            # Update script to point to new model
+            if model_path:
+                logger.info(f"Updating vLLM script to model path: {model_path}")
+                if not _update_vllm_script(model_path):
+                    logger.error(f"Failed to update vLLM script for {model_name}")
+                    return False
 
+        # General service start logic
         mem_info = self.gpu_monitor.get_memory_usage()
         if mem_info:
             required_memory = _parse_memory_size(config.get('required_memory', 0))
             if mem_info.get('available', 0) < required_memory + self.get_min_available_memory():
                 success = await self._free_up_memory(model_name)
                 if not success:
+                    logger.error(f"Failed to free up enough memory for {model_name}")
                     return False
 
         success = self.sys_controller.start_service(service_name)
@@ -543,7 +577,7 @@ class Scheduler:
         return success
     
     async def _free_up_memory(self, target_model_name: str, priority: str = "normal") -> bool:
-        """智能释放显存，考虑模型优先级"""
+        """智能释放显存，考虑模型优先级和最后使用时间"""
         target_config = self.get_model_config(target_model_name)
         if not target_config:
             return False
@@ -560,6 +594,14 @@ class Scheduler:
         if available_memory >= needed_memory:
             return True
         
+        # Try to optimize memory first if we are close
+        if available_memory >= target_required:
+            logger.info("Memory tight, trying to optimize memory before stopping models")
+            await self.gpu_monitor.optimize_memory()
+            gpu_status = await self.gpu_monitor.refresh_cache()
+            if gpu_status and gpu_status.get('available_memory', 0) >= needed_memory:
+                return True
+
         models_to_stop = []
         priority_order = {"critical": 0, "high": 1, "normal": 2, "low": 3}
         target_priority = priority_order.get(priority, 2)
@@ -570,18 +612,27 @@ class Scheduler:
                     continue
                 
                 config = self.get_model_config(model_name)
-                if config and config.get('keep_alive', False):
+                # If model is critical/high and target is lower, don't stop it
+                if config:
                     model_priority = priority_order.get(config.get('priority', 'normal'), 2)
-                    if model_priority <= target_priority:
+                    if model_priority < target_priority and config.get('keep_alive', False):
                         continue
                 
+                last_used = self.model_last_used.get(model_name, datetime.min)
                 model_priority_val = priority_order.get(config.get('priority', 'normal'), 2) if config else 2
-                models_to_stop.append((model_name, model_priority_val, config.get('required_memory', 0)))
+                models_to_stop.append({
+                    "name": model_name,
+                    "priority": model_priority_val,
+                    "last_used": last_used,
+                    "memory": _parse_memory_size(config.get('required_memory', 0)) if config else 0
+                })
         
-        models_to_stop.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        # Sort by: 1. Priority (lower first) 2. Last used (older first) 3. Memory size (larger first)
+        models_to_stop.sort(key=lambda x: (x["priority"], x["last_used"], -x["memory"]), reverse=True)
         
-        for model_name, _, _ in models_to_stop:
-            await self.stop_model(model_name)
+        for m in models_to_stop:
+            logger.info(f"Stopping model {m['name']} to free up memory (priority={m['priority']}, last_used={m['last_used']})")
+            await self.stop_model(m["name"])
             
             # Refresh GPU status to get accurate memory info
             gpu_status = await self.gpu_monitor.refresh_cache()
@@ -593,15 +644,28 @@ class Scheduler:
     async def switch_model(self, target_model_name: str, priority: str = "normal") -> bool:
         """智能切换到目标模型，自动处理显存管理"""
         if not self.is_model_available(target_model_name):
+            logger.error(f"Cannot switch to unavailable model: {target_model_name}")
             return False
 
         if self.is_model_running(target_model_name):
+            logger.info(f"Model {target_model_name} is already running, selecting it")
             self.mark_model_selected(target_model_name)
             return True
 
+        logger.info(f"Switching to model {target_model_name} (priority={priority})")
+        
         success = await self._free_up_memory(target_model_name, priority)
         if not success:
-            return False
+            # Last ditch effort: force memory cleanup
+            logger.warning(f"Standard memory freeing failed, trying forced cleanup")
+            await self.gpu_monitor.force_memory_cleanup()
+            gpu_status = await self.gpu_monitor.refresh_cache()
+            
+            target_config = self.get_model_config(target_model_name)
+            target_required = _parse_memory_size(target_config.get('required_memory', 0)) if target_config else 0
+            if not gpu_status or gpu_status.get('available_memory', 0) < target_required:
+                logger.error(f"Insufficient memory to start {target_model_name} even after forced cleanup")
+                return False
 
         success = await self.start_model(target_model_name)
         if success:
@@ -656,16 +720,34 @@ class Scheduler:
         ordered_models.extend(normal_models)
         return ordered_models
 
-    async def _preload_watcher_loop(self):
-        """后台监控预加载模型状态，自动重启异常退出的预加载模型"""
+    async def _health_watcher_loop(self):
+        """后台监控模型状态，自动重启异常退出的预加载模型，并清理已停止模型的追踪状态"""
         while True:
             try:
+                # 1. Check preloaded models that should be kept alive
                 for model_name in self.preloaded_models:
                     config = self.get_model_config(model_name)
                     if config and config.get('keep_alive', False):
                         if not self.is_model_running(model_name):
                             logger.warning(f"Preloaded model {model_name} is not running, restarting...")
                             await self.start_model(model_name)
+                
+                # 2. Check all models that we think are running
+                with self._model_lock:
+                    currently_tracked = list(self.running_models.keys())
+                
+                for model_name in currently_tracked:
+                    if not self.is_model_running(model_name):
+                        logger.error(f"Model {model_name} crashed or was stopped externally")
+                        with self._model_lock:
+                            if model_name in self.running_models:
+                                del self.running_models[model_name]
+                        
+                        # Auto-restart if it was the default model or a high priority one
+                        if model_name == self._default_model:
+                            logger.info(f"Restarting default model: {model_name}")
+                            await self.start_model(model_name)
+                            
             except Exception as e:
-                logger.error(f"Error in preload watcher: {str(e)}")
+                logger.error(f"Error in health watcher: {str(e)}")
             await asyncio.sleep(30)
