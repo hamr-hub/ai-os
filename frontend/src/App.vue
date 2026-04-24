@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import Sidebar from '@/components/Sidebar.vue'
+import TopBar from '@/components/TopBar.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
 import { useAppStore } from '@/stores/app'
-import { onMounted } from 'vue'
+import { useServerStore } from '@/stores/server'
 
 const store = useAppStore()
+const serverStore = useServerStore()
 
-onMounted(() => {
+onMounted(async () => {
   store.initTheme()
+  serverStore.initFromStorage()
+  await serverStore.checkConnection()
 })
 
 const mainMargin = computed(() => store.sidebarCollapsed ? '64px' : '220px')
@@ -17,6 +21,7 @@ const mainMargin = computed(() => store.sidebarCollapsed ? '64px' : '220px')
 
 <template>
   <div class="app-shell">
+    <TopBar />
     <ToastContainer />
     <Sidebar />
     <main class="app-main" :style="{ marginLeft: mainMargin }">
@@ -45,6 +50,7 @@ const mainMargin = computed(() => store.sidebarCollapsed ? '64px' : '220px')
   flex-direction: column;
   background-color: var(--bg-primary);
   transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding-top: var(--topbar-height);
 }
 
 .app-page {
@@ -69,3 +75,4 @@ const mainMargin = computed(() => store.sidebarCollapsed ? '64px' : '220px')
   transform: translateY(-8px);
 }
 </style>
+

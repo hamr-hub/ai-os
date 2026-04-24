@@ -4,6 +4,8 @@ import type {
   ActionResponse, TestResponse, TestHistoryEntry, TokenStats,
   SystemStatus, QueueStatus, HealthAlert
 } from '@/types'
+import { useServerStore } from '@/stores/server'
+import { useAppStore } from '@/stores/app'
 
 const client = axios.create({
   baseURL: '/api',
@@ -14,6 +16,43 @@ const v1Client = axios.create({
   baseURL: '/v1',
   timeout: 60000,
 })
+
+// Request Interceptors
+client.interceptors.request.use((config) => {
+  const serverStore = useServerStore()
+  config.baseURL = serverStore.manageBase
+  return config
+})
+
+v1Client.interceptors.request.use((config) => {
+  const serverStore = useServerStore()
+  config.baseURL = serverStore.v1Base
+  return config
+})
+
+// Response Interceptors
+const handleResponseError = (error: any) => {
+  const appStore = useAppStore()
+  const message = error.response?.data?.message || error.response?.data?.error || error.message || 'API Request Failed'
+  
+  // Don't toast for cancelled requests
+  if (axios.isCancel(error)) {
+    return Promise.reject(error)
+  }
+
+  appStore.error(message)
+  return Promise.reject(error)
+}
+
+client.interceptors.response.use(
+  (response) => response,
+  handleResponseError
+)
+
+v1Client.interceptors.response.use(
+  (response) => response,
+  handleResponseError
+)
 
 export async function getGPUSummary(): Promise<GPUSummary> {
   const { data } = await client.get<GPUSummary>('/gpu/summary')
@@ -80,7 +119,8 @@ export async function getGPUHistory(count: number = 60): Promise<{ history: GPUH
 }
 
 export async function healthCheck(): Promise<{ status: string }> {
-  const { data } = await axios.get<{ status: string }>('/health')
+  const serverStore = useServerStore()
+  const { data } = await axios.get<{ status: string }>(serverStore.healthUrl)
   return data
 }
 
@@ -154,7 +194,8 @@ export async function chatCompletionStream(
   signal?: AbortSignal
 ): Promise<void> {
   try {
-    const response = await fetch('/v1/chat/completions', {
+    const serverStore = useServerStore()
+    const response = await fetch(`${serverStore.v1Base}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, stream: true }),

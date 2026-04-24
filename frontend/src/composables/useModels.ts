@@ -16,8 +16,10 @@ export function useModels() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const actionLoading = ref<string | null>(null)
+  const switchingModel = ref<string | null>(null)
   const isRefreshing = ref(false)
   let refreshInterval: number | null = null
+  let switchPollingInterval: number | null = null
 
   const fetchModelStatus = async (manualRefresh = false) => {
     if (manualRefresh) {
@@ -73,11 +75,11 @@ export function useModels() {
     error.value = null
     try {
       await startModel(modelName)
-      await fetchModelStatus()
+      switchingModel.value = modelName
+      startSwitchPolling(modelName)
     } catch (err) {
       error.value = err instanceof Error ? err.message : `Failed to start model ${modelName}`
       console.error('Failed to start model:', err)
-    } finally {
       actionLoading.value = null
     }
   }
@@ -98,6 +100,7 @@ export function useModels() {
 
   const handleSwitchModel = async (modelName: string, setAsDefault = false) => {
     actionLoading.value = modelName
+    switchingModel.value = modelName
     error.value = null
     try {
       await switchModel(modelName)
@@ -105,13 +108,34 @@ export function useModels() {
         await setDefaultModel(modelName)
         defaultModel.value = modelName
       }
-      await fetchModelStatus()
+      startSwitchPolling(modelName)
     } catch (err) {
       error.value = err instanceof Error ? err.message : `Failed to switch to model ${modelName}`
       console.error('Failed to switch model:', err)
-    } finally {
       actionLoading.value = null
+      switchingModel.value = null
     }
+  }
+
+  const startSwitchPolling = (modelName: string) => {
+    if (switchPollingInterval) clearInterval(switchPollingInterval)
+    switchPollingInterval = window.setInterval(async () => {
+      try {
+        const status = await getModelsStatus()
+        modelStatus.value = status
+        const modelEntry = status[modelName]
+        if (modelEntry?.running) {
+          actionLoading.value = null
+          switchingModel.value = null
+          if (switchPollingInterval) {
+            clearInterval(switchPollingInterval)
+            switchPollingInterval = null
+          }
+          const defaultModelResult = await getDefaultModel()
+          defaultModel.value = defaultModelResult.default_model
+        }
+      } catch {}
+    }, 5000)
   }
 
   const handleSwitchAndSetDefault = async (modelName: string) => {
@@ -160,6 +184,10 @@ export function useModels() {
 
   onUnmounted(() => {
     stopAutoRefresh()
+    if (switchPollingInterval) {
+      clearInterval(switchPollingInterval)
+      switchPollingInterval = null
+    }
   })
 
   return {
@@ -169,6 +197,7 @@ export function useModels() {
     loading,
     error,
     actionLoading,
+    switchingModel,
     isRefreshing,
     isAutoRefreshEnabled,
     fetchModelStatus,

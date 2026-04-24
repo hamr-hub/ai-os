@@ -8,7 +8,11 @@
 | T2 | ChatMessage 支持 multimodal content part + tools/logprobs/response_format | ✅ 完成 | T1 |
 | T3 | 限流中间件接入 Redis + 超时中间件 | ✅ 完成 | T1 |
 | T4 | 创建部署配置文件 (config.yaml/Dockerfile/docker-compose.yml) | ✅ 完成 | - |
-| T5 | 编译验证 + go vet | 待验证 | T1-T4 |
+| T5 | 编译验证 + go vet | ✅ 完成 | T1-T4 |
+| T6 | 实现图像验证与上传接口 (ValidateImage/UploadImage) | ⏳ 进行中 | T1 |
+| T7 | 实现模型测试框架接口 (test_model/comparative_analysis) | 📅 待办 | T1 |
+| T8 | 完善结构化日志与 RequestContext | 📅 待办 | T1 |
+| T9 | 编写核心逻辑的单元测试 | 📅 待办 | T5 |
 
 ## 已完成的变更
 

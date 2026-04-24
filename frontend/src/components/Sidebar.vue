@@ -108,9 +108,9 @@ const toggleCollapse = () => {
 .sidebar {
   position: fixed;
   left: 0;
-  top: 0;
+  top: var(--topbar-height);
   width: var(--sidebar-width);
-  height: 100vh;
+  height: calc(100vh - var(--topbar-height));
   z-index: 50;
   display: flex;
   flex-direction: column;
