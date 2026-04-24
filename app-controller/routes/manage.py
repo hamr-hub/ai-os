@@ -599,6 +599,16 @@ async def system_status(include_history: bool = False, history_count: int = 60):
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
 
+    # 获取队列信息
+    models = scheduler.get_available_models()
+    queue_info = {}
+    for model in models:
+        queue_info[model] = {
+            "active_requests": scheduler.get_active_requests(model),
+            "concurrency_limit": scheduler.get_concurrency_limit(),
+            "can_accept": scheduler.can_accept_request(model)
+        }
+
     result = {
         "cpu": {
             "percent": cpu_percent,
@@ -617,6 +627,7 @@ async def system_status(include_history: bool = False, history_count: int = 60):
             "free_gb": disk.free // (1024**3),
             "percent": disk.percent
         },
+        "queue": queue_info,
         "timestamp": datetime.now().isoformat()
     }
     

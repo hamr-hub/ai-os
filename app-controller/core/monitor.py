@@ -220,6 +220,35 @@ class GPUMonitor:
             }
         return None
     
+    def get_gpu_summary(self) -> Dict:
+        status = self.get_gpu_status()
+        if status:
+            return {
+                "status": status.get("status", "unavailable"),
+                "current": {
+                    "name": status.get("name"),
+                    "gpu_count": status.get("gpu_count"),
+                    "utilization": status.get("utilization"),
+                    "temperature": status.get("temperature"),
+                    "power_draw": status.get("power_draw"),
+                    "power_limit": status.get("power_limit"),
+                    "power_percent": status.get("power_percent"),
+                    "memory_utilization": status.get("memory_utilization"),
+                    "used_memory": status.get("used_memory"),
+                    "available_memory": status.get("available_memory"),
+                    "total_memory": status.get("total_memory"),
+                    "fan_speed": status.get("fan_speed"),
+                    "clock_sm": status.get("clock_sm"),
+                    "clock_mem": status.get("clock_mem")
+                },
+                "history": []
+            }
+        return {
+            "status": "unavailable",
+            "current": None,
+            "history": []
+        }
+    
     def is_memory_available(self, required_bytes: int) -> bool:
         mem_info = self.get_memory_usage()
         if mem_info and mem_info.get("available", 0) >= required_bytes:
