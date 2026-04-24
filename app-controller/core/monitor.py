@@ -300,10 +300,15 @@ class GPUMonitor:
             return False
 
     def _cache_valid(self) -> bool:
-        return (
-            self._status_cache is not None
-            and self._status_cache_time is not None
-        )
+        if self._status_cache is None or self._status_cache_time is None:
+            return False
+        # Cache is valid for 5 seconds
+        return (datetime.now() - self._status_cache_time).total_seconds() < 5.0
+
+    async def refresh_cache(self):
+        """Manually refresh the GPU status cache."""
+        await self._refresh_cache()
+        return self._status_cache
 
     async def _update_cache_loop(self):
         while True:

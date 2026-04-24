@@ -28,7 +28,6 @@ export const useServerStore = defineStore('server', () => {
   const connectionStatus = ref<ConnectionStatus>('checking')
   const lastCheckedAt = ref<number | null>(null)
   const history = ref<ServerHistoryEntry[]>([])
-  const pendingRemoteUrl = ref('')
 
   const manageBase = computed(() => (activeUrl.value ? `${activeUrl.value}/manage` : '/api'))
   const v1Base = computed(() => (activeUrl.value ? `${activeUrl.value}/v1` : '/v1'))
@@ -87,21 +86,9 @@ export const useServerStore = defineStore('server', () => {
       const timeout = window.setTimeout(() => controller.abort(), 5000)
       const response = await fetch(healthUrl.value, { signal: controller.signal })
       window.clearTimeout(timeout)
-      if (response.ok) {
-        connectionStatus.value = 'online'
-      } else {
-        connectionStatus.value = 'offline'
-        if (activeUrl.value) {
-          activeUrl.value = ''
-          saveConfig()
-        }
-      }
+      connectionStatus.value = response.ok ? 'online' : 'offline'
     } catch {
       connectionStatus.value = 'offline'
-      if (activeUrl.value) {
-        activeUrl.value = ''
-        saveConfig()
-      }
     } finally {
       lastCheckedAt.value = Date.now()
     }
@@ -112,9 +99,8 @@ export const useServerStore = defineStore('server', () => {
     if (savedConfig) {
       try {
         const parsed = JSON.parse(savedConfig) as StoredServerConfig
-        const savedUrl = normalizeUrl(parsed.activeUrl ?? '')
+        activeUrl.value = normalizeUrl(parsed.activeUrl ?? '')
         backendType.value = parsed.backendType ?? 'auto'
-        pendingRemoteUrl.value = savedUrl
       } catch {}
     }
 
@@ -136,30 +122,6 @@ export const useServerStore = defineStore('server', () => {
     }
   }
 
-  const validateRemoteConnection = async () => {
-    const savedUrl = pendingRemoteUrl.value
-    if (!savedUrl) return
-    try {
-      const controller = new AbortController()
-      const timeout = window.setTimeout(() => controller.abort(), 3000)
-      const response = await fetch(`${savedUrl}/health`, { signal: controller.signal })
-      window.clearTimeout(timeout)
-      if (response.ok) {
-        activeUrl.value = savedUrl
-        connectionStatus.value = 'online'
-        syncHistory(savedUrl, backendType.value)
-      } else {
-        activeUrl.value = ''
-        connectionStatus.value = 'offline'
-      }
-    } catch {
-      activeUrl.value = ''
-      connectionStatus.value = 'offline'
-    }
-    saveConfig()
-    pendingRemoteUrl.value = ''
-  }
-
   return {
     activeUrl,
     backendType,
@@ -174,6 +136,5 @@ export const useServerStore = defineStore('server', () => {
     removeHistory,
     checkConnection,
     initFromStorage,
-    validateRemoteConnection,
   }
 })

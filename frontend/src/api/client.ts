@@ -2,6 +2,8 @@ import axios from 'axios'
 import type {
   GPUSummary,
   GPUHistoryEntry,
+  GPUProcess,
+  VLLMMetricsData,
   ModelStatus,
   ModelsResponse,
   ActionResponse,
@@ -61,6 +63,21 @@ v1Client.interceptors.response.use((response) => response, handleResponseError)
 
 export async function getGPUSummary(): Promise<GPUSummary> {
   const { data } = await client.get<GPUSummary>('/gpu/summary')
+  return data
+}
+
+export async function getGPUEnhancedInfo(): Promise<Record<string, any>> {
+  const { data } = await client.get('/gpu/enhanced')
+  return data
+}
+
+export async function getGPUProcesses(): Promise<{ processes: GPUProcess[]; count: number }> {
+  const { data } = await client.get<{ processes: GPUProcess[]; count: number }>('/gpu/processes')
+  return data
+}
+
+export async function getVLLMMetrics(): Promise<VLLMMetricsData> {
+  const { data } = await client.get<VLLMMetricsData>('/vllm/metrics')
   return data
 }
 

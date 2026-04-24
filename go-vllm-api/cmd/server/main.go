@@ -103,6 +103,7 @@ func main() {
 	go scheduler.PreloadModels(ctx)
 	go scheduler.PreloadWatcherLoop(ctx)
 
+	sysCollector := service.NewSystemStatusCollector(zapLogger, redisRepo)
 	go broadcastStatusLoop(ctx, gpuMonitor, scheduler, wsManager, metricsCollector, sysCollector, zapLogger)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -115,8 +116,6 @@ func main() {
 
 	rateLimiter := middleware.NewRateLimitMiddlewareWithLimiter(100, 60, scheduler.GetRateLimiter())
 	r.Use(rateLimiter.Handler())
-
-	sysCollector := service.NewSystemStatusCollector(zapLogger, redisRepo)
 
 	v1Handler := v1handler.NewV1Handler(scheduler, gpuMonitor, vllmProxy, metricsCollector, cacheService)
 	manageHandler := manage.NewManageHandler(

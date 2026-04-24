@@ -372,6 +372,7 @@ async def get_default_model():
 
 @app.post("/manage/default-model/{model_name}")
 async def set_default_model(model_name: str):
+    global DEFAULT_MODEL
     if model_name not in MOCK_MODELS:
         raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
     DEFAULT_MODEL = model_name
@@ -379,6 +380,7 @@ async def set_default_model(model_name: str):
 
 @app.delete("/manage/default-model")
 async def clear_default_model():
+    global DEFAULT_MODEL
     DEFAULT_MODEL = None
     return {"status": "ok", "default_model": None}
 

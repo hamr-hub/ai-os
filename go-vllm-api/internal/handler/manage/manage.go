@@ -1033,3 +1033,17 @@ func (h *ManageHandler) GetVLLMMetrics(c *gin.Context) {
 	metrics := h.gpuMonitor.GetVLLMMetrics()
 	c.JSON(http.StatusOK, metrics)
 }
+
+func (h *ManageHandler) GetHealthDetail(c *gin.Context) {
+	gpuStatus := h.gpuMonitor.GetStatus()
+	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
+	healthScores := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
+	gpuAlerts := h.metrics.GetGPUAlerts(gpuStatus)
+	c.JSON(http.StatusOK, gin.H{
+		"health_scores":       healthScores,
+		"gpu_alerts":          gpuAlerts,
+		"gpu_status_summary":  gpuStatus,
+		"vllm_metrics_summary": vllmMetrics,
+		"timestamp":           time.Now().Format(time.RFC3339),
+	})
+}

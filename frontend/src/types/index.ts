@@ -1,3 +1,23 @@
+export interface GPUProcess {
+  pid: number
+  name: string
+  used_gpu_memory: number
+}
+
+export interface VLLMMetricsData {
+  vllm_available: boolean
+  running_requests: number
+  waiting_requests: number
+  gpu_cache_usage: number
+  cpu_cache_usage: number
+  generation_throughput: number
+  prompt_throughput: number
+  time_to_first_token: number
+  time_per_output_token: number
+  prefix_cache_hit_rate: number
+  scraped_at: string
+}
+
 export interface GPUStatus {
   status: 'available' | 'unavailable'
   gpu_count: number
@@ -16,11 +36,14 @@ export interface GPUStatus {
   memory_utilization: number
   primary?: GPUInfo
   all_gpus?: GPUInfo[]
+  vllm_metrics?: VLLMMetricsData
+  driver_version?: string
   serverTime?: string
 }
 
 export interface GPUInfo {
   name: string
+  index?: number
   total_memory: number
   used_memory: number
   available_memory: number
@@ -33,6 +56,16 @@ export interface GPUInfo {
   clock_sm: number
   clock_mem: number
   memory_utilization: number
+  ecc_errors?: number
+  throttle_reasons?: string[]
+  persistence_mode?: boolean
+  pcie_rx_throughput?: number
+  pcie_tx_throughput?: number
+  bar1_total_memory?: number
+  bar1_used_memory?: number
+  processes?: GPUProcess[]
+  vbios_version?: string
+  driver_version?: string
 }
 
 export interface GPUSummary {
@@ -56,6 +89,9 @@ export interface GPUSummaryCurrent {
   fan_speed?: number
   clock_sm?: number
   clock_mem?: number
+  ecc_errors?: number
+  throttle_reasons?: string[]
+  vllm_metrics?: VLLMMetricsData
 }
 
 export interface GPUHistoryEntry {
@@ -71,6 +107,10 @@ export interface GPUHistoryEntry {
   fan_speed?: number
   clock_sm?: number
   clock_mem?: number
+  ecc_errors?: number
+  vllm_running_requests?: number
+  vllm_waiting_requests?: number
+  vllm_gpu_cache_usage?: number
 }
 
 export interface ModelStatus {

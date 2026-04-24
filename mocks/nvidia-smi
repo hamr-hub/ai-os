@@ -23,33 +23,36 @@ def get_state():
         }
 
 state = get_state()
-vllm = state["vllm"]
-gpu = state["gpu"]
+vllm = state.get("vllm", {})
+gpu = state.get("gpu", {"name": "NVIDIA GeForce RTX 4090", "vram_total_mb": 24576, "temperature": 42, "utilization": 0})
 
 # Base values with random jitter
-status = vllm["status"]
+status = vllm.get("status", "stopped")
+vram_total = gpu.get("vram_total_mb", 24576)
+
 if status == "loading":
     vram_used = 12000 + random.randint(-500, 500)
     utilization = random.randint(70, 95)
     temperature = 65 + random.randint(-2, 2)
     power = 320 + random.randint(-20, 20)
 elif status == "active":
-    vram_used = 22000 + random.randint(-100, 100)
+    # vLLM usually takes about 90% if not configured otherwise
+    vram_used = int(vram_total * 0.9) + random.randint(-100, 100)
     utilization = random.randint(1, 15)
     temperature = 55 + random.randint(-1, 1)
-    power = 120 + random.randint(-5, 5)
+    power = 150 + random.randint(-5, 5)
 else:
     vram_used = 450 + random.randint(-10, 10)
     utilization = random.randint(0, 1)
     temperature = 42 + random.randint(0, 1)
     power = 30 + random.randint(-2, 2)
 
-vram_total = gpu["vram_total_mb"]
 vram_free = vram_total - vram_used
 
 query_all = "--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit,fan.speed,clocks.sm,clocks.mem"
 
 if query_all in " ".join(sys.argv):
+    # Output format matching what GPUMonitor expects
     print(f"{gpu['name']}, {vram_total}, {vram_used}, {vram_free}, {temperature}, {utilization}, {power}, 450.0, 30, 2100, 10501")
 elif "--version" in sys.argv:
     print("NVIDIA-SMI 535.129.03             Driver Version: 535.129.03   CUDA Version: 12.2")

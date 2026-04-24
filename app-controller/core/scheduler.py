@@ -583,7 +583,8 @@ class Scheduler:
         for model_name, _, _ in models_to_stop:
             await self.stop_model(model_name)
             
-            gpu_status = self.gpu_monitor.get_gpu_status()
+            # Refresh GPU status to get accurate memory info
+            gpu_status = await self.gpu_monitor.refresh_cache()
             if gpu_status and gpu_status.get('available_memory', 0) >= needed_memory:
                 return True
         
