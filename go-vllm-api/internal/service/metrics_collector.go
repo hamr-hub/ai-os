@@ -24,42 +24,102 @@ type MetricsCollector struct {
 	completionTokens atomic.Int64
 	totalTokens      atomic.Int64
 
-	mu      sync.RWMutex
-	metrics map[string]interface{}
+	mu           sync.RWMutex
+	tokenHistory []TokenHistoryEntry
+	metrics      map[string]interface{}
 }
 
 type TokenStats struct {
-	PromptTokens     int64 `json:"prompt_tokens"`
-	CompletionTokens int64 `json:"completion_tokens"`
-	TotalTokens      int64 `json:"total_tokens"`
+	PromptTokens     int64               `json:"total_prompt_tokens"`
+	CompletionTokens int64               `json:"total_completion_tokens"`
+	TotalTokens      int64               `json:"total_tokens"`
+	History          []TokenHistoryEntry `json:"history"`
+	Timestamp        string              `json:"timestamp"`
+}
+
+type TokenHistoryEntry struct {
+	Timestamp  string `json:"timestamp"`
+	Total      int64  `json:"total"`
+	Prompt     int64  `json:"prompt"`
+	Completion int64  `json:"completion"`
+	ModelName  string `json:"model_name"`
 }
 
 type GPUHistoryEntry struct {
-	Timestamp       string `json:"timestamp"`
-	Temperature     int    `json:"temperature"`
-	Utilization     int    `json:"utilization"`
-	UsedMemory      int64  `json:"used_memory"`
-	AvailableMemory int64  `json:"available_memory"`
-	TotalMemory     int64  `json:"total_memory"`
-	PowerDraw       int    `json:"power_draw"`
-	PowerPercent    int    `json:"power_percent"`
-	MemoryUtilization int  `json:"memory_utilization"`
+	Timestamp         string `json:"timestamp"`
+	Temperature       int    `json:"temperature"`
+	Utilization       int    `json:"utilization"`
+	UsedMemory        int64  `json:"used_memory"`
+	AvailableMemory   int64  `json:"available_memory"`
+	TotalMemory       int64  `json:"total_memory"`
+	PowerDraw         int    `json:"power_draw"`
+	PowerPercent      int    `json:"power_percent"`
+	MemoryUtilization int    `json:"memory_utilization"`
 }
 
 type AlertInfo struct {
-	Type        string  `json:"type"`
-	Severity    string  `json:"severity"`
-	Value       float64 `json:"value"`
-	Threshold   float64 `json:"threshold"`
-	Message     string  `json:"message"`
+	Type      string  `json:"type"`
+	Severity  string  `json:"severity"`
+	Value     float64 `json:"value"`
+	Threshold float64 `json:"threshold"`
+	Message   string  `json:"message"`
 }
 
 func NewMetricsCollector(redis *repository.RedisRepo, logger *zap.Logger) *MetricsCollector {
-	return &MetricsCollector{
-		logger:  logger,
-		redis:   redis,
-		metrics: make(map[string]interface{}),
+	m := &MetricsCollector{
+		logger:       logger,
+		redis:        redis,
+		metrics:      make(map[string]interface{}),
+		tokenHistory: make([]TokenHistoryEntry, 0),
 	}
+	m.loadFromRedis()
+	return m
+}
+
+func (m *MetricsCollector) loadFromRedis() {
+	if m.redis == nil || !m.redis.IsConnected() {
+		return
+	}
+
+	ctx := context.Background()
+	// Load token usage
+	val, err := m.redis.Get(ctx, "ai_controller:metrics:token_usage")
+	if err == nil && val != "" {
+		var usage map[string]int64
+		if err := json.Unmarshal([]byte(val), &usage); err == nil {
+			m.promptTokens.Store(usage["total_prompt_tokens"])
+			m.completionTokens.Store(usage["total_completion_tokens"])
+			m.totalTokens.Store(usage["total_tokens"])
+		}
+	}
+
+	// Load token history
+	val, err = m.redis.Get(ctx, "ai_controller:metrics:token_history")
+	if err == nil && val != "" {
+		m.mu.Lock()
+		json.Unmarshal([]byte(val), &m.tokenHistory)
+		m.mu.Unlock()
+	}
+}
+
+func (m *MetricsCollector) saveToRedis() {
+	if m.redis == nil || !m.redis.IsConnected() {
+		return
+	}
+
+	ctx := context.Background()
+	// Save token usage
+	usage := map[string]int64{
+		"total_prompt_tokens":     m.promptTokens.Load(),
+		"total_completion_tokens": m.completionTokens.Load(),
+		"total_tokens":            m.totalTokens.Load(),
+	}
+	m.redis.SetJSON(ctx, "ai_controller:metrics:token_usage", usage, 0)
+
+	// Save token history
+	m.mu.RLock()
+	m.redis.SetJSON(ctx, "ai_controller:metrics:token_history", m.tokenHistory, 0)
+	m.mu.RUnlock()
 }
 
 func (m *MetricsCollector) RecordRequest(endpoint string, statusCode int, responseTime float64, opts ...RecordOption) {
@@ -74,30 +134,41 @@ func (m *MetricsCollector) RecordRequest(endpoint string, statusCode int, respon
 		o(&opt)
 	}
 
-	if opt.PromptTokens > 0 {
+	if opt.PromptTokens > 0 || opt.CompletionTokens > 0 {
 		m.promptTokens.Add(opt.PromptTokens)
-	}
-	if opt.CompletionTokens > 0 {
 		m.completionTokens.Add(opt.CompletionTokens)
-	}
-	if opt.TotalTokens > 0 {
-		m.totalTokens.Add(opt.TotalTokens)
+		m.totalTokens.Add(opt.PromptTokens + opt.CompletionTokens)
+
+		// Record history entry
+		m.mu.Lock()
+		m.tokenHistory = append(m.tokenHistory, TokenHistoryEntry{
+			Timestamp:  time.Now().Format(time.RFC3339),
+			Total:      m.totalTokens.Load(),
+			Prompt:     m.promptTokens.Load(),
+			Completion: m.completionTokens.Load(),
+			ModelName:  opt.Model,
+		})
+		if len(m.tokenHistory) > 500 {
+			m.tokenHistory = m.tokenHistory[len(m.tokenHistory)-500:]
+		}
+		m.mu.Unlock()
+		m.saveToRedis()
 	}
 
 	if m.redis != nil && m.redis.IsConnected() {
 		ctx := context.Background()
 		key := "ai_controller:metrics:requests"
 		entry := map[string]interface{}{
-			"endpoint":        endpoint,
-			"status_code":     statusCode,
-			"response_time":   responseTime,
-			"timestamp":       time.Now().Format(time.RFC3339),
-			"model":           opt.Model,
-			"is_image":        opt.IsImage,
-			"image_size":      opt.ImageSize,
-			"prompt_tokens":   opt.PromptTokens,
+			"endpoint":          endpoint,
+			"status_code":       statusCode,
+			"response_time":     responseTime,
+			"timestamp":         time.Now().Format(time.RFC3339),
+			"model":             opt.Model,
+			"is_image":          opt.IsImage,
+			"image_size":        opt.ImageSize,
+			"prompt_tokens":     opt.PromptTokens,
 			"completion_tokens": opt.CompletionTokens,
-			"total_tokens":    opt.TotalTokens,
+			"total_tokens":      opt.PromptTokens + opt.CompletionTokens,
 		}
 		data, _ := json.Marshal(entry)
 		m.redis.LPush(ctx, key, string(data))
@@ -148,10 +219,18 @@ func (m *MetricsCollector) GetMetrics() map[string]interface{} {
 }
 
 func (m *MetricsCollector) GetTokenStats() TokenStats {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	history := make([]TokenHistoryEntry, len(m.tokenHistory))
+	copy(history, m.tokenHistory)
+
 	return TokenStats{
 		PromptTokens:     m.promptTokens.Load(),
 		CompletionTokens: m.completionTokens.Load(),
 		TotalTokens:      m.totalTokens.Load(),
+		History:          history,
+		Timestamp:        time.Now().Format(time.RFC3339),
 	}
 }
 
@@ -162,6 +241,15 @@ func (m *MetricsCollector) Reset() {
 	m.promptTokens.Store(0)
 	m.completionTokens.Store(0)
 	m.totalTokens.Store(0)
+	m.mu.Lock()
+	m.tokenHistory = make([]TokenHistoryEntry, 0)
+	m.mu.Unlock()
+
+	if m.redis != nil && m.redis.IsConnected() {
+		ctx := context.Background()
+		m.redis.Delete(ctx, "ai_controller:metrics:token_usage")
+		m.redis.Delete(ctx, "ai_controller:metrics:token_history")
+	}
 }
 
 func (m *MetricsCollector) GetComprehensiveHealthScore(gpuStatus *GPUStatus) map[string]interface{} {
@@ -311,14 +399,14 @@ func (m *MetricsCollector) SaveGPUHistory(gpuStatus *GPUStatus) {
 	ctx := context.Background()
 	key := "gpu:history"
 	entry := GPUHistoryEntry{
-		Timestamp:        time.Now().Format(time.RFC3339),
-		Temperature:      gpuStatus.Temperature,
-		Utilization:      gpuStatus.Utilization,
-		UsedMemory:       gpuStatus.UsedMemory,
-		AvailableMemory:  gpuStatus.AvailableMemory,
-		TotalMemory:      gpuStatus.TotalMemory,
-		PowerDraw:        gpuStatus.PowerDraw,
-		PowerPercent:     gpuStatus.PowerPercent,
+		Timestamp:         time.Now().Format(time.RFC3339),
+		Temperature:       gpuStatus.Temperature,
+		Utilization:       gpuStatus.Utilization,
+		UsedMemory:        gpuStatus.UsedMemory,
+		AvailableMemory:   gpuStatus.AvailableMemory,
+		TotalMemory:       gpuStatus.TotalMemory,
+		PowerDraw:         gpuStatus.PowerDraw,
+		PowerPercent:      gpuStatus.PowerPercent,
 		MemoryUtilization: gpuStatus.MemoryUtilization,
 	}
 	data, _ := json.Marshal(entry)

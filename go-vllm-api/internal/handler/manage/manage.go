@@ -218,6 +218,7 @@ func (h *ManageHandler) GetModelStatus(c *gin.Context) {
 	models := h.scheduler.GetAvailableModels()
 	status := make(map[string]interface{})
 	for _, m := range models {
+		mc := h.scheduler.GetModelConfig(m)
 		status[m] = gin.H{
 			"running":                  h.scheduler.IsModelRunning(m),
 			"port":                     h.scheduler.GetModelPort(m),
@@ -228,6 +229,9 @@ func (h *ManageHandler) GetModelStatus(c *gin.Context) {
 			"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(m),
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
 			"last_used":                nil,
+			"description":              func() string { if mc != nil { return mc.Description }; return "" }(),
+			"required_memory":          func() string { if mc != nil { return mc.RequiredMemory }; return "" }(),
+			"backend_type":             func() string { if mc != nil { return mc.Service }; return "" }(),
 		}
 	}
 	c.JSON(http.StatusOK, status)
