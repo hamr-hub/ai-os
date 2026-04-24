@@ -100,6 +100,8 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.POST("/service/stop", h.StopService)
 		m.POST("/service/restart", h.RestartService)
 		m.GET("/system/status", h.SystemStatus)
+		m.GET("/system/history", h.GetSystemHistory)
+		m.GET("/token/history", h.GetTokenHistory)
 		m.GET("/websocket/connections", h.GetWebSocketConnections)
 		m.GET("/redis/health", h.RedisHealth)
 		m.GET("/redis/keys", h.RedisKeys)
@@ -684,6 +686,62 @@ func (h *ManageHandler) SystemStatus(c *gin.Context) {
 	result := h.sysCollector.GetSystemStatus()
 	h.cache.Set(cacheKey, result, 10)
 	c.JSON(http.StatusOK, result)
+}
+
+func (h *ManageHandler) GetSystemHistory(c *gin.Context) {
+	limit := 60
+	if v := c.Query("count"); v != "" {
+		if n, err := fmt.Sscanf(v, "%d", &limit); err == nil && n > 0 {
+			_ = n
+		}
+	}
+	if v := c.Query("limit"); v != "" {
+		if n, err := fmt.Sscanf(v, "%d", &limit); err == nil && n > 0 {
+			_ = n
+		}
+	}
+	history := h.sysCollector.GetSystemHistory(limit)
+	c.JSON(http.StatusOK, gin.H{
+		"history":   history,
+		"count":     len(history),
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+}
+
+func (h *ManageHandler) GetTokenHistory(c *gin.Context) {
+	limit := 60
+	if v := c.Query("count"); v != "" {
+		if n, err := fmt.Sscanf(v, "%d", &limit); err == nil && n > 0 {
+			_ = n
+		}
+	}
+	if v := c.Query("limit"); v != "" {
+		if n, err := fmt.Sscanf(v, "%d", &limit); err == nil && n > 0 {
+			_ = n
+		}
+	}
+	stats := h.metrics.GetTokenStats()
+	history := stats.History
+	if limit > 0 && len(history) > limit {
+		history = history[:limit]
+	}
+
+	frontendHistory := make([]gin.H, len(history))
+	for i, entry := range history {
+		frontendHistory[i] = gin.H{
+			"timestamp":        entry.Timestamp,
+			"total_tokens":     entry.Total,
+			"prompt_tokens":    entry.Prompt,
+			"completion_tokens": entry.Completion,
+			"model_name":       entry.ModelName,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"history":   frontendHistory,
+		"count":     len(frontendHistory),
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
 }
 
 func (h *ManageHandler) GetWebSocketConnections(c *gin.Context) {

@@ -103,7 +103,7 @@ func main() {
 	scheduler.PreloadModels(ctx)
 	go scheduler.PreloadWatcherLoop(ctx)
 
-	go broadcastStatusLoop(ctx, gpuMonitor, scheduler, wsManager, metricsCollector, zapLogger)
+	go broadcastStatusLoop(ctx, gpuMonitor, scheduler, wsManager, metricsCollector, sysCollector, zapLogger)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -116,7 +116,7 @@ func main() {
 	rateLimiter := middleware.NewRateLimitMiddlewareWithLimiter(100, 60, scheduler.GetRateLimiter())
 	r.Use(rateLimiter.Handler())
 
-	sysCollector := service.NewSystemStatusCollector(zapLogger)
+	sysCollector := service.NewSystemStatusCollector(zapLogger, redisRepo)
 
 	v1Handler := v1handler.NewV1Handler(scheduler, gpuMonitor, vllmProxy, metricsCollector, cacheService)
 	manageHandler := manage.NewManageHandler(
@@ -163,7 +163,7 @@ func main() {
 	zapLogger.Info("server exited")
 }
 
-func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service.Scheduler, ws *service.WSManager, mc *service.MetricsCollector, l *zap.Logger) {
+func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service.Scheduler, ws *service.WSManager, mc *service.MetricsCollector, sc *service.SystemStatusCollector, l *zap.Logger) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -185,6 +185,7 @@ func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service
 			}
 			ws.BroadcastStatus(gpuSummary, modelStatus)
 			mc.SaveGPUHistory(gpuSummary)
+			sc.SaveSystemHistory()
 		}
 	}
 }
