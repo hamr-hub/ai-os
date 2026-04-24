@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import AgentChatWindow from '@/components/AgentChatWindow.vue'
 import { useAgentChatStore } from '@/stores/agentChat'
 import { useModels } from '@/composables/useModels'
-import { Bot, PanelLeft, Plus, MessageSquare, Trash2, X } from 'lucide-vue-next'
+import { Bot, PanelLeft, Plus, Trash2, X } from 'lucide-vue-next'
 
 const agentChatStore = useAgentChatStore()
 const { defaultModel } = useModels()

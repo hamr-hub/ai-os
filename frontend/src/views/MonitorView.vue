@@ -5,7 +5,6 @@ import { useGPUHistory } from '@/composables/useGPUHistory'
 import { useModels } from '@/composables/useModels'
 import { useTokenHistory } from '@/composables/useTokenHistory'
 import { formatTokens } from '@/utils/format'
-import GpuMetricsCard from '@/components/cards/GpuMetricsCard.vue'
 import LineChart from '@/components/LineChart.vue'
 import {
   RefreshCw,
@@ -52,21 +51,6 @@ const isRefreshing = computed(
 const gpu = computed(() => gpuSummary.value?.current ?? null)
 const gpuStatus = computed(() => gpuSummary.value?.status ?? 'unavailable')
 const runningModels = computed(() => modelList.value.filter((m) => m.running))
-
-const refreshAll = () => {
-  refreshGPU()
-  refreshModels()
-  refreshTokenHistory()
-  refreshGPUHistory()
-}
-
-const tokenTotal = computed(() => tokenStats.value?.total_tokens ?? 0)
-const tokenPrompt = computed(
-  () => tokenStats.value?.total_prompt_tokens ?? tokenStats.value?.prompt_tokens ?? 0
-)
-const tokenCompletion = computed(
-  () => tokenStats.value?.total_completion_tokens ?? tokenStats.value?.completion_tokens ?? 0
-)
 
 const gpuTimeLabels = computed(() =>
   gpuHistory.value.map((e) => {

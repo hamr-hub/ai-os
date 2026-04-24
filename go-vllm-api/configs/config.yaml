@@ -1,14 +1,12 @@
 models:
   Gemma-4-31B-Abliterated:
-    service: vllm
+    service: vllm-gemma
     port: 8000
     required_memory: 40GB
     preload: true
     keep_alive: true
     model_path: /mnt/pve_models/Gemma-4-31B-Abliterated
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Gemma 4 31B 模型（去审查版）"
 
   Qwen3-235B-A22B-Instruct-2507-AWQ:
@@ -19,8 +17,6 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/Qwen3-235B-A22B-Instruct-2507-AWQ
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Qwen3 235B AWQ 量化模型"
 
   Qwen3.6-35B-A3B:
@@ -31,8 +27,6 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/Qwen3.6-35B-A3B
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Qwen3.6 35B 稀疏激活模型"
 
   Qwen3.6-35B-A3B-NVFP4:
@@ -43,8 +37,6 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/Qwen3.6-35B-A3B-NVFP4
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Qwen3.6 35B NVFP4 量化模型"
 
   Qwen3.6-35B-A3B-Uncensored:
@@ -55,8 +47,6 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/Qwen3.6-35B-A3B-Uncensored
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Qwen3.6 35B 去审查版"
 
   llama-3.3-70b-8.0bpw:
@@ -67,8 +57,6 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/llama-3.3-70b-8.0bpw
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Llama 3.3 70B 8bit 量化模型"
 
   llama-3.3-70b-abliterated-gguf:
@@ -79,8 +67,6 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/llama-3.3-70b-abliterated-gguf
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Llama 3.3 70B GGUF 去审查版"
 
   llama-3.3-70b-exl2-6_5:
@@ -91,8 +77,6 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/llama-3.3-70b-exl2-6_5
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Llama 3.3 70B EXL2 6.5bpw 量化"
 
   llama-3.3-70b-exl2-8_0:
@@ -103,8 +87,6 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/llama-3.3-70b-exl2-8_0
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Llama 3.3 70B EXL2 8.0bpw 量化"
 
   midnight-miqu-103b-5.0bpw:
@@ -115,8 +97,6 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/midnight-miqu-103b-5.0bpw
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Midnight Miqu 103B 5bpw 量化"
 
   qwen2.5-72b-exl2-8_0:
@@ -127,39 +107,7 @@ models:
     keep_alive: false
     model_path: /mnt/pve_models/qwen2.5-72b-exl2-8_0
     supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
     description: "Qwen2.5 72B EXL2 8.0bpw 量化"
-
-  Gemma-4-31B-GGUF-Q4:
-    service: llama_cpp
-    port: 8001
-    required_memory: 20GB
-    preload: false
-    keep_alive: false
-    model_path: /mnt/pve_models/Gemma-4-31B-GGUF-Q4/gemma-4-31b-q4_k_m.gguf
-    supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
-    n_gpu_layers: -1
-    ctx_size: 8192
-    host: "0.0.0.0"
-    description: "Gemma 4 31B GGUF Q4_K_M 量化（llama_cpp 后端）"
-
-  Qwen3.6-35B-GGUF-Q4:
-    service: llama_cpp
-    port: 8002
-    required_memory: 24GB
-    preload: false
-    keep_alive: false
-    model_path: /mnt/pve_models/Qwen3.6-35B-GGUF-Q4/qwen3.6-35b-q4_k_m.gguf
-    supports_images: false
-    supports_tool_calling: false
-    supports_image_generation: false
-    n_gpu_layers: -1
-    ctx_size: 8192
-    host: "0.0.0.0"
-    description: "Qwen3.6 35B GGUF Q4_K_M 量化（llama_cpp 后端）"
 
 settings:
   concurrency_limit: 32
@@ -174,9 +122,9 @@ settings:
   default_memory_strategy: balanced
 
   redis:
-    host: jetson-local.hamr.top
+    host: localhost
     port: 6379
-    db: 1
+    db: 0
 
   logging:
     log_dir: logs

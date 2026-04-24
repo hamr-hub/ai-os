@@ -1,4 +1,4 @@
-import type { DefineComponent } from 'vue'
+import type { Component } from 'vue'
 
 export interface DocItem {
   slug: string
@@ -48,7 +48,7 @@ export const docTree: DocItem[] = [
   },
 ]
 
-const docModules: Record<string, () => Promise<{ default: DefineComponent<{}, {}, any> }>> = {
+const docModules: Record<string, () => Promise<{ default: Component }>> = {
   'deployment/deployment-guide': () => import('../../../docs/deployment/deployment-guide.md'),
   'deployment/docker-compose-dev': () => import('../../../docs/deployment/docker-compose-dev.md'),
   'deployment/docker-compose-prod': () => import('../../../docs/deployment/docker-compose-prod.md'),

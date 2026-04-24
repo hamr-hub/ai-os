@@ -12,21 +12,35 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Activity,
-  MessageSquare,
   BookOpen,
+  Settings,
+  ShieldCheck,
+  Cpu
 } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
+import { useGPU } from '@/composables/useGPU'
 
 const router = useRouter()
 const route = useRoute()
 const store = useAppStore()
+const { gpuSummary } = useGPU()
 
-const navItems = [
-  { name: 'dashboard', label: '仪表盘', icon: LayoutDashboard },
-  { name: 'monitor', label: '实时监控', icon: Activity },
-  { name: 'models', label: '模型管理', icon: Server },
-  { name: 'agent', label: 'Agent', icon: Bot },
-  { name: 'docs', label: '文档', icon: BookOpen },
+const groups = [
+  {
+    title: '核心控制',
+    items: [
+      { name: 'dashboard', label: '总览面板', icon: LayoutDashboard },
+      { name: 'models', label: '模型调度', icon: Server },
+      { name: 'agent', label: 'AI Agent', icon: Bot },
+    ]
+  },
+  {
+    title: '数据监控',
+    items: [
+      { name: 'monitor', label: '实时性能', icon: Activity },
+      { name: 'docs', label: '系统文档', icon: BookOpen },
+    ]
+  }
 ]
 
 const isActive = (name: string) => route.name === name
@@ -49,9 +63,11 @@ const themeIcon = computed(() => {
 
 const themeLabel = computed(() => {
   if (store.sidebarCollapsed) return ''
-  if (store.theme === 'system') return '跟随系统'
-  return store.actualTheme === 'dark' ? '深色模式' : '浅色模式'
+  if (store.theme === 'system') return '系统跟随'
+  return store.actualTheme === 'dark' ? '深色视觉' : '浅色视觉'
 })
+
+const gpuInfo = computed(() => gpuSummary.value?.current)
 
 const toggleCollapse = () => {
   store.toggleSidebar()
@@ -59,54 +75,83 @@ const toggleCollapse = () => {
 </script>
 
 <template>
-  <aside class="sidebar" :class="{ collapsed: store.sidebarCollapsed }">
+  <aside class="sidebar animate-scan-v" :class="{ collapsed: store.sidebarCollapsed }">
     <div class="sidebar-inner">
-      <div class="logo-section">
-        <div class="logo-icon">
+      <!-- Logo 区域 -->
+      <div class="logo-section" @click="navigateTo('dashboard')">
+        <div class="logo-icon neon-glow-primary">
           <Zap class="w-5 h-5 text-white" />
         </div>
         <transition name="fade">
           <div v-if="!store.sidebarCollapsed" class="logo-text">
-            <h1 class="logo-title">AI OS</h1>
+            <h1 class="logo-title digital-font">AI OS <span class="v-tag">v2.0</span></h1>
+            <p class="logo-subtitle">Neural Controller</p>
           </div>
         </transition>
-        <button
-          class="collapse-btn"
-          :title="store.sidebarCollapsed ? '展开' : '折叠'"
-          @click="toggleCollapse"
-        >
-          <PanelLeftClose v-if="!store.sidebarCollapsed" class="w-4 h-4" />
-          <PanelLeftOpen v-else class="w-4 h-4" />
-        </button>
       </div>
 
-      <nav class="nav-section">
-        <button
-          v-for="item in navItems"
-          :key="item.name"
-          class="nav-item"
-          :class="{ active: isActive(item.name) }"
-          :title="store.sidebarCollapsed ? item.label : ''"
-          @click="navigateTo(item.name)"
-        >
-          <component :is="item.icon" class="nav-icon" />
+      <!-- 导航分组 -->
+      <div class="nav-container scrollbar-none">
+        <div v-for="group in groups" :key="group.title" class="nav-group">
           <transition name="fade">
-            <span v-if="!store.sidebarCollapsed" class="nav-label">{{ item.label }}</span>
+            <h3 v-if="!store.sidebarCollapsed" class="group-title">{{ group.title }}</h3>
           </transition>
-        </button>
-      </nav>
+          <div class="group-items">
+            <button
+              v-for="item in group.items"
+              :key="item.name"
+              class="nav-item hover-trigger"
+              :class="{ active: isActive(item.name) }"
+              @click="navigateTo(item.name)"
+            >
+              <component :is="item.icon" class="nav-icon" />
+              <transition name="fade">
+                <span v-if="!store.sidebarCollapsed" class="nav-label">{{ item.label }}</span>
+              </transition>
+              <div v-if="isActive(item.name)" class="active-glow"></div>
+            </button>
+          </div>
+        </div>
+      </div>
 
+      <!-- 底部系统仪表盘 -->
       <div class="bottom-section">
-        <button
-          class="nav-item theme-btn"
-          :title="store.sidebarCollapsed ? '切换主题' : ''"
-          @click="cycleTheme"
-        >
-          <component :is="themeIcon" class="nav-icon" />
-          <transition name="fade">
-            <span v-if="!store.sidebarCollapsed" class="nav-label">{{ themeLabel }}</span>
-          </transition>
-        </button>
+        <transition name="fade">
+          <div v-if="!store.sidebarCollapsed && gpuInfo" class="gpu-widget tech-border">
+            <div class="widget-header">
+              <Cpu class="w-3.5 h-3.5 text-primary" />
+              <span class="widget-title digital-font">GPU STATUS</span>
+            </div>
+            <div class="widget-body">
+              <div class="stat-row">
+                <span class="stat-label">LOAD</span>
+                <span class="stat-value digital-font" :class="gpuInfo.utilization > 80 ? 'text-red-400' : 'text-green-400'">
+                  {{ gpuInfo.utilization.toFixed(0) }}%
+                </span>
+              </div>
+              <div class="stat-bar-bg">
+                <div class="stat-bar-fill" :style="{ width: gpuInfo.utilization + '%' }" :class="gpuInfo.utilization > 80 ? 'bg-red-500' : 'bg-green-500'"></div>
+              </div>
+              <div class="stat-row mt-2">
+                <span class="stat-label">VRAM</span>
+                <span class="stat-value digital-font">{{ (gpuInfo.used_memory / 1024).toFixed(1) }}G</span>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <div class="action-buttons">
+          <button class="action-btn" @click="cycleTheme" :title="themeLabel">
+            <component :is="themeIcon" class="w-4.5 h-4.5" />
+          </button>
+          <button class="action-btn" @click="toggleCollapse" :title="store.sidebarCollapsed ? '展开' : '收起'">
+            <PanelLeftOpen v-if="store.sidebarCollapsed" class="w-4.5 h-4.5" />
+            <PanelLeftClose v-else class="w-4.5 h-4.5" />
+          </button>
+          <button class="action-btn" title="系统安全">
+            <ShieldCheck class="w-4.5 h-4.5" />
+          </button>
+        </div>
       </div>
     </div>
   </aside>
@@ -116,16 +161,14 @@ const toggleCollapse = () => {
 .sidebar {
   position: fixed;
   left: 0;
-  top: var(--topbar-height);
+  top: 0;
   width: var(--sidebar-width);
-  height: calc(100vh - var(--topbar-height));
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
+  height: 100vh;
+  z-index: 100;
   background: var(--bg-sidebar);
-  border-right: 1px solid rgba(99, 102, 241, 0.12);
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.3);
+  border-right: 1px solid rgba(99, 102, 241, 0.15);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
 }
 
 .sidebar.collapsed {
@@ -136,162 +179,102 @@ const toggleCollapse = () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
 }
 
 .logo-section {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
-  min-height: 56px;
-  position: relative;
-}
-.logo-section::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 16px;
-  right: 16px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.3), transparent);
-}
-
-.sidebar.collapsed .logo-section {
-  justify-content: center;
-  padding: 16px 12px;
+  padding: 24px 20px;
+  cursor: pointer;
 }
 
 .logo-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow:
-    0 4px 12px rgba(var(--color-primary-rgb), 0.3),
-    0 0 20px rgba(var(--color-primary-rgb), 0.15);
   flex-shrink: 0;
-  transition: box-shadow 0.3s;
-}
-.sidebar:hover .logo-icon {
-  box-shadow:
-    0 4px 16px rgba(var(--color-primary-rgb), 0.4),
-    0 0 30px rgba(var(--color-primary-rgb), 0.2);
 }
 
 .logo-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
   color: var(--text-primary);
-  letter-spacing: -0.5px;
-  white-space: nowrap;
+  margin: 0;
+  line-height: 1;
 }
 
-.collapse-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+.v-tag {
+  font-size: 10px;
+  background: rgba(99, 102, 241, 0.2);
+  color: var(--color-primary-light);
+  padding: 1px 4px;
+  border-radius: 4px;
+  vertical-align: top;
+  margin-left: 2px;
+}
+
+.logo-subtitle {
+  font-size: 10px;
   color: var(--text-muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-left: auto;
-  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
 }
 
-.collapse-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.sidebar.collapsed .collapse-btn {
-  margin-left: 0;
-  position: absolute;
-  right: -12px;
-  top: 16px;
-  width: 24px;
-  height: 24px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-card);
-  box-shadow: var(--shadow);
-  z-index: 60;
-  border-radius: 6px;
-}
-
-.nav-section {
+.nav-container {
   flex: 1;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  padding: 12px;
   overflow-y: auto;
 }
 
-.sidebar.collapsed .nav-section {
-  padding: 8px 8px;
+.nav-group {
+  margin-bottom: 20px;
+}
+
+.group-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 0 12px 8px;
+}
+
+.group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  cursor: pointer;
-  border: none;
+  padding: 10px 14px;
+  border-radius: 12px;
+  color: var(--text-sidebar);
+  border: 1px solid transparent;
   background: transparent;
-  text-align: left;
+  cursor: pointer;
   width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
   position: relative;
+  overflow: hidden;
 }
 
 .nav-item:hover {
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text-primary);
-  background: var(--bg-hover);
-  transform: translateX(2px);
-  box-shadow: 0 0 8px rgba(var(--color-primary-rgb), 0.05);
 }
 
 .nav-item.active {
-  color: var(--color-primary);
-  background: rgba(var(--color-primary-rgb), 0.1);
-  box-shadow: 0 0 12px rgba(var(--color-primary-rgb), 0.08);
-}
-
-[data-theme='dark'] .nav-item.active {
-  background: rgba(var(--color-primary-rgb), 0.15);
-}
-
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-  border-radius: 0 3px 3px 0;
-}
-
-.sidebar.collapsed .nav-item {
-  justify-content: center;
-  padding: 10px;
-  gap: 0;
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.2);
+  color: var(--color-primary-light);
 }
 
 .nav-icon {
@@ -301,31 +284,109 @@ const toggleCollapse = () => {
 }
 
 .nav-label {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.active-glow {
+  position: absolute;
+  left: 0;
+  top: 25%;
+  height: 50%;
+  width: 3px;
+  background: var(--color-primary);
+  border-radius: 0 4px 4px 0;
+  box-shadow: 0 0 10px var(--color-primary);
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 12px;
 }
 
 .bottom-section {
-  padding: 8px;
-  border-top: 1px solid rgba(99, 102, 241, 0.1);
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.gpu-widget {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.widget-header {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.widget-title {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.stat-label { color: var(--text-muted); }
+
+.stat-bar-bg {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  transition: width 0.5s ease;
+}
+
+.action-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.action-btn {
+  flex: 1;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--color-primary-light);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.sidebar.collapsed .gpu-widget {
+  display: none;
+}
+
+.sidebar.collapsed .action-buttons {
   flex-direction: column;
-  gap: 2px;
 }
 
-.sidebar.collapsed .bottom-section {
-  padding: 8px 8px;
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
 }
-
-.fade-enter-active {
-  transition: opacity 0.2s ease;
-}
-.fade-leave-active {
-  transition: opacity 0.1s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
+.fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
 </style>

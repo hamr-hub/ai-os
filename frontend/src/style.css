@@ -60,9 +60,13 @@
   --toast-info-text: #60a5fa;
   --toast-info-border: rgba(59, 130, 246, 0.3);
 
-  --sidebar-width: 220px;
-  --sidebar-collapsed-width: 64px;
-  --topbar-height: 44px;
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 68px;
+  --topbar-height: 56px;
+
+  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.25);
+  --shadow-neon-green: 0 0 15px rgba(34, 197, 94, 0.3);
+  --shadow-neon-blue: 0 0 15px rgba(59, 130, 246, 0.3);
 }
 
 [data-theme='light'] {
@@ -637,4 +641,83 @@ body {
 
 [data-theme='light'] .markdown-body blockquote {
   background: #f1f5f9;
+}
+
+/* Tech & Futuristic Utilities */
+@layer utilities {
+  .tech-border {
+    position: relative;
+    border: 1px solid var(--border-card);
+    overflow: hidden;
+  }
+
+  .tech-border::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+    animation: scan-horizontal 3s linear infinite;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .glass-card {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .neon-glow-primary { box-shadow: 0 0 15px rgba(99, 102, 241, 0.4); }
+  .neon-glow-green { box-shadow: 0 0 15px rgba(34, 197, 94, 0.4); }
+
+  .digital-font {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    letter-spacing: -0.5px;
+  }
+
+  .hover-trigger {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hover-trigger:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-primary-light);
+    box-shadow: var(--shadow-glow);
+  }
+
+  .animate-pulse-soft {
+    animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@keyframes scan-horizontal {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes scan-vertical {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-scan-v {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-scan-v::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 100%;
+  background: linear-gradient(to bottom, transparent 0%, rgba(99, 102, 241, 0.05) 50%, transparent 100%);
+  animation: scan-vertical 4s linear infinite;
+  pointer-events: none;
 }

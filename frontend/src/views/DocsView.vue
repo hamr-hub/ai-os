@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, defineAsyncComponent, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { docTree, getDocLoader, type DocItem } from '@/docs'
 import { BookOpen, ChevronRight, ChevronDown, FileText, FolderOpen } from 'lucide-vue-next'
@@ -9,7 +9,7 @@ const router = useRouter()
 
 const expandedGroups = ref<Set<string>>(new Set(['deployment']))
 const currentDoc = ref<string>('deployment-guide')
-const currentComponent = ref<any>(null)
+const currentComponent = ref<unknown>(null)
 const loading = ref(false)
 
 const slugFromRoute = computed(() => {
@@ -76,8 +76,6 @@ watch(slugFromRoute, (newSlug) => {
     loadDoc(newSlug)
   }
 })
-
-const currentDocItem = computed(() => findDocItem(currentDoc.value))
 </script>
 
 <template>

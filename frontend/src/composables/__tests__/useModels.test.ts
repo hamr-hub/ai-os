@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useModels } from '@/composables/useModels'
-import { getModelsStatus, startModel, stopModel } from '@/api/client'
+import { startModel, stopModel } from '@/api/client'
 
 const { mockModelStatus } = vi.hoisted(() => ({
   mockModelStatus: {
