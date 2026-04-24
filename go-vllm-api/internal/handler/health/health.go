@@ -48,7 +48,8 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 	}
 
 	gpuStatus := h.gpuMonitor.GetStatus()
-	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus)
+	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
+	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
 	result := gin.H{
 		"status":       healthInfo["status"],
 		"timestamp":    time.Now().Format(time.RFC3339),
@@ -61,7 +62,8 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 
 func (h *HealthHandler) HealthCheckDetailed(c *gin.Context) {
 	gpuStatus := h.gpuMonitor.GetStatus()
-	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus)
+	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
+	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
 	result := gin.H{
 		"status":  healthInfo["status"],
 		"timestamp": time.Now().Format(time.RFC3339),

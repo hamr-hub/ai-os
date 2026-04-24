@@ -4,6 +4,7 @@ import asyncio
 import httpx
 import threading
 import logging
+import time
 from typing import Dict, Optional, List, Set
 from datetime import datetime, timedelta
 from .rate_limiter import RateLimiter
@@ -480,15 +481,37 @@ class Scheduler:
             with self._model_lock:
                 self.running_models[model_name] = datetime.now()
 
+            # Poll for readiness instead of arbitrary sleep
             preload_timeout = self.config.get('settings', {}).get('preload_timeout', 120)
-            await asyncio.sleep(min(30, preload_timeout))
-
-            await self._send_warmup_request(model_name)
-
-            gpu_util = self.config.get('settings', {}).get('gpu_memory_utilization', 0.9)
-            await self._adjust_gpu_utilization(model_name, gpu_util)
+            port = self.get_model_port(model_name)
+            ready = await self._wait_for_model_ready(model_name, port, timeout=preload_timeout)
+            
+            if ready:
+                await self._send_warmup_request(model_name)
+                gpu_util = self.config.get('settings', {}).get('gpu_memory_utilization', 0.9)
+                await self._adjust_gpu_utilization(model_name, gpu_util)
+                return True
+            else:
+                logger.error(f"Model {model_name} failed to become ready within {preload_timeout}s")
+                return False
 
         return success
+
+    async def _wait_for_model_ready(self, model_name: str, port: int, timeout: int) -> bool:
+        """Poll the model's health endpoint until it is ready."""
+        start_time = time.time()
+        url = f"http://localhost:{port}/v1/models"
+        
+        while time.time() - start_time < timeout:
+            try:
+                async with httpx.AsyncClient(timeout=2) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        return True
+            except Exception:
+                pass
+            await asyncio.sleep(2)
+        return False
     
     async def stop_model(self, model_name: str) -> bool:
         config = self.get_model_config(model_name)

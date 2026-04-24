@@ -107,6 +107,9 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.GET("/redis/keys", h.RedisKeys)
 		m.DELETE("/redis/flush", h.RedisFlush)
 		m.GET("/monitor/all", h.MonitorAll)
+		m.GET("/gpu/enhanced", h.GetGPUEnhancedInfo)
+		m.GET("/gpu/processes", h.GetGPUProcesses)
+		m.GET("/vllm/metrics", h.GetVLLMMetrics)
 		m.GET("/llama_cpp/models", h.GetLlamaCppModels)
 		m.GET("/llama_cpp/status", h.GetLlamaCppStatus)
 		m.GET("/vllm/models", h.GetVLLMModels)
@@ -510,7 +513,8 @@ func (h *ManageHandler) CheckAlertStatus(c *gin.Context) {
 	}
 
 	gpuStatus := h.gpuMonitor.GetStatus()
-	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus)
+	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
+	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
 	alertStatus := h.metrics.GetOverallAlertStatus(gpuStatus)
 	overallScore := 0.0
 	if v, ok := healthInfo["overall"].(float64); ok {
@@ -808,7 +812,7 @@ func (h *ManageHandler) MonitorAll(c *gin.Context) {
 		}
 	}
 
-	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus)
+	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, h.gpuMonitor.GetVLLMMetrics())
 	serviceStatus := gin.H{
 		"vllm": h.sysCtl.GetServiceStatus("vllm"),
 	}
@@ -1005,4 +1009,27 @@ func (h *ManageHandler) GetTestResults(c *gin.Context) {
 		"status": "found",
 		"report": result,
 	})
+}
+
+func (h *ManageHandler) GetGPUEnhancedInfo(c *gin.Context) {
+	enhanced := h.gpuMonitor.GetEnhancedInfo()
+	if enhanced == nil {
+		c.JSON(http.StatusOK, gin.H{"status": "unavailable", "message": "No GPU detected"})
+		return
+	}
+	c.JSON(http.StatusOK, enhanced)
+}
+
+func (h *ManageHandler) GetGPUProcesses(c *gin.Context) {
+	processes := h.gpuMonitor.GetGPUProcesses()
+	if processes == nil {
+		c.JSON(http.StatusOK, gin.H{"processes": []interface{}{}, "count": 0})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"processes": processes, "count": len(processes)})
+}
+
+func (h *ManageHandler) GetVLLMMetrics(c *gin.Context) {
+	metrics := h.gpuMonitor.GetVLLMMetrics()
+	c.JSON(http.StatusOK, metrics)
 }

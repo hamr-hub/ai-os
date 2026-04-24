@@ -14,7 +14,12 @@ import {
   Settings,
   Wrench,
 } from 'lucide-vue-next'
-import { chatCompletionStream, type ChatMessage } from '@/api/client'
+import {
+  chatCompletionStream,
+  agentChatStream,
+  type ChatMessage,
+  type AgentMessage,
+} from '@/api/client'
 import { useModels } from '@/composables/useModels'
 import { useAppStore } from '@/stores/app'
 import { useAgentChatStore } from '@/stores/agentChat'
@@ -35,6 +40,8 @@ const showSystemPrompt = ref(false)
 const systemPromptInput = ref('')
 const showScrollBottom = ref(false)
 const isAutoScrolling = ref(true)
+const enableTools = ref(false)
+const executingTools = ref<Array<{ name: string; id: string }>>([])
 
 const currentConv = computed(() => agentChatStore.currentConversation)
 const messages = computed(() => currentConv.value?.messages || [])
@@ -118,40 +125,121 @@ const handleSend = async () => {
     abortController.value = new AbortController()
 
     const apiMessages: ChatMessage[] = []
+    const agentMessages: AgentMessage[] = []
 
     if (currentConv.value?.systemPrompt) {
       apiMessages.push({ role: 'system', content: currentConv.value.systemPrompt })
+      agentMessages.push({ role: 'system', content: currentConv.value.systemPrompt })
     }
 
     messages.value
       .filter((m) => m.role !== 'system')
       .slice(0, -1)
-      .forEach((m) => apiMessages.push({ role: m.role, content: m.content }))
+      .forEach((m) => {
+        apiMessages.push({ role: m.role, content: m.content })
+        agentMessages.push({ role: m.role, content: m.content })
+      })
 
-    await chatCompletionStream(
-      {
-        model: activeModel.value || undefined,
-        messages: apiMessages,
-        max_tokens: 2048,
-        temperature: 0.7,
-      },
-      (chunk) => {
-        if (streamingMessageId.value && currentConv.value) {
-          const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
-          if (msg) {
-            msg.content += chunk
-            nextTick(() => scrollToBottom())
+    if (enableTools.value) {
+      // Agent mode with tool calling
+      await agentChatStream(
+        {
+          model: activeModel.value || undefined,
+          messages: agentMessages,
+          max_iterations: 5,
+          auto_confirm: false,
+        },
+        (data) => {
+          // Handle different event types
+          const typedData = data as Record<string, unknown>
+          const type = typedData.type as string | undefined
+
+          if (type === 'tool_calls_start') {
+            // Clear previous content, show tool execution status
+            if (streamingMessageId.value && currentConv.value) {
+              const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
+              if (msg) {
+                msg.content = '\n🔄 正在执行工具...\n'
+              }
+            }
+            executingTools.value = []
+          } else if (type === 'tool_executing') {
+            const name = typedData.name as string
+            const id = typedData.id as string
+            executingTools.value.push({ name, id })
+            if (streamingMessageId.value && currentConv.value) {
+              const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
+              if (msg) {
+                msg.content += `\n⚙️ 执行: ${name}...\n`
+                nextTick(() => scrollToBottom())
+              }
+            }
+          } else if (type === 'tool_result') {
+            const name = typedData.name as string
+            const success = typedData.success as boolean
+            if (streamingMessageId.value && currentConv.value) {
+              const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
+              if (msg) {
+                const icon = success ? '✅' : '❌'
+                msg.content += `${icon} ${name}: ${success ? '成功' : '失败'}\n`
+                nextTick(() => scrollToBottom())
+              }
+            }
+          } else if (typedData.choices && Array.isArray(typedData.choices)) {
+            // Regular streaming content
+            const delta = typedData.choices[0]?.delta as { content?: string } | undefined
+            if (delta?.content) {
+              if (streamingMessageId.value && currentConv.value) {
+                const msg = currentConv.value.messages.find(
+                  (m) => m.id === streamingMessageId.value
+                )
+                if (msg) {
+                  // Clear tool execution status on first content
+                  if (msg.content.includes('正在执行工具') || msg.content.includes('执行:')) {
+                    msg.content = ''
+                  }
+                  msg.content += delta.content
+                  nextTick(() => scrollToBottom())
+                }
+              }
+            }
           }
-        }
-      },
-      (error) => {
-        appStore.error(`请求失败: ${error.message}`)
-        streamingMessageId.value = null
-      },
-      abortController.value.signal
-    )
+        },
+        (error) => {
+          appStore.error(`请求失败: ${error.message}`)
+          streamingMessageId.value = null
+          executingTools.value = []
+        },
+        abortController.value.signal
+      )
+    } else {
+      // Normal chat mode
+      await chatCompletionStream(
+        {
+          model: activeModel.value || undefined,
+          messages: apiMessages,
+          max_tokens: 2048,
+          temperature: 0.7,
+        },
+        (chunk) => {
+          if (streamingMessageId.value && currentConv.value) {
+            const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
+            if (msg) {
+              msg.content += chunk
+              nextTick(() => scrollToBottom())
+            }
+          }
+        },
+        (error) => {
+          appStore.error(`请求失败: ${error.message}`)
+          streamingMessageId.value = null
+        },
+        abortController.value.signal
+      )
+    }
 
     streamingMessageId.value = null
+    executingTools.value = []
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       return
@@ -262,6 +350,14 @@ const autoResize = (event: Event) => {
           @click="showSystemPrompt = !showSystemPrompt"
         >
           <Settings class="w-4 h-4" />
+        </button>
+        <button
+          class="tool-toggle"
+          :class="{ active: enableTools }"
+          title="工具调用"
+          @click="enableTools = !enableTools"
+        >
+          <Wrench class="w-4 h-4" />
         </button>
       </div>
 
@@ -577,6 +673,30 @@ const autoResize = (event: Event) => {
   color: #6366f1;
   border-color: #6366f1;
   background: rgba(99, 102, 241, 0.1);
+}
+
+.tool-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-left: 8px;
+}
+.tool-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+.tool-toggle.active {
+  color: #f59e0b;
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .sys-prompt-panel {

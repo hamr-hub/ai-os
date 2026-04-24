@@ -4,59 +4,144 @@ import json
 import os
 import time
 import subprocess
+import signal
 
 STATE_FILE = "/tmp/ai_os_state.json"
+PID_DIR = "/tmp/ai_os_pids"
+
+if not os.path.exists(PID_DIR):
+    os.makedirs(PID_DIR)
+
+SERVICE_PORTS = {
+    "vllm-gemma": 8000,
+    "vllm-llama": 8001,
+    "vllm-aiclient": 8000
+}
 
 def get_state():
     if not os.path.exists(STATE_FILE):
         return {"vllm": {"status": "stopped"}}
-    with open(STATE_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {"vllm": {"status": "stopped"}}
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
-def handle_start():
+def get_pid(service_name):
+    pid_file = os.path.join(PID_DIR, f"{service_name}.pid")
+    if os.path.exists(pid_file):
+        with open(pid_file, "r") as f:
+            try:
+                return int(f.read().strip())
+            except:
+                return None
+    return None
+
+def save_pid(service_name, pid):
+    pid_file = os.path.join(PID_DIR, f"{service_name}.pid")
+    with open(pid_file, "w") as f:
+        f.write(str(pid))
+
+def clear_pid(service_name):
+    pid_file = os.path.join(PID_DIR, f"{service_name}.pid")
+    if os.path.exists(pid_file):
+        os.remove(pid_file)
+
+def is_pid_running(pid):
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+def handle_start(service_name):
+    pid = get_pid(service_name)
+    if is_pid_running(pid):
+        return 0
+    
+    port = SERVICE_PORTS.get(service_name, 8000)
+    mock_script = os.path.join(os.path.dirname(__file__), "vllm_mock.py")
+    
+    # Use the same python interpreter as systemctl script
+    python_exe = sys.executable
+    
+    cmd = [python_exe, mock_script, "--port", str(port)]
+    
+    # Start in background
+    # Use a log file for debugging
+    log_file = open(os.path.join(PID_DIR, f"{service_name}.log"), "a")
+    proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, preexec_fn=os.setpgrp)
+    
+    save_pid(service_name, proc.pid)
+    
     state = get_state()
     state["vllm"]["status"] = "loading"
     state["vllm"]["loading_start"] = time.time()
+    state["vllm"]["model"] = service_name
     save_state(state)
-    # Simulate loading transition in background
-    # After 20-60s, it will become active
-    # For now, we just set the state to loading. 
-    # The vllm_mock.py will handle the transition or we can start a small script.
+    
     return 0
 
-def handle_stop():
+def handle_stop(service_name):
+    pid = get_pid(service_name)
+    if is_pid_running(pid):
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+            # wait up to 5s
+            for _ in range(50):
+                if not is_pid_running(pid):
+                    break
+                time.sleep(0.1)
+            if is_pid_running(pid):
+                os.killpg(os.getpgid(pid), signal.SIGKILL)
+        except:
+            pass
+    
+    clear_pid(service_name)
+    
     state = get_state()
-    state["vllm"]["status"] = "stopped"
-    state["vllm"]["pid"] = 0
-    save_state(state)
+    if state["vllm"].get("model") == service_name:
+        state["vllm"]["status"] = "stopped"
+        state["vllm"]["pid"] = 0
+        save_state(state)
     return 0
 
-def handle_status():
-    state = get_state()
-    status = state["vllm"]["status"]
-    if status in ["loading", "active"]:
+def handle_status(service_name):
+    pid = get_pid(service_name)
+    if is_pid_running(pid):
         print("active")
+        return 0
     else:
         print("inactive")
-    return 0
+        return 3 # systemctl is-active returns 3 for inactive
 
-def handle_show():
+def handle_show(service_name):
+    pid = get_pid(service_name)
+    running = is_pid_running(pid)
     state = get_state()
-    status = state["vllm"]["status"]
-    if status == "active":
-        print("ActiveState=active")
-        print("SubState=running")
-        print("MainPID=77777")
-        print("MemoryCurrent=22000000000")
-    elif status == "loading":
-        print("ActiveState=active")
-        print("SubState=activating")
-        print("MainPID=77777")
-        print("MemoryCurrent=12000000000")
+    
+    if running:
+        status = state["vllm"]["status"]
+        if status == "active":
+            print("ActiveState=active")
+            print("SubState=running")
+            print(f"MainPID={pid}")
+            print("MemoryCurrent=22000000000")
+        elif status == "loading":
+            print("ActiveState=active")
+            print("SubState=activating")
+            print(f"MainPID={pid}")
+            print("MemoryCurrent=12000000000")
+        else:
+            print("ActiveState=active")
+            print("SubState=running")
+            print(f"MainPID={pid}")
     else:
         print("ActiveState=inactive")
         print("SubState=dead")
@@ -69,17 +154,19 @@ if not args:
     sys.exit(1)
 
 cmd = args[0]
+service_name = args[1] if len(args) > 1 else "vllm-aiclient"
+
 if cmd == "start":
-    sys.exit(handle_start())
+    sys.exit(handle_start(service_name))
 elif cmd == "stop":
-    sys.exit(handle_stop())
+    sys.exit(handle_stop(service_name))
 elif cmd == "restart":
-    handle_stop()
-    sys.exit(handle_start())
+    handle_stop(service_name)
+    sys.exit(handle_start(service_name))
 elif cmd == "is-active":
-    sys.exit(handle_status())
+    sys.exit(handle_status(service_name))
 elif cmd == "show":
-    sys.exit(handle_show())
+    sys.exit(handle_show(service_name))
 else:
     # ignore other commands
     sys.exit(0)

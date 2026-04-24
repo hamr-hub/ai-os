@@ -257,12 +257,13 @@ func (m *MetricsCollector) Reset() {
 	}
 }
 
-func (m *MetricsCollector) GetComprehensiveHealthScore(gpuStatus *GPUStatus) map[string]interface{} {
+func (m *MetricsCollector) GetComprehensiveHealthScore(gpuStatus *GPUStatus, vllmMetrics *VLLMMetricsData) map[string]interface{} {
 	serviceScore := m.calculateServiceScore()
 	gpuScore := m.calculateGPUScore(gpuStatus)
 	responseScore := m.calculateResponseScore()
+	vllmScore := m.calculateVLLMScore(vllmMetrics)
 
-	overall := serviceScore*0.4 + gpuScore*0.3 + responseScore*0.3
+	overall := serviceScore*0.25 + gpuScore*0.25 + vllmScore*0.25 + responseScore*0.25
 	status := "healthy"
 	if overall < 50 {
 		status = "critical"
@@ -276,10 +277,48 @@ func (m *MetricsCollector) GetComprehensiveHealthScore(gpuStatus *GPUStatus) map
 		"overall":        overall,
 		"status":         status,
 		"service_score":  serviceScore,
-		"gpu_score":      gpuScore,
-		"response_score": responseScore,
+		"gpu_overall":    gpuScore,
+		"vllm_inference": vllmScore,
+		"response_time":  responseScore,
 		"alerts":         m.GetGPUAlerts(gpuStatus),
 	}
+}
+
+func (m *MetricsCollector) calculateVLLMScore(vllmMetrics *VLLMMetricsData) float64 {
+	score := 100.0
+	if vllmMetrics == nil || !vllmMetrics.VLLMAvailable {
+		return 50.0
+	}
+
+	if vllmMetrics.GPUCacheUsage >= 95 {
+		score -= 30
+	} else if vllmMetrics.GPUCacheUsage >= 85 {
+		score -= 15
+	}
+
+	if vllmMetrics.WaitingRequests >= 20 {
+		score -= 25
+	} else if vllmMetrics.WaitingRequests >= 5 {
+		score -= 10
+	}
+
+	if vllmMetrics.GenerationThroughput > 0 && vllmMetrics.GenerationThroughput < 10 {
+		score -= 20
+	}
+
+	if vllmMetrics.TimeToFirstToken > 5 {
+		score -= 15
+	} else if vllmMetrics.TimeToFirstToken > 2 {
+		score -= 5
+	}
+
+	if score < 0 {
+		score = 0
+	}
+	if score > 100 {
+		score = 100
+	}
+	return score
 }
 
 func (m *MetricsCollector) calculateServiceScore() float64 {
@@ -495,7 +534,7 @@ func (m *MetricsCollector) GetGPUHistory(limit int) []GPUHistoryEntry {
 
 func (m *MetricsCollector) GetDetailedMetrics() map[string]interface{} {
 	base := m.GetMetrics()
-	base["health"] = m.GetComprehensiveHealthScore(nil)
+	base["health"] = m.GetComprehensiveHealthScore(nil, nil)
 	return base
 }
 

@@ -4,6 +4,7 @@ import random
 import time
 import os
 from datetime import datetime, timedelta
+from typing import Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -365,11 +366,85 @@ async def test_model(model_name: str):
 async def test_reports():
     return {"status": "ok", "reports": {}}
 
-@app.get("/v1/test/report/{model_name}")
-async def test_report(model_name: str):
-    return {"status": "ok", "message": f"Report for {model_name}", "report": {
-        "model_name": model_name,
-        "test_timestamp": datetime.now().isoformat(),
-        "overall_status": "passed",
-        "feature_support": {"chat": True, "tool_calling": False, "image": True, "multimodal": True, "image_generation": False},
-    }}
+@app.get("/manage/default-model")
+async def get_default_model():
+    return {"default_model": DEFAULT_MODEL}
+
+@app.post("/manage/default-model/{model_name}")
+async def set_default_model(model_name: str):
+    if model_name not in MOCK_MODELS:
+        raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
+    DEFAULT_MODEL = model_name
+    return {"status": "ok", "default_model": model_name}
+
+@app.delete("/manage/default-model")
+async def clear_default_model():
+    DEFAULT_MODEL = None
+    return {"status": "ok", "default_model": None}
+
+@app.get("/manage/agent/tools")
+async def agent_list_tools(categories: Optional[str] = None):
+    return {
+        "tools": [
+            {"type": "function", "function": {"name": "get_system_info", "description": "Get system info", "parameters": {"type": "object", "properties": {}, "required": []}}},
+            {"type": "function", "function": {"name": "list_models", "description": "List models", "parameters": {"type": "object", "properties": {}, "required": []}}},
+            {"type": "function", "function": {"name": "start_model", "description": "Start model", "parameters": {"type": "object", "properties": {"model_name": {"type": "string"}}, "required": ["model_name"]}}},
+            {"type": "function", "function": {"name": "stop_model", "description": "Stop model", "parameters": {"type": "object", "properties": {"model_name": {"type": "string"}}, "required": ["model_name"]}}},
+            {"type": "function", "function": {"name": "get_gpu_status", "description": "Get GPU status", "parameters": {"type": "object", "properties": {}, "required": []}}},
+        ],
+        "categories": ["system", "models", "gpu", "chat", "files", "web"],
+        "count": 5,
+    }
+
+@app.get("/manage/agent/tools/{tool_name}")
+async def agent_get_tool(tool_name: str):
+    return {
+        "name": tool_name,
+        "description": f"Tool {tool_name}",
+        "parameters": [],
+        "category": "system",
+        "dangerous": False,
+        "requires_confirmation": False,
+        "openai_schema": {"type": "function", "function": {"name": tool_name, "description": f"Tool {tool_name}", "parameters": {"type": "object", "properties": {}, "required": []}}},
+    }
+
+@app.post("/manage/agent/execute/{tool_name}")
+async def agent_execute_single(tool_name: str, request: Request):
+    return {"tool_name": tool_name, "success": True, "result": {"mock": True}, "execution_time": 0.1}
+
+@app.post("/manage/agent/execute")
+async def agent_execute_batch(request: Request):
+    return {"results": [], "success": True}
+
+@app.get("/manage/agent/history")
+async def agent_history(limit: int = 100):
+    return {"history": [], "statistics": {"total_calls": 0, "success_rate": 0}}
+
+@app.delete("/manage/agent/history")
+async def agent_clear_history():
+    return {"status": "success", "message": "History cleared"}
+
+@app.post("/manage/agent/chat")
+async def agent_chat(request: Request):
+    body = await request.json()
+    running_model = None
+    for name, info in MOCK_MODELS.items():
+        if info["running"] and info["status"] == "running":
+            running_model = name
+            break
+    return {
+        "id": "agent-mock",
+        "model": running_model or "mock",
+        "message": {"role": "assistant", "content": "This is a mock agent response."},
+        "iterations": 1,
+        "finished": True,
+    }
+
+@app.get("/manage/system/history")
+async def system_history(count: int = 60):
+    points = [_system_point(i * 10) for i in range(count)]
+    return {"history": points, "count": count}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=35000)

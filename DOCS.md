@@ -4,10 +4,11 @@
 AI OS 是一个基于 "外壳解耦，内核驱动" 架构的本地大模型管理平台。它将 UI 界面（AIClient-2-API）与推理控制逻辑（AI Controller）分离，解决了 vLLM 启动慢、显存易溢出、资源占用高、缺乏监控等痛点。
 
 ### 核心架构
-1.  **入口层 (Node.js)**: `aiclient2api` - 提供 UI、用户鉴权、OpenAI 协议转发。
+1.  **入口层 (Node.js)**: `aiclient2api` - 提供 AI 对话 UI、用户鉴权、OpenAI 协议转发。
 2.  **控制层 (Python)**: `app-controller` - 核心大脑，负责模型生命周期管理、显存监控、请求排队、健康检查。
-3.  **基础设施**: Redis (队列)、Systemd (服务管理)、nvidia-smi (监控)。
-4.  **推理层**: vLLM 实例，执行实际 AI 推理。
+3.  **管理后台 (Vue 3)**: `frontend` - 专门用于 GPU 监控、模型状态可视化及队列管理。
+4.  **基础设施**: Redis (队列)、Systemd (服务管理)、nvidia-smi (监控)。
+5.  **推理层**: vLLM 实例，执行实际 AI 推理。
 
 ---
 
@@ -17,21 +18,28 @@ AI OS 是一个基于 "外壳解耦，内核驱动" 架构的本地大模型管�
 1.  **基础依赖**: 确保系统已安装 NVIDIA 驱动、CUDA、Python 3.10+、Node.js 18+、Redis。
 2.  **控制层安装**:
     ```bash
-    cd app-controller
-    ./setup.sh
+    cd app-controller && ./setup.sh
     ```
-3.  **入口层安装**:
+3.  **管理后台安装**:
     ```bash
-    cd aiclient2api
-    npm install
+    cd frontend && npm install
     ```
-4.  **一键启动**:
+4.  **入口层安装**:
+    ```bash
+    cd aiclient2api && npm install
+    ```
+5.  **一键启动**:
     ```bash
     ./start.sh
     ```
 
-### SOP 02: 添加/修改新模型
-1.  **编辑配置**: 修改根目录或 `app-controller/config.yaml`。
+### SOP 02: 启动开发环境
+-   **控制层 (后端)**: `cd app-controller && ./start.sh`
+-   **管理后台 (前端)**: `cd frontend && npm run dev`
+-   **入口层 (UI)**: `cd aiclient2api && npm start`
+
+### SOP 03: 添加/修改新模型
+1.  **编辑配置**: 修改 `app-controller/config.yaml`。
     ```yaml
     models:
       My-New-Model:
@@ -47,7 +55,7 @@ AI OS 是一个基于 "外壳解耦，内核驱动" 架构的本地大模型管�
     curl -X POST http://localhost:35000/manage/config/reload
     ```
 
-### SOP 03: 生产环境部署 (Systemd)
+### SOP 04: 生产环境部署 (Systemd)
 1.  **同步服务文件**:
     ```bash
     sudo cp systemd/*.service /etc/systemd/system/
@@ -62,13 +70,13 @@ AI OS 是一个基于 "外壳解耦，内核驱动" 架构的本地大模型管�
     journalctl -u ai-controller -f
     ```
 
-### SOP 04: 日常运维与监控
+### SOP 05: 日常运维与监控
 -   **检查 GPU**: `curl http://localhost:35000/manage/gpu`
 -   **检查模型**: `curl http://localhost:35000/manage/models`
 -   **手动启停**: `curl -X POST http://localhost:35000/manage/models/{name}/[start|stop]`
 -   **查看日志**: `tail -f app-controller/logs/ai_controller.log`
 
-### SOP 05: 模型评测与性能测试
+### SOP 06: 模型评测与性能测试
 1.  **运行自动化评测**: 
     ```bash
     curl -X POST http://localhost:35000/v1/test/model/My-Model
@@ -76,11 +84,6 @@ AI OS 是一个基于 "外壳解耦，内核驱动" 架构的本地大模型管�
 2.  **查看评测报告**: 
     ```bash
     curl http://localhost:35000/v1/test/reports
-    ```
-3.  **运行本地性能脚本**:
-    ```bash
-    cd app-controller
-    python performance_test.py
     ```
 
 ---
