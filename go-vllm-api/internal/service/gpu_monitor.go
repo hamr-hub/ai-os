@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -791,12 +792,12 @@ func (m *GPUMonitor) GetHealthScore() float64 {
 
 	tempScore := 100.0
 	if temp > 85 {
-		tempScore = max(0, 100-(temp-85)*5)
+		tempScore = math.Max(0, float64(100-(temp-85)*5))
 	}
 
 	memScore := 100.0
 	if memUtil > 90 {
-		memScore = max(0, 100-(memUtil-90)*10)
+		memScore = math.Max(0, float64(100-(memUtil-90)*10))
 	}
 
 	throttlePenalty := 0.0

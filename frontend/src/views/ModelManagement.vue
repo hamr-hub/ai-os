@@ -63,13 +63,9 @@ onMounted(() => {
 
 async function fetchCapabilities() {
   for (const m of runningModels.value) {
-    try {
-      const result = await getTestResults(m.name)
-      if (result.report?.feature_support) {
-        modelCapabilities.value[m.name] = result.report.feature_support
-        cachedResults.value[m.name] = result
-      }
-    } catch {}
+    } catch (e) {
+      console.warn(`Failed to fetch test results for ${m.name}:`, e)
+    }
   }
 }
 
@@ -90,7 +86,8 @@ async function fetchHistory() {
   historyLoading.value = true
   try {
     historyList.value = await getTestHistory()
-  } catch {
+  } catch (e) {
+    console.warn('Failed to fetch test history:', e)
   } finally {
     historyLoading.value = false
   }
@@ -124,7 +121,9 @@ async function loadTestResults(modelName: string) {
     const result = await getTestResults(modelName)
     testResult.value = result
     cachedResults.value[modelName] = result
-  } catch {}
+  } catch (e) {
+    console.warn(`Failed to load test results for ${modelName}:`, e)
+  }
 }
 
 function toggleExpand(name: string) {

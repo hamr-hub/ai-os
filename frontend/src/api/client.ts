@@ -355,8 +355,7 @@ export async function listAgentTools(categories?: string): Promise<{
   count: number
 }> {
   const params = categories ? { categories } : {}
-  const serverStore = useServerStore()
-  const { data } = await client.get(`${serverStore.manageBase}/agent/tools`, { params })
+  const { data } = await client.get('/agent/tools', { params })
   return data
 }
 
@@ -368,8 +367,7 @@ export async function getAgentToolInfo(toolName: string): Promise<{
   dangerous: boolean
   requires_confirmation: boolean
 }> {
-  const serverStore = useServerStore()
-  const { data } = await client.get(`${serverStore.manageBase}/agent/tools/${toolName}`)
+  const { data } = await client.get(`/agent/tools/${toolName}`)
   return data
 }
 

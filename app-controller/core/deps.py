@@ -58,5 +58,7 @@ _background_tasks = []
 
 
 def _on_config_changed(new_config):
-    structured_logger.info("Configuration updated", action="config_reload")
+    model_count = len(new_config.get('models', {}))
+    structured_logger.info(f"Configuration updated, models={model_count}, keys={list(new_config.get('models', {}).keys())[:5]}", action="config_reload")
+    cache_service.delete_pattern("ai_controller:cache:*")
     scheduler.config = new_config

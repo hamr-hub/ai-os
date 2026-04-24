@@ -112,7 +112,12 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.GET("/vllm/metrics", h.GetVLLMMetrics)
 		m.GET("/llama_cpp/models", h.GetLlamaCppModels)
 		m.GET("/llama_cpp/status", h.GetLlamaCppStatus)
+		m.POST("/llama_cpp/:model_name/start", h.StartLlamaCppModel)
+		m.POST("/llama_cpp/:model_name/stop", h.StopLlamaCppModel)
+		m.GET("/llama_cpp/:model_name/status", h.GetLlamaCppModelStatus)
 		m.GET("/vllm/models", h.GetVLLMModels)
+		m.GET("/metrics/health-detail", h.GetHealthDetail)
+		m.GET("/gpu/memory-optimization", h.GetMemoryOptimization)
 	}
 
 	v1 := rg.Group("/v1")
@@ -185,9 +190,10 @@ func (h *ManageHandler) GetGPUSummary(c *gin.Context) {
 	}
 
 	result := gin.H{
-		"status":  "available",
-		"current": current,
-		"history": history,
+		"status":       "available",
+		"current":      current,
+		"history":      history,
+		"health_score": h.gpuMonitor.GetHealthScore(),
 	}
 	h.cache.Set(cacheKey, result, 30)
 	c.JSON(http.StatusOK, result)
@@ -1040,11 +1046,71 @@ func (h *ManageHandler) GetHealthDetail(c *gin.Context) {
 	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
 	healthScores := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
 	gpuAlerts := h.metrics.GetGPUAlerts(gpuStatus)
+	healthScore := h.gpuMonitor.GetHealthScore()
 	c.JSON(http.StatusOK, gin.H{
 		"health_scores":       healthScores,
 		"gpu_alerts":          gpuAlerts,
+		"health_score":        healthScore,
 		"gpu_status_summary":  gpuStatus,
 		"vllm_metrics_summary": vllmMetrics,
 		"timestamp":           time.Now().Format(time.RFC3339),
 	})
+}
+
+func (h *ManageHandler) StartLlamaCppModel(c *gin.Context) {
+	modelName := c.Param("model_name")
+	if !h.scheduler.IsModelAvailable(modelName) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
+		return
+	}
+	backendType := h.scheduler.GetModelBackendType(modelName)
+	if backendType != "llama_cpp" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Model %s is not a llama_cpp model (backend: %s)", modelName, backendType)})
+		return
+	}
+	if h.llamaCppMgr.IsServerRunning(modelName) {
+		c.JSON(http.StatusOK, gin.H{"status": "already_running", "model": modelName})
+		return
+	}
+	err := h.llamaCppMgr.StartServerByName(c.Request.Context(), modelName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to start llama_cpp model %s: %v", modelName, err)})
+		return
+	}
+	h.scheduler.MarkModelSelected(modelName)
+	c.JSON(http.StatusOK, gin.H{"status": "starting", "model": modelName, "backend_type": "llama_cpp"})
+}
+
+func (h *ManageHandler) StopLlamaCppModel(c *gin.Context) {
+	modelName := c.Param("model_name")
+	if !h.scheduler.IsModelAvailable(modelName) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
+		return
+	}
+	backendType := h.scheduler.GetModelBackendType(modelName)
+	if backendType != "llama_cpp" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Model %s is not a llama_cpp model (backend: %s)", modelName, backendType)})
+		return
+	}
+	if !h.llamaCppMgr.IsServerRunning(modelName) {
+		c.JSON(http.StatusOK, gin.H{"status": "already_stopped", "model": modelName})
+		return
+	}
+	err := h.llamaCppMgr.StopServer(modelName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to stop llama_cpp model %s: %v", modelName, err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "stopped", "model": modelName, "backend_type": "llama_cpp"})
+}
+
+func (h *ManageHandler) GetLlamaCppModelStatus(c *gin.Context) {
+	modelName := c.Param("model_name")
+	status := h.llamaCppMgr.GetModelStatus(modelName)
+	c.JSON(http.StatusOK, status)
+}
+
+func (h *ManageHandler) GetMemoryOptimization(c *gin.Context) {
+	status := h.gpuMonitor.GetMemoryOptimizationStatus()
+	c.JSON(http.StatusOK, status)
 }

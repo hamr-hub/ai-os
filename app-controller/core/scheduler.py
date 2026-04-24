@@ -151,16 +151,9 @@ class Scheduler:
         return self._find_matching_model(model_name) is not None
     
     def get_model_config(self, model_name: str) -> Optional[Dict]:
-        cache_key = f"ai_controller:cache:model_config:{model_name}"
-        cached_config = cache_service.get(cache_key)
-        if cached_config is not None:
-            return cached_config
-        
         matched_name = self._find_matching_model(model_name)
         if matched_name:
             config = self.config.get('models', {}).get(matched_name)
-            if config:
-                cache_service.set(cache_key, config, ttl=300)
             return config
         return None
     

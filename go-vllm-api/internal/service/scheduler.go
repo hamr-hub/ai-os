@@ -19,6 +19,7 @@ type Scheduler struct {
 	sysCtl        *SystemController
 	redis         *repository.RedisRepo
 	cfg           *config.AppConfig
+	llamaCppMgr   *LlamaCppManager
 	runningModels map[string]time.Time
 	preloaded     map[string]bool
 	modelLastUsed map[string]time.Time
@@ -27,13 +28,14 @@ type Scheduler struct {
 	rateLimiter   *RateLimiter
 }
 
-func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig) *Scheduler {
+func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig, llamaCppMgr *LlamaCppManager) *Scheduler {
 	s := &Scheduler{
 		logger:        logger,
 		gpuMonitor:    gpuMonitor,
 		sysCtl:        sysCtl,
 		redis:         redis,
 		cfg:           cfg,
+		llamaCppMgr:   llamaCppMgr,
 		runningModels: make(map[string]time.Time),
 		preloaded:     make(map[string]bool),
 		modelLastUsed: make(map[string]time.Time),
@@ -165,7 +167,10 @@ func (s *Scheduler) GetModelSupportsImageGeneration(name string) bool {
 func (s *Scheduler) GetModelBackendType(name string) string {
 	mc := s.GetModelConfig(name)
 	if mc != nil {
-		return mc.Service
+		if mc.Service == "llama_cpp" {
+			return "llama_cpp"
+		}
+		return "vllm"
 	}
 	return ""
 }
@@ -175,6 +180,22 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 	if matched == "" {
 		return false
 	}
+	backendType := s.GetModelBackendType(matched)
+
+	if backendType == "llama_cpp" {
+		running := s.llamaCppMgr.IsServerRunning(matched)
+		s.mu.Lock()
+		if running {
+			if _, ok := s.runningModels[matched]; !ok {
+				s.runningModels[matched] = time.Now()
+			}
+		} else {
+			delete(s.runningModels, matched)
+		}
+		s.mu.Unlock()
+		return running
+	}
+
 	port := s.GetModelPort(matched)
 	if port > 0 && s.sysCtl.GetProcessInfo(port) {
 		s.mu.Lock()
@@ -358,6 +379,40 @@ func (s *Scheduler) StartModel(ctx context.Context, name string) (bool, error) {
 	if mc == nil {
 		return false, fmt.Errorf("model config not found: %s", name)
 	}
+
+	backendType := s.GetModelBackendType(matched)
+
+	if backendType == "llama_cpp" {
+		if s.llamaCppMgr.IsServerRunning(matched) {
+			s.mu.Lock()
+			s.runningModels[matched] = time.Now()
+			s.mu.Unlock()
+			return true, nil
+		}
+
+		mem := s.gpuMonitor.GetMemoryUsage()
+		if mem != nil {
+			requiredMem := config.ParseMemorySize(mc.RequiredMemory)
+			if mem.Available < requiredMem+s.GetMinAvailableMemory() {
+				ok, err := s.freeUpMemory(ctx, matched)
+				if !ok {
+					return false, fmt.Errorf("insufficient memory: %w", err)
+				}
+			}
+		}
+
+		err := s.llamaCppMgr.StartServerByName(ctx, matched)
+		if err != nil {
+			s.logger.Error("failed to start llama_cpp model", zap.String("model", matched), zap.Error(err))
+			return false, err
+		}
+		s.mu.Lock()
+		s.runningModels[matched] = time.Now()
+		s.mu.Unlock()
+		s.logger.Info("llama_cpp model started", zap.String("model", matched))
+		return true, nil
+	}
+
 	if s.sysCtl.IsServiceRunning(mc.Service) {
 		s.mu.Lock()
 		s.runningModels[matched] = time.Now()
@@ -395,6 +450,22 @@ func (s *Scheduler) StopModel(ctx context.Context, name string) bool {
 	if mc == nil {
 		return false
 	}
+
+	backendType := s.GetModelBackendType(matched)
+
+	if backendType == "llama_cpp" {
+		err := s.llamaCppMgr.StopServer(matched)
+		if err != nil {
+			s.logger.Error("failed to stop llama_cpp model", zap.String("model", matched), zap.Error(err))
+			return false
+		}
+		s.mu.Lock()
+		delete(s.runningModels, matched)
+		s.mu.Unlock()
+		s.logger.Info("llama_cpp model stopped", zap.String("model", matched))
+		return true
+	}
+
 	success := s.sysCtl.StopService(mc.Service)
 	if success {
 		s.mu.Lock()
@@ -504,4 +575,47 @@ func (s *Scheduler) PreloadWatcherLoop(ctx context.Context) {
 			}
 		}
 	}
+}
+
+type PreloadStatusDetail struct {
+	Preloaded    bool   `json:"preloaded"`
+	Running      bool   `json:"running"`
+	PreloadConfig bool  `json:"preload_config"`
+	KeepAlive    bool   `json:"keep_alive"`
+}
+
+type PreloadStatus struct {
+	PreloadedModels []string                      `json:"preloaded_models"`
+	AllModels       []string                      `json:"all_models"`
+	Status          map[string]PreloadStatusDetail `json:"status"`
+}
+
+func (s *Scheduler) GetPreloadStatus() *PreloadStatus {
+	allModels := s.GetAvailableModels()
+	status := make(map[string]PreloadStatusDetail)
+	for _, m := range allModels {
+		mc := s.GetModelConfig(m)
+		status[m] = PreloadStatusDetail{
+			Preloaded:    s.IsModelPreloaded(m),
+			Running:      s.IsModelRunning(m),
+			PreloadConfig: func() bool { if mc != nil { return mc.Preload }; return false }(),
+			KeepAlive:    func() bool { if mc != nil { return mc.KeepAlive }; return false }(),
+		}
+	}
+	return &PreloadStatus{
+		PreloadedModels: s.GetPreloadedModels(),
+		AllModels:       allModels,
+		Status:          status,
+	}
+}
+
+func (s *Scheduler) SwitchModelWithFallback(ctx context.Context, target string, fallback string) bool {
+	if s.SwitchModel(ctx, target) {
+		return true
+	}
+	if fallback != "" && fallback != target {
+		s.logger.Info("primary switch failed, trying fallback", zap.String("target", target), zap.String("fallback", fallback))
+		return s.SwitchModel(ctx, fallback)
+	}
+	return false
 }
