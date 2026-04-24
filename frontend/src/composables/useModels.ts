@@ -120,7 +120,7 @@ export function useModels() {
 
   const startAutoRefresh = () => {
     if (refreshInterval) return
-    refreshInterval = window.setInterval(fetchModelStatus, 5000)
+    refreshInterval = window.setInterval(fetchModelStatus, 30000)
   }
 
   const stopAutoRefresh = () => {

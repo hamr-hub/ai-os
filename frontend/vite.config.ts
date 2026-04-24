@@ -23,26 +23,25 @@ export default defineConfig({
     port: 30000,
     proxy: {
       '/api/manage': {
-        target: 'http://localhost:35000',
+        target: 'http://ssh.hamr.top:27145',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/api': {
-        target: 'http://localhost:35000',
+        target: 'http://ssh.hamr.top:27145',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/manage'),
       },
       '/v1/test': {
-        target: 'http://localhost:35000',
+        target: 'http://ssh.hamr.top:27145',
         changeOrigin: true,
-        rewrite: (path) => path,
       },
       '/v1': {
-        target: 'http://localhost:35001',
+        target: 'http://ssh.hamr.top:27145',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:35001',
+        target: 'http://ssh.hamr.top:27145',
         changeOrigin: true,
       },
     },

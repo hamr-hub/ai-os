@@ -219,7 +219,7 @@ export interface QueueStatus {
 export interface HealthAlert {
   should_alert: boolean
   health_score: number
-  status: 'healthy' | 'degraded' | 'unhealthy'
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'warning'
   alert_reasons: string[]
   timestamp: string
 }

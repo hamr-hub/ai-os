@@ -7,7 +7,7 @@ import type {
 
 const client = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 60000,
 })
 
 const v1Client = axios.create({
@@ -70,12 +70,12 @@ export async function getTestHistory(): Promise<TestHistoryEntry[]> {
 }
 
 export async function getTokenStats(): Promise<TokenStats> {
-  const { data } = await client.get<TokenStats>('/manage/token/stats')
+  const { data } = await client.get<TokenStats>('/token/stats')
   return data
 }
 
 export async function getGPUHistory(count: number = 60): Promise<{ history: GPUHistoryEntry[]; count: number; enabled: boolean; max_days: number }> {
-  const { data } = await client.get('/manage/gpu/history', { params: { count } })
+  const { data } = await client.get('/gpu/history', { params: { count } })
   return data
 }
 
@@ -85,32 +85,32 @@ export async function healthCheck(): Promise<{ status: string }> {
 }
 
 export async function getDefaultModel(): Promise<{ default_model: string | null }> {
-  const { data } = await client.get<{ default_model: string | null }>('/manage/default-model')
+  const { data } = await client.get<{ default_model: string | null }>('/default-model')
   return data
 }
 
 export async function setDefaultModel(modelName: string): Promise<ActionResponse> {
-  const { data } = await client.post<ActionResponse>(`/manage/default-model/${modelName}`)
+  const { data } = await client.post<ActionResponse>(`/default-model/${modelName}`)
   return data
 }
 
 export async function clearDefaultModel(): Promise<ActionResponse> {
-  const { data } = await client.delete<ActionResponse>('/manage/default-model')
+  const { data } = await client.delete<ActionResponse>('/default-model')
   return data
 }
 
 export async function getSystemStatus(): Promise<SystemStatus> {
-  const { data } = await client.get<SystemStatus>('/manage/system/status')
+  const { data } = await client.get<SystemStatus>('/system/status')
   return data
 }
 
 export async function getQueueStatus(): Promise<QueueStatus> {
-  const { data } = await client.get<QueueStatus>('/manage/queue')
+  const { data } = await client.get<QueueStatus>('/queue')
   return data
 }
 
 export async function getHealthAlert(): Promise<HealthAlert> {
-  const { data } = await client.get<HealthAlert>('/manage/health/alert')
+  const { data } = await client.get<HealthAlert>('/health/alert')
   return data
 }
 

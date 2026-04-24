@@ -81,7 +81,7 @@ onMounted(() => {
   statsInterval = window.setInterval(() => {
     fetchTokenStats()
     fetchGPUHistory()
-  }, 5000)
+  }, 30000)
 })
 onUnmounted(() => {
   if (statsInterval) clearInterval(statsInterval)

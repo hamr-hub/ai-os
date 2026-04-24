@@ -9,6 +9,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.18.0
+	github.com/shirou/gopsutil/v3 v3.24.5
 	go.uber.org/zap v1.27.1
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -44,7 +45,6 @@ require (
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
-	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect

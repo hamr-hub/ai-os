@@ -50,7 +50,7 @@ const refreshAll = () => {
 let statsInterval: number | null = null
 onMounted(() => {
   fetchGPUHistory()
-  statsInterval = window.setInterval(fetchGPUHistory, 10000)
+  statsInterval = window.setInterval(fetchGPUHistory, 30000)
 })
 onUnmounted(() => {
   if (statsInterval) clearInterval(statsInterval)
@@ -98,7 +98,7 @@ const sparklineDatasets = (key: keyof GPUHistoryEntry, color: string, bgColor: s
 
 const healthStatusColor = (status: string) => {
   if (status === 'healthy') return { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', label: '健康' }
-  if (status === 'degraded') return { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', label: '降级' }
+  if (status === 'degraded' || status === 'warning') return { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', label: '降级' }
   return { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', label: '异常' }
 }
 

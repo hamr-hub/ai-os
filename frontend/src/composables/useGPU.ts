@@ -33,7 +33,7 @@ export function useGPU() {
 
   const startAutoRefresh = () => {
     if (refreshInterval) return
-    refreshInterval = window.setInterval(fetchGPUData, 3000)
+    refreshInterval = window.setInterval(fetchGPUData, 30000)
   }
 
   const stopAutoRefresh = () => {
