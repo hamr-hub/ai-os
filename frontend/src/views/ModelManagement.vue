@@ -226,7 +226,9 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
                     <span class="status-dot online"></span>
                     <span class="backend-tag">{{ model.backend_type }}</span>
                     端口 {{ model.port ?? '--' }} · {{ model.active_requests }} 请求
-                    <span v-if="model.required_memory" class="mem-req">显存 {{ model.required_memory }}</span>
+                    <span v-if="model.required_memory" class="mem-req"
+                      >显存 {{ model.required_memory }}</span
+                    >
                   </span>
                 </div>
                 <span v-if="defaultModel === model.name" class="default-badge">
@@ -290,7 +292,9 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
                   <span class="backend-tag">{{ model.backend_type }}</span>
                   端口 {{ model.port ?? '--' }}
                   <span v-if="model.preloaded" class="preload-tag">预加载</span>
-                  <span v-if="model.required_memory" class="mem-req">显存 {{ model.required_memory }}</span>
+                  <span v-if="model.required_memory" class="mem-req"
+                    >显存 {{ model.required_memory }}</span
+                  >
                 </span>
               </div>
               <div class="item-actions">

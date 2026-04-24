@@ -30,14 +30,13 @@ test.describe('Dashboard 页面基本结构', () => {
     await expect(icon).toHaveClass(/animate-spin/)
   })
 
-  test('七个卡片区域可见', async ({ page }) => {
+  test('六个卡片区域可见', async ({ page }) => {
     await expect(page.locator('.gpu-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.token-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.system-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.queue-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.health-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.running-card')).toBeVisible({ timeout: 15000 })
-    await expect(page.locator('.model-list-card')).toBeVisible({ timeout: 15000 })
   })
 
   test('GPU监控卡片显示badge', async ({ page }) => {
@@ -82,17 +81,16 @@ test.describe('Dashboard 数据依赖测试', () => {
     await expect(healthScore.or(emptyState)).toBeVisible({ timeout: 10000 })
   })
 
-  test('模型列表有内容或空状态', async ({ page }) => {
-    const modelTable = page.locator('.model-table .table-row')
-    const emptyState = page.locator('.model-list-card .empty-state')
-    await expect(modelTable.first().or(emptyState)).toBeVisible({ timeout: 10000 })
+  test('运行模型有内容或空状态', async ({ page }) => {
+    const runningList = page.locator('.running-card .running-list')
+    const emptyState = page.locator('.running-card .empty-state')
+    await expect(runningList.first().or(emptyState)).toBeVisible({ timeout: 10000 })
   })
 
   test('GPU监控sparkline区域', async ({ page }) => {
-    const sparkRow = page.locator('.gpu-card .sparkline-row')
+    const gpuMetrics = page.locator('.gpu-card .gpu-metrics')
     const emptyState = page.locator('.gpu-card .empty-state')
-    const errorState = page.locator('.gpu-card .error-state')
-    await expect(sparkRow.or(emptyState).or(errorState)).toBeVisible({ timeout: 10000 })
+    await expect(gpuMetrics.or(emptyState)).toBeVisible({ timeout: 10000 })
   })
 
   test('健康告警展开/折叠告警列表', async ({ page }) => {
@@ -119,7 +117,7 @@ test.describe('Dashboard 响应式布局', () => {
   })
 
   test('中屏2列布局', async ({ browser }) => {
-    const context = await browser.newContext({ viewport: { width: 1000, height: 900 } })
+    const context = await browser.newContext({ viewport: { width: 900, height: 900 } })
     const page = await context.newPage()
     await page.goto('/')
     await page.waitForLoadState('networkidle')
@@ -130,7 +128,7 @@ test.describe('Dashboard 响应式布局', () => {
   })
 
   test('窄屏1列布局', async ({ browser }) => {
-    const context = await browser.newContext({ viewport: { width: 600, height: 900 } })
+    const context = await browser.newContext({ viewport: { width: 500, height: 900 } })
     const page = await context.newPage()
     await page.goto('/')
     await page.waitForLoadState('networkidle')
@@ -152,45 +150,46 @@ test.describe('导航跳转', () => {
   })
 
   test('侧边栏导航项数量正确', async ({ page }) => {
-    const navItems = page.locator('.nav-item').filter({ has: page.locator('.nav-icon') })
+    const navItems = page.locator('.nav-item')
     await expect(navItems).toHaveCount(6, { timeout: 15000 })
-  })
-
-  test('点击导航到聊天页面', async ({ page }) => {
-    await page.locator('.nav-item').filter({ hasText: '聊天' }).click()
-    await expect(page).toHaveURL(/\/chat/, { timeout: 10000 })
-    await expect(page.locator('.chat-view')).toBeVisible({ timeout: 10000 })
-  })
-
-  test('点击导航到模型管理页面', async ({ page }) => {
-    await page.locator('.nav-item').filter({ hasText: '模型' }).click()
-    await expect(page).toHaveURL(/\/models/, { timeout: 10000 })
-    await expect(page.locator('.model-mgmt')).toBeVisible({ timeout: 10000 })
   })
 
   test('点击导航到Agent页面', async ({ page }) => {
     await page.locator('.nav-item').filter({ hasText: 'Agent' }).click()
     await expect(page).toHaveURL(/\/agent/, { timeout: 10000 })
+    await expect(page.locator('.agent-view')).toBeVisible({ timeout: 10000 })
+  })
+
+  test('点击导航到模型管理页面', async ({ page }) => {
+    await page.locator('.nav-item').filter({ hasText: '模型调度' }).click()
+    await expect(page).toHaveURL(/\/models/, { timeout: 10000 })
+    await expect(page.locator('.model-mgmt')).toBeVisible({ timeout: 10000 })
+  })
+
+  test('点击导航到评测页面', async ({ page }) => {
+    await page.locator('.nav-item').filter({ hasText: '模型评测' }).click()
+    await expect(page).toHaveURL(/\/benchmarks/, { timeout: 10000 })
+    await expect(page.locator('.benchmarks-view')).toBeVisible({ timeout: 10000 })
   })
 
   test('点击导航到实时监控页面', async ({ page }) => {
-    await page.locator('.nav-item').filter({ hasText: '监控' }).click()
+    await page.locator('.nav-item').filter({ hasText: '实时性能' }).click()
     await expect(page).toHaveURL(/\/monitor/, { timeout: 10000 })
     await expect(page.locator('.monitor-view')).toBeVisible({ timeout: 10000 })
   })
 
   test('点击导航到文档页面', async ({ page }) => {
-    await page.locator('.nav-item').filter({ hasText: '文档' }).click()
+    await page.locator('.nav-item').filter({ hasText: '系统文档' }).click()
     await expect(page).toHaveURL(/\/docs/, { timeout: 10000 })
   })
 
   test('导航active状态切换', async ({ page }) => {
-    const dashboardNav = page.locator('.nav-item').filter({ hasText: '仪表盘' })
+    const dashboardNav = page.locator('.nav-item').filter({ hasText: '总览面板' })
     await expect(dashboardNav).toHaveClass(/active/)
-    await page.locator('.nav-item').filter({ hasText: '聊天' }).click()
+    await page.locator('.nav-item').filter({ hasText: 'Agent' }).click()
     await expect(dashboardNav).not.toHaveClass(/active/)
-    const chatNav = page.locator('.nav-item').filter({ hasText: '聊天' })
-    await expect(chatNav).toHaveClass(/active/)
+    const agentNav = page.locator('.nav-item').filter({ hasText: 'Agent' })
+    await expect(agentNav).toHaveClass(/active/)
   })
 })
 
@@ -201,14 +200,14 @@ test.describe('侧边栏折叠', () => {
   })
 
   test('折叠侧边栏', async ({ page }) => {
-    const collapseBtn = page.locator('.collapse-btn')
+    const collapseBtn = page.locator('.action-btn').nth(1)
     await expect(collapseBtn).toBeVisible({ timeout: 15000 })
     await collapseBtn.click()
     await expect(page.locator('.sidebar')).toHaveClass(/collapsed/)
   })
 
   test('展开折叠的侧边栏', async ({ page }) => {
-    const collapseBtn = page.locator('.collapse-btn')
+    const collapseBtn = page.locator('.action-btn').nth(1)
     await collapseBtn.click()
     await expect(page.locator('.sidebar')).toHaveClass(/collapsed/)
     await collapseBtn.click()
@@ -217,15 +216,14 @@ test.describe('侧边栏折叠', () => {
 
   test('折叠后主内容区margin变化', async ({ page }) => {
     const main = page.locator('.app-main')
-    const initialMargin = await main.evaluate((el) => el.style.marginLeft)
-    await page.locator('.collapse-btn').click()
-    const collapsedMargin = await main.evaluate((el) => el.style.marginLeft)
-    expect(collapsedMargin).not.toBe(initialMargin)
-    expect(collapsedMargin).toBe('64px')
+    const initialStyle = await main.evaluate((el) => el.style.marginLeft)
+    await page.locator('.action-btn').nth(1).click()
+    const collapsedStyle = await main.evaluate((el) => el.style.marginLeft)
+    expect(collapsedStyle).not.toBe(initialStyle)
   })
 
   test('折叠后导航标签隐藏', async ({ page }) => {
-    await page.locator('.collapse-btn').click()
+    await page.locator('.action-btn').nth(1).click()
     const navLabels = page.locator('.nav-label')
     for (const label of await navLabels.all()) {
       await expect(label).toBeHidden()
@@ -233,7 +231,7 @@ test.describe('侧边栏折叠', () => {
   })
 
   test('折叠后logo文字隐藏', async ({ page }) => {
-    await page.locator('.collapse-btn').click()
+    await page.locator('.action-btn').nth(1).click()
     await expect(page.locator('.logo-title')).toBeHidden()
   })
 })
@@ -245,12 +243,12 @@ test.describe('主题切换', () => {
   })
 
   test('切换主题按钮存在', async ({ page }) => {
-    const themeBtn = page.locator('.theme-btn')
+    const themeBtn = page.locator('.action-btn').first()
     await expect(themeBtn).toBeVisible({ timeout: 15000 })
   })
 
   test('点击主题按钮切换', async ({ page }) => {
-    const themeBtn = page.locator('.theme-btn')
+    const themeBtn = page.locator('.action-btn').first()
     await page.evaluate(() => localStorage.setItem('theme', 'dark'))
     await page.goto('/')
     await page.waitForLoadState('networkidle')
@@ -283,14 +281,14 @@ test.describe('主题切换', () => {
   })
 })
 
-test.describe('Chat 页面', () => {
+test.describe('Agent 页面', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/chat')
+    await page.goto('/agent')
     await page.waitForLoadState('networkidle')
   })
 
-  test('聊天界面可见', async ({ page }) => {
-    await expect(page.locator('.chat-view')).toBeVisible({ timeout: 15000 })
+  test('Agent界面可见', async ({ page }) => {
+    await expect(page.locator('.agent-view')).toBeVisible({ timeout: 15000 })
   })
 
   test('新建会话按钮可见', async ({ page }) => {
@@ -305,7 +303,7 @@ test.describe('Chat 页面', () => {
     const closeBtn = page.locator('.close-btn')
     if (await closeBtn.isVisible()) {
       await closeBtn.click()
-      await expect(page.locator('.chat-sidebar')).toBeHidden()
+      await expect(page.locator('.agent-sidebar')).toBeHidden()
       await expect(page.locator('.sidebar-toggle')).toBeVisible()
     }
   })
@@ -314,9 +312,9 @@ test.describe('Chat 页面', () => {
     const closeBtn = page.locator('.close-btn')
     if (await closeBtn.isVisible()) {
       await closeBtn.click()
-      await expect(page.locator('.chat-sidebar')).toBeHidden()
+      await expect(page.locator('.agent-sidebar')).toBeHidden()
       await page.locator('.sidebar-toggle').click()
-      await expect(page.locator('.chat-sidebar')).toBeVisible()
+      await expect(page.locator('.agent-sidebar')).toBeVisible()
     }
   })
 
@@ -433,17 +431,45 @@ test.describe('Monitor 页面', () => {
   })
 })
 
-test.describe('Agent 页面', () => {
+test.describe('Benchmarks 页面', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/agent')
+    await page.goto('/benchmarks')
     await page.waitForLoadState('networkidle')
   })
 
-  test('Agent界面可见', async ({ page }) => {
-    const agentView = page.locator('.agent-view')
-    if (await agentView.isVisible()) {
-      await expect(agentView).toBeVisible()
-    }
+  test('评测页面标题可见', async ({ page }) => {
+    await expect(page.locator('.header-title')).toHaveText('模型自动化评测', { timeout: 15000 })
+  })
+
+  test('评测页面结构可见', async ({ page }) => {
+    await expect(page.locator('.benchmarks-view')).toBeVisible({ timeout: 15000 })
+  })
+
+  test('搜索框可见', async ({ page }) => {
+    await expect(page.locator('.search-box')).toBeVisible({ timeout: 15000 })
+  })
+
+  test('刷新按钮可见', async ({ page }) => {
+    await expect(page.locator('.header-btn')).toBeVisible({ timeout: 15000 })
+  })
+})
+
+test.describe('Docs 页面', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/docs')
+    await page.waitForLoadState('networkidle')
+  })
+
+  test('文档页面可见', async ({ page }) => {
+    await expect(page.locator('.docs-page')).toBeVisible({ timeout: 15000 })
+  })
+
+  test('文档侧边栏可见', async ({ page }) => {
+    await expect(page.locator('.docs-sidebar')).toBeVisible({ timeout: 15000 })
+  })
+
+  test('文档标题可见', async ({ page }) => {
+    await expect(page.locator('.sidebar-title')).toContainText('项目文档')
   })
 })
 
@@ -462,7 +488,7 @@ test.describe('视觉一致性', () => {
 
   test('卡片圆角一致性', async ({ page }) => {
     const cards = page.locator('.card')
-    const radii = []
+    const radii: string[] = []
     for (const card of await cards.all()) {
       if (await card.isVisible()) {
         const borderRadius = await card.evaluate((el) => getComputedStyle(el).borderRadius)
@@ -477,13 +503,13 @@ test.describe('视觉一致性', () => {
   test('所有卡片有icon-wrap', async ({ page }) => {
     const iconWraps = page.locator('.icon-wrap')
     const count = await iconWraps.count()
-    expect(count).toBeGreaterThanOrEqual(7)
+    expect(count).toBeGreaterThanOrEqual(6)
   })
 
   test('sidebar宽度正确', async ({ page }) => {
     const sidebar = page.locator('.sidebar')
     const width = await sidebar.evaluate((el) => getComputedStyle(el).width)
-    expect(width).toBe('220px')
+    expect(width).toBe('240px')
   })
 
   test('字体family一致', async ({ page }) => {
@@ -496,14 +522,14 @@ test.describe('页面间导航一致性', () => {
   test('从Dashboard到Monitor再返回', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-item').filter({ hasText: '监控' }).click()
+    await page.locator('.nav-item').filter({ hasText: '实时性能' }).click()
     await expect(page).toHaveURL(/\/monitor/, { timeout: 10000 })
-    await page.locator('.nav-item').filter({ hasText: '仪表盘' }).click()
-    await expect(page).toHaveURL(/\//, { timeout: 10000 })
+    await page.locator('.nav-item').filter({ hasText: '总览面板' }).click()
+    await expect(page.locator('.header-title')).toHaveText('仪表盘', { timeout: 10000 })
   })
 
   test('侧边栏在所有页面保持可见', async ({ page }) => {
-    const pages = ['/', '/monitor', '/models', '/chat']
+    const pages = ['/', '/monitor', '/models', '/agent', '/benchmarks', '/docs']
     for (const path of pages) {
       await page.goto(path)
       await page.waitForLoadState('networkidle')

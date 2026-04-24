@@ -22,7 +22,7 @@ export function useSystemData(intervalMs = 10000, initialCount: MaybeRefOrGetter
       const [status, alert, historyData] = await Promise.all([
         getSystemStatus(),
         getHealthAlert(),
-        getSystemHistory(toValue(initialCount))
+        getSystemHistory(toValue(initialCount)),
       ])
       systemStatus.value = status
       healthAlert.value = alert

@@ -25,17 +25,17 @@ export function useTokenHistory(intervalMs = 30000, initialCount: MaybeRefOrGett
     try {
       const [stats, historyData] = await Promise.all([
         getTokenStats(),
-        getTokenHistory(toValue(initialCount))
+        getTokenHistory(toValue(initialCount)),
       ])
-      
+
       tokenStats.value = stats
-      
+
       // Convert server history format to internal format
       tokenHistory.value = historyData.history.map((entry: any) => ({
         timestamp: entry.timestamp,
         total: entry.total_tokens,
         prompt: entry.prompt_tokens,
-        completion: entry.completion_tokens
+        completion: entry.completion_tokens,
       }))
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Token统计获取失败'

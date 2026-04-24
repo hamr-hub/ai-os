@@ -13,7 +13,7 @@ from routes.websocket import websocket_router
 from core.deps import (
     scheduler, gpu_monitor, ws_manager, metrics, prometheus,
     cache_service, cache_updater, redis_client,
-    structured_logger, config_watcher, logger, model_tester, sys_controller,
+    structured_logger, config_watcher, logger, model_tester, sys_controller, system_monitor,
     VLLM_REQUEST_TIMEOUT, VLLM_STREAM_TIMEOUT, VLLM_CLIENT_LIMITS,
     _background_tasks, _on_config_changed
 )

@@ -12,18 +12,10 @@ import {
   Zap,
   RefreshCw,
   Search,
-  Filter,
-  ArrowRightLeft,
 } from 'lucide-vue-next'
-import {
-  runModelTest,
-  getTestHistory,
-  getModels,
-  getTestResults
-} from '@/api/client'
+import { runModelTest, getTestHistory, getModels, getTestResults } from '@/api/client'
 import type { TestHistoryEntry, TestReport, ModelInfo } from '@/types'
 import { useAppStore } from '@/stores/app'
-import LineChart from '@/components/LineChart.vue'
 
 const appStore = useAppStore()
 
@@ -37,25 +29,22 @@ const searchQuery = ref('')
 
 const filteredModels = computed(() => {
   if (!searchQuery.value) return models.value
-  return models.value.filter(m => m.id.toLowerCase().includes(searchQuery.value.toLowerCase()))
+  return models.value.filter((m) => m.id.toLowerCase().includes(searchQuery.value.toLowerCase()))
 })
 
 const fetchInitialData = async () => {
   loading.value = true
   try {
-    const [modelsData, historyData] = await Promise.all([
-      getModels(),
-      getTestHistory()
-    ])
+    const [modelsData, historyData] = await Promise.all([getModels(), getTestHistory()])
     models.value = modelsData.data
     testHistory.value = historyData
-    
+
     if (models.value.length > 0) {
       selectedModel.value = models.value[0].id
       await fetchReport(selectedModel.value)
     }
-  } catch (err) {
-    console.error('Failed to fetch benchmark data:', err)
+  } catch {
+    console.error('Failed to fetch benchmark data:')
   } finally {
     loading.value = false
   }
@@ -69,7 +58,7 @@ const fetchReport = async (modelName: string) => {
     } else {
       currentReport.value = null
     }
-  } catch (err) {
+  } catch {
     currentReport.value = null
   }
 }
@@ -84,7 +73,7 @@ const runTest = async (modelName: string) => {
     }
     // Refresh history
     testHistory.value = await getTestHistory()
-  } catch (err) {
+  } catch {
     appStore.error(`模型 ${modelName} 评测失败`)
   } finally {
     testingModel.value = null
@@ -123,20 +112,6 @@ const getStatusClass = (status: string) => {
       return 'text-yellow-400'
   }
 }
-
-const performanceDatasets = computed(() => {
-  if (!currentReport.value?.performance_metrics?.overall) return []
-  
-  const metrics = currentReport.value.performance_metrics.overall
-  return [
-    {
-      label: 'TPS (Tokens/Sec)',
-      data: [metrics.avg_tps],
-      borderColor: '#6366f1',
-      backgroundColor: 'rgba(99, 102, 241, 0.2)',
-    }
-  ]
-})
 </script>
 
 <template>
@@ -147,7 +122,7 @@ const performanceDatasets = computed(() => {
         <h1 class="header-title">模型自动化评测</h1>
       </div>
       <div class="header-right">
-        <button class="header-btn" @click="fetchInitialData" :disabled="loading">
+        <button class="header-btn" :disabled="loading" @click="fetchInitialData">
           <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': loading }" />
           <span>刷新数据</span>
         </button>
@@ -160,10 +135,10 @@ const performanceDatasets = computed(() => {
           <Search class="search-icon" />
           <input v-model="searchQuery" type="text" placeholder="搜索模型..." />
         </div>
-        
+
         <div class="model-list scrollbar-none">
-          <div 
-            v-for="model in filteredModels" 
+          <div
+            v-for="model in filteredModels"
             :key="model.id"
             class="model-item"
             :class="{ active: selectedModel === model.id }"
@@ -173,10 +148,10 @@ const performanceDatasets = computed(() => {
               <span class="model-name">{{ model.id }}</span>
               <span class="model-provider">{{ model.owned_by }}</span>
             </div>
-            <button 
-              class="test-btn" 
-              @click.stop="runTest(model.id)"
+            <button
+              class="test-btn"
               :disabled="testingModel === model.id"
+              @click.stop="runTest(model.id)"
             >
               <Play v-if="testingModel !== model.id" class="w-3.5 h-3.5" />
               <RefreshCw v-else class="w-3.5 h-3.5 animate-spin" />
@@ -191,12 +166,16 @@ const performanceDatasets = computed(() => {
             <div class="h-top">
               <div class="title-group">
                 <h2 class="report-title">{{ selectedModel }}</h2>
-                <div v-if="currentReport" class="status-badge" :class="getStatusClass(currentReport.overall_status)">
+                <div
+                  v-if="currentReport"
+                  class="status-badge"
+                  :class="getStatusClass(currentReport.overall_status)"
+                >
                   <component :is="getStatusIcon(currentReport.overall_status)" class="w-4 h-4" />
                   <span>{{ currentReport.overall_status }}</span>
                 </div>
               </div>
-              <div class="report-meta" v-if="currentReport">
+              <div v-if="currentReport" class="report-meta">
                 <div class="meta-item">
                   <Clock class="w-3.5 h-3.5" />
                   <span>{{ new Date(currentReport.test_timestamp).toLocaleString() }}</span>
@@ -207,19 +186,29 @@ const performanceDatasets = computed(() => {
             <div v-if="currentReport" class="quick-stats">
               <div class="q-stat">
                 <span class="q-label">Pass Rate</span>
-                <span class="q-val text-green-400">{{ currentReport.performance_metrics?.overall?.pass_rate }}%</span>
+                <span class="q-val text-green-400"
+                  >{{ currentReport.performance_metrics?.overall?.pass_rate }}%</span
+                >
               </div>
               <div class="q-stat">
                 <span class="q-label">Avg TPS</span>
-                <span class="q-val text-blue-400">{{ currentReport.performance_metrics?.overall?.avg_tps.toFixed(2) }}</span>
+                <span class="q-val text-blue-400">{{
+                  currentReport.performance_metrics?.overall?.avg_tps.toFixed(2)
+                }}</span>
               </div>
               <div class="q-stat">
                 <span class="q-label">Latency</span>
-                <span class="q-val text-yellow-400">{{ currentReport.performance_metrics?.overall?.avg_latency.toFixed(2) }}s</span>
+                <span class="q-val text-yellow-400"
+                  >{{ currentReport.performance_metrics?.overall?.avg_latency.toFixed(2) }}s</span
+                >
               </div>
               <div class="q-stat">
                 <span class="q-label">Tests</span>
-                <span class="q-val">{{ currentReport.performance_metrics?.overall?.tests_passed }}/{{ currentReport.performance_metrics?.overall?.tests_total }}</span>
+                <span class="q-val"
+                  >{{ currentReport.performance_metrics?.overall?.tests_passed }}/{{
+                    currentReport.performance_metrics?.overall?.tests_total
+                  }}</span
+                >
               </div>
             </div>
           </div>
@@ -231,7 +220,11 @@ const performanceDatasets = computed(() => {
                 <span class="card-title">功能支持</span>
               </div>
               <div class="feature-list">
-                <div v-for="(supported, feature) in currentReport.feature_support" :key="feature" class="feature-item">
+                <div
+                  v-for="(supported, feature) in currentReport.feature_support"
+                  :key="feature"
+                  class="feature-item"
+                >
                   <span class="f-name">{{ feature }}</span>
                   <CheckCircle2 v-if="supported" class="w-4 h-4 text-green-400" />
                   <XCircle v-else class="w-4 h-4 text-red-400 opacity-50" />
@@ -245,12 +238,23 @@ const performanceDatasets = computed(() => {
                 <span class="card-title">评测历史</span>
               </div>
               <div class="history-list">
-                <div v-for="entry in testHistory.filter(h => h.model_name === selectedModel)" :key="entry.timestamp" class="h-item">
+                <div
+                  v-for="entry in testHistory.filter((h) => h.model_name === selectedModel)"
+                  :key="entry.timestamp"
+                  class="h-item"
+                >
                   <span class="h-time">{{ new Date(entry.timestamp).toLocaleDateString() }}</span>
-                  <span class="h-status" :class="getStatusClass(entry.status)">{{ entry.status }}</span>
+                  <span class="h-status" :class="getStatusClass(entry.status)">{{
+                    entry.status
+                  }}</span>
                   <span class="h-duration">{{ entry.duration?.toFixed(1) }}s</span>
                 </div>
-                <div v-if="!testHistory.filter(h => h.model_name === selectedModel).length" class="empty-text">暂无历史记录</div>
+                <div
+                  v-if="!testHistory.filter((h) => h.model_name === selectedModel).length"
+                  class="empty-text"
+                >
+                  暂无历史记录
+                </div>
               </div>
             </div>
 
@@ -268,7 +272,9 @@ const performanceDatasets = computed(() => {
                 </div>
                 <div v-for="res in currentReport.test_results" :key="res.test_name" class="t-row">
                   <div class="t-cell">{{ res.test_name }}</div>
-                  <div class="t-cell"><span class="type-tag">{{ res.feature_type }}</span></div>
+                  <div class="t-cell">
+                    <span class="type-tag">{{ res.feature_type }}</span>
+                  </div>
                   <div class="t-cell">{{ res.duration?.toFixed(2) }}s</div>
                   <div class="t-cell" :class="getStatusClass(res.status)">{{ res.status }}</div>
                 </div>
@@ -672,8 +678,12 @@ const performanceDatasets = computed(() => {
 }
 
 @keyframes animate-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .animate-spin {
   animation: animate-spin 1s linear infinite;

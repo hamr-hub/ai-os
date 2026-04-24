@@ -123,9 +123,7 @@ export async function getTokenStats(): Promise<TokenStats> {
   return data
 }
 
-export async function getTokenHistory(
-  count: number = 60
-): Promise<{
+export async function getTokenHistory(count: number = 60): Promise<{
   history: Array<{
     timestamp: string
     total_tokens: number
