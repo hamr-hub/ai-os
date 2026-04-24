@@ -15,7 +15,7 @@ import {
   BookOpen,
   Settings,
   ShieldCheck,
-  Cpu
+  Cpu,
 } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
 import { useGPU } from '@/composables/useGPU'
@@ -32,15 +32,15 @@ const groups = [
       { name: 'dashboard', label: '总览面板', icon: LayoutDashboard },
       { name: 'models', label: '模型调度', icon: Server },
       { name: 'agent', label: 'AI Agent', icon: Bot },
-    ]
+    ],
   },
   {
     title: '数据监控',
     items: [
       { name: 'monitor', label: '实时性能', icon: Activity },
       { name: 'docs', label: '系统文档', icon: BookOpen },
-    ]
-  }
+    ],
+  },
 ]
 
 const isActive = (name: string) => route.name === name
@@ -125,26 +125,39 @@ const toggleCollapse = () => {
             <div class="widget-body">
               <div class="stat-row">
                 <span class="stat-label">LOAD</span>
-                <span class="stat-value digital-font" :class="gpuInfo.utilization > 80 ? 'text-red-400' : 'text-green-400'">
+                <span
+                  class="stat-value digital-font"
+                  :class="gpuInfo.utilization > 80 ? 'text-red-400' : 'text-green-400'"
+                >
                   {{ gpuInfo.utilization.toFixed(0) }}%
                 </span>
               </div>
               <div class="stat-bar-bg">
-                <div class="stat-bar-fill" :style="{ width: gpuInfo.utilization + '%' }" :class="gpuInfo.utilization > 80 ? 'bg-red-500' : 'bg-green-500'"></div>
+                <div
+                  class="stat-bar-fill"
+                  :style="{ width: gpuInfo.utilization + '%' }"
+                  :class="gpuInfo.utilization > 80 ? 'bg-red-500' : 'bg-green-500'"
+                ></div>
               </div>
               <div class="stat-row mt-2">
                 <span class="stat-label">VRAM</span>
-                <span class="stat-value digital-font">{{ (gpuInfo.used_memory / 1024).toFixed(1) }}G</span>
+                <span class="stat-value digital-font"
+                  >{{ (gpuInfo.used_memory / 1024).toFixed(1) }}G</span
+                >
               </div>
             </div>
           </div>
         </transition>
 
         <div class="action-buttons">
-          <button class="action-btn" @click="cycleTheme" :title="themeLabel">
+          <button class="action-btn" :title="themeLabel" @click="cycleTheme">
             <component :is="themeIcon" class="w-4.5 h-4.5" />
           </button>
-          <button class="action-btn" @click="toggleCollapse" :title="store.sidebarCollapsed ? '展开' : '收起'">
+          <button
+            class="action-btn"
+            :title="store.sidebarCollapsed ? '展开' : '收起'"
+            @click="toggleCollapse"
+          >
             <PanelLeftOpen v-if="store.sidebarCollapsed" class="w-4.5 h-4.5" />
             <PanelLeftClose v-else class="w-4.5 h-4.5" />
           </button>
@@ -335,7 +348,9 @@ const toggleCollapse = () => {
   margin-bottom: 4px;
 }
 
-.stat-label { color: var(--text-muted); }
+.stat-label {
+  color: var(--text-muted);
+}
 
 .stat-bar-bg {
   height: 4px;
@@ -383,10 +398,12 @@ const toggleCollapse = () => {
   flex-direction: column;
 }
 
-.fade-enter-active, .fade-leave-active {
+.fade-enter-active,
+.fade-leave-active {
   transition: opacity 0.3s ease;
 }
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }
 </style>

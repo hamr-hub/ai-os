@@ -60,7 +60,13 @@ const {
   refresh: refreshTokens,
   isRefreshing: isRefreshingTokens,
 } = useTokenStats()
-const { systemStatus, queueStatus, healthAlert, refresh: refreshSystem, isRefreshing: isRefreshingSystem } = useSystemData()
+const {
+  systemStatus,
+  queueStatus,
+  healthAlert,
+  refresh: refreshSystem,
+  isRefreshing: isRefreshingSystem,
+} = useSystemData()
 
 const alertExpanded = ref(false)
 
@@ -85,7 +91,9 @@ const refreshAll = () => {
 const gpu = computed(() => gpuSummary.value?.current ?? null)
 const gpuStatus = computed(() => gpuSummary.value?.status ?? 'unavailable')
 const runningModels = computed(() => modelList.value.filter((m) => m.running))
-const healthStatusColor = computed(() => getHealthStatusConfig(healthAlert.value?.status ?? 'critical'))
+const healthStatusColor = computed(() =>
+  getHealthStatusConfig(healthAlert.value?.status ?? 'critical')
+)
 
 const totalQueueRequests = computed(() => {
   if (!queueStatus.value) return 0
@@ -158,10 +166,18 @@ const handleSwitchWithToast = async (name: string) => {
         <div class="card-header">
           <div class="icon-wrap cyan"><Monitor class="card-icon-inner" /></div>
           <span class="card-title">GPU 监控</span>
-          <span v-if="gpuStatus === 'available'" class="badge online"><span class="dot online"></span>在线</span>
+          <span v-if="gpuStatus === 'available'" class="badge online"
+            ><span class="dot online"></span>在线</span
+          >
           <span v-else class="badge offline"><span class="dot offline"></span>离线</span>
         </div>
-        <GpuMetricsCard :gpu="gpu" :gpu-history="gpuHistory" :gpu-status="gpuStatus" :error="gpuHistoryError" mode="compact">
+        <GpuMetricsCard
+          :gpu="gpu"
+          :gpu-history="gpuHistory"
+          :gpu-status="gpuStatus"
+          :error="gpuHistoryError"
+          mode="compact"
+        >
           <template #error-action>
             <button class="retry-btn" @click="refreshAll"><RotateCw class="w-3 h-3" /> 重试</button>
           </template>
@@ -200,7 +216,14 @@ const handleSwitchWithToast = async (name: string) => {
         <div v-if="tokenStats && Object.keys(modelStats).length" class="model-token-list">
           <div v-for="(stats, name) in modelStats" :key="name" class="model-token-row">
             <span class="mt-name">{{ name }}</span>
-            <div class="mt-bar-track"><div class="mt-bar-fill" :style="{ width: `${Math.min(100, (stats.total_tokens / Math.max(totalTokens, 1)) * 100)}%` }"></div></div>
+            <div class="mt-bar-track">
+              <div
+                class="mt-bar-fill"
+                :style="{
+                  width: `${Math.min(100, (stats.total_tokens / Math.max(totalTokens, 1)) * 100)}%`,
+                }"
+              ></div>
+            </div>
             <span class="mt-count">{{ formatTokens(stats.total_tokens) }}</span>
           </div>
         </div>
@@ -218,32 +241,78 @@ const handleSwitchWithToast = async (name: string) => {
               <Cpu class="w-4 h-4" :style="{ color: getProgressColor(systemStatus.cpu.percent) }" />
               <div class="sys-info">
                 <span class="sys-label">CPU</span>
-                <div class="sys-bar-track"><div class="sys-bar-fill" :style="{ width: `${systemStatus.cpu.percent}%`, background: getProgressColor(systemStatus.cpu.percent) }"></div></div>
-                <span class="sys-val" :class="getStatusLevel(systemStatus.cpu.percent)">{{ systemStatus.cpu.percent.toFixed(1) }}%</span>
+                <div class="sys-bar-track">
+                  <div
+                    class="sys-bar-fill"
+                    :style="{
+                      width: `${systemStatus.cpu.percent}%`,
+                      background: getProgressColor(systemStatus.cpu.percent),
+                    }"
+                  ></div>
+                </div>
+                <span class="sys-val" :class="getStatusLevel(systemStatus.cpu.percent)"
+                  >{{ systemStatus.cpu.percent.toFixed(1) }}%</span
+                >
               </div>
-              <span class="sys-meta">{{ systemStatus.cpu.cores_physical }}核 / {{ systemStatus.cpu.cores }}线程</span>
+              <span class="sys-meta"
+                >{{ systemStatus.cpu.cores_physical }}核 / {{ systemStatus.cpu.cores }}线程</span
+              >
             </div>
             <div class="sys-item">
-              <MemoryStick class="w-4 h-4" :style="{ color: getProgressColor(systemStatus.memory.percent) }" />
+              <MemoryStick
+                class="w-4 h-4"
+                :style="{ color: getProgressColor(systemStatus.memory.percent) }"
+              />
               <div class="sys-info">
                 <span class="sys-label">内存</span>
-                <div class="sys-bar-track"><div class="sys-bar-fill" :style="{ width: `${systemStatus.memory.percent}%`, background: getProgressColor(systemStatus.memory.percent) }"></div></div>
-                <span class="sys-val" :class="getStatusLevel(systemStatus.memory.percent)">{{ systemStatus.memory.percent.toFixed(1) }}%</span>
+                <div class="sys-bar-track">
+                  <div
+                    class="sys-bar-fill"
+                    :style="{
+                      width: `${systemStatus.memory.percent}%`,
+                      background: getProgressColor(systemStatus.memory.percent),
+                    }"
+                  ></div>
+                </div>
+                <span class="sys-val" :class="getStatusLevel(systemStatus.memory.percent)"
+                  >{{ systemStatus.memory.percent.toFixed(1) }}%</span
+                >
               </div>
-              <span class="sys-meta">{{ (systemStatus.memory.used_mb / 1024).toFixed(1) }} / {{ (systemStatus.memory.total_mb / 1024).toFixed(1) }} GB</span>
+              <span class="sys-meta"
+                >{{ (systemStatus.memory.used_mb / 1024).toFixed(1) }} /
+                {{ (systemStatus.memory.total_mb / 1024).toFixed(1) }} GB</span
+              >
             </div>
             <div class="sys-item">
-              <HardDrive class="w-4 h-4" :style="{ color: getProgressColor(systemStatus.disk.percent) }" />
+              <HardDrive
+                class="w-4 h-4"
+                :style="{ color: getProgressColor(systemStatus.disk.percent) }"
+              />
               <div class="sys-info">
                 <span class="sys-label">磁盘</span>
-                <div class="sys-bar-track"><div class="sys-bar-fill" :style="{ width: `${systemStatus.disk.percent}%`, background: getProgressColor(systemStatus.disk.percent) }"></div></div>
-                <span class="sys-val" :class="getStatusLevel(systemStatus.disk.percent)">{{ systemStatus.disk.percent.toFixed(1) }}%</span>
+                <div class="sys-bar-track">
+                  <div
+                    class="sys-bar-fill"
+                    :style="{
+                      width: `${systemStatus.disk.percent}%`,
+                      background: getProgressColor(systemStatus.disk.percent),
+                    }"
+                  ></div>
+                </div>
+                <span class="sys-val" :class="getStatusLevel(systemStatus.disk.percent)"
+                  >{{ systemStatus.disk.percent.toFixed(1) }}%</span
+                >
               </div>
-              <span class="sys-meta">{{ systemStatus.disk.used_gb }} / {{ systemStatus.disk.total_gb }} GB</span>
+              <span class="sys-meta"
+                >{{ systemStatus.disk.used_gb }} / {{ systemStatus.disk.total_gb }} GB</span
+              >
             </div>
           </div>
         </template>
-        <div v-else class="empty-state"><Server class="w-10 h-10 text-muted" /><p>系统数据不可用</p></div>
+        <div v-else class="empty-state">
+          <Server class="w-10 h-10 text-muted" />
+          <p>系统数据不可用</p>
+        </div>
       </div>
 
       <div class="card queue-card card-glow-primary scale-in stagger-4">
@@ -260,47 +329,88 @@ const handleSwitchWithToast = async (name: string) => {
                 <span class="q-count warning">{{ entry.active_requests }}</span>
                 <span class="q-limit">/ {{ entry.concurrency_limit }}</span>
               </div>
-              <span class="q-status" :class="entry.can_accept ? 'success' : 'danger'">{{ entry.can_accept ? '可接受' : '已满' }}</span>
+              <span class="q-status" :class="entry.can_accept ? 'success' : 'danger'">{{
+                entry.can_accept ? '可接受' : '已满'
+              }}</span>
             </div>
           </div>
-          <div v-else class="empty-state"><Layers class="w-8 h-8 text-muted" /><p>当前无活跃请求</p></div>
+          <div v-else class="empty-state">
+            <Layers class="w-8 h-8 text-muted" />
+            <p>当前无活跃请求</p>
+          </div>
         </template>
-        <div v-else class="empty-state"><Layers class="w-10 h-10 text-muted" /><p>队列数据不可用</p></div>
+        <div v-else class="empty-state">
+          <Layers class="w-10 h-10 text-muted" />
+          <p>队列数据不可用</p>
+        </div>
       </div>
 
       <div class="card health-card card-glow-green scale-in stagger-5">
         <div class="card-header">
           <div class="icon-wrap green"><ShieldCheck class="card-icon-inner" /></div>
           <span class="card-title">健康告警</span>
-          <span v-if="healthAlert" class="badge" :style="{ background: healthStatusColor.bg, color: healthStatusColor.color }">
+          <span
+            v-if="healthAlert"
+            class="badge"
+            :style="{ background: healthStatusColor.bg, color: healthStatusColor.color }"
+          >
             {{ healthStatusColor.label }}
           </span>
         </div>
         <template v-if="healthAlert">
           <div class="health-score-row">
-            <div class="health-score" :class="healthAlert.health_score >= 70 ? 'good' : healthAlert.health_score >= 50 ? 'degraded' : 'bad'">
+            <div
+              class="health-score"
+              :class="
+                healthAlert.health_score >= 70
+                  ? 'good'
+                  : healthAlert.health_score >= 50
+                    ? 'degraded'
+                    : 'bad'
+              "
+            >
               {{ healthAlert.health_score.toFixed(0) }}
             </div>
             <div class="health-score-bar">
-              <div class="hs-fill" :style="{ width: `${healthAlert.health_score}%`, background: healthAlert.health_score >= 70 ? '#22c55e' : healthAlert.health_score >= 50 ? '#f59e0b' : '#ef4444' }"></div>
+              <div
+                class="hs-fill"
+                :style="{
+                  width: `${healthAlert.health_score}%`,
+                  background:
+                    healthAlert.health_score >= 70
+                      ? '#22c55e'
+                      : healthAlert.health_score >= 50
+                        ? '#f59e0b'
+                        : '#ef4444',
+                }"
+              ></div>
             </div>
           </div>
           <div v-if="healthAlert.alert_reasons?.length" class="alert-reasons">
             <button class="alert-toggle" @click="alertExpanded = !alertExpanded">
-              <AlertTriangle class="w-4 h-4" :style="{ color: healthAlert.should_alert ? '#f59e0b' : '#22c55e' }" />
+              <AlertTriangle
+                class="w-4 h-4"
+                :style="{ color: healthAlert.should_alert ? '#f59e0b' : '#22c55e' }"
+              />
               <span>{{ healthAlert.alert_reasons.length }} 条告警</span>
               <ChevronDown v-if="!alertExpanded" class="w-3 h-3" />
               <ChevronUp v-else class="w-3 h-3" />
             </button>
             <div v-if="alertExpanded" class="alert-list">
               <div v-for="(reason, idx) in healthAlert.alert_reasons" :key="idx" class="alert-item">
-                <span class="alert-dot" :class="healthAlert.should_alert ? 'warning' : 'info'"></span>
+                <span
+                  class="alert-dot"
+                  :class="healthAlert.should_alert ? 'warning' : 'info'"
+                ></span>
                 <span>{{ reason }}</span>
               </div>
             </div>
           </div>
         </template>
-        <div v-else class="empty-state"><ShieldCheck class="w-10 h-10 text-muted" /><p>健康数据不可用</p></div>
+        <div v-else class="empty-state">
+          <ShieldCheck class="w-10 h-10 text-muted" />
+          <p>健康数据不可用</p>
+        </div>
       </div>
 
       <div class="card running-card card-glow-green scale-in stagger-6">
@@ -313,11 +423,21 @@ const handleSwitchWithToast = async (name: string) => {
           <div v-for="model in runningModels" :key="model.name" class="model-row">
             <div class="model-info">
               <span class="model-name">{{ model.name }}</span>
-              <span class="model-meta">端口 {{ model.port }} · {{ model.active_requests }} 请求</span>
+              <span class="model-meta"
+                >端口 {{ model.port }} · {{ model.active_requests }} 请求</span
+              >
             </div>
             <div class="model-actions">
-              <span v-if="defaultModel === model.name" class="default-tag"><Star class="w-3 h-3" /> 默认</span>
-              <button class="action-btn stop" @click="handleStopWithToast(model.name)" :disabled="!!actionLoading"><Square class="w-3 h-3" /> 停止</button>
+              <span v-if="defaultModel === model.name" class="default-tag"
+                ><Star class="w-3 h-3" /> 默认</span
+              >
+              <button
+                class="action-btn stop"
+                :disabled="!!actionLoading"
+                @click="handleStopWithToast(model.name)"
+              >
+                <Square class="w-3 h-3" /> 停止
+              </button>
             </div>
           </div>
         </div>
@@ -325,16 +445,33 @@ const handleSwitchWithToast = async (name: string) => {
         <div class="stopped-section">
           <div class="sub-header">可启动模型</div>
           <div class="stopped-list">
-            <div v-for="model in modelList.filter((m) => !m.running)" :key="model.name" class="model-row stopped">
+            <div
+              v-for="model in modelList.filter((m) => !m.running)"
+              :key="model.name"
+              class="model-row stopped"
+            >
               <div class="model-info">
                 <span class="model-name">{{ model.name }}</span>
                 <span class="model-meta">
-                  <Box class="w-3 h-3 inline-block" /> {{ model.supports_images ? '支持图片' : '纯文本' }}
+                  <Box class="w-3 h-3 inline-block" />
+                  {{ model.supports_images ? '支持图片' : '纯文本' }}
                 </span>
               </div>
               <div class="model-actions">
-                <button class="action-btn start" @click="handleStartWithToast(model.name)" :disabled="!!actionLoading"><Play class="w-3 h-3" /> 启动</button>
-                <button class="action-btn switch" @click="handleSwitchWithToast(model.name)" :disabled="!!actionLoading"><ArrowRightLeft class="w-3 h-3" /> 切换</button>
+                <button
+                  class="action-btn start"
+                  :disabled="!!actionLoading"
+                  @click="handleStartWithToast(model.name)"
+                >
+                  <Play class="w-3 h-3" /> 启动
+                </button>
+                <button
+                  class="action-btn switch"
+                  :disabled="!!actionLoading"
+                  @click="handleSwitchWithToast(model.name)"
+                >
+                  <ArrowRightLeft class="w-3 h-3" /> 切换
+                </button>
               </div>
             </div>
           </div>
