@@ -1,9 +1,9 @@
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, type MaybeRefOrGetter, toValue } from 'vue'
 import { getTokenStats, getTokenHistory } from '@/api/client'
 import { formatTimeLabel } from '@/utils/format'
 import type { TokenStats } from '@/types'
 
-export function useTokenHistory(intervalMs = 30000, initialCount = 60) {
+export function useTokenHistory(intervalMs = 30000, initialCount: MaybeRefOrGetter<number> = 60) {
   const tokenStats = ref<TokenStats | null>(null)
   const tokenHistory = ref<
     Array<{ timestamp: string; total: number; prompt: number; completion: number }>

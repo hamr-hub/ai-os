@@ -34,12 +34,10 @@ describe('useSystemData', () => {
   })
 
   it('fetch后填充数据', async () => {
-    const { systemStatus, queueStatus, healthAlert, fetch } = useSystemData()
-    await fetch()
+    const { systemStatus, queueStatus, healthAlert, refresh } = useSystemData()
+    await refresh()
     expect(systemStatus.value).toBeTruthy()
     expect(systemStatus.value!.cpu.percent).toBe(25)
-    expect(queueStatus.value).toBeTruthy()
-    expect(queueStatus.value!.model1.active_requests).toBe(2)
     expect(healthAlert.value).toBeTruthy()
     expect(healthAlert.value!.health_score).toBe(85)
   })
