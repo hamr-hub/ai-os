@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, type Component } from 'vue'
 import { useModels } from '@/composables/useModels'
 import { runModelTest, getTestResults, getTestHistory } from '@/api/client'
 import type { TestResponse, TestHistoryEntry, TestReport } from '@/types'
@@ -75,9 +75,9 @@ async function fetchCapabilities() {
 
 const getCapabilityBadges = (
   modelName: string
-): Array<{ label: string; icon: any; color: string }> => {
+): Array<{ label: string; icon: Component; color: string }> => {
   const caps = modelCapabilities.value[modelName]
-  const badges: Array<{ label: string; icon: any; color: string }> = []
+  const badges: Array<{ label: string; icon: Component; color: string }> = []
   badges.push({ label: '对话', icon: MessageSquare, color: '#6366f1' })
   if (caps?.tool_calling) badges.push({ label: '工具调用', icon: Wrench, color: '#3b82f6' })
   if (caps?.image_generation) badges.push({ label: '图片生成', icon: Image, color: '#8b5cf6' })
@@ -108,8 +108,8 @@ async function runTest() {
       modelCapabilities.value[selectedTestModel.value] = testResult.value.report.feature_support
     }
     await fetchHistory()
-  } catch (e: any) {
-    testError.value = e?.message ?? '检测失败'
+  } catch (e: unknown) {
+    testError.value = (e as Error)?.message ?? '检测失败'
   } finally {
     testing.value = false
   }

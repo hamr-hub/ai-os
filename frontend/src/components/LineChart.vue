@@ -54,10 +54,11 @@ const props = withDefaults(
     yUnit: '',
     showLegend: true,
     animate: true,
+    title: '',
   }
 )
 
-const chartRef = ref<any>(null)
+const chartRef = ref<InstanceType<typeof Line> | null>(null)
 
 const chartData = computed(() => ({
   labels: props.labels,
@@ -76,7 +77,7 @@ const chartData = computed(() => ({
 const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: props.animate ? ({ duration: 300 } as any) : (false as any),
+  animation: props.animate ? ({ duration: 300 } as Record<string, unknown>) : false,
   interaction: {
     mode: 'index' as const,
     intersect: false,
@@ -111,7 +112,7 @@ const chartOptions = computed(() => ({
       titleFont: { size: 12 },
       bodyFont: { size: 12 },
       callbacks: {
-        label: (ctx: any) => {
+        label: (ctx: { parsed: { y: number }; dataset: { label: string } }) => {
           const val = ctx.parsed.y
           return `${ctx.dataset.label}: ${val.toFixed(1)}${props.yUnit}`
         },
@@ -142,7 +143,7 @@ const chartOptions = computed(() => ({
       ticks: {
         color: '#475569',
         font: { size: 11 },
-        callback: (val: any) => `${val}${props.yUnit}`,
+        callback: (val: number) => `${val}${props.yUnit}`,
       },
       border: { display: false },
     },

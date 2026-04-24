@@ -148,7 +148,7 @@ export interface TestReport {
     feature_type: string
     status: string
     duration?: number
-    metrics?: Record<string, any>
+    metrics?: Record<string, unknown>
     error?: string
     details?: string
   }[]

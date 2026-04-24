@@ -42,8 +42,8 @@ v1Client.interceptors.request.use((config) => {
 const handleResponseError = (error: AxiosError) => {
   const appStore = useAppStore()
   const message =
-    (error.response?.data as any)?.message ||
-    (error.response?.data as any)?.error ||
+    (error.response?.data as Record<string, unknown>)?.message ||
+    (error.response?.data as Record<string, unknown>)?.error ||
     error.message ||
     'API Request Failed'
 

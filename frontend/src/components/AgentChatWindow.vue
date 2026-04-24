@@ -211,10 +211,6 @@ const copyMessage = async (id: string, content: string) => {
   } catch {}
 }
 
-const renderContent = (content: string): string => {
-  return renderMarkdown(content)
-}
-
 const autoResize = (event: Event) => {
   const el = event.target as HTMLTextAreaElement
   el.style.height = 'auto'
@@ -316,17 +312,12 @@ const autoResize = (event: Event) => {
                 'bubble-agent': message.role === 'assistant',
                 'bubble-sys': message.role === 'system',
               }"
-                        >
+              >
               <div
                 v-if="message.role === 'assistant'"
                 class="msg-text markdown-body"
-                v-html="renderContent(message.content)"
+                v-html="renderMarkdown(message.content)"
               ></div>
-              <p v-else class="msg-text">{{ message.content }}</p>-if="message.role === 'assistant'"
-                class="msg-text markdown-body"
-                v-html="renderContent(message.content)"
-              ></div>
-              <p v-else class="msg-text">{{ message.content }}</p>
 
               <div v-if="message.toolCalls?.length" class="tool-calls-block">
                 <div v-for="tc in message.toolCalls" :key="tc.id" class="tool-call-item">

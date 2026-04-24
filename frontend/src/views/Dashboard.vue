@@ -8,9 +8,7 @@ import { useSystemData } from '@/composables/useSystemData'
 import { getProgressColor, getStatusLevel, getHealthStatusConfig } from '@/utils/theme'
 import { formatTimeLabel } from '@/utils/format'
 import { useAppStore } from '@/stores/app'
-import LineChart from '@/components/LineChart.vue'
 import GpuMetricsCard from '@/components/cards/GpuMetricsCard.vue'
-import type { SystemHistoryEntry } from '@/types'
 import {
   RefreshCw,
   Monitor,
@@ -270,15 +268,6 @@ const handleSwitchWithToast = async (name: string) => {
               <Cpu class="w-4 h-4" :style="{ color: getProgressColor(systemStatus.cpu.percent) }" />
               <div class="sys-info">
                 <span class="sys-label">CPU</span>
-                <div class="sys-bar-track">
-                  <div
-                    class="sys-bar-fill"
-                    :style="{
-                      width: `${systemStatus.cpu.percent}%`,
-                      background: getProgressColor(systemStatus.cpu.percent),
-                    }"
-                  ></div>
-                </div>
                 <span class="sys-val" :class="getStatusLevel(systemStatus.cpu.percent)"
                   >{{ systemStatus.cpu.percent.toFixed(1) }}%</span
                 >
@@ -286,6 +275,20 @@ const handleSwitchWithToast = async (name: string) => {
               <span class="sys-meta"
                 >{{ systemStatus.cpu.cores_physical }}核 / {{ systemStatus.cpu.cores }}线程</span
               >
+              <div v-if="systemHistory.length >= 2" class="sys-chart">
+                <LineChart
+                  :labels="sysTimeLabels"
+                  :datasets="
+                    sysSparklineDatasets('cpu_percent', '#fbbf24', 'rgba(251,191,36,0.05)')
+                  "
+                  :height="60"
+                  :show-legend="false"
+                  :animate="false"
+                  y-unit="%"
+                  y-min="0"
+                  y-max="100"
+                />
+              </div>
             </div>
             <div class="sys-item">
               <MemoryStick
@@ -294,15 +297,6 @@ const handleSwitchWithToast = async (name: string) => {
               />
               <div class="sys-info">
                 <span class="sys-label">内存</span>
-                <div class="sys-bar-track">
-                  <div
-                    class="sys-bar-fill"
-                    :style="{
-                      width: `${systemStatus.memory.percent}%`,
-                      background: getProgressColor(systemStatus.memory.percent),
-                    }"
-                  ></div>
-                </div>
                 <span class="sys-val" :class="getStatusLevel(systemStatus.memory.percent)"
                   >{{ systemStatus.memory.percent.toFixed(1) }}%</span
                 >
@@ -311,6 +305,20 @@ const handleSwitchWithToast = async (name: string) => {
                 >{{ (systemStatus.memory.used_mb / 1024).toFixed(1) }} /
                 {{ (systemStatus.memory.total_mb / 1024).toFixed(1) }} GB</span
               >
+              <div v-if="systemHistory.length >= 2" class="sys-chart">
+                <LineChart
+                  :labels="sysTimeLabels"
+                  :datasets="
+                    sysSparklineDatasets('memory_percent', '#22d3ee', 'rgba(34,211,238,0.05)')
+                  "
+                  :height="60"
+                  :show-legend="false"
+                  :animate="false"
+                  y-unit="%"
+                  y-min="0"
+                  y-max="100"
+                />
+              </div>
             </div>
             <div class="sys-item">
               <HardDrive
@@ -513,3 +521,55 @@ const handleSwitchWithToast = async (name: string) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.system-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sys-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sys-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sys-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sys-val {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sys-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.sys-chart {
+  margin-top: 4px;
+}
+
+.sys-bar-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sys-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+</style>
