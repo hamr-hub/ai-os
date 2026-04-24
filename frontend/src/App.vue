@@ -10,11 +10,9 @@ import { useServerStore } from '@/stores/server'
 const store = useAppStore()
 const serverStore = useServerStore()
 
-serverStore.initFromStorage()
-
 onMounted(async () => {
   store.initTheme()
-  await serverStore.validateRemoteConnection()
+  serverStore.initFromStorage()
   await serverStore.checkConnection()
 })
 
