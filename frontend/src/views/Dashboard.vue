@@ -5,6 +5,7 @@ import { useGPU } from '@/composables/useGPU'
 import { useGPUHistory } from '@/composables/useGPUHistory'
 import { useTokenStats } from '@/composables/useTokenStats'
 import { useSystemData } from '@/composables/useSystemData'
+import type { QueueModelEntry } from '@/types'
 import { getProgressColor, getStatusLevel, getHealthStatusConfig } from '@/utils/theme'
 import { formatTimeLabel } from '@/utils/format'
 import { useAppStore } from '@/stores/app'
@@ -99,12 +100,12 @@ const healthStatusColor = computed(() =>
 
 const totalQueueRequests = computed(() => {
   if (!queueStatus.value) return 0
-  return Object.values(queueStatus.value).reduce((sum, q) => sum + q.active_requests, 0)
+  return Object.values(queueStatus.value as Record<string, QueueModelEntry>).reduce((sum, q) => sum + q.active_requests, 0)
 })
 
 const activeQueueEntries = computed(() => {
   if (!queueStatus.value) return []
-  const entries = Object.entries(queueStatus.value)
+  const entries = Object.entries(queueStatus.value as Record<string, QueueModelEntry>)
     .filter(([, entry]) => entry.active_requests > 0)
     .sort(([, a], [, b]) => b.active_requests - a.active_requests)
   if (!entries.length) return []
