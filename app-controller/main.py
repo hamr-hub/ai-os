@@ -126,9 +126,11 @@ async def save_history_loop():
     while True:
         try:
             gpu_monitor.save_gpu_history()
+            system_monitor.save_system_history()
+            metrics.save_token_history()
         except Exception as e:
-            logger.error(f"Error saving GPU history: {str(e)}")
-        await asyncio.sleep(2)
+            logger.error(f"Error saving history: {str(e)}")
+        await asyncio.sleep(5)  # Changed to 5 seconds for more reasonable resolution
 
 
 @app.on_event("startup")
@@ -148,6 +150,7 @@ async def startup_event():
     if redis_client.is_connected():
         logger.info("Redis connection established successfully")
         gpu_monitor.set_redis_client(redis_client)
+        system_monitor.set_redis_client(redis_client)
         await cache_updater.start(metrics)
         logger.info("Cache updater service started")
     else:

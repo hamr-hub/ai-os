@@ -225,6 +225,9 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         request_data['model'] = vllm_model_name
 
         if stream:
+            if 'stream_options' not in request_data:
+                request_data['stream_options'] = {"include_usage": True}
+            
             stream_client = get_vllm_stream_client(request)
             stream_request = stream_client.build_request('POST', vllm_url, json=request_data)
 
@@ -271,6 +274,16 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
                                 json_chunk = json.loads(chunk_data)
                                 json_chunk['id'] = chat_completion_id
                                 json_chunk['model'] = model_name
+                                
+                                # Record usage if present in chunk (OpenAI compatible stream usage)
+                                usage = json_chunk.get('usage')
+                                if usage:
+                                    metrics.record_token_usage(
+                                        model_name,
+                                        prompt_tokens=usage.get('prompt_tokens', 0),
+                                        completion_tokens=usage.get('completion_tokens', 0)
+                                    )
+                                
                                 yield f"data: {json.dumps(json_chunk)}\n\n"
                             except json.JSONDecodeError:
                                 yield f"data: {chunk_data}\n\n"
@@ -316,6 +329,16 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         result = response.json()
         result['id'] = f"chatcmpl-{os.urandom(12).hex()}"
         result['model'] = model_name
+
+        # Record token usage
+        usage = result.get('usage')
+        if usage:
+            metrics.record_token_usage(
+                model_name,
+                prompt_tokens=usage.get('prompt_tokens', 0),
+                completion_tokens=usage.get('completion_tokens', 0)
+            )
+
         return result
     except (HTTPException, Exception) as e:
         if isinstance(e, HTTPException):

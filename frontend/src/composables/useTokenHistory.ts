@@ -1,9 +1,9 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { getTokenStats } from '@/api/client'
+import { getTokenStats, getTokenHistory } from '@/api/client'
 import { formatTimeLabel } from '@/utils/format'
 import type { TokenStats } from '@/types'
 
-export function useTokenHistory(intervalMs = 30000) {
+export function useTokenHistory(intervalMs = 30000, initialCount = 60) {
   const tokenStats = ref<TokenStats | null>(null)
   const tokenHistory = ref<
     Array<{ timestamp: string; total: number; prompt: number; completion: number }>
@@ -13,7 +13,7 @@ export function useTokenHistory(intervalMs = 30000) {
   const error = ref<string | null>(null)
   let timer: number | null = null
 
-  const fetchTokenStats = async (manualRefresh = false) => {
+  const fetchTokenData = async (manualRefresh = false) => {
     if (manualRefresh) {
       isRefreshing.value = true
     } else {
@@ -23,17 +23,20 @@ export function useTokenHistory(intervalMs = 30000) {
     error.value = null
 
     try {
-      const stats = await getTokenStats()
+      const [stats, historyData] = await Promise.all([
+        getTokenStats(),
+        getTokenHistory(initialCount)
+      ])
+      
       tokenStats.value = stats
-      tokenHistory.value.push({
-        timestamp: stats.timestamp ?? new Date().toISOString(),
-        total: stats.total_tokens,
-        prompt: stats.total_prompt_tokens ?? stats.prompt_tokens ?? 0,
-        completion: stats.total_completion_tokens ?? stats.completion_tokens ?? 0,
-      })
-      if (tokenHistory.value.length > 300) {
-        tokenHistory.value = tokenHistory.value.slice(-300)
-      }
+      
+      // Convert server history format to internal format
+      tokenHistory.value = historyData.history.map((entry: any) => ({
+        timestamp: entry.timestamp,
+        total: entry.total_tokens,
+        prompt: entry.prompt_tokens,
+        completion: entry.completion_tokens
+      }))
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Token统计获取失败'
     } finally {
@@ -42,11 +45,11 @@ export function useTokenHistory(intervalMs = 30000) {
     }
   }
 
-  const refresh = () => fetchTokenStats(true)
+  const refresh = () => fetchTokenData(true)
 
   const startPolling = () => {
     if (timer) return
-    timer = window.setInterval(fetchTokenStats, intervalMs)
+    timer = window.setInterval(fetchTokenData, intervalMs)
   }
 
   const stopPolling = () => {
@@ -93,7 +96,7 @@ export function useTokenHistory(intervalMs = 30000) {
   ])
 
   onMounted(() => {
-    fetchTokenStats()
+    fetchTokenData()
     startPolling()
   })
 
@@ -109,7 +112,7 @@ export function useTokenHistory(intervalMs = 30000) {
     loading,
     isRefreshing,
     error,
-    fetchTokenStats,
+    fetchTokenData,
     refresh,
     startPolling,
     stopPolling,

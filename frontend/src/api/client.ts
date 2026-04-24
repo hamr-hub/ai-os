@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios'
+import axios from 'axios'
 import type {
   GPUSummary,
   GPUHistoryEntry,
@@ -39,13 +39,12 @@ v1Client.interceptors.request.use((config) => {
 })
 
 // Response Interceptors
-const handleResponseError = (error: AxiosError) => {
+const handleResponseError = (error: unknown) => {
   const appStore = useAppStore()
+  const err = error as { response?: { data?: unknown }; message?: string }
+  const data = err.response?.data as Record<string, unknown> | undefined
   const message =
-    (error.response?.data as Record<string, unknown>)?.message ||
-    (error.response?.data as Record<string, unknown>)?.error ||
-    error.message ||
-    'API Request Failed'
+    (data?.message as string) || (data?.error as string) || err.message || 'API Request Failed'
 
   // Don't toast for cancelled requests
   if (axios.isCancel(error)) {
@@ -103,21 +102,40 @@ export async function getTestResults(name: string): Promise<TestResponse> {
 }
 
 export async function getTestHistory(): Promise<TestHistoryEntry[]> {
-  const { data } = await v1Client.get<{ status: string; reports: Record<string, TestResponse> }>(
-    '/test/reports'
-  )
+  const { data } = await v1Client.get<{
+    status: string
+    reports: Record<string, Record<string, unknown>>
+  }>('/test/reports')
   const reports = data.reports || {}
   return Object.entries(reports).map(([model_name, report]) => ({
     model_name,
-    timestamp: report.test_timestamp || '',
-    status: report.overall_status || 'unknown',
-    overall_status: report.overall_status,
-    duration: report.resource_utilization?.test_duration_seconds,
+    timestamp: (report.test_timestamp as string) || '',
+    status: (report.overall_status as string) || 'unknown',
+    overall_status: report.overall_status as string | undefined,
+    duration: (report.resource_utilization as Record<string, unknown>)?.test_duration_seconds as
+      | number
+      | undefined,
   }))
 }
 
 export async function getTokenStats(): Promise<TokenStats> {
   const { data } = await client.get<TokenStats>('/token/stats')
+  return data
+}
+
+export async function getTokenHistory(
+  count: number = 60
+): Promise<{
+  history: Array<{
+    timestamp: string
+    total_tokens: number
+    prompt_tokens: number
+    completion_tokens: number
+    models: Record<string, any>
+  }>
+  count: number
+}> {
+  const { data } = await client.get('/token/history', { params: { count } })
   return data
 }
 
@@ -149,8 +167,20 @@ export async function clearDefaultModel(): Promise<ActionResponse> {
   return data
 }
 
-export async function getSystemStatus(): Promise<SystemStatus> {
-  const { data } = await client.get<SystemStatus>('/system/status')
+export async function getSystemStatus(
+  includeHistory = false,
+  historyCount = 60
+): Promise<SystemStatus & { history?: any[] }> {
+  const { data } = await client.get<SystemStatus & { history?: any[] }>('/system/status', {
+    params: { include_history: includeHistory, history_count: historyCount },
+  })
+  return data
+}
+
+export async function getSystemHistory(
+  count: number = 60
+): Promise<{ history: any[]; count: number }> {
+  const { data } = await client.get('/system/history', { params: { count } })
   return data
 }
 

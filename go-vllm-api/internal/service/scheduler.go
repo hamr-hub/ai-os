@@ -458,38 +458,6 @@ func (s *Scheduler) freeUpMemory(ctx context.Context, targetModel string) (bool,
 	return false, fmt.Errorf("could not free enough memory")
 }
 
-func (s *Scheduler) SetDefaultModel(name string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	matched := s.FindMatchingModel(name)
-	if matched == "" {
-		return false
-	}
-	s.defaultModel = matched
-	return true
-}
-
-func (s *Scheduler) GetDefaultModel() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.defaultModel
-}
-
-func (s *Scheduler) ClearDefaultModel() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.defaultModel = ""
-}
-
-func (s *Scheduler) GetCurrentModelName() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for name := range s.runningModels {
-		return name
-	}
-	return ""
-}
-
 func (s *Scheduler) PreloadModels(ctx context.Context) {
 	s.mu.Lock()
 	var preloadOrder []string

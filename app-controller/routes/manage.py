@@ -124,6 +124,9 @@ async def get_model_status(refresh: Optional[bool] = False):
             "supports_images": scheduler.get_model_supports_images(model),
             "supports_tool_calling": scheduler.get_model_supports_tool_calling(model),
             "supports_image_generation": scheduler.get_model_supports_image_generation(model),
+            "description": scheduler.get_model_config(model).get("description", "") if scheduler.get_model_config(model) else "",
+            "required_memory": scheduler.get_model_config(model).get("required_memory", "") if scheduler.get_model_config(model) else "",
+            "backend_type": scheduler.get_model_backend_type(model),
         }
 
     cache_service.set(cache_key, status, ttl_seconds=5)
@@ -376,7 +379,14 @@ async def preload_all_models():
 
 @manage_router.get("/token/stats")
 async def get_token_stats():
-    return metrics.get_token_stats()
+    cache_key = "api:manage:token:stats"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = metrics.get_token_stats()
+    cache_service.set(cache_key, result, ttl_seconds=10)
+    return result
 
 
 @manage_router.get("/metrics")
@@ -577,15 +587,15 @@ async def restart_python_service(request: ServiceControlRequest = None):
 
 
 @manage_router.get("/system/status")
-async def system_status():
-    cache_key = "api:manage:system:status"
+async def system_status(include_history: bool = False, history_count: int = 60):
+    cache_key = f"api:manage:system:status:{include_history}:{history_count}"
     cached = cache_service.get(cache_key)
     if cached is not None:
         return cached
 
     import psutil
 
-    cpu_percent = psutil.cpu_percent(interval=1)
+    cpu_percent = psutil.cpu_percent(interval=0.1)
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
 
@@ -609,9 +619,28 @@ async def system_status():
         },
         "timestamp": datetime.now().isoformat()
     }
+    
+    if include_history:
+        from core.deps import system_monitor
+        result["history"] = system_monitor.get_system_history(history_count)
 
-    cache_service.set(cache_key, result, ttl_seconds=10)
+    cache_service.set(cache_key, result, ttl_seconds=5)
     return result
+
+@manage_router.get("/system/history")
+async def get_system_history(count: int = 60):
+    from core.deps import system_monitor
+    return {
+        "history": system_monitor.get_system_history(count),
+        "count": count
+    }
+
+@manage_router.get("/token/history")
+async def get_token_history(count: int = 60):
+    return {
+        "history": metrics.get_token_history(count),
+        "count": count
+    }
 
 
 @manage_router.get("/websocket/connections")
@@ -825,18 +854,6 @@ async def model_info(model_name: str, refresh: Optional[bool] = False):
         "last_used": scheduler.get_model_last_used(model_name).isoformat() if scheduler.get_model_last_used(model_name) else None
     }
 
-    cache_service.set(cache_key, result, ttl_seconds=10)
-    return result
-
-
-@manage_router.get("/token-stats")
-async def get_token_stats():
-    cache_key = "api:manage:token-stats"
-    cached = cache_service.get(cache_key)
-    if cached is not None:
-        return cached
-
-    result = metrics.get_token_stats()
     cache_service.set(cache_key, result, ttl_seconds=10)
     return result
 

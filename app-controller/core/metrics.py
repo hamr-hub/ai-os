@@ -23,6 +23,7 @@ class MetricsCollector:
         self.image_error_counts: Dict[str, int] = defaultdict(int)
 
         self.token_usage: Dict[str, int] = defaultdict(int)
+        self.token_history: List[Dict] = []
 
         self._load_from_redis()
     
@@ -86,6 +87,11 @@ class MetricsCollector:
             data = redis_client.get_json(token_usage_key)
             if data:
                 self.token_usage = defaultdict(int, data)
+
+            token_history_key = self._get_key("token_history")
+            data = redis_client.get_json(token_history_key)
+            if data:
+                self.token_history = data
         except Exception as e:
             logger.error(f"Failed to load metrics from Redis: {e}")
     
@@ -123,6 +129,9 @@ class MetricsCollector:
 
             token_usage_key = self._get_key("token_usage")
             redis_client.set_json(token_usage_key, dict(self.token_usage))
+
+            token_history_key = self._get_key("token_history")
+            redis_client.set_json(token_history_key, self.token_history)
         except Exception as e:
             logger.error(f"Failed to save metrics to Redis: {e}")
     
@@ -166,6 +175,19 @@ class MetricsCollector:
         self.token_usage["total_prompt_tokens"] += prompt_tokens
         self.token_usage["total_completion_tokens"] += completion_tokens
         self.token_usage["total_tokens"] += prompt_tokens + completion_tokens
+
+        # Record history entry
+        self.token_history.append({
+            "timestamp": datetime.now().isoformat(),
+            "total": self.token_usage["total_tokens"],
+            "prompt": self.token_usage["total_prompt_tokens"],
+            "completion": self.token_usage["total_completion_tokens"],
+            "model_name": model_name
+        })
+
+        if len(self.token_history) > 500:
+            self.token_history = self.token_history[-500:]
+
         self._save_to_redis()
 
     def get_token_stats(self) -> Dict:
@@ -186,6 +208,7 @@ class MetricsCollector:
             "total_completion_tokens": self.token_usage.get("total_completion_tokens", 0),
             "total_tokens": self.token_usage.get("total_tokens", 0),
             "models": model_stats,
+            "history": self.token_history,
             "timestamp": datetime.now().isoformat()
         }
     
@@ -194,19 +217,54 @@ class MetricsCollector:
             "timestamp": datetime.now().isoformat(),
             **gpu_status
         })
-        if len(self.gpu_status_history) > 60:
-            self.gpu_status_history = self.gpu_status_history[-60:]
+        if len(self.gpu_status_history) > 300:
+            self.gpu_status_history = self.gpu_status_history[-300:]
         
         gpu_history_key = self._get_key("gpu_history")
         redis_client.set_json(gpu_history_key, self.gpu_status_history)
     
     def record_queue_length(self, length: int):
         self.queue_length_history.append(length)
-        if len(self.queue_length_history) > 60:
-            self.queue_length_history = self.queue_length_history[-60:]
+        if len(self.queue_length_history) > 300:
+            self.queue_length_history = self.queue_length_history[-300:]
         
         queue_history_key = self._get_key("queue_history")
         redis_client.set_json(queue_history_key, self.queue_length_history)
+
+    def save_token_history(self):
+        if not redis_client.is_connected():
+            return
+        
+        try:
+            stats = self.get_token_stats()
+            history_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "total_tokens": stats["total_tokens"],
+                "prompt_tokens": stats["total_prompt_tokens"],
+                "completion_tokens": stats["total_completion_tokens"],
+                "models": stats["models"]
+            }
+            
+            token_history_key = self._get_key("token_history")
+            redis_client.get_client().lpush(token_history_key, json.dumps(history_entry))
+            redis_client.get_client().ltrim(token_history_key, 0, 1000) # Keep 1000 points
+            
+            ttl_30_days = 30 * 24 * 60 * 60
+            redis_client.get_client().expire(token_history_key, ttl_30_days)
+        except Exception as e:
+            logger.error(f"Failed to save token history to Redis: {e}")
+
+    def get_token_history(self, count: int = 60) -> List[Dict]:
+        if not redis_client.is_connected():
+            return []
+        
+        try:
+            token_history_key = self._get_key("token_history")
+            history_data = redis_client.get_client().lrange(token_history_key, 0, count - 1)
+            history = [json.loads(item) for item in history_data]
+            return history[::-1]
+        except Exception:
+            return []
     
     def get_metrics(self) -> Dict:
         avg_response_time = sum(self.response_times) / len(self.response_times) if self.response_times else 0

@@ -378,7 +378,10 @@ class GPUMonitor:
                 "memory_utilization": status.get("memory_utilization", 0),
                 "used_memory": status.get("used_memory", 0),
                 "available_memory": status.get("available_memory", 0),
-                "total_memory": status.get("total_memory", 0)
+                "total_memory": status.get("total_memory", 0),
+                "fan_speed": status.get("fan_speed", 0),
+                "clock_sm": status.get("clock_sm", 0),
+                "clock_mem": status.get("clock_mem", 0)
             }
             
             self._redis_client.lpush("gpu:history", json.dumps(history_entry))
@@ -400,7 +403,10 @@ class GPUMonitor:
                     "memory_utilization": status.get("memory_utilization"),
                     "used_memory": status.get("used_memory"),
                     "available_memory": status.get("available_memory"),
-                    "total_memory": status.get("total_memory")
+                    "total_memory": status.get("total_memory"),
+                    "fan_speed": status.get("fan_speed"),
+                    "clock_sm": status.get("clock_sm"),
+                    "clock_mem": status.get("clock_mem")
                 }
             }
             ttl_1_hour = 60 * 60
@@ -413,6 +419,57 @@ class GPUMonitor:
             return True
         except Exception:
             return False
+
+class SystemMonitor:
+    def __init__(self, redis_client=None):
+        self._redis_client = redis_client
+        self._max_history_days = 7
+        self._history_enabled = True
+    
+    def set_redis_client(self, redis_client):
+        self._redis_client = redis_client
+        
+    def _calculate_max_history_points(self, interval_seconds: int = 5) -> int:
+        seconds_per_day = 24 * 60 * 60
+        total_seconds = self._max_history_days * seconds_per_day
+        return int(total_seconds / interval_seconds)
+
+    def save_system_history(self):
+        if not self._history_enabled or self._redis_client is None:
+            return False
+            
+        try:
+            import psutil
+            cpu_percent = psutil.cpu_percent()
+            memory = psutil.virtual_memory()
+            
+            history_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "cpu_percent": cpu_percent,
+                "memory_percent": memory.percent,
+                "memory_used_mb": memory.used // (1024**2),
+                "memory_available_mb": memory.available // (1024**2)
+            }
+            
+            max_points = self._calculate_max_history_points()
+            self._redis_client.lpush("system:history", json.dumps(history_entry))
+            self._redis_client.ltrim("system:history", 0, max_points - 1)
+            
+            ttl_30_days = 30 * 24 * 60 * 60
+            self._redis_client.expire("system:history", ttl_30_days)
+            return True
+        except Exception:
+            return False
+            
+    def get_system_history(self, count: int = 60) -> List[Dict]:
+        if self._redis_client is None:
+            return []
+        try:
+            history_data = self._redis_client.lrange("system:history", 0, count - 1)
+            history = [json.loads(item) for item in history_data]
+            return history[::-1]
+        except Exception:
+            return []
     
     def _clean_old_history(self):
         try:

@@ -4,8 +4,10 @@ import { useGPU } from '@/composables/useGPU'
 import { useGPUHistory } from '@/composables/useGPUHistory'
 import { useModels } from '@/composables/useModels'
 import { useTokenHistory } from '@/composables/useTokenHistory'
+import { useSystemData } from '@/composables/useSystemData'
 import { formatTokens } from '@/utils/format'
 import LineChart from '@/components/LineChart.vue'
+import GpuMetricsCard from '@/components/cards/GpuMetricsCard.vue'
 import {
   RefreshCw,
   Monitor,
@@ -35,15 +37,24 @@ const historyCount = computed(() => {
 })
 const { gpuHistory, refresh: refreshGPUHistory } = useGPUHistory(historyCount)
 const {
+  systemHistory,
+  refresh: refreshSystem,
+  isRefreshing: isRefreshingSystem,
+} = useSystemData(10000, historyCount)
+const {
   tokenStats,
   tokenTimeLabels,
   tokenTotalDataset,
   refresh: refreshTokenHistory,
   isRefreshing: isRefreshingTokenHistory,
-} = useTokenHistory()
+} = useTokenHistory(30000, historyCount)
 
 const isRefreshing = computed(
-  () => isRefreshingModels.value || isRefreshingGPU.value || isRefreshingTokenHistory.value
+  () =>
+    isRefreshingModels.value ||
+    isRefreshingGPU.value ||
+    isRefreshingTokenHistory.value ||
+    isRefreshingSystem.value
 )
 const gpu = computed(() => gpuSummary.value?.current ?? null)
 const gpuStatus = computed(() => gpuSummary.value?.status ?? 'unavailable')
@@ -141,9 +152,44 @@ const gpuMultiDataset = computed(() => [
   },
 ])
 
+const systemTimeLabels = computed(() =>
+  systemHistory.value.map((e) => {
+    const d = new Date(e.timestamp)
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  })
+)
+
+const cpuDataset = computed(() => [
+  {
+    label: 'CPU 利用率',
+    data: systemHistory.value.map((e) => e.cpu_percent),
+    borderColor: '#ec4899',
+    backgroundColor: 'rgba(236, 72, 153, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+])
+
+const memDataset = computed(() => [
+  {
+    label: '内存利用率',
+    data: systemHistory.value.map((e) => e.memory_percent),
+    borderColor: '#8b5cf6',
+    backgroundColor: 'rgba(139, 92, 246, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+])
+
 const changeTimeRange = (range: '1m' | '5m' | '15m' | '1h' | '6h') => {
   timeRange.value = range
   refreshGPUHistory()
+  refreshSystem()
+  refreshTokenHistory()
 }
 
 const refreshAll = () => {
@@ -151,6 +197,7 @@ const refreshAll = () => {
   refreshModels()
   refreshTokenHistory()
   refreshGPUHistory()
+  refreshSystem()
 }
 </script>
 
@@ -276,6 +323,36 @@ const refreshAll = () => {
             :height="220"
             y-unit=""
             :show-legend="true"
+          />
+        </div>
+
+        <div class="card chart-card">
+          <div class="card-header">
+            <Cpu class="card-icon purple" />
+            <span class="card-title">CPU 利用率</span>
+          </div>
+          <LineChart
+            :labels="systemTimeLabels"
+            :datasets="cpuDataset"
+            :height="180"
+            y-unit="%"
+            :y-min="0"
+            :y-max="100"
+          />
+        </div>
+
+        <div class="card chart-card">
+          <div class="card-header">
+            <MemoryStick class="card-icon blue" />
+            <span class="card-title">系统内存趋势</span>
+          </div>
+          <LineChart
+            :labels="systemTimeLabels"
+            :datasets="memDataset"
+            :height="180"
+            y-unit="%"
+            :y-min="0"
+            :y-max="100"
           />
         </div>
       </div>

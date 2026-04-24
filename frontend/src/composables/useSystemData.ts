@@ -1,14 +1,11 @@
-import { ref, onMounted, onUnmounted } from 'vue'
-import { getSystemStatus, getQueueStatus, getHealthAlert } from '@/api/client'
-import type { SystemStatus, QueueStatus, HealthAlert, SystemHistoryEntry } from '@/types'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { getSystemStatus, getHealthAlert, getSystemHistory } from '@/api/client'
+import type { SystemStatus, HealthAlert } from '@/types'
 
-const MAX_HISTORY = 30
-
-export function useSystemData(intervalMs = 10000) {
+export function useSystemData(intervalMs = 10000, initialCount = 60) {
   const systemStatus = ref<SystemStatus | null>(null)
-  const queueStatus = ref<QueueStatus | null>(null)
   const healthAlert = ref<HealthAlert | null>(null)
-  const systemHistory = ref<SystemHistoryEntry[]>([])
+  const systemHistory = ref<any[]>([])
   const loading = ref(false)
   const isRefreshing = ref(false)
   const error = ref<string | null>(null)
@@ -22,32 +19,20 @@ export function useSystemData(intervalMs = 10000) {
     }
     error.value = null
     try {
-      systemStatus.value = await getSystemStatus()
-      if (systemStatus.value) {
-        systemHistory.value.push({
-          timestamp: systemStatus.value.timestamp,
-          cpu_percent: systemStatus.value.cpu.percent,
-          memory_percent: systemStatus.value.memory.percent,
-        })
-        if (systemHistory.value.length > MAX_HISTORY) {
-          systemHistory.value.shift()
-        }
-      }
+      const [status, alert, historyData] = await Promise.all([
+        getSystemStatus(),
+        getHealthAlert(),
+        getSystemHistory(initialCount)
+      ])
+      systemStatus.value = status
+      healthAlert.value = alert
+      systemHistory.value = historyData.history
     } catch (err) {
-      console.error('Failed to fetch system status:', err)
+      error.value = err instanceof Error ? err.message : 'Failed to fetch system data'
+    } finally {
+      loading.value = false
+      isRefreshing.value = false
     }
-    try {
-      queueStatus.value = await getQueueStatus()
-    } catch (err) {
-      console.error('Failed to fetch queue status:', err)
-    }
-    try {
-      healthAlert.value = await getHealthAlert()
-    } catch (err) {
-      console.error('Failed to fetch health alert:', err)
-    }
-    loading.value = false
-    isRefreshing.value = false
   }
 
   const refresh = () => {
@@ -65,6 +50,8 @@ export function useSystemData(intervalMs = 10000) {
       timer = null
     }
   }
+
+  const queueStatus = computed(() => systemStatus.value?.queue ?? null)
 
   onMounted(() => {
     fetch()
@@ -84,7 +71,6 @@ export function useSystemData(intervalMs = 10000) {
     isRefreshing,
     error,
     refresh,
-    fetch,
     startPolling,
     stopPolling,
   }

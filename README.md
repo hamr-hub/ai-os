@@ -53,6 +53,7 @@
 | 🎯 **无缝对接** | 通过自定义渠道配置，原有的用户分组、额度扣费、对话历史直接可用 |
 | 🎯 **实时监控** | WebSocket 推送 GPU 状态和模型状态到前端 |
 | 🎯 **健康检查** | 综合健康评分（0-100），支持告警机制 |
+| 🎯 **自动评测** | 内置模型功能性测试与性能基准测试（TPS、延迟、通过率） |
 
 ---
 
@@ -227,6 +228,8 @@ Python 控制层会自动将配置的模型列表同步到 AIClient-2-API，无�
 | `/manage/models/{name}/start` | POST | 启动模型 |
 | `/manage/models/{name}/stop` | POST | 停止模型 |
 | `/manage/queue` | GET | 队列状态 |
+| `/v1/test/model/{name}` | POST | 运行模型评测 |
+| `/v1/test/reports` | GET | 获取所有评测报告 |
 | `/health` | GET | 健康检查 |
 
 ---

@@ -73,6 +73,7 @@ class ChatCompletionRequest(BaseModel):
     stop: Optional[List[str]] = None
     presence_penalty: Optional[float] = 0.0
     frequency_penalty: Optional[float] = 0.0
+    stream_options: Optional[Dict[str, Any]] = None
 
     @field_validator('messages')
     def validate_messages_with_images(cls, v):

@@ -1,5 +1,5 @@
 from core.scheduler import Scheduler
-from core.monitor import GPUMonitor
+from core.monitor import GPUMonitor, SystemMonitor
 from core.sys_ctl import SystemController
 from core.websocket_manager import WebSocketManager
 from core.config_watcher import ConfigWatcher
@@ -41,6 +41,7 @@ logger = setup_logger(log_dir=log_dir)
 structured_logger = StructuredLogger("ai_controller")
 
 gpu_monitor = GPUMonitor()
+system_monitor = SystemMonitor()
 sys_controller = SystemController()
 scheduler = Scheduler(gpu_monitor, sys_controller)
 ws_manager = WebSocketManager()

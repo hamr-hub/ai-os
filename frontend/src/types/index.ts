@@ -54,6 +54,8 @@ export interface GPUSummaryCurrent {
   available_memory: number
   total_memory: number
   fan_speed?: number
+  clock_sm?: number
+  clock_mem?: number
 }
 
 export interface GPUHistoryEntry {
@@ -66,6 +68,9 @@ export interface GPUHistoryEntry {
   used_memory: number
   available_memory: number
   total_memory: number
+  fan_speed?: number
+  clock_sm?: number
+  clock_mem?: number
 }
 
 export interface ModelStatus {
@@ -79,6 +84,9 @@ export interface ModelStatus {
     supports_images?: boolean
     supports_tool_calling?: boolean
     supports_image_generation?: boolean
+    description?: string
+    required_memory?: string
+    backend_type?: string
   }
 }
 
@@ -242,6 +250,14 @@ export interface TokenModelStats {
   total_tokens: number
 }
 
+export interface TokenHistoryEntry {
+  timestamp: string
+  total: number
+  prompt: number
+  completion: number
+  model_name?: string
+}
+
 export interface TokenStats {
   total_prompt_tokens: number
   total_completion_tokens: number
@@ -249,5 +265,6 @@ export interface TokenStats {
   prompt_tokens?: number
   completion_tokens?: number
   models: Record<string, TokenModelStats>
+  history?: TokenHistoryEntry[]
   timestamp: string
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { computed, watch, ref } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
@@ -58,7 +59,7 @@ const props = withDefaults(
   }
 )
 
-const chartRef = ref<InstanceType<typeof Line> | null>(null)
+const chartRef = ref<{ chart: { data: unknown; update: (mode?: string) => void } } | null>(null)
 
 const chartData = computed(() => ({
   labels: props.labels,
@@ -77,7 +78,7 @@ const chartData = computed(() => ({
 const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: props.animate ? ({ duration: 300 } as Record<string, unknown>) : false,
+  animation: props.animate ? ({ duration: 300 } as const) : (false as const),
   interaction: {
     mode: 'index' as const,
     intersect: false,
@@ -112,7 +113,7 @@ const chartOptions = computed(() => ({
       titleFont: { size: 12 },
       bodyFont: { size: 12 },
       callbacks: {
-        label: (ctx: { parsed: { y: number }; dataset: { label: string } }) => {
+        label: (ctx: any) => {
           const val = ctx.parsed.y
           return `${ctx.dataset.label}: ${val.toFixed(1)}${props.yUnit}`
         },
@@ -143,7 +144,7 @@ const chartOptions = computed(() => ({
       ticks: {
         color: '#475569',
         font: { size: 11 },
-        callback: (val: number) => `${val}${props.yUnit}`,
+        callback: (val: any) => `${val}${props.yUnit}`,
       },
       border: { display: false },
     },

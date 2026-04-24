@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/* eslint-disable vue/no-v-html */
 import { ref, nextTick, computed, watch, onMounted, onUnmounted } from 'vue'
 import {
   Send,
@@ -312,12 +313,13 @@ const autoResize = (event: Event) => {
                 'bubble-agent': message.role === 'assistant',
                 'bubble-sys': message.role === 'system',
               }"
-              >
+            >
               <div
                 v-if="message.role === 'assistant'"
                 class="msg-text markdown-body"
                 v-html="renderMarkdown(message.content)"
               ></div>
+              <p v-else class="msg-text">{{ message.content }}</p>
 
               <div v-if="message.toolCalls?.length" class="tool-calls-block">
                 <div v-for="tc in message.toolCalls" :key="tc.id" class="tool-call-item">

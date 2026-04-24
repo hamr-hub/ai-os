@@ -30,6 +30,7 @@ const groups = [
     items: [
       { name: 'dashboard', label: '总览面板', icon: LayoutDashboard },
       { name: 'models', label: '模型调度', icon: Server },
+      { name: 'benchmarks', label: '模型评测', icon: ShieldCheck },
       { name: 'agent', label: 'AI Agent', icon: Bot },
     ],
   },

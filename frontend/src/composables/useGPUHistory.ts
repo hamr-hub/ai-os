@@ -2,7 +2,7 @@ import { ref, onMounted, onUnmounted, unref, type MaybeRefOrGetter } from 'vue'
 import { getGPUHistory } from '@/api/client'
 import type { GPUHistoryEntry } from '@/types'
 
-export function useGPUHistory(count: MaybeRefOrGetter<number> = 60, intervalMs = 30000) {
+export function useGPUHistory(count: MaybeRefOrGetter<number> = 120, intervalMs = 10000) {
   const gpuHistory = ref<GPUHistoryEntry[]>([])
   const loading = ref(false)
   const isRefreshing = ref(false)

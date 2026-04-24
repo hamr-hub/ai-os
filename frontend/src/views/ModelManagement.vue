@@ -221,9 +221,12 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
               <div class="card-top">
                 <div class="model-info">
                   <span class="model-name">{{ model.name }}</span>
+                  <p v-if="model.description" class="model-desc">{{ model.description }}</p>
                   <span class="model-meta">
                     <span class="status-dot online"></span>
+                    <span class="backend-tag">{{ model.backend_type }}</span>
                     端口 {{ model.port ?? '--' }} · {{ model.active_requests }} 请求
+                    <span v-if="model.required_memory" class="mem-req">显存 {{ model.required_memory }}</span>
                   </span>
                 </div>
                 <span v-if="defaultModel === model.name" class="default-badge">
@@ -281,10 +284,13 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
             <div v-for="model in stoppedModels" :key="model.name" class="model-item">
               <div class="item-info">
                 <span class="item-name">{{ model.name }}</span>
+                <p v-if="model.description" class="item-desc">{{ model.description }}</p>
                 <span class="item-meta">
                   <span class="status-dot offline"></span>
+                  <span class="backend-tag">{{ model.backend_type }}</span>
                   端口 {{ model.port ?? '--' }}
                   <span v-if="model.preloaded" class="preload-tag">预加载</span>
+                  <span v-if="model.required_memory" class="mem-req">显存 {{ model.required_memory }}</span>
                 </span>
               </div>
               <div class="item-actions">
@@ -703,12 +709,35 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
   font-weight: 600;
   color: var(--text-primary);
 }
+.model-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 4px 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .model-meta {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.backend-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+.mem-req {
+  color: var(--color-primary-light);
+  font-weight: 500;
 }
 .status-dot {
   width: 6px;
@@ -830,12 +859,19 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
   font-weight: 500;
   color: var(--text-primary);
 }
+.item-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 2px 0;
+  line-height: 1.3;
+}
 .item-meta {
   font-size: 11px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .preload-tag {

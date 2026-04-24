@@ -182,6 +182,16 @@ const sparklineDatasets = (key: keyof GPUHistoryEntry, color: string, bgColor: s
         <span class="stat-label">运行模型</span>
         <span class="stat-val">{{ runningModelsCount }} / {{ totalModelsCount }}</span>
       </div>
+      <div v-if="gpu.fan_speed !== undefined" class="stat-item">
+        <Activity class="stat-icon" />
+        <span class="stat-label">风扇</span>
+        <span class="stat-val">{{ gpu.fan_speed }}%</span>
+      </div>
+      <div v-if="gpu.clock_sm !== undefined" class="stat-item">
+        <Cpu class="stat-icon" />
+        <span class="stat-label">核心频率</span>
+        <span class="stat-val">{{ gpu.clock_sm }} MHz</span>
+      </div>
     </div>
     <div v-else class="empty-state">GPU 不可用</div>
   </div>
