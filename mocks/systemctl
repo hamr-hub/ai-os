@@ -1,0 +1,85 @@
+#!/Users/hyx/miniforge3/bin/python3
+import sys
+import json
+import os
+import time
+import subprocess
+
+STATE_FILE = "/tmp/ai_os_state.json"
+
+def get_state():
+    if not os.path.exists(STATE_FILE):
+        return {"vllm": {"status": "stopped"}}
+    with open(STATE_FILE, "r") as f:
+        return json.load(f)
+
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+def handle_start():
+    state = get_state()
+    state["vllm"]["status"] = "loading"
+    state["vllm"]["loading_start"] = time.time()
+    save_state(state)
+    # Simulate loading transition in background
+    # After 20-60s, it will become active
+    # For now, we just set the state to loading. 
+    # The vllm_mock.py will handle the transition or we can start a small script.
+    return 0
+
+def handle_stop():
+    state = get_state()
+    state["vllm"]["status"] = "stopped"
+    state["vllm"]["pid"] = 0
+    save_state(state)
+    return 0
+
+def handle_status():
+    state = get_state()
+    status = state["vllm"]["status"]
+    if status in ["loading", "active"]:
+        print("active")
+    else:
+        print("inactive")
+    return 0
+
+def handle_show():
+    state = get_state()
+    status = state["vllm"]["status"]
+    if status == "active":
+        print("ActiveState=active")
+        print("SubState=running")
+        print("MainPID=77777")
+        print("MemoryCurrent=22000000000")
+    elif status == "loading":
+        print("ActiveState=active")
+        print("SubState=activating")
+        print("MainPID=77777")
+        print("MemoryCurrent=12000000000")
+    else:
+        print("ActiveState=inactive")
+        print("SubState=dead")
+        print("MainPID=0")
+        print("MemoryCurrent=0")
+    return 0
+
+args = sys.argv[1:]
+if not args:
+    sys.exit(1)
+
+cmd = args[0]
+if cmd == "start":
+    sys.exit(handle_start())
+elif cmd == "stop":
+    sys.exit(handle_stop())
+elif cmd == "restart":
+    handle_stop()
+    sys.exit(handle_start())
+elif cmd == "is-active":
+    sys.exit(handle_status())
+elif cmd == "show":
+    sys.exit(handle_show())
+else:
+    # ignore other commands
+    sys.exit(0)

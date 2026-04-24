@@ -196,3 +196,205 @@ const sparklineDatasets = (key: keyof GPUHistoryEntry, color: string, bgColor: s
     <div v-else class="empty-state">GPU 不可用</div>
   </div>
 </template>
+
+<style scoped>
+.gpu-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gpu-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.gpu-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gpu-vram {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sparkline-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.sparkline-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spark-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.spark-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.spark-val.status-good {
+  color: #22c55e;
+}
+.spark-val.status-warning {
+  color: #f59e0b;
+}
+.spark-val.status-danger {
+  color: #ef4444;
+}
+
+.metrics-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.mini-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mini-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.mini-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mini-val.status-good {
+  color: #22c55e;
+}
+.mini-val.status-warning {
+  color: #f59e0b;
+}
+.mini-val.status-danger {
+  color: #ef4444;
+}
+
+.mini-bar {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.mini-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.gpu-stats-content {
+  padding: 12px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.stat-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--color-primary);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.stat-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stat-val.status-good {
+  color: #22c55e;
+}
+.stat-val.status-warning {
+  color: #f59e0b;
+}
+.stat-val.status-danger {
+  color: #ef4444;
+}
+
+.error-state,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.error-state p,
+.empty-state p {
+  font-size: 13px;
+  margin: 0;
+}
+
+.retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-primary);
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.retry-btn:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+</style>

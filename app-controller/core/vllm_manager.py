@@ -23,13 +23,13 @@ model_switch_lock = asyncio.Lock()
 _switching_in_progress = False
 
 # 模型扫描路径
-MODEL_BASE_PATH = "/mnt/pve_models"
+MODEL_BASE_PATH = "/tmp/pve_models"
 
 # vLLM 服务名称
 VLLM_SERVICE_NAME = "vllm-aiclient"
 
 # vLLM 启动脚本路径
-VLLM_START_SCRIPT = "/root/ai-suite/start_vllm_aiclient.sh"
+VLLM_START_SCRIPT = "/tmp/ai-suite/start_vllm_aiclient.sh"
 
 # vLLM API 默认端口
 VLLM_DEFAULT_PORT = 8000

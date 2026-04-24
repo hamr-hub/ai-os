@@ -535,6 +535,19 @@ const handleSwitchWithToast = async (name: string) => {
   background: var(--bg-primary);
 }
 
+.dashboard::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dashboard::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 2px;
+}
+
 .header {
   height: 56px;
   display: flex;

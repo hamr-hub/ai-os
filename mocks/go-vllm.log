@@ -1,0 +1,1 @@
+2026-04-24T21:48:45.733+0800	INFO	server/main.go:42	config loaded	{"path": "configs/config.yaml", "models": 11}

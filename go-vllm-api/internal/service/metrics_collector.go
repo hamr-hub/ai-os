@@ -46,15 +46,19 @@ type TokenHistoryEntry struct {
 }
 
 type GPUHistoryEntry struct {
-	Timestamp         string `json:"timestamp"`
-	Temperature       int    `json:"temperature"`
-	Utilization       int    `json:"utilization"`
-	UsedMemory        int64  `json:"used_memory"`
-	AvailableMemory   int64  `json:"available_memory"`
-	TotalMemory       int64  `json:"total_memory"`
-	PowerDraw         int    `json:"power_draw"`
-	PowerPercent      int    `json:"power_percent"`
-	MemoryUtilization int    `json:"memory_utilization"`
+	Timestamp            string  `json:"timestamp"`
+	Temperature          int     `json:"temperature"`
+	Utilization          int     `json:"utilization"`
+	UsedMemory           int64   `json:"used_memory"`
+	AvailableMemory      int64   `json:"available_memory"`
+	TotalMemory          int64   `json:"total_memory"`
+	PowerDraw            int     `json:"power_draw"`
+	PowerPercent         int     `json:"power_percent"`
+	MemoryUtilization    int     `json:"memory_utilization"`
+	EccErrors            int     `json:"ecc_errors"`
+	VLLMRunningRequests  int     `json:"vllm_running_requests,omitempty"`
+	VLLMWaitingRequests  int     `json:"vllm_waiting_requests,omitempty"`
+	VLLMGPUCacheUsage    float64 `json:"vllm_gpu_cache_usage,omitempty"`
 }
 
 type AlertInfo struct {
@@ -408,6 +412,14 @@ func (m *MetricsCollector) SaveGPUHistory(gpuStatus *GPUStatus) {
 		PowerDraw:         gpuStatus.PowerDraw,
 		PowerPercent:      gpuStatus.PowerPercent,
 		MemoryUtilization: gpuStatus.MemoryUtilization,
+	}
+	if gpuStatus.Primary != nil {
+		entry.EccErrors = gpuStatus.Primary.EccErrors
+	}
+	if gpuStatus.VLLMMetrics != nil {
+		entry.VLLMRunningRequests = gpuStatus.VLLMMetrics.RunningRequests
+		entry.VLLMWaitingRequests = gpuStatus.VLLMMetrics.WaitingRequests
+		entry.VLLMGPUCacheUsage = gpuStatus.VLLMMetrics.GPUCacheUsage
 	}
 	data, _ := json.Marshal(entry)
 	m.redis.LPush(ctx, key, string(data))

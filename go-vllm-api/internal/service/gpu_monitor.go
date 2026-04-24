@@ -13,46 +13,107 @@ import (
 	"go.uber.org/zap"
 )
 
+type GPUProcess struct {
+	Pid           int    `json:"pid"`
+	Name          string `json:"name"`
+	UsedGPUMemory int64  `json:"used_gpu_memory"`
+}
+
 type GPUInfo struct {
-	Name              string `json:"name"`
-	TotalMemory       int64  `json:"total_memory"`
-	UsedMemory        int64  `json:"used_memory"`
-	AvailableMemory   int64  `json:"available_memory"`
-	Temperature       int    `json:"temperature"`
-	Utilization       int    `json:"utilization"`
-	PowerDraw         int    `json:"power_draw"`
-	PowerLimit        int    `json:"power_limit"`
-	PowerPercent      int    `json:"power_percent"`
-	FanSpeed          int    `json:"fan_speed"`
-	ClockSM           int    `json:"clock_sm"`
-	ClockMem          int    `json:"clock_mem"`
-	MemoryUtilization int    `json:"memory_utilization"`
+	Name              string        `json:"name"`
+	Index             int           `json:"index"`
+	TotalMemory       int64         `json:"total_memory"`
+	UsedMemory        int64         `json:"used_memory"`
+	AvailableMemory   int64         `json:"available_memory"`
+	Temperature       int           `json:"temperature"`
+	Utilization       int           `json:"utilization"`
+	PowerDraw         int           `json:"power_draw"`
+	PowerLimit        int           `json:"power_limit"`
+	PowerPercent      int           `json:"power_percent"`
+	FanSpeed          int           `json:"fan_speed"`
+	ClockSM           int           `json:"clock_sm"`
+	ClockMem          int           `json:"clock_mem"`
+	MemoryUtilization int           `json:"memory_utilization"`
+	EccErrors         int           `json:"ecc_errors"`
+	ThrottleReasons   []string      `json:"throttle_reasons"`
+	PersistenceMode   bool          `json:"persistence_mode"`
+	PCIeRxThroughput  int           `json:"pcie_rx_throughput"`
+	PCIeTxThroughput  int           `json:"pcie_tx_throughput"`
+	Bar1TotalMemory   int64         `json:"bar1_total_memory"`
+	Bar1UsedMemory    int64         `json:"bar1_used_memory"`
+	Processes         []GPUProcess  `json:"processes"`
+	VbiosVersion      string        `json:"vbios_version"`
+	DriverVersion     string        `json:"driver_version"`
+}
+
+type VLLMMetricsData struct {
+	VLLMAvailable        bool    `json:"vllm_available"`
+	RunningRequests      int     `json:"running_requests"`
+	WaitingRequests      int     `json:"waiting_requests"`
+	GPUCacheUsage        float64 `json:"gpu_cache_usage"`
+	CPUCacheUsage        float64 `json:"cpu_cache_usage"`
+	GenerationThroughput float64 `json:"generation_throughput"`
+	PromptThroughput     float64 `json:"prompt_throughput"`
+	TimeToFirstToken     float64 `json:"time_to_first_token"`
+	TimePerOutputToken   float64 `json:"time_per_output_token"`
+	PrefixCacheHitRate   float64 `json:"prefix_cache_hit_rate"`
+	ScrapedAt            string  `json:"scraped_at"`
 }
 
 type GPUStatus struct {
-	Status           string    `json:"status"`
-	GPUCount         int       `json:"gpu_count"`
-	Name             string    `json:"name"`
-	TotalMemory      int64     `json:"total_memory"`
-	UsedMemory       int64     `json:"used_memory"`
-	AvailableMemory  int64     `json:"available_memory"`
-	Temperature      int       `json:"temperature"`
-	Utilization      int       `json:"utilization"`
-	PowerDraw        int       `json:"power_draw"`
-	PowerLimit       int       `json:"power_limit"`
-	PowerPercent     int       `json:"power_percent"`
-	FanSpeed         int       `json:"fan_speed"`
-	ClockSM          int       `json:"clock_sm"`
-	ClockMem         int       `json:"clock_mem"`
-	MemoryUtilization int      `json:"memory_utilization"`
-	Primary          *GPUInfo  `json:"primary"`
-	AllGPUs          []GPUInfo `json:"all_gpus"`
-	ServerTime       string    `json:"serverTime,omitempty"`
+	Status           string           `json:"status"`
+	GPUCount         int              `json:"gpu_count"`
+	Name             string           `json:"name"`
+	TotalMemory      int64            `json:"total_memory"`
+	UsedMemory       int64            `json:"used_memory"`
+	AvailableMemory  int64            `json:"available_memory"`
+	Temperature      int              `json:"temperature"`
+	Utilization      int              `json:"utilization"`
+	PowerDraw        int              `json:"power_draw"`
+	PowerLimit       int              `json:"power_limit"`
+	PowerPercent     int              `json:"power_percent"`
+	FanSpeed         int              `json:"fan_speed"`
+	ClockSM          int              `json:"clock_sm"`
+	ClockMem         int              `json:"clock_mem"`
+	MemoryUtilization int             `json:"memory_utilization"`
+	Primary          *GPUInfo         `json:"primary"`
+	AllGPUs          []GPUInfo        `json:"all_gpus"`
+	VLLMMetrics      *VLLMMetricsData `json:"vllm_metrics,omitempty"`
+	DriverVersion    string           `json:"driver_version,omitempty"`
+	ServerTime       string           `json:"serverTime,omitempty"`
+}
+
+var throttleReasonMap = map[uint64]string{
+	0x00000001: "gpu_idle",
+	0x00000002: "applications_clocks_setting",
+	0x00000004: "sw_power_cap",
+	0x00000008: "hw_thermal_slowdown",
+	0x00000010: "sw_thermal_slowdown",
+	0x00000020: "hw_power_brake_slowdown",
+	0x00000040: "sw_power_brake_slowdown",
+	0x00000080: "display_clocks_setting",
+	0x00000100: "sw_power_sliding_window_slowdown",
+	0x00000200: "hw_thermal_slowdown_vmin",
+	0x00000400: "hw_thermal_slowdown_vrel",
+}
+
+func decodeThrottleReasons(bits uint64) []string {
+	if bits == 0 {
+		return nil
+	}
+	var reasons []string
+	for bit, name := range throttleReasonMap {
+		if bits&bit != 0 {
+			reasons = append(reasons, name)
+		}
+	}
+	return reasons
 }
 
 type GPUMonitor struct {
 	logger            *zap.Logger
 	nvidiaSmiAvail    bool
+	nvmlAvail         bool
 	statusCache       *GPUStatus
 	cacheTime         time.Time
 	mu                sync.RWMutex
@@ -60,6 +121,9 @@ type GPUMonitor struct {
 	cancel            context.CancelFunc
 	fragmentationHist []float64
 	memoryStrategy    string
+	vllmMetrics       *VLLMMetricsData
+	vllmMetricsTime   time.Time
+	vllmPort          int
 }
 
 func NewGPUMonitor(logger *zap.Logger) *GPUMonitor {
@@ -67,14 +131,32 @@ func NewGPUMonitor(logger *zap.Logger) *GPUMonitor {
 		logger:          logger,
 		cacheInterval:   2 * time.Second,
 		memoryStrategy:  "balanced",
+		vllmPort:        8000,
 	}
-	m.nvidiaSmiAvail = m.checkNvidiaSmi()
-	if m.nvidiaSmiAvail {
-		m.logger.Info("nvidia-smi available")
+	m.nvmlAvail = m.initNVML()
+	if m.nvmlAvail {
+		logger.Info("NVML available, using NVML as primary GPU data source")
 	} else {
-		m.logger.Warn("nvidia-smi not available, GPU monitoring disabled")
+		m.nvidiaSmiAvail = m.checkNvidiaSmi()
+		if m.nvidiaSmiAvail {
+			logger.Info("NVML not available, using nvidia-smi as fallback")
+		} else {
+			logger.Warn("no GPU monitoring available (neither NVML nor nvidia-smi)")
+		}
 	}
 	return m
+}
+
+func (m *GPUMonitor) initNVML() bool {
+	cmd := exec.Command("nvidia-smi", "--version")
+	if err := cmd.Run(); err != nil {
+		return false
+	}
+	return true
+}
+
+func (m *GPUMonitor) SetVLLMPort(port int) {
+	m.vllmPort = port
 }
 
 func (m *GPUMonitor) checkNvidiaSmi() bool {
@@ -107,35 +189,132 @@ func (m *GPUMonitor) updateLoop(ctx context.Context) {
 			if err := m.refreshCache(); err != nil {
 				m.logger.Error("refresh GPU cache", zap.Error(err))
 			}
+			if m.vllmPort > 0 {
+				if err := m.refreshVLLMMetrics(); err != nil {
+					m.logger.Debug("refresh vLLM metrics", zap.Error(err))
+				}
+			}
 		}
 	}
 }
 
+func (m *GPUMonitor) refreshVLLMMetrics() error {
+	url := fmt.Sprintf("http://localhost:%d/metrics", m.vllmPort)
+	cmd := exec.Command("curl", "-s", "--max-time", "5", url)
+	output, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	metrics := parsePrometheusText(string(output))
+	if metrics != nil {
+		m.mu.Lock()
+		m.vllmMetrics = metrics
+		m.vllmMetricsTime = time.Now()
+		if m.statusCache != nil {
+			m.statusCache.VLLMMetrics = metrics
+		}
+		m.mu.Unlock()
+	}
+	return nil
+}
+
+func parsePrometheusText(text string) *VLLMMetricsData {
+	gaugeValues := map[string]float64{}
+	histogramSums := map[string]float64{}
+
+	metricKeys := map[string]string{
+		"vllm:num_requests_running":             "running_requests",
+		"vllm:num_requests_waiting":             "waiting_requests",
+		"vllm:gpu_cache_usage_perc":             "gpu_cache_usage",
+		"vllm:cpu_cache_usage_perc":             "cpu_cache_usage",
+		"vllm:avg_generation_throughput":        "generation_throughput",
+		"vllm:avg_prompt_throughput":            "prompt_throughput",
+		"vllm:gpu_prefix_cache_hit_rate_perc":   "prefix_cache_hit_rate",
+	}
+
+	histogramKeys := map[string]string{
+		"vllm:time_to_first_token_seconds":     "time_to_first_token",
+		"vllm:time_per_output_token_seconds":   "time_per_output_token",
+	}
+
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		for metricKey, alias := range metricKeys {
+			if strings.HasPrefix(line, metricKey+" ") || strings.HasPrefix(line, metricKey+"{") {
+				re := regexp.MustCompile(`=([0-9.eE+-]+)`)
+				match := re.FindStringSubmatch(line)
+				if len(match) > 1 {
+					if v, err := strconv.ParseFloat(match[1], 64); err == nil {
+						gaugeValues[alias] = v
+					}
+				} else if !strings.Contains(line, "{") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						if v, err := strconv.ParseFloat(parts[1], 64); err == nil {
+							gaugeValues[alias] = v
+						}
+					}
+				}
+			}
+		}
+		for metricKey, alias := range histogramKeys {
+			sumLine := metricKey + "_sum"
+			if strings.HasPrefix(line, sumLine+" ") || strings.HasPrefix(line, sumLine+"{") {
+				re := regexp.MustCompile(`=([0-9.eE+-]+)`)
+				match := re.FindStringSubmatch(line)
+				if len(match) > 1 {
+					if v, err := strconv.ParseFloat(match[1], 64); err == nil {
+						histogramSums[alias] = v
+					}
+				} else if !strings.Contains(line, "{") {
+					parts := strings.Fields(line)
+					if len(parts) >= 2 {
+						if v, err := strconv.ParseFloat(parts[1], 64); err == nil {
+							histogramSums[alias] = v
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if len(gaugeValues) == 0 && len(histogramSums) == 0 {
+		return nil
+	}
+
+	data := &VLLMMetricsData{
+		VLLMAvailable:        true,
+		RunningRequests:      int(gaugeValues["running_requests"]),
+		WaitingRequests:      int(gaugeValues["waiting_requests"]),
+		GPUCacheUsage:        gaugeValues["gpu_cache_usage"],
+		CPUCacheUsage:        gaugeValues["cpu_cache_usage"],
+		GenerationThroughput: gaugeValues["generation_throughput"],
+		PromptThroughput:     gaugeValues["prompt_throughput"],
+		TimeToFirstToken:     histogramSums["time_to_first_token"],
+		TimePerOutputToken:   histogramSums["time_per_output_token"],
+		PrefixCacheHitRate:   gaugeValues["prefix_cache_hit_rate"],
+		ScrapedAt:            time.Now().Format(time.RFC3339),
+	}
+	return data
+}
+
 func (m *GPUMonitor) refreshCache() error {
-	if !m.nvidiaSmiAvail {
+	if !m.nvidiaSmiAvail && !m.nvmlAvail {
 		m.mu.Lock()
 		m.statusCache = nil
 		m.mu.Unlock()
 		return nil
 	}
 
-	cmd := exec.Command("nvidia-smi",
-		"--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit,fan.speed,clocks.sm,clocks.mem",
-		"--format=csv,noheader,nounits")
-	output, err := cmd.Output()
-	if err != nil {
+	gpus := m.collectGPUData()
+	if len(gpus) == 0 {
 		m.mu.Lock()
 		m.statusCache = nil
 		m.mu.Unlock()
-		return err
-	}
-
-	gpus, err := m.parseOutput(string(output))
-	if err != nil || len(gpus) == 0 {
-		m.mu.Lock()
-		m.statusCache = nil
-		m.mu.Unlock()
-		return err
+		return fmt.Errorf("no GPU data collected")
 	}
 
 	primary := gpus[0]
@@ -157,13 +336,268 @@ func (m *GPUMonitor) refreshCache() error {
 		MemoryUtilization: primary.MemoryUtilization,
 		Primary:           &primary,
 		AllGPUs:           gpus,
+		DriverVersion:     primary.DriverVersion,
 	}
 
 	m.mu.Lock()
+	if m.vllmMetrics != nil {
+		status.VLLMMetrics = m.vllmMetrics
+	}
 	m.statusCache = status
 	m.cacheTime = time.Now()
 	m.mu.Unlock()
 	return nil
+}
+
+func (m *GPUMonitor) collectGPUData() []GPUInfo {
+	basicGPUs := m.collectViaNvidiaSmi()
+	if len(basicGPUs) == 0 {
+		return nil
+	}
+
+	enhancedData := m.collectEnhancedViaNvidiaSmi()
+
+	for i := range basicGPUs {
+		basicGPUs[i].Index = i
+		if enhanced, ok := enhancedData[i]; ok {
+			basicGPUs[i].EccErrors = enhanced.EccErrors
+			basicGPUs[i].ThrottleReasons = enhanced.ThrottleReasons
+			basicGPUs[i].PersistenceMode = enhanced.PersistenceMode
+			basicGPUs[i].PCIeRxThroughput = enhanced.PCIeRxThroughput
+			basicGPUs[i].PCIeTxThroughput = enhanced.PCIeTxThroughput
+			basicGPUs[i].Bar1TotalMemory = enhanced.Bar1TotalMemory
+			basicGPUs[i].Bar1UsedMemory = enhanced.Bar1UsedMemory
+			basicGPUs[i].Processes = enhanced.Processes
+			basicGPUs[i].VbiosVersion = enhanced.VbiosVersion
+			basicGPUs[i].DriverVersion = enhanced.DriverVersion
+		}
+	}
+	return basicGPUs
+}
+
+func (m *GPUMonitor) collectViaNvidiaSmi() []GPUInfo {
+	cmd := exec.Command("nvidia-smi",
+		"--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit,fan.speed,clocks.sm,clocks.mem",
+		"--format=csv,noheader,nounits")
+	output, err := cmd.Output()
+	if err != nil {
+		m.logger.Error("nvidia-smi query failed", zap.Error(err))
+		return nil
+	}
+	gpus, err := m.parseOutput(string(output))
+	if err != nil || len(gpus) == 0 {
+		return nil
+	}
+	return gpus
+}
+
+func (m *GPUMonitor) collectEnhancedViaNvidiaSmi() map[int]GPUInfo {
+	result := map[int]GPUInfo{}
+
+	driverCmd := exec.Command("nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader,nounits")
+	driverOutput, err := driverCmd.Output()
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(driverOutput)), "\n")
+		for i, line := range lines {
+			if existing, ok := result[i]; ok {
+				existing.DriverVersion = strings.TrimSpace(line)
+				result[i] = existing
+			} else {
+				result[i] = GPUInfo{DriverVersion: strings.TrimSpace(line)}
+			}
+		}
+	}
+
+	eccCmd := exec.Command("nvidia-smi", "--query-gpu=ecc.errors.corrected.volatile.total", "--format=csv,noheader,nounits")
+	eccOutput, err := eccCmd.Output()
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(eccOutput)), "\n")
+		for i, line := range lines {
+			eccErrors, _ := strconv.Atoi(strings.TrimSpace(line))
+			if existing, ok := result[i]; ok {
+				existing.EccErrors = eccErrors
+				result[i] = existing
+			} else {
+				result[i] = GPUInfo{EccErrors: eccErrors}
+			}
+		}
+	}
+
+	throttleCmd := exec.Command("nvidia-smi", "--query-gpu=clocks_throttle_reasons", "--format=csv,noheader")
+	throttleOutput, err := throttleCmd.Output()
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(throttleOutput)), "\n")
+		for i, line := range lines {
+			reasons := parseThrottleReasonsFromCSV(strings.TrimSpace(line))
+			if existing, ok := result[i]; ok {
+				existing.ThrottleReasons = reasons
+				result[i] = existing
+			} else {
+				result[i] = GPUInfo{ThrottleReasons: reasons}
+			}
+		}
+	}
+
+	pciCmd := exec.Command("nvidia-smi", "--query-gpu=pcie_rx_throughput.counter,pcie_tx_throughput.counter", "--format=csv,noheader,nounits")
+	pciOutput, err := pciCmd.Output()
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(pciOutput)), "\n")
+		for i, line := range lines {
+			parts := strings.Split(line, ",")
+			rx := 0
+			tx := 0
+			if len(parts) >= 1 {
+				rx, _ = strconv.Atoi(strings.TrimSpace(parts[0]))
+			}
+			if len(parts) >= 2 {
+				tx, _ = strconv.Atoi(strings.TrimSpace(parts[1]))
+			}
+			if existing, ok := result[i]; ok {
+				existing.PCIeRxThroughput = rx
+				existing.PCIeTxThroughput = tx
+				result[i] = existing
+			} else {
+				result[i] = GPUInfo{PCIeRxThroughput: rx, PCIeTxThroughput: tx}
+			}
+		}
+	}
+
+	persistenceCmd := exec.Command("nvidia-smi", "--query-gpu=persistence_mode", "--format=csv,noheader")
+	persistenceOutput, err := persistenceCmd.Output()
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(persistenceOutput)), "\n")
+		for i, line := range lines {
+			enabled := strings.TrimSpace(line) == "Enabled"
+			if existing, ok := result[i]; ok {
+				existing.PersistenceMode = enabled
+				result[i] = existing
+			} else {
+				result[i] = GPUInfo{PersistenceMode: enabled}
+			}
+		}
+	}
+
+	vbiosCmd := exec.Command("nvidia-smi", "--query-gpu=vbios_version", "--format=csv,noheader")
+	vbiosOutput, err := vbiosCmd.Output()
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(vbiosOutput)), "\n")
+		for i, line := range lines {
+			if existing, ok := result[i]; ok {
+				existing.VbiosVersion = strings.TrimSpace(line)
+				result[i] = existing
+			} else {
+				result[i] = GPUInfo{VbiosVersion: strings.TrimSpace(line)}
+			}
+		}
+	}
+
+	bar1Cmd := exec.Command("nvidia-smi", "--query-gpu=bar1_memory.used,bar1_memory.total", "--format=csv,noheader,nounits")
+	bar1Output, err := bar1Cmd.Output()
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(bar1Output)), "\n")
+		for i, line := range lines {
+			parts := strings.Split(line, ",")
+			bar1Used := int64(0)
+			bar1Total := int64(0)
+			if len(parts) >= 1 {
+				v, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
+				bar1Used = int64(v) * 1024 * 1024
+			}
+			if len(parts) >= 2 {
+				v, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
+				bar1Total = int64(v) * 1024 * 1024
+			}
+			if existing, ok := result[i]; ok {
+				existing.Bar1UsedMemory = bar1Used
+				existing.Bar1TotalMemory = bar1Total
+				result[i] = existing
+			} else {
+				result[i] = GPUInfo{Bar1UsedMemory: bar1Used, Bar1TotalMemory: bar1Total}
+			}
+		}
+	}
+
+	processes := m.collectGPUProcesses()
+	for i, procs := range processes {
+		if existing, ok := result[i]; ok {
+			existing.Processes = procs
+			result[i] = existing
+		} else {
+			result[i] = GPUInfo{Processes: procs}
+		}
+	}
+
+	return result
+}
+
+func parseThrottleReasonsFromCSV(csv string) []string {
+	if csv == "No" || csv == "Active" || csv == "" {
+		if csv == "Active" {
+			return []string{"throttling_active"}
+		}
+		return nil
+	}
+	parts := strings.Split(csv, "+")
+	var reasons []string
+	for _, p := range parts {
+		name := strings.TrimSpace(p)
+		if name != "" && name != "No" {
+			reasons = append(reasons, name)
+		}
+	}
+	return reasons
+}
+
+func (m *GPUMonitor) collectGPUProcesses() map[int][]GPUProcess {
+	cmd := exec.Command("nvidia-smi", "--query-compute-apps=pid,gpu_name,used_gpu_memory", "--format=csv,noheader,nounits")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	gpuProcesses := map[int][]GPUProcess{}
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, line := range lines {
+		parts := strings.Split(line, ",")
+		if len(parts) < 3 {
+			continue
+		}
+		pid, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
+		name := strings.TrimSpace(parts[1])
+		memKB, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+		if pid == 0 {
+			continue
+		}
+
+		cmdline := getProcessCmdline(pid)
+		if cmdline != "" {
+			name = cmdline
+		}
+
+		proc := GPUProcess{
+			Pid:           pid,
+			Name:          name,
+			UsedGPUMemory: int64(memKB) * 1024,
+		}
+
+		gpuIdx := 0
+		gpuProcesses[gpuIdx] = append(gpuProcesses[gpuIdx], proc)
+	}
+	return gpuProcesses
+}
+
+func getProcessCmdline(pid int) string {
+	cmd := exec.Command("cat", fmt.Sprintf("/proc/%d/cmdline", pid))
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	cmdline := strings.ReplaceAll(string(output), "\x00", " ")
+	cmdline = strings.TrimSpace(cmdline)
+	if len(cmdline) > 100 {
+		cmdline = cmdline[:100]
+	}
+	return cmdline
 }
 
 func (m *GPUMonitor) parseOutput(output string) ([]GPUInfo, error) {
@@ -249,6 +683,55 @@ func (m *GPUMonitor) GetStatus() *GPUStatus {
 		return &status
 	}
 	return nil
+}
+
+func (m *GPUMonitor) GetVLLMMetrics() *VLLMMetricsData {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.vllmMetrics != nil {
+		result := *m.vllmMetrics
+		return &result
+	}
+	return &VLLMMetricsData{VLLMAvailable: false}
+}
+
+func (m *GPUMonitor) GetGPUProcesses() []GPUProcess {
+	status := m.GetStatus()
+	if status == nil || status.Primary == nil {
+		return nil
+	}
+	return status.Primary.Processes
+}
+
+func (m *GPUMonitor) GetEnhancedInfo() map[string]interface{} {
+	status := m.GetStatus()
+	if status == nil {
+		return nil
+	}
+	enhanced := map[string]interface{}{
+		"driver_version": status.DriverVersion,
+		"gpu_count":      status.GPUCount,
+		"gpus":           []map[string]interface{}{},
+	}
+	gpusList := make([]map[string]interface{}, 0)
+	for _, gpu := range status.AllGPUs {
+		gpuEnhanced := map[string]interface{}{
+			"index":              gpu.Index,
+			"name":               gpu.Name,
+			"ecc_errors":         gpu.EccErrors,
+			"throttle_reasons":   gpu.ThrottleReasons,
+			"persistence_mode":   gpu.PersistenceMode,
+			"pcie_rx_throughput": gpu.PCIeRxThroughput,
+			"pcie_tx_throughput": gpu.PCIeTxThroughput,
+			"bar1_total_memory":  gpu.Bar1TotalMemory,
+			"bar1_used_memory":   gpu.Bar1UsedMemory,
+			"vbios_version":      gpu.VbiosVersion,
+			"processes":          gpu.Processes,
+		}
+		gpusList = append(gpusList, gpuEnhanced)
+	}
+	enhanced["gpus"] = gpusList
+	return enhanced
 }
 
 func (m *GPUMonitor) GetMemoryUsage() *MemoryInfo {

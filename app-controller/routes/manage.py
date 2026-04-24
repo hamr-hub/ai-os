@@ -87,6 +87,33 @@ async def get_gpu_history(count: int = 60):
         return {"error": str(e)}
 
 
+@manage_router.get("/gpu/processes")
+async def get_gpu_processes():
+    processes = gpu_monitor.get_gpu_processes()
+    return {
+        "processes": processes,
+        "count": len(processes),
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@manage_router.get("/gpu/enhanced")
+async def get_gpu_enhanced():
+    enhanced = gpu_monitor.get_gpu_enhanced_info()
+    if not enhanced:
+        return {"status": "unavailable", "message": "NVML not available or no GPU detected"}
+    enhanced["timestamp"] = datetime.now().isoformat()
+    return enhanced
+
+
+@manage_router.get("/vllm/metrics")
+async def get_vllm_metrics():
+    vllm_metrics = gpu_monitor.get_vllm_metrics()
+    if not vllm_metrics:
+        return {"status": "unavailable", "message": "vLLM metrics not available"}
+    return vllm_metrics
+
+
 @manage_router.post("/gpu/history/config")
 async def configure_gpu_history(enabled: Optional[bool] = None, max_days: Optional[int] = None):
     try:
@@ -416,7 +443,8 @@ async def check_alert_status():
         return cached
 
     gpu_status = gpu_monitor.get_gpu_status()
-    health_info = metrics.get_comprehensive_health_score(gpu_status)
+    vllm_metrics = gpu_monitor.get_vllm_metrics()
+    health_info = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
     alert_reasons = metrics.get_alert_reasons()
 
     result = {
@@ -429,6 +457,21 @@ async def check_alert_status():
 
     cache_service.set(cache_key, result, ttl_seconds=10)
     return result
+
+
+@manage_router.get("/metrics/health-detail")
+async def get_health_detail():
+    gpu_status = gpu_monitor.get_gpu_status()
+    vllm_metrics = gpu_monitor.get_vllm_metrics()
+    health_scores = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
+    gpu_alerts = metrics.check_gpu_alerts(gpu_status or {}, vllm_metrics)
+    return {
+        "health_scores": health_scores,
+        "gpu_alerts": gpu_alerts,
+        "gpu_status_summary": gpu_status,
+        "vllm_metrics_summary": vllm_metrics,
+        "timestamp": datetime.now().isoformat()
+    }
 
 
 @manage_router.get("/cache/status")
@@ -761,7 +804,8 @@ async def get_monitor_all():
         })
 
     gpu_status = gpu_monitor.get_gpu_status()
-    health_info = metrics.get_comprehensive_health_score(gpu_status)
+    vllm_metrics = gpu_monitor.get_vllm_metrics()
+    health_info = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
 
     service_name = "aiclient-python"
     service_info = {

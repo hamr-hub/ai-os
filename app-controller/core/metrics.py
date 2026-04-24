@@ -364,52 +364,87 @@ class MetricsCollector:
         score = max(0, 100 - (error_rate * 100))
         return round(score, 2)
     
-    def get_comprehensive_health_score(self, gpu_status: Optional[Dict] = None) -> Dict:
+    def get_comprehensive_health_score(self, gpu_status: Optional[Dict] = None, vllm_metrics: Optional[Dict] = None) -> Dict:
         scores = {}
-        
+
         total = sum(self.request_counts.values())
         errors = sum(self.error_counts.values())
-        
+
         if total > 0:
             error_rate = errors / total
             service_score = max(0, 100 - (error_rate * 100))
         else:
             service_score = 100.0
-        
+
         scores["service"] = round(service_score, 2)
-        
+
         if gpu_status and gpu_status.get("status") == "available":
             primary = gpu_status.get("primary", {})
             temp = primary.get("temperature", 0)
             total_mem = primary.get("total_memory", 1)
             used_mem = primary.get("used_memory", 0)
-            
+
             temp_score = min(100, max(0, 100 - (temp - 85) * 2))
             mem_score = min(100, max(0, 100 - ((used_mem / total_mem) - 0.9) * 1000))
-            
+
             scores["gpu_temperature"] = round(temp_score, 2)
             scores["gpu_memory"] = round(mem_score, 2)
             scores["gpu_overall"] = round((temp_score * 0.5 + mem_score * 0.5), 2)
+
+            throttle_reasons = primary.get("throttle_reasons", [])
+            if throttle_reasons:
+                scores["gpu_throttling"] = 0.0
+                scores["gpu_overall"] = min(scores["gpu_overall"], 50.0)
         else:
             scores["gpu_temperature"] = 0.0
             scores["gpu_memory"] = 0.0
             scores["gpu_overall"] = 0.0
-        
+
         avg_response_time = sum(self.response_times) / len(self.response_times) if self.response_times else 0
         response_score = min(100, max(0, 100 - avg_response_time * 10))
         scores["response_time"] = round(response_score, 2)
-        
+
+        vllm_score = 100.0
+        if vllm_metrics and vllm_metrics.get("vllm_available"):
+            gpu_cache_usage = vllm_metrics.get("gpu_cache_usage", 0)
+            if gpu_cache_usage >= 95:
+                vllm_score -= 30
+            elif gpu_cache_usage >= 85:
+                vllm_score -= 15
+
+            waiting_requests = vllm_metrics.get("waiting_requests", 0)
+            if waiting_requests >= 20:
+                vllm_score -= 25
+            elif waiting_requests >= 5:
+                vllm_score -= 10
+
+            generation_throughput = vllm_metrics.get("generation_throughput", 0)
+            if generation_throughput > 0 and generation_throughput < 10:
+                vllm_score -= 20
+
+            ttft = vllm_metrics.get("time_to_first_token", 0)
+            if ttft > 5:
+                vllm_score -= 15
+            elif ttft > 2:
+                vllm_score -= 5
+
+            vllm_score = max(0, min(100, vllm_score))
+        elif vllm_metrics and not vllm_metrics.get("vllm_available"):
+            vllm_score = 50.0
+        scores["vllm_inference"] = round(vllm_score, 2)
+
         weights = {
-            "service": 0.4,
-            "gpu_overall": 0.3,
-            "response_time": 0.3
+            "service": 0.25,
+            "gpu_overall": 0.25,
+            "vllm_inference": 0.25,
+            "response_time": 0.25
         }
-        
+
         overall_score = sum(scores.get(k, 0) * v for k, v in weights.items())
         scores["overall"] = round(overall_score, 2)
-        
+
         scores["status"] = self._get_health_status(overall_score)
-        
+
         return scores
     
     def _get_health_status(self, score: float) -> str:
@@ -469,8 +504,7 @@ class MetricsCollector:
         
         return reasons
     
-    def check_gpu_alerts(self, gpu_status: Dict) -> Dict[str, Dict]:
-        """检查GPU告警阈值"""
+    def check_gpu_alerts(self, gpu_status: Dict, vllm_metrics: Optional[Dict] = None) -> Dict[str, Dict]:
         alerts = {
             "temperature": {
                 "status": "ok",
@@ -498,6 +532,20 @@ class MetricsCollector:
                 "value": 0,
                 "threshold": 95,
                 "critical_threshold": 100,
+                "message": ""
+            },
+            "vllm_cache": {
+                "status": "ok",
+                "value": 0,
+                "threshold": 85,
+                "critical_threshold": 95,
+                "message": ""
+            },
+            "vllm_queue": {
+                "status": "ok",
+                "value": 0,
+                "threshold": 5,
+                "critical_threshold": 20,
                 "message": ""
             }
         }
@@ -547,7 +595,26 @@ class MetricsCollector:
         elif util >= 95:
             alerts["utilization"]["status"] = "warning"
             alerts["utilization"]["message"] = f"GPU使用率偏高: {util}%"
-        
+
+        if vllm_metrics and vllm_metrics.get("vllm_available"):
+            gpu_cache_usage = vllm_metrics.get("gpu_cache_usage", 0)
+            alerts["vllm_cache"]["value"] = round(gpu_cache_usage, 1)
+            if gpu_cache_usage >= 95:
+                alerts["vllm_cache"]["status"] = "critical"
+                alerts["vllm_cache"]["message"] = f"vLLM KV Cache使用率严重过高: {gpu_cache_usage:.1f}%"
+            elif gpu_cache_usage >= 85:
+                alerts["vllm_cache"]["status"] = "warning"
+                alerts["vllm_cache"]["message"] = f"vLLM KV Cache使用率偏高: {gpu_cache_usage:.1f}%"
+
+            waiting_requests = vllm_metrics.get("waiting_requests", 0)
+            alerts["vllm_queue"]["value"] = waiting_requests
+            if waiting_requests >= 20:
+                alerts["vllm_queue"]["status"] = "critical"
+                alerts["vllm_queue"]["message"] = f"vLLM排队请求过多: {waiting_requests}个"
+            elif waiting_requests >= 5:
+                alerts["vllm_queue"]["status"] = "warning"
+                alerts["vllm_queue"]["message"] = f"vLLM排队请求偏多: {waiting_requests}个"
+
         return alerts
     
     def get_overall_alert_status(self, gpu_status: Optional[Dict] = None) -> Dict:
