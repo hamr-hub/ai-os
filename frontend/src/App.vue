@@ -16,7 +16,7 @@ onMounted(async () => {
   await serverStore.checkConnection()
 })
 
-const mainMargin = computed(() => (store.sidebarCollapsed ? '64px' : '220px'))
+const mainMargin = computed(() => (store.sidebarCollapsed ? 'var(--sidebar-collapsed-width)' : 'var(--sidebar-width)'))
 </script>
 
 <template>

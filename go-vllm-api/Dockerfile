@@ -1,7 +1,9 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
     && apk update && apk add --no-cache git gcc musl-dev
+
+ENV GOPROXY=https://goproxy.cn,direct
 
 WORKDIR /app
 
