@@ -218,6 +218,7 @@ export interface SystemStatus {
   memory: SystemMemoryStatus
   disk: SystemDiskStatus
   timestamp: string
+  queue?: QueueStatus
 }
 
 export interface SystemHistoryEntry {

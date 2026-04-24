@@ -1,8 +1,8 @@
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, type MaybeRefOrGetter, toValue } from 'vue'
 import { getSystemStatus, getHealthAlert, getSystemHistory } from '@/api/client'
 import type { SystemStatus, HealthAlert } from '@/types'
 
-export function useSystemData(intervalMs = 10000, initialCount = 60) {
+export function useSystemData(intervalMs = 10000, initialCount: MaybeRefOrGetter<number> = 60) {
   const systemStatus = ref<SystemStatus | null>(null)
   const healthAlert = ref<HealthAlert | null>(null)
   const systemHistory = ref<any[]>([])
@@ -22,7 +22,7 @@ export function useSystemData(intervalMs = 10000, initialCount = 60) {
       const [status, alert, historyData] = await Promise.all([
         getSystemStatus(),
         getHealthAlert(),
-        getSystemHistory(initialCount)
+        getSystemHistory(toValue(initialCount))
       ])
       systemStatus.value = status
       healthAlert.value = alert
