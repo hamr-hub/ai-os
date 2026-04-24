@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/go-vllm-api ./cmd
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata nvidia-container-toolkit
+RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /bin/go-vllm-api /usr/local/bin/go-vllm-api
 COPY configs/config.yaml /app/configs/config.yaml
