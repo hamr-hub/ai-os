@@ -1,6 +1,7 @@
 FROM golang:1.24-alpine AS builder
 
-RUN apk update && apk add --no-cache git gcc musl-dev
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+    && apk update && apk add --no-cache git gcc musl-dev
 
 WORKDIR /app
 
@@ -12,7 +13,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/go-vllm-api ./cmd
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+    && apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /bin/go-vllm-api /usr/local/bin/go-vllm-api
 COPY configs/config.yaml /app/configs/config.yaml

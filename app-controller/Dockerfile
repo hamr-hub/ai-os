@@ -2,7 +2,9 @@ FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
+RUN sed -i 's@archive.ubuntu.com@mirrors.aliyun.com@g' /etc/apt/sources.list \
+    && sed -i 's@security.ubuntu.com@mirrors.aliyun.com@g' /etc/apt/sources.list \
+    && apt-get update && apt-get install -y \
     python3.10 \
     python3.10-dev \
     python3.10-venv \
@@ -18,8 +20,8 @@ WORKDIR /app
 COPY requirements.txt .
 
 RUN python3 -m venv .venv && \
-    .venv/bin/pip install --upgrade pip && \
-    .venv/bin/pip install -r requirements.txt
+    .venv/bin/pip install --upgrade pip -i https://mirrors.aliyun.com/pypi/simple/ && \
+    .venv/bin/pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 
 COPY . .
 
