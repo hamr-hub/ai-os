@@ -614,7 +614,6 @@ async def v1_test_reports():
 
 # --- Agent endpoints ---
 
-
 @app.get("/manage/agent/tools")
 async def agent_tools(categories: Optional[str] = None):
     filtered = AGENT_TOOLS

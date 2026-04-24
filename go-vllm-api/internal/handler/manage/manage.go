@@ -1046,7 +1046,7 @@ func (h *ManageHandler) GetHealthDetail(c *gin.Context) {
 	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
 	healthScores := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
 	gpuAlerts := h.metrics.GetGPUAlerts(gpuStatus)
-	healthScore := h.gpuMonitor.GetHealthScore()
+healthScore := h.gpuMonitor.GetHealthScore()
 	c.JSON(http.StatusOK, gin.H{
 		"health_scores":       healthScores,
 		"gpu_alerts":          gpuAlerts,
@@ -1056,7 +1056,6 @@ func (h *ManageHandler) GetHealthDetail(c *gin.Context) {
 		"timestamp":           time.Now().Format(time.RFC3339),
 	})
 }
-
 func (h *ManageHandler) StartLlamaCppModel(c *gin.Context) {
 	modelName := c.Param("model_name")
 	if !h.scheduler.IsModelAvailable(modelName) {
