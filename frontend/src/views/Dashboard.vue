@@ -6,8 +6,11 @@ import { useGPUHistory } from '@/composables/useGPUHistory'
 import { useTokenStats } from '@/composables/useTokenStats'
 import { useSystemData } from '@/composables/useSystemData'
 import { getProgressColor, getStatusLevel, getHealthStatusConfig } from '@/utils/theme'
+import { formatTimeLabel } from '@/utils/format'
 import { useAppStore } from '@/stores/app'
+import LineChart from '@/components/LineChart.vue'
 import GpuMetricsCard from '@/components/cards/GpuMetricsCard.vue'
+import type { SystemHistoryEntry } from '@/types'
 import {
   RefreshCw,
   Monitor,
@@ -64,6 +67,7 @@ const {
   systemStatus,
   queueStatus,
   healthAlert,
+  systemHistory,
   refresh: refreshSystem,
   isRefreshing: isRefreshingSystem,
 } = useSystemData()
@@ -102,10 +106,35 @@ const totalQueueRequests = computed(() => {
 
 const activeQueueEntries = computed(() => {
   if (!queueStatus.value) return []
-  return Object.entries(queueStatus.value)
-    .filter(([_, entry]) => entry.active_requests > 0)
+  const entries = Object.entries(queueStatus.value)
+    .filter(([, entry]) => entry.active_requests > 0)
+    .sort(([, a], [, b]) => b.active_requests - a.active_requests)
+  if (!entries.length) return []
+  const target = defaultModel.value || entries[0][0]
+  return entries
+    .filter(([name]) => name === target)
+    .slice(0, 1)
     .map(([name, entry]) => ({ name, ...entry }))
 })
+
+const sysTimeLabels = computed(() => systemHistory.value.map((e) => formatTimeLabel(e.timestamp)))
+
+const sysSparklineDatasets = (
+  key: 'cpu_percent' | 'memory_percent',
+  color: string,
+  bgColor: string
+) => [
+  {
+    label: '',
+    data: systemHistory.value.map((e) => Number(e[key]) || 0),
+    borderColor: color,
+    backgroundColor: bgColor,
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+]
 
 const switchingProgress = computed(() => {
   if (!switchingModel.value) return null

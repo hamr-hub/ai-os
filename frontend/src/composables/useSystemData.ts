@@ -1,11 +1,14 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { getSystemStatus, getQueueStatus, getHealthAlert } from '@/api/client'
-import type { SystemStatus, QueueStatus, HealthAlert } from '@/types'
+import type { SystemStatus, QueueStatus, HealthAlert, SystemHistoryEntry } from '@/types'
+
+const MAX_HISTORY = 30
 
 export function useSystemData(intervalMs = 10000) {
   const systemStatus = ref<SystemStatus | null>(null)
   const queueStatus = ref<QueueStatus | null>(null)
   const healthAlert = ref<HealthAlert | null>(null)
+  const systemHistory = ref<SystemHistoryEntry[]>([])
   const loading = ref(false)
   const isRefreshing = ref(false)
   const error = ref<string | null>(null)
@@ -20,6 +23,16 @@ export function useSystemData(intervalMs = 10000) {
     error.value = null
     try {
       systemStatus.value = await getSystemStatus()
+      if (systemStatus.value) {
+        systemHistory.value.push({
+          timestamp: systemStatus.value.timestamp,
+          cpu_percent: systemStatus.value.cpu.percent,
+          memory_percent: systemStatus.value.memory.percent,
+        })
+        if (systemHistory.value.length > MAX_HISTORY) {
+          systemHistory.value.shift()
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch system status:', err)
     }
@@ -66,6 +79,7 @@ export function useSystemData(intervalMs = 10000) {
     systemStatus,
     queueStatus,
     healthAlert,
+    systemHistory,
     loading,
     isRefreshing,
     error,

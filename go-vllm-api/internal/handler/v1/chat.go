@@ -125,6 +125,8 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 	statusCode := 200
 	slotAcquired := false
 
+	hasImage, totalImageSize := utils.CountImageContent(req)
+
 	if modelName == "" || modelName == "default" {
 		modelName = h.scheduler.GetDefaultModel()
 		if modelName == "" {
@@ -141,12 +143,20 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 			h.scheduler.ReleaseRequest(modelName)
 		}
 		duration := time.Since(start).Seconds()
-		h.metrics.RecordRequest("/v1/chat/completions", statusCode, duration, service.WithModel(modelName))
+		h.metrics.RecordRequest("/v1/chat/completions", statusCode, duration, 
+			service.WithModel(modelName),
+			service.WithImage(hasImage, totalImageSize))
 	}()
 
 	if !h.scheduler.IsModelAvailable(modelName) {
 		statusCode = 404
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
+		return
+	}
+
+	if hasImage && !utils.IsMultimodalModel(modelName) {
+		statusCode = 400
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Model %s does not support image inputs. Please use a multimodal model.", modelName)})
 		return
 	}
 
@@ -311,11 +321,76 @@ func (h *V1Handler) ValidateImage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Image validation not yet implemented in Go"})
+
+	decoded, err := utils.DecodeBase64Image(req.ImageData)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	validation := utils.ValidateImageData(decoded)
+	if validation.Valid {
+		c.JSON(http.StatusOK, gin.H{
+			"success":    true,
+			"message":    "Image validation successful",
+			"image_info": validation,
+		})
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success":    false,
+			"message":    validation.Error,
+			"image_info": validation,
+		})
+	}
 }
 
 func (h *V1Handler) UploadImage(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"success": false, "message": "Image upload not yet implemented in Go"})
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "No file uploaded"})
+		return
+	}
+
+	if file.Size > int64(model.MaxImageSizeBytes) {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+			"success": false,
+			"message": fmt.Sprintf("Image size exceeds maximum allowed size of %dMB", model.MaxImageSizeMB),
+		})
+		return
+	}
+
+	f, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open file"})
+		return
+	}
+	defer f.Close()
+
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(f)
+	contents := buf.Bytes()
+
+	validation := utils.ValidateImageData(contents)
+	if validation.Valid {
+		c.JSON(http.StatusOK, gin.H{
+			"success":    true,
+			"message":    "Image uploaded successfully",
+			"image_info": gin.H{
+				"width":        validation.Width,
+				"height":       validation.Height,
+				"format":       validation.Format,
+				"size_bytes":   validation.SizeBytes,
+				"filename":     file.Filename,
+				"content_type": file.Header.Get("Content-Type"),
+			},
+		})
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success":    false,
+			"message":    validation.Error,
+			"image_info": validation,
+		})
+	}
 }
 
 func (h *V1Handler) GetImageInfo(c *gin.Context) {

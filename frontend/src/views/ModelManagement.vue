@@ -44,13 +44,6 @@ const {
 const runningModels = computed(() => modelList.value.filter((m) => m.running))
 const stoppedModels = computed(() => modelList.value.filter((m) => !m.running))
 
-const switchProgress = computed(() => {
-  if (!switchingModel.value) return null
-  const model = modelList.value.find((m) => m.name === switchingModel.value)
-  if (model?.running) return null
-  return { model: switchingModel.value, phase: model ? '加载中' : '卸载旧模型' }
-})
-
 const selectedTestModel = ref('')
 const testing = ref(false)
 const testResult = ref<TestResponse | null>(null)
@@ -210,10 +203,10 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
       </button>
     </header>
 
-    <div v-if="switchProgress" class="switch-banner">
+    <div v-if="switchingModel" class="switch-banner">
       <Loader2 class="w-5 h-5 animate-spin" />
-      <span class="switch-text">{{ switchProgress.phase }}：{{ switchProgress.model }}</span>
-      <span class="switch-hint">vLLM 切换通常需要 30-120 秒，请耐心等待</span>
+      <span class="switch-text">正在切换到 {{ switchingModel }}，请耐心等待...</span>
+      <span class="switch-hint">vLLM 加载模型通常需要 30-120 秒</span>
     </div>
 
     <div class="content">

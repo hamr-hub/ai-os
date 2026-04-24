@@ -21,7 +21,6 @@ import {
 
 const { gpuSummary, refresh: refreshGPU, isRefreshing: isRefreshingGPU } = useGPU()
 const { modelList, refresh: refreshModels, isRefreshing: isRefreshingModels } = useModels()
-
 const timeRange = ref<'1m' | '5m' | '15m' | '1h' | '6h'>('1m')
 const timeRangeOptions = [
   { value: '1m' as const, label: '1分钟', count: 20 },
@@ -30,12 +29,10 @@ const timeRangeOptions = [
   { value: '1h' as const, label: '1小时', count: 1200 },
   { value: '6h' as const, label: '6小时', count: 7200 },
 ]
-
 const historyCount = computed(() => {
   const opt = timeRangeOptions.find((o) => o.value === timeRange.value)
   return opt?.count ?? 60
 })
-
 const { gpuHistory, refresh: refreshGPUHistory } = useGPUHistory(historyCount)
 const {
   tokenStats,
@@ -146,6 +143,13 @@ const gpuMultiDataset = computed(() => [
 
 const changeTimeRange = (range: '1m' | '5m' | '15m' | '1h' | '6h') => {
   timeRange.value = range
+  refreshGPUHistory()
+}
+
+const refreshAll = () => {
+  refreshGPU()
+  refreshModels()
+  refreshTokenHistory()
   refreshGPUHistory()
 }
 </script>
@@ -262,7 +266,9 @@ const changeTimeRange = (range: '1m' | '5m' | '15m' | '1h' | '6h') => {
           <div class="card-header">
             <Coins class="card-icon purple" />
             <span class="card-title">Token 用量趋势</span>
-            <span v-if="tokenStats" class="count-badge">{{ formatTokens(tokenTotal) }}</span>
+            <span v-if="tokenStats" class="count-badge">{{
+              formatTokens(tokenStats.total_tokens)
+            }}</span>
           </div>
           <LineChart
             :labels="tokenTimeLabels"
@@ -299,17 +305,23 @@ const changeTimeRange = (range: '1m' | '5m' | '15m' | '1h' | '6h') => {
             <div class="token-row">
               <TrendingUp class="w-4 h-4 text-blue-400" />
               <span class="token-label">Prompt</span>
-              <span class="token-val">{{ formatTokens(tokenPrompt) }}</span>
+              <span class="token-val">{{
+                formatTokens(tokenStats.total_prompt_tokens ?? tokenStats.prompt_tokens ?? 0)
+              }}</span>
             </div>
             <div class="token-row">
               <Activity class="w-4 h-4 text-green-400" />
               <span class="token-label">Completion</span>
-              <span class="token-val">{{ formatTokens(tokenCompletion) }}</span>
+              <span class="token-val">{{
+                formatTokens(
+                  tokenStats.total_completion_tokens ?? tokenStats.completion_tokens ?? 0
+                )
+              }}</span>
             </div>
             <div class="token-row">
               <Coins class="w-4 h-4 text-purple-400" />
               <span class="token-label">Total</span>
-              <span class="token-val primary">{{ formatTokens(tokenTotal) }}</span>
+              <span class="token-val primary">{{ formatTokens(tokenStats.total_tokens) }}</span>
             </div>
             <div v-if="Object.keys(tokenStats.models).length" class="model-breakdown">
               <h4 class="breakdown-title">各模型用量</h4>

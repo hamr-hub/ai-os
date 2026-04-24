@@ -316,9 +316,13 @@ const autoResize = (event: Event) => {
                 'bubble-agent': message.role === 'assistant',
                 'bubble-sys': message.role === 'system',
               }"
-            >
+                        >
               <div
                 v-if="message.role === 'assistant'"
+                class="msg-text markdown-body"
+                v-html="renderContent(message.content)"
+              ></div>
+              <p v-else class="msg-text">{{ message.content }}</p>-if="message.role === 'assistant'"
                 class="msg-text markdown-body"
                 v-html="renderContent(message.content)"
               ></div>

@@ -212,6 +212,12 @@ export interface SystemStatus {
   timestamp: string
 }
 
+export interface SystemHistoryEntry {
+  timestamp: string
+  cpu_percent: number
+  memory_percent: number
+}
+
 export interface QueueModelEntry {
   active_requests: number
   concurrency_limit: number

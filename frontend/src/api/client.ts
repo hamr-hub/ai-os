@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 import type {
   GPUSummary,
   GPUHistoryEntry,
@@ -39,11 +39,11 @@ v1Client.interceptors.request.use((config) => {
 })
 
 // Response Interceptors
-const handleResponseError = (error: any) => {
+const handleResponseError = (error: AxiosError) => {
   const appStore = useAppStore()
   const message =
-    error.response?.data?.message ||
-    error.response?.data?.error ||
+    (error.response?.data as any)?.message ||
+    (error.response?.data as any)?.error ||
     error.message ||
     'API Request Failed'
 
@@ -103,7 +103,7 @@ export async function getTestResults(name: string): Promise<TestResponse> {
 }
 
 export async function getTestHistory(): Promise<TestHistoryEntry[]> {
-  const { data } = await v1Client.get<{ status: string; reports: Record<string, any> }>(
+  const { data } = await v1Client.get<{ status: string; reports: Record<string, TestResponse> }>(
     '/test/reports'
   )
   const reports = data.reports || {}

@@ -13,7 +13,6 @@ import {
   PanelLeftOpen,
   Activity,
   BookOpen,
-  Settings,
   ShieldCheck,
   Cpu,
 } from 'lucide-vue-next'
