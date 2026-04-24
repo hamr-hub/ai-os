@@ -1,0 +1,110 @@
+task_id: AIOS-FRONTEND-V4
+title: "AI OS Frontend V4 - 界面美化与端到端测试完善"
+source: "内部需求 - 继续完善前端界面和E2E测试"
+priority: P1
+platform: Web
+status: draft
+
+business_goal:
+  target_user: "AI模型运维人员和开发者"
+  problem: "Dashboard界面视觉体验不够精致，E2E测试覆盖率不足且部分测试与实际UI不匹配"
+  success_metrics:
+    - metric: "E2E测试通过率"
+      target: "100%"
+      observable: true
+    - metric: "单元测试通过率"
+      target: "100%"
+      observable: true
+    - metric: "Dashboard页面首次渲染骨架屏加载体验"
+      target: "骨架屏在数据加载前正确显示"
+      observable: true
+
+scope:
+  in_scope:
+    - "Dashboard界面视觉优化：卡片间距、圆角、阴影、空状态样式统一"
+    - "修复现有失败的单元测试（useSystemData.test.ts）"
+    - "完善E2E测试：修复与实际UI不匹配的断言"
+    - "补充缺失的E2E测试场景（Benchmarks页面、Docs页面）"
+    - "响应式布局E2E测试修正"
+  out_of_scope:
+    - "新增页面或功能"
+    - "后端API修改"
+    - "性能优化（非视觉相关）"
+
+key_interactions:
+  - entry: "Dashboard首页"
+    path: "用户打开Dashboard → 看到6张卡片（GPU/Token/系统/队列/健康/模型） → 各卡片展示数据或空状态"
+    states: ["加载中(骨架屏)", "数据已加载", "数据不可用(空状态)"]
+
+acceptance_criteria:
+  - id: AC-01
+    given: "Dashboard页面数据加载中"
+    when: "用户访问Dashboard"
+    then: "显示6个骨架屏卡片占位，无空白闪烁"
+    type: visual
+
+  - id: AC-02
+    given: "Dashboard页面数据加载完成"
+    when: "6张数据卡片渲染完成"
+    then: "所有卡片具有统一的圆角(border-radius:12px)、间距(16px gap)、阴影(shadow-sm)、边框(border-card)"
+    type: visual
+
+  - id: AC-03
+    given: "某项数据不可用（如GPU离线、Token无统计）"
+    when: "对应卡片显示空状态"
+    then: "空状态有图标+文字描述，样式统一（居中、灰色图标、14px文字）"
+    type: visual
+
+  - id: AC-04
+    given: "现有useSystemData单元测试"
+    when: "执行vitest run"
+    then: "所有37个测试全部通过，0个失败"
+    type: functional
+
+  - id: AC-05
+    given: "E2E测试配置playwright.config.ts指向localhost:30000"
+    when: "执行playwright test"
+    then: "所有E2E测试断言与当前实际UI匹配，无定位器找不到元素的错误"
+    type: functional
+
+  - id: AC-06
+    given: "Benchmarks页面(/benchmarks)和Docs页面(/docs)"
+    when: "执行E2E测试"
+    then: "这两个页面有基础的可见性测试覆盖"
+    type: functional
+
+  - id: AC-07
+    given: "Dashboard在不同屏幕宽度下"
+    when: "宽度>=1400px时显示3列，>=768px时显示2列，<768px时显示1列"
+    then: "网格布局正确响应式切换"
+    type: visual
+
+implicit_requirements:
+  - scenario: "网络请求失败"
+    types: ["timeout", "server_error", "network_offline"]
+    handling: "显示空状态卡片，提供重试按钮"
+  - scenario: "后端服务未启动"
+    types: ["connection_refused"]
+    handling: "所有数据显示空状态，TopBar显示offline状态"
+
+data_interfaces:
+  existing_api:
+    - endpoint: "/api/system/status"
+      method: GET
+      response_type: SystemStatus
+      note: "现有API，无需修改"
+    - endpoint: "/api/system/history"
+      method: GET
+      response_type: SystemHistoryEntry[]
+    - endpoint: "/api/health/alert"
+      method: GET
+      response_type: HealthAlert
+    - endpoint: "/api/gpu/summary"
+      method: GET
+      response_type: GPUSummary
+    - endpoint: "/api/token/stats"
+      method: GET
+      response_type: TokenStats
+    - endpoint: "/api/models"
+      method: GET
+      response_type: ModelStatus

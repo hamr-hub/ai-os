@@ -1,0 +1,76 @@
+meta:
+  title: "前端界面修复：路由缺失、布局错位、类型错误、CSS重复定义"
+  task_id: FRONTEND-FIX-001
+  platform: web
+  framework: vue3
+  requirement_confidence: "high"
+  requirement_version: "1.0"
+
+scope:
+  in_scope:
+    - "修复缺失的 benchmarks 路由"
+    - "修复 sidebar/main 宽度不匹配"
+    - "修复 TS 类型错误（SystemStatus、composables、Dashboard）"
+    - "修复 CSS 重复 --shadow-glow"
+    - "修复测试文件引用错误"
+  out_of_scope:
+    - "新增功能开发"
+    - "后端服务修改"
+
+file_changes:
+  - path: "src/router/index.ts"
+    change: "modify"
+    summary: "添加 /benchmarks 路由映射到 ModelBenchmarks.vue"
+    ac_mapping: ["AC-1"]
+  - path: "src/App.vue"
+    change: "modify"
+    summary: "mainMargin 从硬编码改为使用 CSS 变量 var(--sidebar-width)/var(--sidebar-collapsed-width)"
+    ac_mapping: ["AC-2", "AC-3"]
+  - path: "src/style.css"
+    change: "modify"
+    summary: "删除重复的 --shadow-glow 定义，保留一处"
+    ac_mapping: []
+  - path: "src/types/index.ts"
+    change: "modify"
+    summary: "SystemStatus 类型添加可选 queue 字段 (QueueStatus)"
+    ac_mapping: ["AC-4"]
+  - path: "src/composables/useSystemData.ts"
+    change: "modify"
+    summary: "initialCount 参数类型改为 MaybeRefOrGetter<number>，使用 toValue()"
+    ac_mapping: ["AC-4"]
+  - path: "src/composables/useTokenHistory.ts"
+    change: "modify"
+    summary: "initialCount 参数类型改为 MaybeRefOrGetter<number>，使用 toValue()"
+    ac_mapping: ["AC-4"]
+  - path: "src/views/Dashboard.vue"
+    change: "modify"
+    summary: "添加 QueueModelEntry 类型导入，queueStatus 类型断言为 Record<string, QueueModelEntry>"
+    ac_mapping: ["AC-4"]
+  - path: "src/composables/__tests__/useSystemData.test.ts"
+    change: "modify"
+    summary: "修正 fetch → refresh，移除不可达的 queue 断言"
+    ac_mapping: ["AC-4"]
+
+validation:
+  acceptance:
+    - ac_id: "AC-1"
+      test_type: "manual"
+      test_command: "点击侧边栏模型评测，验证 /benchmarks 路由正确渲染"
+    - ac_id: "AC-2"
+      test_type: "manual"
+      test_command: "sidebar展开时main内容区marginLeft=240px无重叠"
+    - ac_id: "AC-3"
+      test_type: "manual"
+      test_command: "sidebar折叠时main内容区marginLeft=68px无重叠"
+    - ac_id: "AC-4"
+      test_type: "build"
+      test_command: "pnpm build"
+  rollback:
+    strategy: "git revert"
+    steps:
+      - "git revert HEAD -- 逐文件回滚"
+
+risks:
+  - level: "low"
+    description: "CSS变量方案需浏览器兼容性，Vue 3 + Vite 项目无风险"
+    mitigation: "CSS变量已被主流浏览器广泛支持"

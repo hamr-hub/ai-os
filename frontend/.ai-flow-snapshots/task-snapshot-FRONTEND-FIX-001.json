@@ -1,0 +1,28 @@
+{
+  "taskId": "FRONTEND-FIX-001",
+  "timestamp": "2026-04-24T11:54:33.224Z",
+  "expectedFiles": [],
+  "gitStatus": {
+    "modified": [
+      "frontend/src/composables/__tests__/useGPU.test.ts",
+      "frontend/src/composables/__tests__/useSystemData.test.ts",
+      "frontend/src/composables/useSystemData.ts"
+    ],
+    "added": [],
+    "deleted": [],
+    "renamed": [],
+    "untracked": [
+      "docs/tasks/AIOS-FRONTEND-V4/plan.md",
+      "docs/tasks/AIOS-FRONTEND-V4/plan.yaml",
+      "docs/tasks/AIOS-FRONTEND-V4/requirement.md",
+      "docs/tasks/AIOS-FRONTEND-V4/requirement.yaml",
+      "docs/tasks/AIOS-FRONTEND-V4/tech-solution.md",
+      "docs/tasks/AIOS-FRONTEND-V4/tech-solution.yaml",
+      "docs/tasks/AIOS-FRONTEND-V4/verification-report.md",
+      "docs/tasks/FRONTEND-FIX-001/",
+      "frontend/docs/tasks/FRONTEND-FIX-001/"
+    ]
+  },
+  "branch": "main",
+  "commit": "01a42407eabbe76861cde9593047426ee5ef6d4f"
+}

@@ -36,7 +36,7 @@ export function useSystemData(intervalMs = 10000, initialCount: MaybeRefOrGetter
   }
 
   const refresh = () => {
-    fetch(true)
+    return fetch(true)
   }
 
   const startPolling = () => {

@@ -1,0 +1,108 @@
+plan:
+  meta:
+    source_tech_doc: "docs/tasks/AIOS-FRONTEND-V4/tech-solution.yaml"
+    scope: "P0"
+    test_coverage_target: 100
+    min_tests_per_feature: 1
+
+  tasks:
+    - id: "T0-1"
+      priority: "P0"
+      type: "test"
+      title: "修复useSystemData单元测试mock"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useSystemData.test.ts"
+      given: "useSystemData composable已定义，调用getSystemStatus+getHealthAlert+getSystemHistory"
+      when: "refresh()调用后"
+      then:
+        - "systemStatus.value非null且包含cpu.percent=25"
+        - "healthAlert.value非null且包含health_score=85"
+        - "queueStatus.value为systemStatus.queue的计算值"
+      depends_on: []
+
+    - id: "P0-1"
+      priority: "P0"
+      type: "code"
+      title: "修正useSystemData单元测试mock与实际调用对齐"
+      files: ["frontend/src/composables/__tests__/useSystemData.test.ts"]
+      depends_on: ["T0-1"]
+      implementation_notes:
+        - "添加getSystemHistory mock返回{history: [...]}"
+        - "移除getQueueStatus mock（useSystemData不直接调用）"
+        - "确保systemStatus mock数据包含queue字段"
+      definition_of_done:
+        - "vitest run全部通过（37/37 tests pass）"
+
+    - id: "T0-2"
+      priority: "P0"
+      type: "test"
+      title: "E2E测试断言与实际UI匹配验证"
+      test_type: "view"
+      file: "frontend/e2e/app.spec.ts"
+      given: "前端dev server运行在localhost:30000"
+      when: "playwright test执行"
+      then:
+        - "所有选择器能找到对应DOM元素"
+        - "路由路径与router/index.ts匹配"
+        - "sidebar宽度240px而非220px"
+      depends_on: []
+
+    - id: "P0-2"
+      priority: "P0"
+      type: "code"
+      title: "修正E2E测试选择器和断言"
+      files: ["frontend/e2e/app.spec.ts"]
+      depends_on: ["T0-2"]
+      implementation_notes:
+        - "model-list-card → running-card"
+        - "/chat路由 → /agent路由"
+        - ".chat-view → .agent-view或其他实际类名"
+        - ".new-chat-btn → 检查AgentView实际类名"
+        - "sidebar宽度220px → 240px"
+        - "中屏断点1000px → 768px"
+        - "model-mgmt选择器确认"
+      definition_of_done:
+        - "playwright test全部通过（无定位器错误）"
+
+    - id: "T0-3"
+      priority: "P1"
+      type: "test"
+      title: "Benchmarks和Docs页面E2E测试编写"
+      test_type: "view"
+      file: "frontend/e2e/app.spec.ts"
+      given: "前端dev server运行在localhost:30000"
+      when: "访问/benchmarks和/docs页面"
+      then:
+        - "Benchmarks页面header-title可见"
+        - "Docs页面sidebar可见"
+      depends_on: []
+
+    - id: "P0-3"
+      priority: "P1"
+      type: "code"
+      title: "补充Benchmarks和Docs页面E2E测试"
+      files: ["frontend/e2e/app.spec.ts"]
+      depends_on: ["T0-3"]
+      implementation_notes:
+        - "Benchmarks: header-title文本、搜索框、模型列表"
+        - "Docs: sidebar导航树、内容区域"
+      definition_of_done:
+        - "新增测试覆盖Benchmarks和Docs页面基础可见性"
+
+    - id: "P0-4"
+      priority: "P1"
+      type: "code"
+      title: "确认Dashboard视觉一致性"
+      files: ["frontend/src/style.css", "frontend/src/views/Dashboard.vue"]
+      depends_on: []
+      implementation_notes:
+        - "确认card-base圆角16px一致"
+        - "确认.grid gap一致"
+        - "确认.empty-state样式统一（居中、灰色图标、14px文字）"
+      definition_of_done:
+        - "所有卡片视觉一致性确认"
+
+  commands:
+    test: "cd frontend && npx vitest run"
+    lint: "cd frontend && git diff --name-only HEAD | grep '\\.ts$\\|\\.vue$' | head -20 | xargs npx eslint --no-error-on-unmatched-pattern 2>/dev/null || true"
+    typecheck: "cd frontend && npx vue-tsc --noEmit"

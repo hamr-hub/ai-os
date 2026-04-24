@@ -1,0 +1,95 @@
+task_id: FRONTEND-FIX-001
+title: "前端界面修复：路由缺失、布局错位、类型错误、CSS重复定义"
+source: "手动描述 - 用户反馈 localhost:30000 界面被改坏"
+developer: heyongxian
+platform: web
+priority: P1
+status: in_progress
+
+business_goal:
+  objective: "修复前端界面4个关键bug，确保页面正常显示和导航功能正常"
+  target_user: "ai-os 系统使用者"
+  success_metrics:
+    - metric: "页面无布局重叠"
+      measurement: "sidebar与main内容区无重叠"
+    - metric: "所有路由可正常导航"
+      measurement: "点击侧边栏所有导航项均能到达对应页面"
+    - metric: "构建通过"
+      measurement: "pnpm build 无 TS 类型错误"
+
+scope:
+  in_scope:
+    - "修复缺失的 benchmarks 路由"
+    - "修复 sidebar/main 宽度不匹配导致的布局重叠"
+    - "修复 SystemStatus 类型缺少 queue 字段"
+    - "修复 useSystemData/useTokenHistory 参数类型不支持 ComputedRef"
+    - "修复 Dashboard 中 queue 相关的 unknown 类型错误"
+    - "修复 style.css 重复的 --shadow-glow 定义"
+    - "修复 useSystemData.test.ts 中引用不存在的 fetch 方法"
+  out_of_scope:
+    - "新增功能开发"
+    - "后端服务修改"
+    - "UI 设计变更"
+
+key_interactions:
+  - entry: "侧边栏导航"
+    user_path: "点击模型评测 → 跳转到 ModelBenchmarks 页面"
+    states: ["侧边栏点击", "路由导航", "页面渲染"]
+  - entry: "页面布局"
+    user_path: "页面加载 → sidebar和main内容区对齐无重叠"
+    states: ["正常布局", "sidebar展开", "sidebar折叠"]
+
+acceptance_criteria:
+  - id: AC-1
+    given: "用户在侧边栏点击模型评测导航项"
+    when: "路由跳转到 /benchmarks"
+    then: "页面正确渲染 ModelBenchmarks.vue 组件，显示模型评测功能界面"
+    testable: true
+  - id: AC-2
+    given: "页面加载完成且侧边栏展开状态"
+    when: "sidebar宽度240px展开"
+    then: "main内容区marginLeft为240px，无重叠覆盖"
+    testable: true
+  - id: AC-3
+    given: "页面加载完成且侧边栏折叠状态"
+    when: "sidebar宽度68px折叠"
+    then: "main内容区marginLeft为68px，无重叠覆盖"
+    testable: true
+  - id: AC-4
+    given: "执行 pnpm build 命令"
+    when: "TypeScript 类型检查和构建"
+    then: "构建成功通过，0个类型错误"
+    testable: true
+
+data_interfaces:
+  - name: SystemStatus
+    type: existing_interface
+    change: "添加可选 queue 字段 (QueueStatus 类型)"
+    contract_source: "src/types/index.ts"
+  - name: useSystemData
+    type: composable
+    change: "initialCount 参数类型改为 MaybeRefOrGetter<number>"
+    contract_source: "src/composables/useSystemData.ts"
+  - name: useTokenHistory
+    type: composable
+    change: "initialCount 参数类型改为 MaybeRefOrGetter<number>"
+    contract_source: "src/composables/useTokenHistory.ts"
+
+gate:
+  verdict: "PASS"
+  mode: "standard"
+  p0_missing: []
+  p1_missing: []
+  risks: []
+  ambiguity_score:
+    business_goal_clarity: 95
+    interaction_completeness: 95
+    ac_testability: 100
+    data_contract_certainty: 100
+    overall: 97
+
+implementation_context:
+  code_complete: true
+  test_complete: true
+  note: "代码修复已在当前会话中完成，pnpm build 通过"
+  missing_items: []

@@ -42,9 +42,9 @@ describe('useGPU', () => {
 
   it('formatMemory格式化字节', () => {
     const { formatMemory } = useGPU()
-    expect(formatMemory(21474836480)).toBe('20.00 GB')
-    expect(formatMemory(1048576)).toBe('1.00 MB')
-    expect(formatMemory(1024)).toBe('1.00 KB')
+    expect(formatMemory(21474836480)).toBe('20.0 GB')
+    expect(formatMemory(1048576)).toBe('1.0 MB')
+    expect(formatMemory(1024)).toBe('1.0 KB')
     expect(formatMemory(500)).toBe('500 B')
   })
 

@@ -1,0 +1,111 @@
+plan:
+  meta:
+    source_tech_doc: "docs/tasks/FRONTEND-FIX-001/tech-solution.yaml"
+    scope: "P0"
+    test_coverage_target: 80
+    min_tests_per_feature: 2
+
+  tasks:
+    - id: "T0-1"
+      priority: "P0"
+      type: "test"
+      title: "验证 benchmarks 路由导航正确性"
+      test_type: "hook"
+      file: "src/router/__tests__/index.test.ts"
+      given: "路由配置中包含 /benchmarks 路径"
+      when: "router.resolve({ name: 'benchmarks' })"
+      then:
+        - "路由路径为 /benchmarks"
+        - "路由组件为 ModelBenchmarks.vue"
+      depends_on: []
+
+    - id: "P0-1"
+      priority: "P0"
+      type: "code"
+      title: "修复缺失的 benchmarks 路由"
+      files: ["src/router/index.ts"]
+      depends_on: ["T0-1"]
+      implementation_notes:
+        - "在 router/index.ts 中 agent 路由后添加 benchmarks 路由"
+        - "path: '/benchmarks', name: 'benchmarks', component: ModelBenchmarks.vue"
+      definition_of_done:
+        - "路由已添加到 router/index.ts"
+        - "路由测试通过"
+        - "pnpm build 通过"
+
+    - id: "T0-2"
+      priority: "P0"
+      type: "test"
+      title: "验证 App.vue mainMargin 使用 CSS 变量而非硬编码"
+      test_type: "hook"
+      file: "src/App.vue"
+      given: "sidebarCollapsed 为 false"
+      when: "计算 mainMargin"
+      then:
+        - "mainMargin 为 var(--sidebar-width) 而非 220px"
+        - "sidebarCollapsed 为 true 时 mainMargin 为 var(--sidebar-collapsed-width) 而非 64px"
+      depends_on: []
+
+    - id: "P0-2"
+      priority: "P0"
+      type: "code"
+      title: "修复 sidebar/main 宽度不匹配"
+      files: ["src/App.vue"]
+      depends_on: ["T0-2"]
+      implementation_notes:
+        - "App.vue mainMargin 改为 computed(() => store.sidebarCollapsed ? 'var(--sidebar-collapsed-width)' : 'var(--sidebar-width)')"
+      definition_of_done:
+        - "App.vue 使用 CSS 变量计算 marginLeft"
+        - "sidebar展开时main与sidebar对齐无重叠"
+        - "sidebar折叠时main与sidebar对齐无重叠"
+
+    - id: "T0-3"
+      priority: "P0"
+      type: "test"
+      title: "验证 TS 类型修复 - SystemStatus 包含 queue 字段"
+      test_type: "pure"
+      file: "src/types/index.ts"
+      given: "SystemStatus 类型定义包含可选 queue 字段"
+      when: "TypeScript 编译检查"
+      then:
+        - "SystemStatus 类型包含 queue?: QueueStatus"
+        - "useSystemData 的 queueStatus computed 无类型错误"
+      depends_on: []
+
+    - id: "P0-3"
+      priority: "P0"
+      type: "code"
+      title: "修复 TS 类型错误（SystemStatus/composables/Dashboard）"
+      files:
+        - "src/types/index.ts"
+        - "src/composables/useSystemData.ts"
+        - "src/composables/useTokenHistory.ts"
+        - "src/views/Dashboard.vue"
+        - "src/composables/__tests__/useSystemData.test.ts"
+      depends_on: ["T0-3"]
+      implementation_notes:
+        - "SystemStatus 添加 queue?: QueueStatus 可选字段"
+        - "useSystemData: initialCount 改为 MaybeRefOrGetter<number>, 使用 toValue()"
+        - "useTokenHistory: initialCount 改为 MaybeRefOrGetter<number>, 使用 toValue()"
+        - "Dashboard: 添加 QueueModelEntry 类型导入, queueStatus 类型断言"
+        - "测试文件: fetch → refresh, 移除不可达 queue 断言"
+      definition_of_done:
+        - "pnpm build 无 TS 类型错误"
+        - "pnpm test 通过"
+
+    - id: "P1-1"
+      priority: "P1"
+      type: "code"
+      title: "修复 CSS 重复 --shadow-glow 定义"
+      files: ["src/style.css"]
+      depends_on: []
+      implementation_notes:
+        - "删除 style.css 中 :root 内第二处 --shadow-glow 定义（0.25版本），保留一处（0.25版本）"
+      definition_of_done:
+        - "style.css 只有一处 --shadow-glow 定义"
+        - "界面渲染正常"
+
+  commands:
+    test: "cd frontend && pnpm test"
+    lint: "cd frontend && npx vue-tsc --noEmit"
+    typecheck: "cd frontend && npx vue-tsc -b"

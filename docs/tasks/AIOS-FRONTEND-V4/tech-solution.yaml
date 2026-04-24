@@ -1,0 +1,80 @@
+meta:
+  title: "AI OS Frontend V4 - 界面美化与端到端测试完善"
+  platform: Web
+  task_id: AIOS-FRONTEND-V4
+  requirement_version: "1.0"
+  requirement_confidence: "high"
+
+scope:
+  in_scope:
+    - "Dashboard卡片样式统一（间距、圆角、阴影、空状态）"
+    - "修复useSystemData单元测试（mock不匹配导致3个失败）"
+    - "修正E2E测试断言（选择器、类名、路由路径与实际UI不匹配）"
+    - "补充Benchmarks和Docs页面E2E测试"
+    - "响应式布局E2E测试断点修正"
+  out_of_scope:
+    - "新增页面或功能"
+    - "后端API修改"
+    - "性能优化（非视觉相关）"
+
+file_changes:
+  - path: "frontend/src/composables/__tests__/useSystemData.test.ts"
+    change: modify
+    summary: "修复mock：添加getSystemHistory mock，移除getQueueStatus mock（useSystemData不调用它），确保refresh()正确返回数据"
+    risk: low
+
+  - path: "frontend/src/style.css"
+    change: modify
+    summary: "确保卡片样式统一：card-base圆角16px已定义，确认.grid gap 16px和卡片间距一致性"
+    risk: low
+
+  - path: "frontend/e2e/app.spec.ts"
+    change: modify
+    summary: "修正E2E测试：修复类名/选择器不匹配（model-list-card不存在→改为running-card），路由路径(chat→agent)，sidebar宽度(220→240)，中屏断点(1000→768)，补充Benchmarks和Docs页面测试"
+    risk: medium
+
+  - path: "frontend/src/views/Dashboard.vue"
+    change: modify
+    summary: "确认空状态样式统一（居中、灰色图标、14px文字），如有不一致则修正"
+    risk: low
+
+api: []
+
+tracking: []
+
+flags: []
+
+validation:
+  acceptance:
+    - id: AC-01
+      test: "E2E: Dashboard加载时骨架屏6个卡片可见"
+      type: e2e
+    - id: AC-02
+      test: "E2E: CSS变量验证卡片圆角(borderRadius)、间距(grid gap)、阴影(shadow)"
+      type: e2e
+    - id: AC-03
+      test: "E2E: 空状态有图标+文字描述且样式统一"
+      type: e2e
+    - id: AC-04
+      test: "Unit: vitest run 全部通过（0 failures）"
+      type: unit
+    - id: AC-05
+      test: "E2E: playwright test 全部通过（无定位器错误）"
+      type: e2e
+    - id: AC-06
+      test: "E2E: Benchmarks和Docs页面有基础可见性测试"
+      type: e2e
+    - id: AC-07
+      test: "E2E: 响应式布局断点>=1400px 3列, >=768px 2列, <768px 1列"
+      type: e2e
+
+risks:
+  - level: P1
+    description: "E2E测试依赖后端服务运行，本地无后端时测试可能超时失败"
+    mitigation: "使用Playwright的mock功能或确保webServer配置正确启动dev服务"
+
+rollback:
+  strategy: "git revert，低风险改动可直接回滚"
+  steps:
+    - "git revert HEAD"
+    - "验证vitest和playwright测试恢复原始状态"
