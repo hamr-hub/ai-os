@@ -43,8 +43,8 @@ export function useTokenStats(intervalMs = 10000) {
   }
 
   const totalTokens = computed(() => stats.value?.total_tokens ?? 0)
-  const promptTokens = computed(() => stats.value?.total_prompt_tokens ?? 0)
-  const completionTokens = computed(() => stats.value?.total_completion_tokens ?? 0)
+  const promptTokens = computed(() => stats.value?.total_prompt_tokens ?? stats.value?.prompt_tokens ?? 0)
+  const completionTokens = computed(() => stats.value?.total_completion_tokens ?? stats.value?.completion_tokens ?? 0)
   const modelStats = computed(() => stats.value?.models ?? {})
 
   const formatTokens = (n: number): string => {

@@ -25,8 +25,7 @@ const navItems = [
   { name: 'dashboard', label: '仪表盘', icon: LayoutDashboard },
   { name: 'monitor', label: '实时监控', icon: Activity },
   { name: 'models', label: '模型管理', icon: Server },
-  { name: 'chat', label: '聊天', icon: MessageSquare },
-  { name: 'agent', label: 'Agent', icon: Bot },
+    { name: 'agent', label: 'Agent', icon: Bot },
   { name: 'docs', label: '文档', icon: BookOpen },
 ]
 

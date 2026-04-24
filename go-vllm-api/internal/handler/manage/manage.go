@@ -186,10 +186,18 @@ func (h *ManageHandler) GetGPUHistory(c *gin.Context) {
 			_ = n
 		}
 	}
+	count := c.Query("count")
+	if count != "" {
+		if n, err := fmt.Sscanf(count, "%d", &limit); err == nil && n > 0 {
+			_ = n
+		}
+	}
 	history := h.metrics.GetGPUHistory(limit)
 	c.JSON(http.StatusOK, gin.H{
-		"history":  history,
-		"count":    len(history),
+		"history":   history,
+		"count":     len(history),
+		"enabled":   true,
+		"max_days":  30,
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }
@@ -219,6 +227,7 @@ func (h *ManageHandler) GetModelStatus(c *gin.Context) {
 			"supports_images":          h.scheduler.GetModelSupportsImages(m),
 			"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(m),
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
+			"last_used":                nil,
 		}
 	}
 	c.JSON(http.StatusOK, status)
@@ -439,11 +448,22 @@ func (h *ManageHandler) GetTokenStats(c *gin.Context) {
 		return
 	}
 	stats := h.metrics.GetTokenStats()
+	models := make(map[string]interface{})
+	for _, m := range h.scheduler.GetAvailableModels() {
+		models[m] = map[string]interface{}{
+			"prompt_tokens":     0,
+			"completion_tokens": 0,
+			"total_tokens":      0,
+		}
+	}
 	result := gin.H{
-		"prompt_tokens":     stats.PromptTokens,
-		"completion_tokens": stats.CompletionTokens,
-		"total_tokens":      stats.TotalTokens,
-		"timestamp":         time.Now().Format(time.RFC3339),
+		"total_prompt_tokens":     stats.PromptTokens,
+		"total_completion_tokens": stats.CompletionTokens,
+		"total_tokens":            stats.TotalTokens,
+		"prompt_tokens":           stats.PromptTokens,
+		"completion_tokens":       stats.CompletionTokens,
+		"models":                  models,
+		"timestamp":               time.Now().Format(time.RFC3339),
 	}
 	h.cache.Set(cacheKey, result, 10)
 	c.JSON(http.StatusOK, result)
@@ -481,12 +501,18 @@ func (h *ManageHandler) CheckAlertStatus(c *gin.Context) {
 		overallScore = v
 	}
 
+	alertReasons := make([]string, 0)
+	gpuAlerts := h.metrics.GetGPUAlerts(h.gpuMonitor.GetStatus())
+	for _, a := range gpuAlerts {
+		alertReasons = append(alertReasons, a.Message)
+	}
 	result := gin.H{
-		"should_alert": overallScore < 70,
-		"health_score": overallScore,
-		"status":       healthInfo["status"],
-		"alert_status": alertStatus,
-		"timestamp":    time.Now().Format(time.RFC3339),
+		"should_alert":  overallScore < 70,
+		"health_score":  overallScore,
+		"status":        healthInfo["status"],
+		"alert_status":  alertStatus,
+		"alert_reasons": alertReasons,
+		"timestamp":     time.Now().Format(time.RFC3339),
 	}
 	h.cache.Set(cacheKey, result, 10)
 	c.JSON(http.StatusOK, result)

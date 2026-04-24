@@ -234,6 +234,8 @@ export interface TokenStats {
   total_prompt_tokens: number
   total_completion_tokens: number
   total_tokens: number
+  prompt_tokens?: number
+  completion_tokens?: number
   models: Record<string, TokenModelStats>
   timestamp: string
 }
