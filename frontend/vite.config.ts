@@ -23,8 +23,12 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 30000,
+    port: 30001,
     proxy: {
+      '/manage': {
+        target: proxyTarget,
+        changeOrigin: true,
+      },
       '/api': {
         target: proxyTarget,
         changeOrigin: true,

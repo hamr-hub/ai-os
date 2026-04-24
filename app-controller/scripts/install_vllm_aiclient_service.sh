@@ -5,6 +5,7 @@ set -e
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPTS_DIR")"
+ROOT_DIR="$(dirname "$PROJECT_DIR")"
 INSTALL_DIR="/root/ai-suite"
 SYSTEMD_DIR="/etc/systemd/system"
 
@@ -30,7 +31,7 @@ chmod +x "$INSTALL_DIR/switch_vllm_model_aiclient.py"
 
 # 3. 安装 systemd 服务
 echo "[3/4] 安装 systemd 服务..."
-cp "$PROJECT_DIR/systemd/vllm-aiclient.service" "$SYSTEMD_DIR/vllm-aiclient.service"
+cp "$ROOT_DIR/systemd/vllm-aiclient.service" "$SYSTEMD_DIR/vllm-aiclient.service"
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 

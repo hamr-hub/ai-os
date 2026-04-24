@@ -131,13 +131,30 @@ class GPUMonitor:
         parts = [part.strip() for part in line.split(',')]
         if len(parts) < 6:
             return None
-        total_mb = int(parts[1])
-        used_mb = int(parts[2])
-        free_mb = int(parts[3])
-        temperature = int(parts[4])
-        utilization = int(parts[5])
-        power_draw = float(parts[6]) if len(parts) > 6 and parts[6] else 0
-        power_limit = float(parts[7]) if len(parts) > 7 and parts[7] else 0
+        try:
+            total_mb = int(parts[1])
+            used_mb = int(parts[2])
+            free_mb = int(parts[3])
+        except (ValueError, IndexError):
+            return None
+        temperature = 0
+        if len(parts) > 4 and parts[4].isdigit():
+            temperature = int(parts[4])
+        utilization = 0
+        if len(parts) > 5 and parts[5].replace('%','').isdigit():
+            utilization = int(parts[5].replace('%',''))
+        power_draw = 0.0
+        if len(parts) > 6:
+            try:
+                power_draw = float(parts[6])
+            except ValueError:
+                power_draw = 0.0
+        power_limit = 0.0
+        if len(parts) > 7:
+            try:
+                power_limit = float(parts[7])
+            except ValueError:
+                power_limit = 0.0
         fan_speed = int(parts[8]) if len(parts) > 8 and parts[8].isdigit() else 0
         clock_sm = int(parts[9]) if len(parts) > 9 and parts[9].isdigit() else 0
         clock_mem = int(parts[10]) if len(parts) > 10 and parts[10].isdigit() else 0

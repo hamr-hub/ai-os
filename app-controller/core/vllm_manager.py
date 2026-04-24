@@ -26,10 +26,10 @@ _switching_in_progress = False
 MODEL_BASE_PATH = "/mnt/pve_models"
 
 # vLLM 服务名称
-VLLM_SERVICE_NAME = "vllm"
+VLLM_SERVICE_NAME = "vllm-aiclient"
 
 # vLLM 启动脚本路径
-VLLM_START_SCRIPT = "/root/ai-suite/start_vllm.sh"
+VLLM_START_SCRIPT = "/root/ai-suite/start_vllm_aiclient.sh"
 
 # vLLM API 默认端口
 VLLM_DEFAULT_PORT = 8000
