@@ -253,7 +253,9 @@ const currentDocItem = computed(() => findDocItem(currentDoc.value))
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .docs-empty {
@@ -267,9 +269,14 @@ const currentDocItem = computed(() => findDocItem(currentDoc.value))
   font-size: 14px;
 }
 
-.slide-enter-active { transition: all 0.2s ease; }
-.slide-leave-active { transition: all 0.15s ease; }
-.slide-enter-from, .slide-leave-to {
+.slide-enter-active {
+  transition: all 0.2s ease;
+}
+.slide-leave-active {
+  transition: all 0.15s ease;
+}
+.slide-enter-from,
+.slide-leave-to {
   opacity: 0;
   transform: translateY(-4px);
 }

@@ -113,7 +113,7 @@ test.describe('Dashboard 响应式布局', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     const grid = page.locator('.grid')
-    const columns = await grid.evaluate(el => getComputedStyle(el).gridTemplateColumns)
+    const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(3)
     await context.close()
   })
@@ -124,7 +124,7 @@ test.describe('Dashboard 响应式布局', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     const grid = page.locator('.grid')
-    const columns = await grid.evaluate(el => getComputedStyle(el).gridTemplateColumns)
+    const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(2)
     await context.close()
   })
@@ -135,7 +135,7 @@ test.describe('Dashboard 响应式布局', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     const grid = page.locator('.grid')
-    const columns = await grid.evaluate(el => getComputedStyle(el).gridTemplateColumns)
+    const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(1)
     await context.close()
   })
@@ -217,9 +217,9 @@ test.describe('侧边栏折叠', () => {
 
   test('折叠后主内容区margin变化', async ({ page }) => {
     const main = page.locator('.app-main')
-    const initialMargin = await main.evaluate(el => el.style.marginLeft)
+    const initialMargin = await main.evaluate((el) => el.style.marginLeft)
     await page.locator('.collapse-btn').click()
-    const collapsedMargin = await main.evaluate(el => el.style.marginLeft)
+    const collapsedMargin = await main.evaluate((el) => el.style.marginLeft)
     expect(collapsedMargin).not.toBe(initialMargin)
     expect(collapsedMargin).toBe('64px')
   })
@@ -254,7 +254,9 @@ test.describe('主题切换', () => {
     await page.evaluate(() => localStorage.setItem('theme', 'dark'))
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    const initialTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'))
+    const initialTheme = await page.evaluate(() =>
+      document.documentElement.getAttribute('data-theme')
+    )
     await themeBtn.click()
     const newTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'))
     expect(newTheme).not.toBe(initialTheme)
@@ -264,7 +266,9 @@ test.describe('主题切换', () => {
     await page.evaluate(() => localStorage.setItem('theme', 'dark'))
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    const bg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg-primary'))
+    const bg = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--bg-primary')
+    )
     expect(bg.trim()).toContain('#0a0e1a')
   })
 
@@ -272,7 +276,9 @@ test.describe('主题切换', () => {
     await page.evaluate(() => localStorage.setItem('theme', 'light'))
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    const bg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg-primary'))
+    const bg = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--bg-primary')
+    )
     expect(bg.trim()).toContain('#f8fafc')
   })
 })
@@ -338,7 +344,7 @@ test.describe('ModelManagement 页面', () => {
 
   test('两列布局', async ({ page }) => {
     const content = page.locator('.content')
-    const columns = await content.evaluate(el => getComputedStyle(el).gridTemplateColumns)
+    const columns = await content.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(2)
   })
 
@@ -363,7 +369,7 @@ test.describe('ModelManagement 页面', () => {
     const firstCard = cards.first()
     if (await firstCard.isVisible()) {
       await firstCard.hover()
-      const transform = await firstCard.evaluate(el => getComputedStyle(el).transform)
+      const transform = await firstCard.evaluate((el) => getComputedStyle(el).transform)
       expect(transform).toBeTruthy()
     }
   })
@@ -448,7 +454,9 @@ test.describe('视觉一致性', () => {
   })
 
   test('CSS变量主题色正确', async ({ page }) => {
-    const primary = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-primary'))
+    const primary = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--color-primary')
+    )
     expect(primary.trim()).toBe('#6366f1')
   })
 
@@ -457,12 +465,12 @@ test.describe('视觉一致性', () => {
     const radii = []
     for (const card of await cards.all()) {
       if (await card.isVisible()) {
-        const borderRadius = await card.evaluate(el => getComputedStyle(el).borderRadius)
+        const borderRadius = await card.evaluate((el) => getComputedStyle(el).borderRadius)
         radii.push(borderRadius)
       }
     }
     if (radii.length > 1) {
-      expect(radii.every(r => r === radii[0])).toBe(true)
+      expect(radii.every((r) => r === radii[0])).toBe(true)
     }
   })
 
@@ -474,7 +482,7 @@ test.describe('视觉一致性', () => {
 
   test('sidebar宽度正确', async ({ page }) => {
     const sidebar = page.locator('.sidebar')
-    const width = await sidebar.evaluate(el => getComputedStyle(el).width)
+    const width = await sidebar.evaluate((el) => getComputedStyle(el).width)
     expect(width).toBe('220px')
   })
 

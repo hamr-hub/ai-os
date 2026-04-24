@@ -1,5 +1,6 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { getTokenStats } from '@/api/client'
+import { formatTokens } from '@/utils/format'
 import type { TokenStats } from '@/types'
 
 export function useTokenStats(intervalMs = 10000) {
@@ -43,15 +44,13 @@ export function useTokenStats(intervalMs = 10000) {
   }
 
   const totalTokens = computed(() => stats.value?.total_tokens ?? 0)
-  const promptTokens = computed(() => stats.value?.total_prompt_tokens ?? stats.value?.prompt_tokens ?? 0)
-  const completionTokens = computed(() => stats.value?.total_completion_tokens ?? stats.value?.completion_tokens ?? 0)
+  const promptTokens = computed(
+    () => stats.value?.total_prompt_tokens ?? stats.value?.prompt_tokens ?? 0
+  )
+  const completionTokens = computed(
+    () => stats.value?.total_completion_tokens ?? stats.value?.completion_tokens ?? 0
+  )
   const modelStats = computed(() => stats.value?.models ?? {})
-
-  const formatTokens = (n: number): string => {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-    return `${n}`
-  }
 
   onMounted(() => {
     fetch()

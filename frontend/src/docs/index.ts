@@ -44,9 +44,7 @@ export const docTree: DocItem[] = [
     slug: 'research',
     title: '研发资产',
     category: 'research',
-    children: [
-      { slug: 'rd-assets', title: '研发资产盘点', category: 'research' },
-    ],
+    children: [{ slug: 'rd-assets', title: '研发资产盘点', category: 'research' }],
   },
 ]
 
@@ -61,7 +59,8 @@ const docModules: Record<string, () => Promise<{ default: DefineComponent<{}, {}
   'agent/conventions': () => import('../../../docs/agent/conventions.md'),
   'agent/development-commands': () => import('../../../docs/agent/development_commands.md'),
   'agent/requirement-template': () => import('../../../docs/agent/requirement-template.md'),
-  'installation/ai-flow-init-report': () => import('../../../docs/installation/ai-flow-init-report.md'),
+  'installation/ai-flow-init-report': () =>
+    import('../../../docs/installation/ai-flow-init-report.md'),
   'research/rd-assets': () => import('../../../docs/research/rd-assets.md'),
 }
 

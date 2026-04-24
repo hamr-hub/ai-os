@@ -29,9 +29,9 @@ export const useServerStore = defineStore('server', () => {
   const lastCheckedAt = ref<number | null>(null)
   const history = ref<ServerHistoryEntry[]>([])
 
-  const manageBase = computed(() => activeUrl.value ? `${activeUrl.value}/manage` : '/api')
-  const v1Base = computed(() => activeUrl.value ? `${activeUrl.value}/v1` : '/v1')
-  const healthUrl = computed(() => activeUrl.value ? `${activeUrl.value}/health` : '/health')
+  const manageBase = computed(() => (activeUrl.value ? `${activeUrl.value}/manage` : '/api'))
+  const v1Base = computed(() => (activeUrl.value ? `${activeUrl.value}/v1` : '/v1'))
+  const healthUrl = computed(() => (activeUrl.value ? `${activeUrl.value}/health` : '/health'))
   const currentLabel = computed(() => activeUrl.value || '本地代理')
 
   const saveConfig = () => {
@@ -49,7 +49,7 @@ export const useServerStore = defineStore('server', () => {
   const syncHistory = (url: string, type: BackendType) => {
     if (!url) return
     const now = Date.now()
-    const existing = history.value.find(item => item.url === url)
+    const existing = history.value.find((item) => item.url === url)
     if (existing) {
       existing.backendType = type
       existing.lastUsedAt = now
@@ -75,7 +75,7 @@ export const useServerStore = defineStore('server', () => {
   }
 
   const removeHistory = (url: string) => {
-    history.value = history.value.filter(item => item.url !== url)
+    history.value = history.value.filter((item) => item.url !== url)
     saveHistory()
   }
 
@@ -109,13 +109,13 @@ export const useServerStore = defineStore('server', () => {
       try {
         const parsed = JSON.parse(savedHistory) as ServerHistoryEntry[]
         history.value = parsed
-          .map(item => ({
+          .map((item) => ({
             url: normalizeUrl(item.url),
             backendType: item.backendType ?? 'auto',
             addedAt: item.addedAt ?? Date.now(),
             lastUsedAt: item.lastUsedAt ?? item.addedAt ?? Date.now(),
           }))
-          .filter(item => item.url)
+          .filter((item) => item.url)
           .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
           .slice(0, MAX_HISTORY)
       } catch {}

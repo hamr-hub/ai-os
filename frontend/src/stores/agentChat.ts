@@ -26,7 +26,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
   const activeConversation = ref<string | null>(null)
 
   const currentConversation = computed(() => {
-    return conversations.value.find(c => c.id === activeConversation.value)
+    return conversations.value.find((c) => c.id === activeConversation.value)
   })
 
   const generateId = () => {
@@ -41,7 +41,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
       model,
       systemPrompt: '',
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     }
     conversations.value.unshift(conv)
     activeConversation.value = conv.id
@@ -50,13 +50,13 @@ export const useAgentChatStore = defineStore('agentChat', () => {
   }
 
   const selectConversation = (id: string) => {
-    if (conversations.value.find(c => c.id === id)) {
+    if (conversations.value.find((c) => c.id === id)) {
       activeConversation.value = id
     }
   }
 
   const deleteConversation = (id: string) => {
-    const index = conversations.value.findIndex(c => c.id === id)
+    const index = conversations.value.findIndex((c) => c.id === id)
     if (index !== -1) {
       conversations.value.splice(index, 1)
       if (activeConversation.value === id) {
@@ -67,7 +67,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
   }
 
   const updateConversationTitle = (id: string, title: string) => {
-    const conv = conversations.value.find(c => c.id === id)
+    const conv = conversations.value.find((c) => c.id === id)
     if (conv) {
       conv.title = title
       conv.updatedAt = new Date()
@@ -76,7 +76,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
   }
 
   const setConversationModel = (id: string, model: string | null) => {
-    const conv = conversations.value.find(c => c.id === id)
+    const conv = conversations.value.find((c) => c.id === id)
     if (conv) {
       conv.model = model
       conv.updatedAt = new Date()
@@ -85,7 +85,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
   }
 
   const setConversationSystemPrompt = (id: string, prompt: string) => {
-    const conv = conversations.value.find(c => c.id === id)
+    const conv = conversations.value.find((c) => c.id === id)
     if (conv) {
       conv.systemPrompt = prompt
       conv.updatedAt = new Date()
@@ -94,13 +94,13 @@ export const useAgentChatStore = defineStore('agentChat', () => {
   }
 
   const addMessage = (conversationId: string, role: Message['role'], content: string) => {
-    const conv = conversations.value.find(c => c.id === conversationId)
+    const conv = conversations.value.find((c) => c.id === conversationId)
     if (conv) {
       const message: Message = {
         id: generateId(),
         role,
         content,
-        timestamp: new Date()
+        timestamp: new Date(),
       }
       conv.messages.push(message)
       conv.updatedAt = new Date()
@@ -116,7 +116,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
   }
 
   const clearMessages = (conversationId: string) => {
-    const conv = conversations.value.find(c => c.id === conversationId)
+    const conv = conversations.value.find((c) => c.id === conversationId)
     if (conv) {
       conv.messages = []
       conv.updatedAt = new Date()
@@ -142,8 +142,8 @@ export const useAgentChatStore = defineStore('agentChat', () => {
           messages: c.messages.map((m: Message) => ({
             ...m,
             toolCalls: m.toolCalls ?? [],
-            timestamp: new Date(m.timestamp)
-          }))
+            timestamp: new Date(m.timestamp),
+          })),
         }))
         activeConversation.value = conversations.value[0]?.id || null
       } catch (e) {

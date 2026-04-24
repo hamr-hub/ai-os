@@ -151,6 +151,46 @@ func Load(path string) (*AppConfig, error) {
 		return nil, fmt.Errorf("parse config yaml: %w", err)
 	}
 
+	// Environment variable overrides
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		// Simple parsing for redis://host:port or redis://:password@host:port/db
+		trimmed := strings.TrimPrefix(redisURL, "redis://")
+		// Handle password/user if present
+		if idx := strings.LastIndex(trimmed, "@"); idx != -1 {
+			trimmed = trimmed[idx+1:]
+		}
+		// Handle DB if present
+		if idx := strings.LastIndex(trimmed, "/"); idx != -1 {
+			dbStr := trimmed[idx+1:]
+			if db, err := strconv.Atoi(dbStr); err == nil {
+				c.Settings.Redis.DB = db
+			}
+			trimmed = trimmed[:idx]
+		}
+		// Handle host:port
+		parts := strings.Split(trimmed, ":")
+		c.Settings.Redis.Host = parts[0]
+		if len(parts) > 1 {
+			if port, err := strconv.Atoi(parts[1]); err == nil {
+				c.Settings.Redis.Port = port
+			}
+		}
+	} else {
+		if host := os.Getenv("REDIS_HOST"); host != "" {
+			c.Settings.Redis.Host = host
+		}
+		if port := os.Getenv("REDIS_PORT"); port != "" {
+			if p, err := strconv.Atoi(port); err == nil {
+				c.Settings.Redis.Port = p
+			}
+		}
+		if db := os.Getenv("REDIS_DB"); db != "" {
+			if d, err := strconv.Atoi(db); err == nil {
+				c.Settings.Redis.DB = d
+			}
+		}
+	}
+
 	if c.LlamaCpp.DefaultNGPULayers == 0 {
 		c.LlamaCpp.DefaultNGPULayers = -1
 	}

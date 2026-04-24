@@ -28,7 +28,8 @@ describe('useTokenStats', () => {
   })
 
   it('fetch后填充数据', async () => {
-    const { stats, totalTokens, promptTokens, completionTokens, modelStats, fetch } = useTokenStats()
+    const { stats, totalTokens, promptTokens, completionTokens, modelStats, fetch } =
+      useTokenStats()
     await fetch()
     expect(stats.value).toBeTruthy()
     expect(totalTokens.value).toBe(15000)

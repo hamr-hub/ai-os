@@ -1,8 +1,16 @@
 import axios from 'axios'
 import type {
-  GPUSummary, GPUHistoryEntry, ModelStatus, ModelsResponse,
-  ActionResponse, TestResponse, TestHistoryEntry, TokenStats,
-  SystemStatus, QueueStatus, HealthAlert
+  GPUSummary,
+  GPUHistoryEntry,
+  ModelStatus,
+  ModelsResponse,
+  ActionResponse,
+  TestResponse,
+  TestHistoryEntry,
+  TokenStats,
+  SystemStatus,
+  QueueStatus,
+  HealthAlert,
 } from '@/types'
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
@@ -33,8 +41,12 @@ v1Client.interceptors.request.use((config) => {
 // Response Interceptors
 const handleResponseError = (error: any) => {
   const appStore = useAppStore()
-  const message = error.response?.data?.message || error.response?.data?.error || error.message || 'API Request Failed'
-  
+  const message =
+    error.response?.data?.message ||
+    error.response?.data?.error ||
+    error.message ||
+    'API Request Failed'
+
   // Don't toast for cancelled requests
   if (axios.isCancel(error)) {
     return Promise.reject(error)
@@ -44,15 +56,9 @@ const handleResponseError = (error: any) => {
   return Promise.reject(error)
 }
 
-client.interceptors.response.use(
-  (response) => response,
-  handleResponseError
-)
+client.interceptors.response.use((response) => response, handleResponseError)
 
-v1Client.interceptors.response.use(
-  (response) => response,
-  handleResponseError
-)
+v1Client.interceptors.response.use((response) => response, handleResponseError)
 
 export async function getGPUSummary(): Promise<GPUSummary> {
   const { data } = await client.get<GPUSummary>('/gpu/summary')
@@ -97,7 +103,9 @@ export async function getTestResults(name: string): Promise<TestResponse> {
 }
 
 export async function getTestHistory(): Promise<TestHistoryEntry[]> {
-  const { data } = await v1Client.get<{ status: string; reports: Record<string, any> }>('/test/reports')
+  const { data } = await v1Client.get<{ status: string; reports: Record<string, any> }>(
+    '/test/reports'
+  )
   const reports = data.reports || {}
   return Object.entries(reports).map(([model_name, report]) => ({
     model_name,
@@ -113,7 +121,9 @@ export async function getTokenStats(): Promise<TokenStats> {
   return data
 }
 
-export async function getGPUHistory(count: number = 60): Promise<{ history: GPUHistoryEntry[]; count: number; enabled: boolean; max_days: number }> {
+export async function getGPUHistory(
+  count: number = 60
+): Promise<{ history: GPUHistoryEntry[]; count: number; enabled: boolean; max_days: number }> {
   const { data } = await client.get('/gpu/history', { params: { count } })
   return data
 }
@@ -180,7 +190,9 @@ export interface ChatCompletionResponse {
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
 }
 
-export async function chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+export async function chatCompletion(
+  request: ChatCompletionRequest
+): Promise<ChatCompletionResponse> {
   const { data } = await v1Client.post<ChatCompletionResponse>('/chat/completions', request)
   return data
 }

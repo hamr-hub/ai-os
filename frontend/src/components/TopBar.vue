@@ -99,8 +99,11 @@ onUnmounted(() => {
     </div>
 
     <div class="topbar-right topbar-panel-wrap">
-      <button class="topbar-icon-btn" @click.stop="refreshStatus" title="刷新连接状态">
-        <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': serverStore.connectionStatus === 'checking' }" />
+      <button class="topbar-icon-btn" title="刷新连接状态" @click.stop="refreshStatus">
+        <RefreshCw
+          class="w-4 h-4"
+          :class="{ 'animate-spin': serverStore.connectionStatus === 'checking' }"
+        />
       </button>
       <button class="topbar-switch-btn" @click.stop="panelOpen = !panelOpen">
         <Plug class="w-4 h-4" />
@@ -133,13 +136,20 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="panel-section" v-if="serverStore.history.length">
+        <div v-if="serverStore.history.length" class="panel-section">
           <div class="panel-title">历史地址</div>
           <div class="history-list">
-            <div v-for="item in serverStore.history" :key="item.url" class="history-item" :class="{ active: item.url === serverStore.activeUrl }">
+            <div
+              v-for="item in serverStore.history"
+              :key="item.url"
+              class="history-item"
+              :class="{ active: item.url === serverStore.activeUrl }"
+            >
               <button class="history-main" @click="useHistory(item.url, item.backendType)">
                 <span class="history-url">{{ item.url }}</span>
-                <span class="history-meta">{{ item.backendType.toUpperCase() }} · {{ formatTime(item.lastUsedAt) }}</span>
+                <span class="history-meta"
+                  >{{ item.backendType.toUpperCase() }} · {{ formatTime(item.lastUsedAt) }}</span
+                >
               </button>
               <button class="history-delete" @click.stop="removeHistory(item.url)">
                 <Trash2 class="w-3.5 h-3.5" />
@@ -164,8 +174,24 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  background: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border-card);
+  background: rgba(6, 10, 20, 0.9);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+}
+.topbar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(99, 102, 241, 0.5),
+    rgba(6, 182, 212, 0.3),
+    transparent
+  );
 }
 
 .topbar-left,
@@ -196,14 +222,15 @@ onUnmounted(() => {
 .server-state {
   display: inline-flex;
   align-items: center;
-  height: 22px;
+  height: 20px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid var(--border-card);
-  color: var(--text-secondary);
-  background: var(--bg-card);
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.08);
+  letter-spacing: 0.5px;
 }
 
 .topbar-icon-btn,
@@ -222,10 +249,10 @@ onUnmounted(() => {
   gap: 8px;
   height: 30px;
   padding: 0 12px;
-  border-radius: 10px;
-  background: var(--bg-card);
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.08);
   color: var(--text-secondary);
-  border: 1px solid var(--border-card);
+  border: 1px solid rgba(99, 102, 241, 0.2);
   transition: all 0.2s ease;
 }
 
@@ -233,8 +260,10 @@ onUnmounted(() => {
 .topbar-switch-btn:hover,
 .panel-btn:hover,
 .history-delete:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
 }
 
 .topbar-panel-wrap {
@@ -248,7 +277,12 @@ onUnmounted(() => {
   width: 420px;
   padding: 14px;
   border-radius: 14px;
-  background: var(--bg-card);
+  background: rgba(11, 15, 28, 0.95);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.6),
+    0 0 1px rgba(99, 102, 241, 0.3);
+  backdrop-filter: blur(16px);
 }
 
 .panel-section + .panel-section {
@@ -315,8 +349,10 @@ onUnmounted(() => {
 }
 
 .panel-btn.primary {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #fff;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
 }
 
 .history-list {

@@ -25,7 +25,7 @@ const navItems = [
   { name: 'dashboard', label: '仪表盘', icon: LayoutDashboard },
   { name: 'monitor', label: '实时监控', icon: Activity },
   { name: 'models', label: '模型管理', icon: Server },
-    { name: 'agent', label: 'Agent', icon: Bot },
+  { name: 'agent', label: 'Agent', icon: Bot },
   { name: 'docs', label: '文档', icon: BookOpen },
 ]
 
@@ -70,7 +70,11 @@ const toggleCollapse = () => {
             <h1 class="logo-title">AI OS</h1>
           </div>
         </transition>
-        <button class="collapse-btn" @click="toggleCollapse" :title="store.sidebarCollapsed ? '展开' : '折叠'">
+        <button
+          class="collapse-btn"
+          :title="store.sidebarCollapsed ? '展开' : '折叠'"
+          @click="toggleCollapse"
+        >
           <PanelLeftClose v-if="!store.sidebarCollapsed" class="w-4 h-4" />
           <PanelLeftOpen v-else class="w-4 h-4" />
         </button>
@@ -80,10 +84,10 @@ const toggleCollapse = () => {
         <button
           v-for="item in navItems"
           :key="item.name"
-          @click="navigateTo(item.name)"
           class="nav-item"
           :class="{ active: isActive(item.name) }"
           :title="store.sidebarCollapsed ? item.label : ''"
+          @click="navigateTo(item.name)"
         >
           <component :is="item.icon" class="nav-icon" />
           <transition name="fade">
@@ -93,7 +97,11 @@ const toggleCollapse = () => {
       </nav>
 
       <div class="bottom-section">
-        <button class="nav-item theme-btn" @click="cycleTheme" :title="store.sidebarCollapsed ? '切换主题' : ''">
+        <button
+          class="nav-item theme-btn"
+          :title="store.sidebarCollapsed ? '切换主题' : ''"
+          @click="cycleTheme"
+        >
           <component :is="themeIcon" class="nav-icon" />
           <transition name="fade">
             <span v-if="!store.sidebarCollapsed" class="nav-label">{{ themeLabel }}</span>
@@ -115,8 +123,9 @@ const toggleCollapse = () => {
   display: flex;
   flex-direction: column;
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-card);
+  border-right: 1px solid rgba(99, 102, 241, 0.12);
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.3);
 }
 
 .sidebar.collapsed {
@@ -135,8 +144,18 @@ const toggleCollapse = () => {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  border-bottom: 1px solid var(--border-primary);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
   min-height: 56px;
+  position: relative;
+}
+.logo-section::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.3), transparent);
 }
 
 .sidebar.collapsed .logo-section {
@@ -152,12 +171,16 @@ const toggleCollapse = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.3), 0 0 20px rgba(var(--color-primary-rgb), 0.15);
+  box-shadow:
+    0 4px 12px rgba(var(--color-primary-rgb), 0.3),
+    0 0 20px rgba(var(--color-primary-rgb), 0.15);
   flex-shrink: 0;
   transition: box-shadow 0.3s;
 }
 .sidebar:hover .logo-icon {
-  box-shadow: 0 4px 16px rgba(var(--color-primary-rgb), 0.4), 0 0 30px rgba(var(--color-primary-rgb), 0.2);
+  box-shadow:
+    0 4px 16px rgba(var(--color-primary-rgb), 0.4),
+    0 0 30px rgba(var(--color-primary-rgb), 0.2);
 }
 
 .logo-title {
@@ -285,7 +308,7 @@ const toggleCollapse = () => {
 
 .bottom-section {
   padding: 8px;
-  border-top: 1px solid var(--border-primary);
+  border-top: 1px solid rgba(99, 102, 241, 0.1);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -295,7 +318,14 @@ const toggleCollapse = () => {
   padding: 8px 8px;
 }
 
-.fade-enter-active { transition: opacity 0.2s ease; }
-.fade-leave-active { transition: opacity 0.1s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active {
+  transition: opacity 0.2s ease;
+}
+.fade-leave-active {
+  transition: opacity 0.1s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

@@ -17,7 +17,9 @@ export const useAppStore = defineStore('app', () => {
 
   const updateActualTheme = () => {
     if (theme.value === 'system') {
-      actualTheme.value = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      actualTheme.value = window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
     } else {
       actualTheme.value = theme.value
     }
@@ -48,13 +50,13 @@ export const useAppStore = defineStore('app', () => {
   const addToast = (type: ToastMessage['type'], message: string, duration = 3000) => {
     const id = ++toastId
     toasts.value.push({ id, type, message, duration })
-    
+
     if (duration > 0) {
       setTimeout(() => {
         removeToast(id)
       }, duration)
     }
-    
+
     return id
   }
 

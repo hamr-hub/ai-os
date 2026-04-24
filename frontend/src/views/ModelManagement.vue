@@ -32,6 +32,7 @@ const {
   modelList,
   defaultModel,
   actionLoading,
+  switchingModel,
   isRefreshing,
   refresh,
   handleStartModel,
@@ -40,8 +41,15 @@ const {
   handleSetDefaultModel,
 } = useModels()
 
-const runningModels = computed(() => modelList.value.filter(m => m.running))
-const stoppedModels = computed(() => modelList.value.filter(m => !m.running))
+const runningModels = computed(() => modelList.value.filter((m) => m.running))
+const stoppedModels = computed(() => modelList.value.filter((m) => !m.running))
+
+const switchProgress = computed(() => {
+  if (!switchingModel.value) return null
+  const model = modelList.value.find((m) => m.name === switchingModel.value)
+  if (model?.running) return null
+  return { model: switchingModel.value, phase: model ? '加载中' : '卸载旧模型' }
+})
 
 const selectedTestModel = ref('')
 const testing = ref(false)
@@ -72,13 +80,15 @@ async function fetchCapabilities() {
   }
 }
 
-const getCapabilityBadges = (modelName: string): Array<{ label: string; icon: any; color: string }> => {
+const getCapabilityBadges = (
+  modelName: string
+): Array<{ label: string; icon: any; color: string }> => {
   const caps = modelCapabilities.value[modelName]
   const badges: Array<{ label: string; icon: any; color: string }> = []
   badges.push({ label: '对话', icon: MessageSquare, color: '#6366f1' })
   if (caps?.tool_calling) badges.push({ label: '工具调用', icon: Wrench, color: '#3b82f6' })
   if (caps?.image_generation) badges.push({ label: '图片生成', icon: Image, color: '#8b5cf6' })
-  const model = modelList.value.find(m => m.name === modelName)
+  const model = modelList.value.find((m) => m.name === modelName)
   if (model?.supports_images) badges.push({ label: '多模态', icon: Eye, color: '#f59e0b' })
   return badges
 }
@@ -87,7 +97,8 @@ async function fetchHistory() {
   historyLoading.value = true
   try {
     historyList.value = await getTestHistory()
-  } catch {} finally {
+  } catch {
+  } finally {
     historyLoading.value = false
   }
 }
@@ -134,7 +145,12 @@ function toggleExpand(name: string) {
 
 const formatTime = (ts: string | null) => {
   if (!ts) return '--'
-  return new Date(ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(ts).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 const featureItems = computed(() => {
@@ -150,20 +166,30 @@ const featureItems = computed(() => {
 const overallStatus = computed(() => testResult.value?.report?.overall_status ?? '')
 const statusColor = computed(() => {
   switch (overallStatus.value) {
-    case 'passed': return '#22c55e'
-    case 'degraded': return '#f59e0b'
-    case 'partial': return '#3b82f6'
-    case 'failed': return '#ef4444'
-    default: return '#6b7280'
+    case 'passed':
+      return '#22c55e'
+    case 'degraded':
+      return '#f59e0b'
+    case 'partial':
+      return '#3b82f6'
+    case 'failed':
+      return '#ef4444'
+    default:
+      return '#6b7280'
   }
 })
 const statusLabel = computed(() => {
   switch (overallStatus.value) {
-    case 'passed': return '全部通过'
-    case 'degraded': return '部分降级'
-    case 'partial': return '部分通过'
-    case 'failed': return '检测失败'
-    default: return '--'
+    case 'passed':
+      return '全部通过'
+    case 'degraded':
+      return '部分降级'
+    case 'partial':
+      return '部分通过'
+    case 'failed':
+      return '检测失败'
+    default:
+      return '--'
   }
 })
 
@@ -179,10 +205,16 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
         <h1 class="header-title">模型管理</h1>
         <span class="count-badge">{{ runningModels.length }} / {{ modelList.length }} 运行中</span>
       </div>
-      <button class="icon-btn" @click="refresh" :disabled="isRefreshing">
+      <button class="icon-btn" :disabled="isRefreshing" @click="refresh">
         <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isRefreshing }" />
       </button>
     </header>
+
+    <div v-if="switchProgress" class="switch-banner">
+      <Loader2 class="w-5 h-5 animate-spin" />
+      <span class="switch-text">{{ switchProgress.phase }}：{{ switchProgress.model }}</span>
+      <span class="switch-hint">vLLM 切换通常需要 30-120 秒，请耐心等待</span>
+    </div>
 
     <div class="content">
       <div class="left-col">
@@ -207,16 +239,35 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
               </div>
               <div class="card-bottom">
                 <div class="cap-badges">
-                  <span v-for="b in getCapabilityBadges(model.name)" :key="b.label" class="cap-badge" :style="{ color: b.color, borderColor: b.color + '40', background: b.color + '10' }">
+                  <span
+                    v-for="b in getCapabilityBadges(model.name)"
+                    :key="b.label"
+                    class="cap-badge"
+                    :style="{
+                      color: b.color,
+                      borderColor: b.color + '40',
+                      background: b.color + '10',
+                    }"
+                  >
                     <component :is="b.icon" class="w-3 h-3" />
                     {{ b.label }}
                   </span>
                 </div>
                 <div class="card-actions">
-                  <button class="action-btn" @click="handleSetDefaultModel(model.name)" :disabled="!!actionLoading" title="设为默认">
+                  <button
+                    class="action-btn"
+                    :disabled="!!actionLoading || !!switchingModel"
+                    title="设为默认"
+                    @click="handleSetDefaultModel(model.name)"
+                  >
                     <Star class="w-3.5 h-3.5" />
                   </button>
-                  <button class="action-btn danger" @click="handleStopModel(model.name)" :disabled="!!actionLoading" title="停止">
+                  <button
+                    class="action-btn danger"
+                    :disabled="!!actionLoading || !!switchingModel"
+                    title="停止"
+                    @click="handleStopModel(model.name)"
+                  >
                     <Square class="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -244,10 +295,18 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
                 </span>
               </div>
               <div class="item-actions">
-                <button class="action-btn primary" @click="handleSwitchAndSetDefault(model.name)" :disabled="!!actionLoading">
+                <button
+                  class="action-btn primary"
+                  :disabled="!!actionLoading || !!switchingModel"
+                  @click="handleSwitchAndSetDefault(model.name)"
+                >
                   <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
                 </button>
-                <button class="action-btn" @click="handleStartModel(model.name)" :disabled="!!actionLoading">
+                <button
+                  class="action-btn"
+                  :disabled="!!actionLoading || !!switchingModel"
+                  @click="handleStartModel(model.name)"
+                >
                   <Play class="w-3.5 h-3.5" /> 启动
                 </button>
               </div>
@@ -272,7 +331,7 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
                 {{ m.name }} {{ m.running ? '(运行中)' : '' }}
               </option>
             </select>
-            <button class="test-btn" @click="runTest" :disabled="!selectedTestModel || testing">
+            <button class="test-btn" :disabled="!selectedTestModel || testing" @click="runTest">
               <Loader2 v-if="testing" class="w-4 h-4 animate-spin" />
               <Activity v-else class="w-4 h-4" />
               {{ testing ? '检测中...' : '开始检测' }}
@@ -289,11 +348,18 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
               <span class="status-dot-lg" :style="{ background: statusColor }"></span>
               <span class="status-text" :style="{ color: statusColor }">{{ statusLabel }}</span>
               <span class="status-model">{{ testResult.report?.model_name }}</span>
-              <span class="status-time">{{ formatTime(testResult.report?.test_timestamp ?? null) }}</span>
+              <span class="status-time">{{
+                formatTime(testResult.report?.test_timestamp ?? null)
+              }}</span>
             </div>
 
             <div class="features-grid">
-              <div v-for="feat in featureItems" :key="feat.key" class="feature-card" :class="{ supported: feat.supported }">
+              <div
+                v-for="feat in featureItems"
+                :key="feat.key"
+                class="feature-card"
+                :class="{ supported: feat.supported }"
+              >
                 <component :is="feat.icon" class="feature-icon" />
                 <span class="feature-label">{{ feat.label }}</span>
                 <CheckCircle v-if="feat.supported" class="w-4 h-4 text-green-500" />
@@ -306,22 +372,32 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
               <div class="perf-grid">
                 <div class="perf-card">
                   <Zap class="perf-icon" />
-                  <span class="perf-value">{{ perfMetrics.overall.avg_tps?.toFixed(1) ?? '--' }}</span>
+                  <span class="perf-value">{{
+                    perfMetrics.overall.avg_tps?.toFixed(1) ?? '--'
+                  }}</span>
                   <span class="perf-label">Token/s</span>
                 </div>
                 <div class="perf-card">
                   <Clock class="perf-icon" />
-                  <span class="perf-value">{{ perfMetrics.overall.avg_latency?.toFixed(2) ?? '--' }}</span>
+                  <span class="perf-value">{{
+                    perfMetrics.overall.avg_latency?.toFixed(2) ?? '--'
+                  }}</span>
                   <span class="perf-label">延迟(秒)</span>
                 </div>
                 <div class="perf-card">
                   <Activity class="perf-icon" />
-                  <span class="perf-value">{{ perfMetrics.overall.pass_rate?.toFixed(0) ?? '--' }}%</span>
+                  <span class="perf-value"
+                    >{{ perfMetrics.overall.pass_rate?.toFixed(0) ?? '--' }}%</span
+                  >
                   <span class="perf-label">通过率</span>
                 </div>
                 <div class="perf-card">
                   <CheckCircle class="perf-icon" />
-                  <span class="perf-value">{{ perfMetrics.overall.tests_passed ?? 0 }}/{{ perfMetrics.overall.tests_total ?? 0 }}</span>
+                  <span class="perf-value"
+                    >{{ perfMetrics.overall.tests_passed ?? 0 }}/{{
+                      perfMetrics.overall.tests_total ?? 0
+                    }}</span
+                  >
                   <span class="perf-label">测试通过</span>
                 </div>
               </div>
@@ -343,7 +419,9 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
                 <div v-if="resUtil.gpu?.available" class="res-item">
                   <MemoryStick class="w-3.5 h-3.5" />
                   <span>显存</span>
-                  <span class="res-val">{{ resUtil.gpu.end_memory_used_mb?.toFixed(0) ?? '--' }} MB</span>
+                  <span class="res-val"
+                    >{{ resUtil.gpu.end_memory_used_mb?.toFixed(0) ?? '--' }} MB</span
+                  >
                 </div>
                 <div v-if="resUtil.test_duration_seconds" class="res-item">
                   <Clock class="w-3.5 h-3.5" />
@@ -356,7 +434,11 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
             <div v-if="testResult.report?.test_results?.length" class="metrics-section">
               <h4 class="sub-title">检测详情</h4>
               <div class="detail-list">
-                <div v-for="tr in testResult.report.test_results" :key="tr.test_name" class="detail-item">
+                <div
+                  v-for="tr in testResult.report.test_results"
+                  :key="tr.test_name"
+                  class="detail-item"
+                >
                   <span class="detail-name">{{ tr.test_name }}</span>
                   <span class="detail-status" :class="tr.status">
                     <CheckCircle v-if="tr.status === 'passed'" class="w-3.5 h-3.5" />
@@ -364,7 +446,9 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
                     <AlertTriangle v-else class="w-3.5 h-3.5" />
                     {{ tr.status }}
                   </span>
-                  <span v-if="tr.duration" class="detail-duration">{{ tr.duration.toFixed(2) }}s</span>
+                  <span v-if="tr.duration" class="detail-duration"
+                    >{{ tr.duration.toFixed(2) }}s</span
+                  >
                 </div>
               </div>
             </div>
@@ -375,29 +459,65 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
           <div class="card-header">
             <Clock class="card-icon" />
             <span class="card-title">检测历史</span>
-            <button class="icon-btn small" @click="fetchHistory" :disabled="historyLoading">
+            <button class="icon-btn small" :disabled="historyLoading" @click="fetchHistory">
               <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': historyLoading }" />
             </button>
           </div>
           <div v-if="historyList.length" class="history-list">
-            <div v-for="entry in historyList" :key="`${entry.model_name}-${entry.timestamp}`" class="history-item">
+            <div
+              v-for="entry in historyList"
+              :key="`${entry.model_name}-${entry.timestamp}`"
+              class="history-item"
+            >
               <div class="history-header" @click="toggleExpand(entry.model_name)">
-                <component :is="expandedReport === entry.model_name ? ChevronDown : ChevronRight" class="w-3.5 h-3.5 text-muted" />
+                <component
+                  :is="expandedReport === entry.model_name ? ChevronDown : ChevronRight"
+                  class="w-3.5 h-3.5 text-muted"
+                />
                 <span class="history-name">{{ entry.model_name }}</span>
-                <span class="history-status" :style="{ color: entry.status === 'passed' ? '#22c55e' : entry.status === 'failed' ? '#ef4444' : '#f59e0b' }">
+                <span
+                  class="history-status"
+                  :style="{
+                    color:
+                      entry.status === 'passed'
+                        ? '#22c55e'
+                        : entry.status === 'failed'
+                          ? '#ef4444'
+                          : '#f59e0b',
+                  }"
+                >
                   {{ entry.overall_status || entry.status }}
                 </span>
                 <span class="history-time">{{ formatTime(entry.timestamp) }}</span>
               </div>
-              <div v-if="expandedReport === entry.model_name && cachedResults[entry.model_name]?.report" class="history-detail">
+              <div
+                v-if="
+                  expandedReport === entry.model_name && cachedResults[entry.model_name]?.report
+                "
+                class="history-detail"
+              >
                 <div class="feature-mini">
-                  <span :class="{ supported: cachedResults[entry.model_name]?.report?.feature_support?.chat }">
+                  <span
+                    :class="{
+                      supported: cachedResults[entry.model_name]?.report?.feature_support?.chat,
+                    }"
+                  >
                     <MessageSquare class="w-3 h-3" /> 对话
                   </span>
-                  <span :class="{ supported: cachedResults[entry.model_name]?.report?.feature_support?.tool_calling }">
+                  <span
+                    :class="{
+                      supported:
+                        cachedResults[entry.model_name]?.report?.feature_support?.tool_calling,
+                    }"
+                  >
                     <Wrench class="w-3 h-3" /> 工具
                   </span>
-                  <span :class="{ supported: (cachedResults[entry.model_name]?.report?.feature_support as any)?.image_generation }">
+                  <span
+                    :class="{
+                      supported: (cachedResults[entry.model_name]?.report?.feature_support as any)
+                        ?.image_generation,
+                    }"
+                  >
                     <Image class="w-3 h-3" /> 图片
                   </span>
                 </div>
@@ -431,65 +551,142 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
   flex-shrink: 0;
 }
 
-.header-left { display: flex; align-items: center; gap: 8px; }
-.header-icon { width: 18px; height: 18px; color: var(--text-muted); }
-.header-title { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.header-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}
+.header-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
 
 .count-badge {
-  font-size: 12px; color: var(--text-muted);
-  background: var(--bg-secondary); padding: 2px 8px; border-radius: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 2px 8px;
+  border-radius: 10px;
 }
 
 .icon-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; border-radius: 8px;
-  border: 1px solid var(--border-primary); background: var(--bg-secondary);
-  color: var(--text-muted); cursor: pointer; transition: all 0.25s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.25s;
 }
-.icon-btn:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2); }
-.icon-btn:disabled { opacity: 0.5; }
-.icon-btn.small { width: 28px; height: 28px; }
+.icon-btn:hover:not(:disabled) {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+}
+.icon-btn:disabled {
+  opacity: 0.5;
+}
+.icon-btn.small {
+  width: 28px;
+  height: 28px;
+}
 
 .content {
-  flex: 1; overflow: hidden;
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 16px; padding: 16px 24px;
+  flex: 1;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px 24px;
 }
 
-.left-col, .right-col {
-  display: flex; flex-direction: column; gap: 16px; overflow-y: auto;
+.left-col,
+.right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
 }
 
 .card {
-  background: var(--bg-card); border-radius: 14px;
-  border: 1px solid var(--border-card); padding: 20px;
+  background: var(--bg-card);
+  border-radius: 14px;
+  border: 1px solid var(--border-card);
+  padding: 20px;
   box-shadow: var(--shadow);
   transition: all 0.3s ease;
   animation: fade-in 0.4s ease-out;
-  position: relative; overflow: hidden;
+  position: relative;
+  overflow: hidden;
 }
 .card:hover {
   border-color: rgba(99, 102, 241, 0.25);
-  box-shadow: var(--shadow-md), 0 0 12px rgba(99, 102, 241, 0.08);
+  box-shadow:
+    var(--shadow-md),
+    0 0 12px rgba(99, 102, 241, 0.08);
   transform: translateY(-1px);
 }
 
 .card-header {
-  display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
-.card-icon { width: 18px; height: 18px; color: var(--color-primary); filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3)); transition: transform 0.2s; }
-.card:hover .card-icon { transform: scale(1.1); }
-.card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.section-count { font-size: 11px; color: var(--text-muted); background: var(--bg-secondary); padding: 1px 6px; border-radius: 8px; margin-left: auto; }
-.section-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5; }
+.card-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--color-primary);
+  filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3));
+  transition: transform 0.2s;
+}
+.card:hover .card-icon {
+  transform: scale(1.1);
+}
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.section-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: auto;
+}
+.section-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
 
-.model-cards { display: flex; flex-direction: column; gap: 8px; }
+.model-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
 .model-card {
-  position: relative; padding: 14px;
-  background: var(--bg-secondary); border-radius: 10px;
-  border-left: 3px solid #22c55e; transition: all 0.2s;
+  position: relative;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  border-left: 3px solid #22c55e;
+  transition: all 0.2s;
 }
 .model-card:hover {
   transform: translateX(4px);
@@ -497,182 +694,499 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
   box-shadow: 0 2px 12px rgba(99, 102, 241, 0.1);
 }
 
-.card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-.model-info { display: flex; flex-direction: column; gap: 2px; }
-.model-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.model-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
-.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-.status-dot.online { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.4); }
-.status-dot.offline { background: #6b7280; }
-
-.default-badge {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; color: #f59e0b; background: rgba(245, 158, 11, 0.1);
-  padding: 2px 8px; border-radius: 4px;
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.model-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.model-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.model-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.online {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+}
+.status-dot.offline {
+  background: #6b7280;
 }
 
-.card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.default-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
 
-.cap-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+.card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.cap-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
 .cap-badge {
-  display: inline-flex; align-items: center; gap: 3px;
-  font-size: 10px; font-weight: 500;
-  padding: 2px 7px; border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
   border: 1px solid;
 }
 
-.card-actions { display: flex; gap: 4px; }
+.card-actions {
+  display: flex;
+  gap: 4px;
+}
 
 .action-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 500;
-  border: 1px solid var(--border-primary); background: var(--bg-card);
-  color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.action-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-secondary); }
-.action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.action-btn.primary { color: #22c55e; border-color: rgba(34, 197, 94, 0.3); }
-.action-btn.primary:hover:not(:disabled) { background: rgba(34, 197, 94, 0.06); }
-.action-btn.danger { color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
-.action-btn.danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.06); }
+.action-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-secondary);
+}
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.action-btn.primary {
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.action-btn.primary:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.06);
+}
+.action-btn.danger {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.action-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.06);
+}
 
-.model-list { display: flex; flex-direction: column; gap: 4px; }
+.model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
 .model-item {
-  display: flex; align-items: center;
-  justify-content: space-between; padding: 10px 12px;
-  background: var(--bg-secondary); border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
   transition: background 0.2s;
 }
-.model-item:hover { background: var(--bg-tertiary); transform: translateX(2px); }
+.model-item:hover {
+  background: var(--bg-tertiary);
+  transform: translateX(2px);
+}
 
-.item-info { display: flex; flex-direction: column; gap: 2px; }
-.item-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
-.item-meta { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+.item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 
-.preload-tag { font-size: 10px; color: #3b82f6; background: rgba(59, 130, 246, 0.1); padding: 1px 5px; border-radius: 3px; }
-.item-actions { display: flex; gap: 4px; }
+.preload-tag {
+  font-size: 10px;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.item-actions {
+  display: flex;
+  gap: 4px;
+}
 
 .loading-overlay {
-  position: absolute; inset: 0; display: flex;
-  align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.1); border-radius: inherit; z-index: 1;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: inherit;
+  z-index: 1;
 }
 
-.empty-card { text-align: center; color: var(--text-muted); padding: 32px 0; font-size: 13px; }
+.empty-card {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 32px 0;
+  font-size: 13px;
+}
 
-.test-controls { display: flex; gap: 8px; margin-bottom: 16px; }
+.test-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
 
 .model-select {
-  flex: 1; padding: 8px 12px; border-radius: 8px;
-  border: 1px solid var(--border-primary); background: var(--bg-secondary);
-  color: var(--text-primary); font-size: 13px; cursor: pointer; outline: none;
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
 }
-.model-select:focus { border-color: var(--border-secondary); }
-.model-select:disabled { opacity: 0.5; }
+.model-select:focus {
+  border-color: var(--border-secondary);
+}
+.model-select:disabled {
+  opacity: 0.5;
+}
 
 .test-btn {
-  display: flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 10px;
   background: linear-gradient(135deg, #6366f1, #4f46e5);
-  color: #fff; font-size: 13px; font-weight: 500;
-  border: none; cursor: pointer; transition: all 0.25s;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s;
   box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
 }
-.test-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4); }
-.test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.test-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+.test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .error-banner {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 14px; background: rgba(239, 68, 68, 0.1);
-  color: #ef4444; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
 }
 
-.results { display: flex; flex-direction: column; gap: 16px; }
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
 .overall-status {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 14px; background: var(--bg-secondary);
-  border-radius: 8px; border-left: 3px solid;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border-left: 3px solid;
 }
-.status-dot-lg { width: 8px; height: 8px; border-radius: 50%; }
-.status-text { font-size: 14px; font-weight: 600; }
-.status-model { font-size: 13px; color: var(--text-primary); margin-left: 4px; }
-.status-time { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+.status-dot-lg {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.status-text {
+  font-size: 14px;
+  font-weight: 600;
+}
+.status-model {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-left: 4px;
+}
+.status-time {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
 
-.features-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
 
 .feature-card {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 14px 8px; background: var(--bg-secondary);
-  border-radius: 10px; border: 1px solid var(--border-primary);
-  transition: border-color 0.2s, transform 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  border: 1px solid var(--border-primary);
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
 }
-.feature-card.supported { border-color: rgba(34, 197, 94, 0.3); }
-.feature-card:hover { transform: translateY(-2px); }
-.feature-icon { width: 20px; height: 20px; color: var(--text-muted); }
-.feature-card.supported .feature-icon { color: #22c55e; }
-.feature-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.feature-card.supported {
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.feature-card:hover {
+  transform: translateY(-2px);
+}
+.feature-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+}
+.feature-card.supported .feature-icon {
+  color: #22c55e;
+}
+.feature-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
 
-.sub-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; }
+.sub-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
 
-.perf-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.perf-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
 
 .perf-card {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 12px; background: var(--bg-secondary); border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
 }
-.perf-icon { width: 16px; height: 16px; color: var(--text-muted); }
-.perf-value { font-size: 16px; font-weight: 700; color: var(--text-primary); }
-.perf-label { font-size: 11px; color: var(--text-muted); }
+.perf-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+.perf-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.perf-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
-.res-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.res-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
 
 .res-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 12px; background: var(--bg-secondary); border-radius: 6px;
-  font-size: 12px; color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
-.res-val { margin-left: auto; font-weight: 600; color: var(--text-primary); font-size: 13px; }
+.res-val {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 13px;
+}
 
-.detail-list { display: flex; flex-direction: column; gap: 4px; }
+.detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .detail-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; background: var(--bg-secondary); border-radius: 6px; font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 12px;
 }
-.detail-name { font-weight: 500; color: var(--text-primary); }
-.detail-status { display: flex; align-items: center; gap: 4px; font-weight: 500; }
-.detail-status.passed { color: #22c55e; }
-.detail-status.failed { color: #ef4444; }
-.detail-status.skipped { color: #6b7280; }
-.detail-duration { color: var(--text-muted); margin-left: auto; }
+.detail-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.detail-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+.detail-status.passed {
+  color: #22c55e;
+}
+.detail-status.failed {
+  color: #ef4444;
+}
+.detail-status.skipped {
+  color: #6b7280;
+}
+.detail-duration {
+  color: var(--text-muted);
+  margin-left: auto;
+}
 
-.metrics-section { margin-top: 4px; }
+.metrics-section {
+  margin-top: 4px;
+}
 
-.history-list { display: flex; flex-direction: column; gap: 4px; }
-.history-item { background: var(--bg-secondary); border-radius: 6px; overflow: hidden; }
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.history-item {
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  overflow: hidden;
+}
 
 .history-header {
-  display: flex; align-items: center; gap: 6px;
-  padding: 10px 12px; cursor: pointer; font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
 }
-.history-header:hover { background: var(--bg-tertiary); }
-.history-name { font-weight: 500; color: var(--text-primary); }
-.history-status { font-size: 12px; font-weight: 500; margin-left: 4px; }
-.history-time { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+.history-header:hover {
+  background: var(--bg-tertiary);
+}
+.history-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.history-status {
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 4px;
+}
+.history-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
 
 .history-detail {
   padding: 10px 12px 10px 28px;
   border-top: 1px solid var(--bg-tertiary);
 }
 
-.feature-mini { display: flex; gap: 12px; font-size: 12px; color: var(--text-muted); }
-.feature-mini span { display: flex; align-items: center; gap: 4px; }
-.feature-mini span.supported { color: #22c55e; }
+.feature-mini {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.feature-mini span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.feature-mini span.supported {
+  color: #22c55e;
+}
 
-.empty-state { text-align: center; color: var(--text-muted); padding: 24px 0; font-size: 13px; }
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 24px 0;
+  font-size: 13px;
+}
 
-.left-col::-webkit-scrollbar, .right-col::-webkit-scrollbar { width: 4px; }
-.left-col::-webkit-scrollbar-track, .right-col::-webkit-scrollbar-track { background: transparent; }
-.left-col::-webkit-scrollbar-thumb, .right-col::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
+.left-col::-webkit-scrollbar,
+.right-col::-webkit-scrollbar {
+  width: 4px;
+}
+.left-col::-webkit-scrollbar-track,
+.right-col::-webkit-scrollbar-track {
+  background: transparent;
+}
+.left-col::-webkit-scrollbar-thumb,
+.right-col::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 2px;
+}
 </style>

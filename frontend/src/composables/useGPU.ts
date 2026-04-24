@@ -1,5 +1,6 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { getGPUSummary } from '@/api/client'
+import { formatBytes, formatTimeLabel } from '@/utils/format'
 import type { GPUSummary } from '@/types'
 
 export function useGPU() {
@@ -53,17 +54,9 @@ export function useGPU() {
 
   const isAutoRefreshEnabled = computed(() => refreshInterval !== null)
 
-  const formatMemory = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-  }
+  const formatMemory = (bytes: number): string => formatBytes(bytes)
 
-  const formatTimestamp = (timestamp: string): string => {
-    const date = new Date(timestamp)
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  }
+  const formatTimestamp = (timestamp: string): string => formatTimeLabel(timestamp)
 
   const formatPercentage = (value: number): string => {
     return `${value.toFixed(1)}%`

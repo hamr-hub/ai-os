@@ -27,4 +27,5 @@ module.exports = {
     'vue/no-unused-vars': 'error',
     'vue/script-setup-uses-vars': 'error',
   },
+  ignorePatterns: ['node_modules/', 'dist/', 'dist-ssr/', '*.local.ts'],
 }

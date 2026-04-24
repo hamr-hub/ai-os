@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import Markdown from 'unplugin-vue-markdown/vite'
 import { resolve } from 'path'
 
+const proxyTarget = 'http://ssh.hamr.top:27145'
+
 export default defineConfig({
   plugins: [
     vue({
@@ -22,26 +24,21 @@ export default defineConfig({
   server: {
     port: 30000,
     proxy: {
-      '/api/manage': {
-        target: 'http://ssh.hamr.top:27145',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
       '/api': {
-        target: 'http://ssh.hamr.top:27145',
+        target: proxyTarget,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/manage'),
       },
       '/v1/test': {
-        target: 'http://ssh.hamr.top:27145',
+        target: proxyTarget,
         changeOrigin: true,
       },
       '/v1': {
-        target: 'http://ssh.hamr.top:27145',
+        target: proxyTarget,
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://ssh.hamr.top:27145',
+        target: proxyTarget,
         changeOrigin: true,
       },
     },

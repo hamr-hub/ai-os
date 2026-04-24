@@ -16,7 +16,7 @@ onMounted(async () => {
   await serverStore.checkConnection()
 })
 
-const mainMargin = computed(() => store.sidebarCollapsed ? '64px' : '220px')
+const mainMargin = computed(() => (store.sidebarCollapsed ? '64px' : '220px'))
 </script>
 
 <template>
@@ -62,7 +62,9 @@ const mainMargin = computed(() => store.sidebarCollapsed ? '64px' : '220px')
 
 .page-enter-active,
 .page-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .page-enter-from {
@@ -75,4 +77,3 @@ const mainMargin = computed(() => store.sidebarCollapsed ? '64px' : '220px')
   transform: translateY(-8px);
 }
 </style>
-

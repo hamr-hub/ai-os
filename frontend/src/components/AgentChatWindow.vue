@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import { ref, nextTick, computed, watch, onMounted, onUnmounted } from 'vue'
-import { Send, Loader2, Bot, User, Sparkles, StopCircle, Copy, Check, ChevronDown, Settings, Wrench } from 'lucide-vue-next'
+import {
+  Send,
+  Loader2,
+  Bot,
+  User,
+  Sparkles,
+  StopCircle,
+  Copy,
+  Check,
+  ChevronDown,
+  Settings,
+  Wrench,
+} from 'lucide-vue-next'
 import { chatCompletionStream, type ChatMessage } from '@/api/client'
 import { useModels } from '@/composables/useModels'
 import { useAppStore } from '@/stores/app'
@@ -20,18 +32,24 @@ const copiedId = ref<string | null>(null)
 const showModelPicker = ref(false)
 const showSystemPrompt = ref(false)
 const systemPromptInput = ref('')
+const showScrollBottom = ref(false)
+const isAutoScrolling = ref(true)
 
 const currentConv = computed(() => agentChatStore.currentConversation)
 const messages = computed(() => currentConv.value?.messages || [])
-const runningModelList = computed(() => modelList.value.filter(m => m.running))
+const runningModelList = computed(() => modelList.value.filter((m) => m.running))
 const activeModel = computed(() => currentConv.value?.model || defaultModel.value)
 
-watch(currentConv, (conv) => {
-  if (conv) {
-    systemPromptInput.value = conv.systemPrompt ?? ''
-  }
-  nextTick(() => scrollToBottom())
-}, { immediate: true })
+watch(
+  currentConv,
+  (conv) => {
+    if (conv) {
+      systemPromptInput.value = conv.systemPrompt ?? ''
+    }
+    nextTick(() => scrollToBottom(true))
+  },
+  { immediate: true }
+)
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
@@ -50,16 +68,35 @@ const handleClickOutside = (e: MouseEvent) => {
   }
 }
 
-const scrollToBottom = () => {
-  if (chatContainer.value) {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight
+const handleScroll = () => {
+  if (!chatContainer.value) return
+  const { scrollTop, scrollHeight, clientHeight } = chatContainer.value
+  const distanceToBottom = scrollHeight - scrollTop - clientHeight
+
+  // 向上滚动超过 200px 显示按钮
+  showScrollBottom.value = distanceToBottom > 200
+
+  // 如果用户手动向上滚动，停止自动跟随
+  if (isLoading.value && distanceToBottom > 20) {
+    isAutoScrolling.value = false
+  } else if (distanceToBottom < 10) {
+    isAutoScrolling.value = true
+  }
+}
+
+const scrollToBottom = (force = false) => {
+  if (chatContainer.value && (isAutoScrolling.value || force)) {
+    chatContainer.value.scrollTo({
+      top: chatContainer.value.scrollHeight,
+      behavior: force ? 'smooth' : 'auto',
+    })
   }
 }
 
 const addMessage = (role: 'user' | 'assistant' | 'system', content: string) => {
   if (!currentConv.value) return null
   const message = agentChatStore.addMessage(currentConv.value.id, role, content)
-  nextTick(() => scrollToBottom())
+  nextTick(() => scrollToBottom(true))
   return message
 }
 
@@ -70,6 +107,7 @@ const handleSend = async () => {
   inputMessage.value = ''
   addMessage('user', userMessage)
   isLoading.value = true
+  isAutoScrolling.value = true
 
   try {
     const assistantMessage = addMessage('assistant', '')
@@ -85,9 +123,9 @@ const handleSend = async () => {
     }
 
     messages.value
-      .filter(m => m.role !== 'system')
+      .filter((m) => m.role !== 'system')
       .slice(0, -1)
-      .forEach(m => apiMessages.push({ role: m.role, content: m.content }))
+      .forEach((m) => apiMessages.push({ role: m.role, content: m.content }))
 
     await chatCompletionStream(
       {
@@ -98,7 +136,7 @@ const handleSend = async () => {
       },
       (chunk) => {
         if (streamingMessageId.value && currentConv.value) {
-          const msg = currentConv.value.messages.find(m => m.id === streamingMessageId.value)
+          const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
           if (msg) {
             msg.content += chunk
             nextTick(() => scrollToBottom())
@@ -167,7 +205,9 @@ const copyMessage = async (id: string, content: string) => {
   try {
     await navigator.clipboard.writeText(content)
     copiedId.value = id
-    setTimeout(() => { copiedId.value = null }, 2000)
+    setTimeout(() => {
+      copiedId.value = null
+    }, 2000)
   } catch {}
 }
 
@@ -191,7 +231,7 @@ const autoResize = (event: Event) => {
         </div>
         <h2 class="empty-title">Agent</h2>
         <p class="empty-desc">与 AI Agent 对话，连接已部署的模型</p>
-        <button @click="handleNewChat" class="start-btn">开始对话</button>
+        <button class="start-btn" @click="handleNewChat">开始对话</button>
       </div>
     </div>
 
@@ -204,7 +244,13 @@ const autoResize = (event: Event) => {
             <ChevronDown class="w-3.5 h-3.5" />
           </div>
           <div v-if="showModelPicker" class="model-picker">
-            <div v-for="m in runningModelList" :key="m.name" class="picker-item" :class="{ active: m.name === activeModel }" @click.stop="selectModel(m.name)">
+            <div
+              v-for="m in runningModelList"
+              :key="m.name"
+              class="picker-item"
+              :class="{ active: m.name === activeModel }"
+              @click.stop="selectModel(m.name)"
+            >
               <span class="picker-dot online"></span>
               {{ m.name }}
               <Check v-if="m.name === activeModel" class="w-3.5 h-3.5" />
@@ -212,7 +258,12 @@ const autoResize = (event: Event) => {
             <div v-if="!runningModelList.length" class="picker-empty">暂无运行中模型</div>
           </div>
         </div>
-        <button class="sys-prompt-toggle" :class="{ active: showSystemPrompt }" @click="showSystemPrompt = !showSystemPrompt" title="系统提示词">
+        <button
+          class="sys-prompt-toggle"
+          :class="{ active: showSystemPrompt }"
+          title="系统提示词"
+          @click="showSystemPrompt = !showSystemPrompt"
+        >
           <Settings class="w-4 h-4" />
         </button>
       </div>
@@ -222,35 +273,55 @@ const autoResize = (event: Event) => {
           <span>系统提示词</span>
           <button class="sys-prompt-apply" @click="applySystemPrompt">应用</button>
         </div>
-        <textarea v-model="systemPromptInput" class="sys-prompt-input" placeholder="设定 Agent 的角色和行为..." rows="3"></textarea>
+        <textarea
+          v-model="systemPromptInput"
+          class="sys-prompt-input"
+          placeholder="设定 Agent 的角色和行为..."
+          rows="3"
+        ></textarea>
         <p class="sys-prompt-hint">设定后将在下次发送消息时生效</p>
       </div>
 
-      <div ref="chatContainer" class="messages-area scrollbar-thin">
+      <div ref="chatContainer" class="messages-area scrollbar-thin" @scroll="handleScroll">
         <div v-if="messages.length === 0" class="msg-empty">
           <Bot class="w-8 h-8 opacity-40" />
           <p>发送消息开始对话</p>
           <p class="sub">支持多轮对话，Agent 会记住上下文</p>
         </div>
 
-        <div v-for="message in messages" :key="message.id" class="msg-row" :class="{ 'msg-user': message.role === 'user' }">
-          <div class="msg-avatar" :class="{
-            'avatar-user': message.role === 'user',
-            'avatar-agent': message.role === 'assistant',
-            'avatar-sys': message.role === 'system',
-          }">
+        <div
+          v-for="message in messages"
+          :key="message.id"
+          class="msg-row"
+          :class="{ 'msg-user': message.role === 'user' }"
+        >
+          <div
+            class="msg-avatar"
+            :class="{
+              'avatar-user': message.role === 'user',
+              'avatar-agent': message.role === 'assistant',
+              'avatar-sys': message.role === 'system',
+            }"
+          >
             <User v-if="message.role === 'user'" class="w-4 h-4 text-white" />
             <Bot v-else-if="message.role === 'assistant'" class="w-4 h-4 text-white" />
             <Sparkles v-else class="w-4 h-4 text-white" />
           </div>
 
           <div class="msg-body">
-            <div class="msg-bubble" :class="{
-              'bubble-user': message.role === 'user',
-              'bubble-agent': message.role === 'assistant',
-              'bubble-sys': message.role === 'system',
-            }">
-              <div v-if="message.role === 'assistant'" class="msg-text markdown-body" v-html="renderContent(message.content)"></div>
+            <div
+              class="msg-bubble"
+              :class="{
+                'bubble-user': message.role === 'user',
+                'bubble-agent': message.role === 'assistant',
+                'bubble-sys': message.role === 'system',
+              }"
+            >
+              <div
+                v-if="message.role === 'assistant'"
+                class="msg-text markdown-body"
+                v-html="renderContent(message.content)"
+              ></div>
               <p v-else class="msg-text">{{ message.content }}</p>
 
               <div v-if="message.toolCalls?.length" class="tool-calls-block">
@@ -262,17 +333,27 @@ const autoResize = (event: Event) => {
               </div>
 
               <span v-if="streamingMessageId === message.id" class="streaming-cursor">
-                <span style="animation-delay:0ms"></span>
-                <span style="animation-delay:150ms"></span>
-                <span style="animation-delay:300ms"></span>
+                <span style="animation-delay: 0ms"></span>
+                <span style="animation-delay: 150ms"></span>
+                <span style="animation-delay: 300ms"></span>
               </span>
 
-              <button v-if="message.role === 'assistant' && message.content && streamingMessageId !== message.id" @click="copyMessage(message.id, message.content)" class="copy-btn">
+              <button
+                v-if="
+                  message.role === 'assistant' &&
+                  message.content &&
+                  streamingMessageId !== message.id
+                "
+                class="copy-btn"
+                @click="copyMessage(message.id, message.content)"
+              >
                 <Check v-if="copiedId === message.id" class="w-3.5 h-3.5 text-green-400" />
                 <Copy v-else class="w-3.5 h-3.5" />
               </button>
             </div>
-            <p class="msg-time" :class="{ 'text-right': message.role === 'user' }">{{ formatTime(message.timestamp) }}</p>
+            <p class="msg-time" :class="{ 'text-right': message.role === 'user' }">
+              {{ formatTime(message.timestamp) }}
+            </p>
           </div>
         </div>
 
@@ -280,15 +361,41 @@ const autoResize = (event: Event) => {
           <Loader2 class="w-4 h-4 animate-spin" />
           <span>正在思考...</span>
         </div>
+
+        <!-- 滚动到底部按钮 -->
+        <Transition name="fade">
+          <button
+            v-if="showScrollBottom"
+            class="scroll-bottom-btn"
+            title="滚动到底部"
+            @click="scrollToBottom(true)"
+          >
+            <ChevronDown class="w-5 h-5" />
+          </button>
+        </Transition>
       </div>
 
       <div class="input-area">
         <div class="input-row">
-          <textarea v-model="inputMessage" @keydown="handleKeyPress" @input="autoResize" placeholder="输入消息... (Enter 发送，Shift+Enter 换行)" class="msg-input scrollbar-thin" :disabled="isLoading" rows="1"></textarea>
-          <button v-if="!isLoading" @click="handleSend" :disabled="!inputMessage.trim()" class="send-btn" title="发送">
+          <textarea
+            v-model="inputMessage"
+            placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
+            class="msg-input scrollbar-thin"
+            :disabled="isLoading"
+            rows="1"
+            @keydown="handleKeyPress"
+            @input="autoResize"
+          ></textarea>
+          <button
+            v-if="!isLoading"
+            :disabled="!inputMessage.trim()"
+            class="send-btn"
+            title="发送"
+            @click="handleSend"
+          >
             <Send class="w-4 h-4" />
           </button>
-          <button v-else @click="handleStop" class="stop-btn" title="停止">
+          <button v-else class="stop-btn" title="停止" @click="handleStop">
             <StopCircle class="w-4 h-4" />
           </button>
         </div>
@@ -310,178 +417,500 @@ const autoResize = (event: Event) => {
   flex-direction: column;
   height: 100%;
   background: var(--bg-primary);
+  position: relative;
 }
 
-.empty-state { flex: 1; display: flex; align-items: center; justify-content: center; }
-.empty-content { text-align: center; max-width: 360px; padding: 24px; }
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.empty-content {
+  text-align: center;
+  max-width: 360px;
+  padding: 24px;
+}
 .empty-icon {
-  width: 72px; height: 72px; margin: 0 auto 20px;
-  border-radius: 20px; background: linear-gradient(135deg, #6366f1, #4f46e5);
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 8px 24px rgba(99,102,241,0.4);
-}
-.empty-title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
-.empty-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
-.start-btn {
-  padding: 10px 24px; border-radius: 12px; border: none;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 20px;
+  border-radius: 20px;
   background: linear-gradient(135deg, #6366f1, #4f46e5);
-  color: #fff; font-size: 14px; font-weight: 500; cursor: pointer;
-  box-shadow: 0 4px 16px rgba(99,102,241,0.3); transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
 }
-.start-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.empty-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.empty-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+.start-btn {
+  padding: 10px 24px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+  transition: all 0.2s;
+}
+.start-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
 
 .chat-topbar {
-  position: relative; display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px; border-bottom: 1px solid var(--border-primary); background: var(--bg-card); z-index: 10;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-card);
+  z-index: 10;
 }
 
 .model-selector {
-  display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 8px;
-  border: 1px solid var(--border-primary); background: var(--bg-secondary); cursor: pointer;
-  font-size: 13px; color: var(--text-primary); transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: all 0.2s;
 }
-.model-selector:hover { border-color: var(--border-secondary); }
-.model-dot { width: 7px; height: 7px; border-radius: 50%; }
-.model-dot.online { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4); }
-.model-dot.offline { background: #6b7280; }
+.model-selector:hover {
+  border-color: var(--border-secondary);
+}
+.model-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.model-dot.online {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+}
+.model-dot.offline {
+  background: #6b7280;
+}
 
 .model-picker {
-  position: absolute; top: 100%; left: 16px; min-width: 240px;
-  background: var(--bg-card); border: 1px solid var(--border-primary); border-radius: 10px;
-  box-shadow: var(--shadow-md); z-index: 20; overflow: hidden;
+  position: absolute;
+  top: 100%;
+  left: 16px;
+  min-width: 240px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  z-index: 20;
+  overflow: hidden;
 }
 .picker-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 10px 14px; font-size: 13px; color: var(--text-primary); cursor: pointer; transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s;
 }
-.picker-item:hover { background: var(--bg-secondary); }
-.picker-item.active { color: #6366f1; }
-.picker-dot { width: 6px; height: 6px; border-radius: 50%; }
-.picker-dot.online { background: #22c55e; }
-.picker-empty { padding: 14px; text-align: center; font-size: 12px; color: var(--text-muted); }
+.picker-item:hover {
+  background: var(--bg-secondary);
+}
+.picker-item.active {
+  color: #6366f1;
+}
+.picker-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.picker-dot.online {
+  background: #22c55e;
+}
+.picker-empty {
+  padding: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
-.topbar-left { position: relative; }
+.topbar-left {
+  position: relative;
+}
 
 .sys-prompt-toggle {
-  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-primary);
-  background: transparent; color: var(--text-muted); cursor: pointer;
-  display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
 }
-.sys-prompt-toggle:hover { color: var(--text-primary); background: var(--bg-secondary); }
-.sys-prompt-toggle.active { color: #6366f1; border-color: #6366f1; background: rgba(99,102,241,0.1); }
+.sys-prompt-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+.sys-prompt-toggle.active {
+  color: #6366f1;
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.1);
+}
 
 .sys-prompt-panel {
-  padding: 12px 16px; border-bottom: 1px solid var(--border-primary); background: var(--bg-card);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-card);
 }
 .sys-prompt-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 8px; font-size: 13px; font-weight: 500; color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 .sys-prompt-apply {
-  padding: 4px 12px; border-radius: 6px; border: none;
-  background: #6366f1; color: #fff; font-size: 12px; cursor: pointer; transition: opacity 0.2s;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: none;
+  background: #6366f1;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.2s;
 }
-.sys-prompt-apply:hover { opacity: 0.85; }
+.sys-prompt-apply:hover {
+  opacity: 0.85;
+}
 .sys-prompt-input {
-  width: 100%; padding: 8px 12px; border-radius: 8px;
-  border: 1px solid var(--border-primary); background: var(--bg-input);
-  color: var(--text-primary); font-size: 13px; outline: none; resize: vertical;
-  min-height: 60px; transition: border-color 0.2s;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  resize: vertical;
+  min-height: 60px;
+  transition: border-color 0.2s;
 }
-.sys-prompt-input:focus { border-color: #6366f1; }
-.sys-prompt-input::placeholder { color: var(--text-muted); }
-.sys-prompt-hint { margin-top: 4px; font-size: 11px; color: var(--text-muted); }
+.sys-prompt-input:focus {
+  border-color: #6366f1;
+}
+.sys-prompt-input::placeholder {
+  color: var(--text-muted);
+}
+.sys-prompt-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
-.messages-area { flex: 1; overflow-y: auto; padding: 16px; }
+.messages-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  position: relative;
+}
 
 .msg-empty {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 6px; padding: 48px 0; color: var(--text-muted); font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 0;
+  color: var(--text-muted);
+  font-size: 13px;
 }
-.msg-empty .sub { font-size: 12px; opacity: 0.7; }
+.msg-empty .sub {
+  font-size: 12px;
+  opacity: 0.7;
+}
 
-.msg-row { display: flex; gap: 10px; margin-bottom: 16px; }
-.msg-row.msg-user { flex-direction: row-reverse; }
+.msg-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.msg-row.msg-user {
+  flex-direction: row-reverse;
+}
 
 .msg-avatar {
-  width: 36px; height: 36px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
-.avatar-user { background: linear-gradient(135deg, #3b82f6, #2563eb); }
-.avatar-agent { background: linear-gradient(135deg, #6366f1, #4f46e5); }
-.avatar-sys { background: var(--bg-tertiary); }
+.avatar-user {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+.avatar-agent {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+}
+.avatar-sys {
+  background: var(--bg-tertiary);
+}
 
-.msg-body { flex: 1; max-width: 72%; min-width: 0; }
+.msg-body {
+  flex: 1;
+  max-width: 72%;
+  min-width: 0;
+}
 
 .msg-bubble {
-  position: relative; padding: 12px 16px; border-radius: 16px;
-  font-size: 14px; line-height: 1.65; word-break: break-word;
+  position: relative;
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.65;
+  word-break: break-word;
 }
-.bubble-user { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; border-top-right-radius: 4px; }
-.bubble-agent { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-primary); border-top-left-radius: 4px; }
-.bubble-sys { background: var(--bg-tertiary); color: var(--text-muted); }
+.bubble-user {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  border-top-right-radius: 4px;
+}
+.bubble-agent {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-top-left-radius: 4px;
+}
+.bubble-sys {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
 
-.msg-text { white-space: pre-wrap; }
+.msg-text {
+  white-space: pre-wrap;
+}
 
-.tool-calls-block { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.tool-calls-block {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .tool-call-item {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 8px; border-radius: 6px;
-  background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.15);
-  font-size: 12px; color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  font-size: 12px;
+  color: var(--text-secondary);
 }
-.tc-name { font-weight: 500; color: var(--text-primary); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; }
-.tc-badge { font-size: 10px; color: #6366f1; background: rgba(99, 102, 241, 0.1); padding: 1px 5px; border-radius: 3px; }
+.tc-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+}
+.tc-badge {
+  font-size: 10px;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
 
-.streaming-cursor { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
+.streaming-cursor {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
 .streaming-cursor span {
-  width: 4px; height: 16px; border-radius: 2px;
-  background: currentColor; opacity: 0.6; animation: bounce 1s infinite;
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.6;
+  animation: bounce 1s infinite;
 }
 
 .copy-btn {
-  position: absolute; top: 8px; right: 8px; padding: 4px; border-radius: 6px;
-  background: transparent; border: none; color: var(--text-muted); cursor: pointer;
-  opacity: 0; transition: all 0.2s;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
 }
-.msg-row:hover .copy-btn { opacity: 1; }
+.msg-row:hover .copy-btn {
+  opacity: 1;
+}
 
-.msg-time { font-size: 11px; color: var(--text-muted); margin-top: 4px; padding: 0 4px; }
+.msg-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  padding: 0 4px;
+}
 
 .thinking-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 0; color: var(--text-muted); font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
-.input-area { padding: 12px 16px 16px; border-top: 1px solid var(--border-primary); background: var(--bg-card); }
-.input-row { display: flex; gap: 10px; align-items: flex-end; }
+.scroll-bottom-btn {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  z-index: 30;
+  transition: all 0.2s;
+}
+.scroll-bottom-btn:hover {
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.input-area {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-card);
+}
+.input-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
 
 .msg-input {
-  flex: 1; padding: 10px 14px; border-radius: 14px;
-  border: 1px solid var(--border-primary); background: var(--bg-input);
-  color: var(--text-primary); font-size: 14px; outline: none; resize: none;
-  min-height: 44px; max-height: 160px; transition: border-color 0.2s;
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  resize: none;
+  min-height: 44px;
+  max-height: 160px;
+  transition: border-color 0.2s;
 }
-.msg-input:focus { border-color: #6366f1; }
-.msg-input:disabled { opacity: 0.5; }
-.msg-input::placeholder { color: var(--text-muted); }
+.msg-input:focus {
+  border-color: #6366f1;
+}
+.msg-input:disabled {
+  opacity: 0.5;
+}
+.msg-input::placeholder {
+  color: var(--text-muted);
+}
 
-.send-btn, .stop-btn {
-  width: 44px; height: 44px; border-radius: 12px; border: none;
-  display: flex; align-items: center; justify-content: center; cursor: pointer;
-  transition: all 0.2s; flex-shrink: 0;
+.send-btn,
+.stop-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
 }
 .send-btn {
-  background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff;
-  box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
-.send-btn:hover:not(:disabled) { transform: translateY(-1px); }
-.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.stop-btn { background: #ef4444; color: #fff; }
+.send-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.stop-btn {
+  background: #ef4444;
+  color: #fff;
+}
 
-.input-footer { display: flex; justify-content: center; margin-top: 6px; font-size: 12px; }
-.model-info { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); }
-.model-warn { color: #f59e0b; }
+.input-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.model-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+.model-warn {
+  color: #f59e0b;
+}
 
 :deep(.markdown-body) {
   white-space: normal;
@@ -493,7 +922,8 @@ const autoResize = (event: Event) => {
 :deep(.markdown-body p:last-child) {
   margin-bottom: 0;
 }
-:deep(.markdown-body ul), :deep(.markdown-body ol) {
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
   margin: 0 0 8px;
   padding-left: 20px;
 }
@@ -501,16 +931,24 @@ const autoResize = (event: Event) => {
   margin: 0 0 8px;
   padding: 8px 12px;
   border-left: 3px solid #6366f1;
-  background: rgba(99,102,241,0.06);
+  background: rgba(99, 102, 241, 0.06);
   color: var(--text-secondary);
 }
-:deep(.markdown-body h1), :deep(.markdown-body h2), :deep(.markdown-body h3) {
+:deep(.markdown-body h1),
+:deep(.markdown-body h2),
+:deep(.markdown-body h3) {
   margin: 12px 0 6px;
   font-weight: 600;
 }
-:deep(.markdown-body h1) { font-size: 18px; }
-:deep(.markdown-body h2) { font-size: 16px; }
-:deep(.markdown-body h3) { font-size: 14px; }
+:deep(.markdown-body h1) {
+  font-size: 18px;
+}
+:deep(.markdown-body h2) {
+  font-size: 16px;
+}
+:deep(.markdown-body h3) {
+  font-size: 14px;
+}
 :deep(.markdown-body a) {
   color: #6366f1;
   text-decoration: underline;
@@ -520,7 +958,8 @@ const autoResize = (event: Event) => {
   border-collapse: collapse;
   margin: 8px 0;
 }
-:deep(.markdown-body th), :deep(.markdown-body td) {
+:deep(.markdown-body th),
+:deep(.markdown-body td) {
   border: 1px solid var(--border-primary);
   padding: 6px 10px;
   font-size: 13px;
@@ -562,24 +1001,40 @@ const autoResize = (event: Event) => {
   border-radius: 0;
 }
 :deep(.code-lang) {
-  position: absolute; top: 6px; right: 50px;
-  font-size: 0.7em; color: #565f89; text-transform: uppercase;
+  position: absolute;
+  top: 6px;
+  right: 50px;
+  font-size: 0.7em;
+  color: #565f89;
+  text-transform: uppercase;
   z-index: 2;
 }
 :deep(.code-copy-btn) {
-  position: absolute; top: 6px; right: 10px;
-  padding: 2px 8px; border-radius: 4px;
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
-  color: #565f89; font-size: 11px; cursor: pointer; z-index: 2;
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #565f89;
+  font-size: 11px;
+  cursor: pointer;
+  z-index: 2;
   transition: all 0.2s;
 }
 :deep(.code-copy-btn:hover) {
-  background: rgba(255,255,255,0.15);
+  background: rgba(255, 255, 255, 0.15);
   color: #a9b1d6;
 }
 
 @keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 </style>

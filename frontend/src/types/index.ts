@@ -121,7 +121,13 @@ export interface TestReport {
   performance_metrics?: {
     chat?: { avg_tps: number; avg_latency: number; avg_token_count: number; tests_passed: number }
     image?: { avg_tps: number; avg_latency: number; tests_passed: number }
-    overall?: { avg_tps: number; avg_latency: number; tests_passed: number; tests_total: number; pass_rate: number }
+    overall?: {
+      avg_tps: number
+      avg_latency: number
+      tests_passed: number
+      tests_total: number
+      pass_rate: number
+    }
   }
   resource_utilization?: {
     test_duration_seconds?: number

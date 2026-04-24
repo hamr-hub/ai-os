@@ -13,7 +13,16 @@ import {
   Filler,
 } from 'chart.js'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+)
 
 interface DatasetConfig {
   label: string
@@ -26,30 +35,33 @@ interface DatasetConfig {
   borderWidth?: number
 }
 
-const props = withDefaults(defineProps<{
-  labels: string[]
-  datasets: DatasetConfig[]
-  title?: string
-  height?: number
-  yMin?: number
-  yMax?: number
-  yUnit?: string
-  showLegend?: boolean
-  animate?: boolean
-}>(), {
-  height: 200,
-  yMin: undefined,
-  yMax: undefined,
-  yUnit: '',
-  showLegend: true,
-  animate: true,
-})
+const props = withDefaults(
+  defineProps<{
+    labels: string[]
+    datasets: DatasetConfig[]
+    title?: string
+    height?: number
+    yMin?: number
+    yMax?: number
+    yUnit?: string
+    showLegend?: boolean
+    animate?: boolean
+  }>(),
+  {
+    height: 200,
+    yMin: undefined,
+    yMax: undefined,
+    yUnit: '',
+    showLegend: true,
+    animate: true,
+  }
+)
 
 const chartRef = ref<any>(null)
 
 const chartData = computed(() => ({
   labels: props.labels,
-  datasets: props.datasets.map(ds => ({
+  datasets: props.datasets.map((ds) => ({
     label: ds.label,
     data: ds.data,
     borderColor: ds.borderColor ?? '#6366f1',
@@ -64,7 +76,7 @@ const chartData = computed(() => ({
 const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: props.animate ? { duration: 300 } as any : false as any,
+  animation: props.animate ? ({ duration: 300 } as any) : (false as any),
   interaction: {
     mode: 'index' as const,
     intersect: false,
@@ -137,12 +149,16 @@ const chartOptions = computed(() => ({
   },
 }))
 
-watch(chartData, () => {
-  if (chartRef.value?.chart) {
-    chartRef.value.chart.data = chartData.value
-    chartRef.value.chart.update('none')
-  }
-}, { deep: true })
+watch(
+  chartData,
+  () => {
+    if (chartRef.value?.chart) {
+      chartRef.value.chart.data = chartData.value
+      chartRef.value.chart.update('none')
+    }
+  },
+  { deep: true }
+)
 </script>
 
 <template>

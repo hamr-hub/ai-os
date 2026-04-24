@@ -4,8 +4,28 @@ import { getModelsStatus, startModel, stopModel } from '@/api/client'
 
 const { mockModelStatus } = vi.hoisted(() => ({
   mockModelStatus: {
-    'model-a': { running: true, port: 8000, service: 'vllm', active_requests: 3, preloaded: true, last_used: '2026-04-23', supports_images: true, supports_tool_calling: false, supports_image_generation: false },
-    'model-b': { running: false, port: null, service: null, active_requests: 0, preloaded: false, last_used: null, supports_images: false, supports_tool_calling: false, supports_image_generation: false },
+    'model-a': {
+      running: true,
+      port: 8000,
+      service: 'vllm',
+      active_requests: 3,
+      preloaded: true,
+      last_used: '2026-04-23',
+      supports_images: true,
+      supports_tool_calling: false,
+      supports_image_generation: false,
+    },
+    'model-b': {
+      running: false,
+      port: null,
+      service: null,
+      active_requests: 0,
+      preloaded: false,
+      last_used: null,
+      supports_images: false,
+      supports_tool_calling: false,
+      supports_image_generation: false,
+    },
   },
 }))
 
@@ -49,7 +69,7 @@ describe('useModels', () => {
   it('modelList正确展开', async () => {
     const { modelList, fetchModelStatus } = useModels()
     await fetchModelStatus()
-    const running = modelList.value.filter(m => m.running)
+    const running = modelList.value.filter((m) => m.running)
     expect(running.length).toBe(1)
     expect(running[0].name).toBe('model-a')
   })

@@ -6,19 +6,29 @@ const store = useAppStore()
 
 const getToastIcon = (type: string) => {
   switch (type) {
-    case 'success': return CheckCircle
-    case 'error': return XCircle
-    case 'warning': return AlertTriangle
-    case 'info': default: return Info
+    case 'success':
+      return CheckCircle
+    case 'error':
+      return XCircle
+    case 'warning':
+      return AlertTriangle
+    case 'info':
+    default:
+      return Info
   }
 }
 
 const getToastClass = (type: string) => {
   switch (type) {
-    case 'success': return 'toast-success'
-    case 'error': return 'toast-error'
-    case 'warning': return 'toast-warning'
-    case 'info': default: return 'toast-info'
+    case 'success':
+      return 'toast-success'
+    case 'error':
+      return 'toast-error'
+    case 'warning':
+      return 'toast-warning'
+    case 'info':
+    default:
+      return 'toast-info'
   }
 }
 </script>
@@ -35,10 +45,10 @@ const getToastClass = (type: string) => {
         <component :is="getToastIcon(toast.type)" class="w-5 h-5 flex-shrink-0 mt-0.5" />
         <p class="flex-1 text-sm font-medium leading-relaxed">{{ toast.message }}</p>
         <button
-          @click="store.removeToast(toast.id)"
           class="flex-shrink-0 p-1 rounded-lg transition-colors"
           :class="getToastClass(toast.type)"
           style="opacity: 0.7; hover:opacity: 1"
+          @click="store.removeToast(toast.id)"
         >
           <X class="w-4 h-4" />
         </button>
