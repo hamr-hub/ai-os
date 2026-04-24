@@ -25,7 +25,7 @@ export function useTokenHistory(intervalMs = 30000, initialCount: MaybeRefOrGett
     try {
       const [stats, historyData] = await Promise.all([
         getTokenStats(),
-        getTokenHistory(initialCount)
+        getTokenHistory(toValue(initialCount))
       ])
       
       tokenStats.value = stats
