@@ -590,9 +590,8 @@ const handleSwitchWithToast = async (name: string) => {
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  padding: 16px 24px;
-  overflow-y: auto;
+  gap: 20px;
+  padding: 20px 24px;
 }
 
 @media (max-width: 1024px) {
@@ -609,7 +608,7 @@ const handleSwitchWithToast = async (name: string) => {
 
 .card {
   background: var(--bg-card);
-  border-radius: 14px;
+  border-radius: 16px;
   border: 1px solid var(--border-card);
   padding: 20px;
   box-shadow: var(--shadow);
@@ -1154,19 +1153,6 @@ const handleSwitchWithToast = async (name: string) => {
   height: 100%;
   border-radius: 2px;
   transition: width 0.5s ease;
-}
-
-.grid::-webkit-scrollbar {
-  width: 4px;
-}
-
-.grid::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.grid::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 2px;
 }
 
 @keyframes fade-in {

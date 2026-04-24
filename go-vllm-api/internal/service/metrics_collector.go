@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -346,17 +347,17 @@ func (m *MetricsCollector) GetGPUAlerts(gpuStatus *GPUStatus) []AlertInfo {
 	}
 
 	memUtil := float64(gpuStatus.MemoryUtilization)
-	if memUtil > 0.9 {
+	if memUtil > 90 {
 		severity := "warning"
-		if memUtil > 0.95 {
+		if memUtil > 95 {
 			severity = "critical"
 		}
 		alerts = append(alerts, AlertInfo{
 			Type:      "memory",
 			Severity:  severity,
 			Value:     memUtil,
-			Threshold: 0.9,
-			Message:   fmt.Sprintf("GPU memory utilization %.0f%% exceeds threshold", memUtil*100),
+			Threshold: 90,
+			Message:   fmt.Sprintf("GPU memory utilization %d%% exceeds threshold", gpuStatus.MemoryUtilization),
 		})
 	}
 
@@ -372,6 +373,51 @@ func (m *MetricsCollector) GetGPUAlerts(gpuStatus *GPUStatus) []AlertInfo {
 			Threshold: 85,
 			Message:   fmt.Sprintf("GPU power %d%% exceeds threshold", gpuStatus.PowerPercent),
 		})
+	}
+
+	if gpuStatus.Primary != nil && gpuStatus.Primary.EccErrors > 0 {
+		alerts = append(alerts, AlertInfo{
+			Type:      "ecc_errors",
+			Severity:  "warning",
+			Value:     float64(gpuStatus.Primary.EccErrors),
+			Threshold: 0,
+			Message:   fmt.Sprintf("GPU ECC errors detected: %d", gpuStatus.Primary.EccErrors),
+		})
+	}
+
+	if gpuStatus.Primary != nil && len(gpuStatus.Primary.ThrottleReasons) > 0 {
+		alerts = append(alerts, AlertInfo{
+			Type:      "throttle",
+			Severity:  "warning",
+			Value:     float64(len(gpuStatus.Primary.ThrottleReasons)),
+			Threshold: 0,
+			Message:   fmt.Sprintf("GPU throttling: %s", strings.Join(gpuStatus.Primary.ThrottleReasons, ", ")),
+		})
+	}
+
+	if gpuStatus.VLLMMetrics != nil {
+		if gpuStatus.VLLMMetrics.WaitingRequests > 10 {
+			severity := "warning"
+			if gpuStatus.VLLMMetrics.WaitingRequests > 50 {
+				severity = "critical"
+			}
+			alerts = append(alerts, AlertInfo{
+				Type:      "vllm_queue",
+				Severity:  severity,
+				Value:     float64(gpuStatus.VLLMMetrics.WaitingRequests),
+				Threshold: 10,
+				Message:   fmt.Sprintf("vLLM queue overflow: %d waiting requests", gpuStatus.VLLMMetrics.WaitingRequests),
+			})
+		}
+		if gpuStatus.VLLMMetrics.GPUCacheUsage > 90 {
+			alerts = append(alerts, AlertInfo{
+				Type:      "vllm_cache",
+				Severity:  "warning",
+				Value:     gpuStatus.VLLMMetrics.GPUCacheUsage,
+				Threshold: 90,
+				Message:   fmt.Sprintf("vLLM KV cache usage %.1f%% exceeds threshold", gpuStatus.VLLMMetrics.GPUCacheUsage),
+			})
+		}
 	}
 
 	return alerts

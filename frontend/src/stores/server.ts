@@ -30,7 +30,7 @@ export const useServerStore = defineStore('server', () => {
   const history = ref<ServerHistoryEntry[]>([])
   const pendingRemoteUrl = ref('')
 
-  const manageBase = computed(() => (activeUrl.value ? `${activeUrl.value}/manage` : '/manage'))
+  const manageBase = computed(() => (activeUrl.value ? `${activeUrl.value}/manage` : '/api'))
   const v1Base = computed(() => (activeUrl.value ? `${activeUrl.value}/v1` : '/v1'))
   const healthUrl = computed(() => (activeUrl.value ? `${activeUrl.value}/health` : '/health'))
   const currentLabel = computed(() => activeUrl.value || '本地代理')

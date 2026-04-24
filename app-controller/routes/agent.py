@@ -16,7 +16,7 @@ from tools.executor import ToolExecutor, ToolResult
 from middleware.error_handler import ModelNotFoundException, ModelServiceUnavailableException
 
 
-agent_router = APIRouter(prefix="/agent")
+agent_router = APIRouter(prefix="/manage/agent")
 
 
 # Pydantic models for request/response

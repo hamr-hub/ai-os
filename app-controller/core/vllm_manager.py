@@ -22,17 +22,24 @@ model_switch_lock = asyncio.Lock()
 # 标记是否正在切换中（用于同步函数的检查）
 _switching_in_progress = False
 
-# 模型扫描路径
-MODEL_BASE_PATH = "/tmp/pve_models"
+def _load_vllm_config() -> Dict[str, Any]:
+    try:
+        import yaml
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            return config.get('vllm', {})
+    except Exception:
+        pass
+    return {}
 
-# vLLM 服务名称
-VLLM_SERVICE_NAME = "vllm-aiclient"
+VLLM_CONFIG = _load_vllm_config()
 
-# vLLM 启动脚本路径
-VLLM_START_SCRIPT = "/tmp/ai-suite/start_vllm_aiclient.sh"
-
-# vLLM API 默认端口
-VLLM_DEFAULT_PORT = 8000
+MODEL_BASE_PATH = VLLM_CONFIG.get('model_base_path', '/mnt/pve_models')
+VLLM_SERVICE_NAME = VLLM_CONFIG.get('service_name', 'vllm')
+VLLM_START_SCRIPT = VLLM_CONFIG.get('start_script', '/root/ai-suite/start_vllm.sh')
+VLLM_DEFAULT_PORT = VLLM_CONFIG.get('default_port', 8000)
 
 # 模型显存估算配置（基于模型参数和量化类型）
 # 格式：{"pattern": {"vram_gb": 数值, "multimodal": 布尔值}}
