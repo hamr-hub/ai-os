@@ -2,6 +2,7 @@ package manage
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -107,6 +108,13 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.GET("/llama_cpp/models", h.GetLlamaCppModels)
 		m.GET("/llama_cpp/status", h.GetLlamaCppStatus)
 		m.GET("/vllm/models", h.GetVLLMModels)
+	}
+
+	v1 := rg.Group("/v1")
+	{
+		v1.POST("/test/model/:model_name", h.RunModelTest)
+		v1.GET("/test/reports", h.GetTestHistory)
+		v1.GET("/test/results/:model_name", h.GetTestResults)
 	}
 
 	api := rg.Group("/api/v1")
@@ -454,6 +462,7 @@ func (h *ManageHandler) GetTokenStats(c *gin.Context) {
 	stats := h.metrics.GetTokenStats()
 	models := make(map[string]interface{})
 	for _, m := range h.scheduler.GetAvailableModels() {
+		// TODO: Add per-model token tracking in MetricsCollector
 		models[m] = map[string]interface{}{
 			"prompt_tokens":     0,
 			"completion_tokens": 0,
@@ -467,7 +476,8 @@ func (h *ManageHandler) GetTokenStats(c *gin.Context) {
 		"prompt_tokens":           stats.PromptTokens,
 		"completion_tokens":       stats.CompletionTokens,
 		"models":                  models,
-		"timestamp":               time.Now().Format(time.RFC3339),
+		"history":                 stats.History,
+		"timestamp":               stats.Timestamp,
 	}
 	h.cache.Set(cacheKey, result, 10)
 	c.JSON(http.StatusOK, result)
@@ -841,4 +851,100 @@ func (h *ManageHandler) ModelInfo(c *gin.Context) {
 		info["keep_alive"] = mc.KeepAlive
 	}
 	c.JSON(http.StatusOK, info)
+}
+
+func (h *ManageHandler) RunModelTest(c *gin.Context) {
+	modelName := c.Param("model_name")
+	if !h.scheduler.IsModelAvailable(modelName) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
+		return
+	}
+
+	if !h.scheduler.IsModelRunning(modelName) {
+		ok, err := h.scheduler.StartModel(c.Request.Context(), modelName)
+		if !ok {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Failed to start model: %v", err)})
+			return
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	mc := h.scheduler.GetModelConfig(modelName)
+	port := h.scheduler.GetModelPort(modelName)
+	modelPath := h.scheduler.GetModelPath(modelName)
+
+	report := h.modelTesting.RunAllTests(c.Request.Context(), modelName, modelPath, port, mc.SupportsImages)
+
+	// Save to Redis
+	if h.redis != nil && h.redis.IsConnected() {
+		ctx := context.Background()
+		historyKey := "model_test:history"
+		reportKey := fmt.Sprintf("model_test:report:%s", modelName)
+
+		// Save report
+		h.redis.SetJSON(ctx, reportKey, report, 0)
+
+		// Add to history
+		historyEntry := gin.H{
+			"model_name": modelName,
+			"timestamp":  report.Timestamp,
+			"status":     func() string { if report.PassRate >= 1.0 { return "passed" }; return "partial" }(),
+			"pass_rate":  report.PassRate,
+		}
+		data, _ := json.Marshal(historyEntry)
+		h.redis.LPush(ctx, historyKey, string(data))
+		h.redis.LTrim(ctx, historyKey, 0, 99)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "completed",
+		"message": fmt.Sprintf("Successfully tested %s", modelName),
+		"report":  report,
+	})
+}
+
+func (h *ManageHandler) GetTestHistory(c *gin.Context) {
+	if h.redis == nil || !h.redis.IsConnected() {
+		c.JSON(http.StatusOK, []interface{}{})
+		return
+	}
+
+	ctx := context.Background()
+	items, err := h.redis.LRange(ctx, "model_test:history", 0, 99)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	result := make([]interface{}, 0)
+	for _, item := range items {
+		var entry interface{}
+		if err := json.Unmarshal([]byte(item), &entry); err == nil {
+			result = append(result, entry)
+		}
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *ManageHandler) GetTestResults(c *gin.Context) {
+	modelName := c.Param("model_name")
+	if h.redis == nil || !h.redis.IsConnected() {
+		c.JSON(http.StatusNotFound, gin.H{"status": "not_found", "message": "Redis not connected"})
+		return
+	}
+
+	ctx := context.Background()
+	reportKey := fmt.Sprintf("model_test:report:%s", modelName)
+	report, err := h.redis.Get(ctx, reportKey)
+	if err != nil || report == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": "not_found", "message": "Report not found"})
+		return
+	}
+
+	var result interface{}
+	json.Unmarshal([]byte(report), &result)
+	c.JSON(http.StatusOK, gin.H{
+		"status": "found",
+		"report": result,
+	})
 }

@@ -1,15 +1,18 @@
 package v1
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"go-vllm-api/internal/model"
+	"go-vllm-api/internal/pkg/utils"
 	"go-vllm-api/internal/proxy"
 	"go-vllm-api/internal/service"
 
@@ -65,10 +68,10 @@ func (h *V1Handler) ListModels(c *gin.Context) {
 	for _, name := range models {
 		mc := h.scheduler.GetModelConfig(name)
 		info := model.ModelInfo{
-			ID:     name,
-			Object: "model",
+			ID:      name,
+			Object:  "model",
 			Running: h.scheduler.IsModelRunning(name),
-			Port:   8000,
+			Port:    8000,
 		}
 		if mc != nil {
 			info.SupportsImages = mc.SupportsImages
@@ -95,12 +98,12 @@ func (h *V1Handler) GetModelInfo(c *gin.Context) {
 	}
 	mc := h.scheduler.GetModelConfig(modelName)
 	info := gin.H{
-		"id":               modelName,
-		"object":           "model",
-		"running":          h.scheduler.IsModelRunning(modelName),
-		"active_requests":  h.scheduler.GetActiveRequests(modelName),
-		"supports_images":  h.scheduler.GetModelSupportsImages(modelName),
-		"port":             h.scheduler.GetModelPort(modelName),
+		"id":              modelName,
+		"object":          "model",
+		"running":         h.scheduler.IsModelRunning(modelName),
+		"active_requests": h.scheduler.GetActiveRequests(modelName),
+		"supports_images": h.scheduler.GetModelSupportsImages(modelName),
+		"port":            h.scheduler.GetModelPort(modelName),
 	}
 	if mc != nil {
 		info["description"] = mc.Description
@@ -138,14 +141,17 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		}
 	}
 
+	var promptTokens, completionTokens int64
+
 	defer func() {
 		if slotAcquired {
 			h.scheduler.ReleaseRequest(modelName)
 		}
 		duration := time.Since(start).Seconds()
-		h.metrics.RecordRequest("/v1/chat/completions", statusCode, duration, 
+		h.metrics.RecordRequest("/v1/chat/completions", statusCode, duration,
 			service.WithModel(modelName),
-			service.WithImage(hasImage, totalImageSize))
+			service.WithImage(hasImage, int64(totalImageSize)),
+			service.WithTokens(promptTokens, completionTokens, promptTokens+completionTokens))
 	}()
 
 	if !h.scheduler.IsModelAvailable(modelName) {
@@ -169,10 +175,10 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 			if !ok {
 				statusCode = 429
 				c.JSON(http.StatusTooManyRequests, gin.H{
-					"error":          "Too many requests",
-					"active":         active,
-					"limit":          limit,
-					"queue_length":   queueLen,
+					"error":        "Too many requests",
+					"active":       active,
+					"limit":        limit,
+					"queue_length": queueLen,
 				})
 				return
 			}
@@ -180,10 +186,10 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		} else {
 			statusCode = 429
 			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error":          "Too many requests",
-				"active":         active,
-				"limit":          limit,
-				"queue_length":   queueLen,
+				"error":        "Too many requests",
+				"active":       active,
+				"limit":        limit,
+				"queue_length": queueLen,
 			})
 			return
 		}
@@ -205,11 +211,16 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 	vllmModelName := h.scheduler.GetModelPath(modelName)
 
 	payload := make(map[string]interface{})
-	data, _ := json.Marshal(req)
-	json.Unmarshal(data, &payload)
+	payloadData, _ := json.Marshal(req)
+	json.Unmarshal(payloadData, &payload)
 	payload["model"] = vllmModelName
 
 	if stream {
+		// Automatically include usage in streams
+		if _, ok := payload["stream_options"]; !ok {
+			payload["stream_options"] = map[string]interface{}{"include_usage": true}
+		}
+
 		ch, err := h.proxy.StreamChatCompletion(c.Request.Context(), port, payload)
 		if err != nil {
 			statusCode = 503
@@ -243,6 +254,23 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				return false
 			}
+
+			// Try to parse usage from chunk
+			if strings.HasPrefix(evt.Data, "data: ") {
+				dataStr := strings.TrimPrefix(evt.Data, "data: ")
+				var chunk map[string]interface{}
+				if err := json.Unmarshal([]byte(dataStr), &chunk); err == nil {
+					if usage, ok := chunk["usage"].(map[string]interface{}); ok {
+						if p, ok := usage["prompt_tokens"].(float64); ok {
+							promptTokens = int64(p)
+						}
+						if c, ok := usage["completion_tokens"].(float64); ok {
+							completionTokens = int64(c)
+						}
+					}
+				}
+			}
+
 			fmt.Fprintf(w, "%s\n", evt.Data)
 			return true
 		})
@@ -256,6 +284,19 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Record token usage for non-streaming
+	if resMap, ok := result.(map[string]interface{}); ok {
+		if usage, ok := resMap["usage"].(map[string]interface{}); ok {
+			if p, ok := usage["prompt_tokens"].(float64); ok {
+				promptTokens = int64(p)
+			}
+			if c, ok := usage["completion_tokens"].(float64); ok {
+				completionTokens = int64(c)
+			}
+		}
+	}
+
 	statusCode = 200
 	c.JSON(http.StatusOK, result)
 }
@@ -400,9 +441,9 @@ func (h *V1Handler) GetImageInfo(c *gin.Context) {
 		return
 	}
 	result := gin.H{
-		"max_size_mb":        model.MaxImageSizeMB,
-		"max_dimensions":     fmt.Sprintf("%dx%d", model.MaxWidth, model.MaxHeight),
-		"supported_formats":  getSupportedFormats(),
+		"max_size_mb":       model.MaxImageSizeMB,
+		"max_dimensions":    fmt.Sprintf("%dx%d", model.MaxWidth, model.MaxHeight),
+		"supported_formats": getSupportedFormats(),
 	}
 	h.cache.Set("api:v1:images:info", result, 3600)
 	c.JSON(http.StatusOK, result)
@@ -432,8 +473,8 @@ func (h *V1Handler) GenerateImage(c *gin.Context) {
 	port := h.scheduler.GetModelPort(req.Model)
 	payload := map[string]interface{}{
 		"prompt":          req.Prompt,
-		"n":              req.N,
-		"size":           req.Size,
+		"n":               req.N,
+		"size":            req.Size,
 		"response_format": req.ResponseFormat,
 	}
 
