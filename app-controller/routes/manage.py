@@ -84,7 +84,8 @@ async def get_gpu_history(count: int = 60):
             "max_days": gpu_monitor.get_max_history_days()
         }
     except Exception as e:
-        return {"error": str(e)}
+        logger.exception("Failed to get GPU history")
+        raise HTTPException(status_code=500, detail=f"Failed to get GPU history: {str(e)}")
 
 
 @manage_router.get("/gpu/processes")
@@ -126,7 +127,8 @@ async def configure_gpu_history(enabled: Optional[bool] = None, max_days: Option
             "max_days": gpu_monitor.get_max_history_days()
         }
     except Exception as e:
-        return {"error": str(e)}
+        logger.exception("Failed to configure GPU history")
+        raise HTTPException(status_code=500, detail=f"Failed to configure GPU history: {str(e)}")
 
 
 @manage_router.get("/models")
@@ -732,24 +734,30 @@ async def redis_health_check():
 async def get_redis_keys(pattern: str = "*"):
     try:
         if not redis_client.is_connected():
-            return {"error": "Redis not connected"}
+            raise HTTPException(status_code=503, detail="Redis not connected")
 
         keys = redis_client.keys(pattern)
         return {"keys": keys, "count": len(keys)}
     except Exception as e:
-        return {"error": str(e)}
+        if isinstance(e, HTTPException):
+            raise
+        logger.exception("Failed to get Redis keys")
+        raise HTTPException(status_code=500, detail=f"Failed to get Redis keys: {str(e)}")
 
 
 @manage_router.delete("/redis/flush")
 async def flush_redis():
     try:
         if not redis_client.is_connected():
-            return {"error": "Redis not connected"}
+            raise HTTPException(status_code=503, detail="Redis not connected")
 
         success = redis_client.flush_db()
         return {"status": "success" if success else "failed"}
     except Exception as e:
-        return {"error": str(e)}
+        if isinstance(e, HTTPException):
+            raise
+        logger.exception("Failed to flush Redis")
+        raise HTTPException(status_code=500, detail=f"Failed to flush Redis: {str(e)}")
 
 
 @manage_router.get("/logs/test")

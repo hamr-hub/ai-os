@@ -64,19 +64,24 @@ onMounted(() => {
 })
 
 async function fetchCapabilities() {
-  for (const m of runningModels.value) {
-    try {
-      const res = await fetch(`${serverStore.v1Base}/test/results/${m.name}`)
-      if (res.ok) {
-        const data = await res.json()
-        if (data.report?.feature_support) {
-          modelCapabilities.value[m.name] = data.report.feature_support
-        }
-      }
-    } catch (e) {
-      console.warn(`Failed to fetch test results for ${m.name}:`, e)
+  const results = await Promise.allSettled(
+    runningModels.value.map(async (model) => {
+      const data = await getTestResults(model.name)
+      return { modelName: model.name, featureSupport: data.report?.feature_support }
+    })
+  )
+
+  results.forEach((result) => {
+    if (result.status !== 'fulfilled') {
+      console.warn('Failed to fetch model capability:', result.reason)
+      return
     }
-  }
+
+    const { modelName, featureSupport } = result.value
+    if (featureSupport) {
+      modelCapabilities.value[modelName] = featureSupport
+    }
+  })
 }
 
 const getCapabilityBadges = (

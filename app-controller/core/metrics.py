@@ -61,8 +61,8 @@ class MetricsCollector:
             if data:
                 try:
                     self.start_time = datetime.fromisoformat(data)
-                except:
-                    pass
+                except ValueError:
+                    logger.warning("Invalid metrics start_time in Redis: %s", data)
             
             image_request_counts_key = self._get_key("image_request_counts")
             data = redis_client.get_json(image_request_counts_key)
@@ -224,17 +224,25 @@ class MetricsCollector:
         })
         if len(self.gpu_status_history) > 300:
             self.gpu_status_history = self.gpu_status_history[-300:]
-        
-        gpu_history_key = self._get_key("gpu_history")
-        redis_client.set_json(gpu_history_key, self.gpu_status_history)
+
+        if redis_client.is_connected():
+            try:
+                gpu_history_key = self._get_key("gpu_history")
+                redis_client.set_json(gpu_history_key, self.gpu_status_history)
+            except Exception as e:
+                logger.error(f"Failed to save GPU history metrics to Redis: {e}")
     
     def record_queue_length(self, length: int):
         self.queue_length_history.append(length)
         if len(self.queue_length_history) > 300:
             self.queue_length_history = self.queue_length_history[-300:]
-        
-        queue_history_key = self._get_key("queue_history")
-        redis_client.set_json(queue_history_key, self.queue_length_history)
+
+        if redis_client.is_connected():
+            try:
+                queue_history_key = self._get_key("queue_history")
+                redis_client.set_json(queue_history_key, self.queue_length_history)
+            except Exception as e:
+                logger.error(f"Failed to save queue length metrics to Redis: {e}")
 
     def save_token_history(self):
         if not redis_client.is_connected():
@@ -266,9 +274,15 @@ class MetricsCollector:
         try:
             token_history_key = self._get_key("token_history")
             history_data = redis_client.get_client().lrange(token_history_key, 0, count - 1)
-            history = [json.loads(item) for item in history_data]
+            history = []
+            for item in history_data:
+                try:
+                    history.append(json.loads(item))
+                except Exception:
+                    logger.warning("Skipping invalid token history entry from Redis")
             return history[::-1]
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to read token history from Redis: {e}")
             return []
     
     def get_metrics(self) -> Dict:

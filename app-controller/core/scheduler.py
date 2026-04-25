@@ -410,6 +410,10 @@ class Scheduler:
         cleanup_delay = self.config.get('settings', {}).get('memory_cleanup_delay', 3)
         await asyncio.sleep(cleanup_delay)
         return True
+
+    def _mark_model_stopped(self, model_name: str):
+        with self._model_lock:
+            self.running_models.pop(model_name, None)
     
     async def _send_warmup_request(self, model_name: str) -> bool:
         """发送预热请求到 vLLM"""
@@ -427,24 +431,37 @@ class Scheduler:
                     },
                     timeout=30
                 )
-                return response.status_code == 200
-        except Exception:
+                if response.status_code != 200:
+                    logger.warning("Warmup request for model %s returned status %s", model_name, response.status_code)
+                    return False
+                return True
+        except Exception as exc:
+            logger.warning("Warmup request for model %s failed: %s", model_name, exc)
             return False
     
-    async def _adjust_gpu_utilization(self, model_name: str, target_utilization: float = 0.9):
+    async def _adjust_gpu_utilization(self, model_name: str, target_utilization: float = 0.9) -> bool:
         """调整 GPU 显存利用率"""
         port = self.get_model_port(model_name)
         url = f"http://localhost:{port}/v1/control"
         
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                await client.post(
+                response = await client.post(
                     url,
                     json={"gpu_memory_utilization": target_utilization},
                     timeout=10
                 )
-        except Exception:
-            pass
+                if response.status_code >= 400:
+                    logger.warning(
+                        "GPU utilization adjustment for model %s returned status %s",
+                        model_name,
+                        response.status_code,
+                    )
+                    return False
+                return True
+        except Exception as exc:
+            logger.warning("Failed to adjust GPU utilization for model %s: %s", model_name, exc)
+            return False
     
     async def start_model(self, model_name: str) -> bool:
         config = self.get_model_config(model_name)
@@ -478,9 +495,17 @@ class Scheduler:
                     self.running_models[model_name] = datetime.now()
 
                 preload_timeout = self.config.get('settings', {}).get('preload_timeout', 120)
-                await asyncio.sleep(min(15, preload_timeout))
+                port = self.get_model_port(model_name)
+                ready = await self._wait_for_model_ready(model_name, port, timeout=preload_timeout)
+                if not ready:
+                    logger.error(f"llama.cpp model {model_name} failed to become ready within {preload_timeout}s")
+                    llama_cpp_manager.stop_server(model_name)
+                    self._mark_model_stopped(model_name)
+                    return False
 
-                await self._send_warmup_request(model_name)
+                warmup_ok = await self._send_warmup_request(model_name)
+                if not warmup_ok:
+                    logger.warning("Warmup request did not succeed for llama.cpp model %s", model_name)
 
             return success
 
@@ -529,12 +554,18 @@ class Scheduler:
             ready = await self._wait_for_model_ready(model_name, port, timeout=preload_timeout)
             
             if ready:
-                await self._send_warmup_request(model_name)
+                warmup_ok = await self._send_warmup_request(model_name)
+                if not warmup_ok:
+                    logger.warning("Warmup request did not succeed for model %s", model_name)
                 gpu_util = self.config.get('settings', {}).get('gpu_memory_utilization', 0.9)
-                await self._adjust_gpu_utilization(model_name, gpu_util)
+                adjust_ok = await self._adjust_gpu_utilization(model_name, gpu_util)
+                if not adjust_ok:
+                    logger.warning("GPU utilization adjustment did not succeed for model %s", model_name)
                 return True
             else:
                 logger.error(f"Model {model_name} failed to become ready within {preload_timeout}s")
+                self.sys_controller.stop_service(service_name)
+                self._mark_model_stopped(model_name)
                 return False
 
         return success
@@ -543,16 +574,46 @@ class Scheduler:
         """Poll the model's health endpoint until it is ready."""
         start_time = time.time()
         url = f"http://localhost:{port}/v1/models"
+        last_status_code = None
+        last_error = None
         
         while time.time() - start_time < timeout:
             try:
                 async with httpx.AsyncClient(timeout=2) as client:
                     response = await client.get(url)
                     if response.status_code == 200:
+                        if last_status_code not in (None, 200):
+                            logger.info(
+                                "Model %s became ready on port %s after transient status %s",
+                                model_name,
+                                port,
+                                last_status_code,
+                            )
                         return True
-            except Exception:
-                pass
+                    last_status_code = response.status_code
+                    logger.debug(
+                        "Model %s readiness probe returned status %s on port %s",
+                        model_name,
+                        response.status_code,
+                        port,
+                    )
+            except Exception as exc:
+                last_error = str(exc)
             await asyncio.sleep(2)
+        if last_status_code is not None:
+            logger.error(
+                "Model %s readiness probe timed out on port %s after last status %s",
+                model_name,
+                port,
+                last_status_code,
+            )
+        elif last_error:
+            logger.error(
+                "Model %s readiness probe timed out on port %s after last error: %s",
+                model_name,
+                port,
+                last_error,
+            )
         return False
     
     async def stop_model(self, model_name: str) -> bool:
@@ -693,7 +754,7 @@ class Scheduler:
 
             return False
         except Exception as e:
-            logger.error(f"Error switching model: {str(e)}")
+            logger.exception(f"Error switching model to {target_model_name}: {str(e)}")
             if fallback_model and fallback_model != target_model_name:
                 return await self.switch_model(fallback_model)
             return False
@@ -738,7 +799,9 @@ class Scheduler:
                     if config and config.get('keep_alive', False):
                         if not self.is_model_running(model_name):
                             logger.warning(f"Preloaded model {model_name} is not running, restarting...")
-                            await self.start_model(model_name)
+                            restarted = await self.start_model(model_name)
+                            if not restarted:
+                                logger.error("Failed to restart keep-alive model %s", model_name)
                 
                 # 2. Check all models that we think are running
                 with self._model_lock:
@@ -754,8 +817,10 @@ class Scheduler:
                         # Auto-restart if it was the default model or a high priority one
                         if model_name == self._default_model:
                             logger.info(f"Restarting default model: {model_name}")
-                            await self.start_model(model_name)
+                            restarted = await self.start_model(model_name)
+                            if not restarted:
+                                logger.error("Failed to restart default model %s", model_name)
                             
             except Exception as e:
-                logger.error(f"Error in health watcher: {str(e)}")
+                logger.exception(f"Error in health watcher: {str(e)}")
             await asyncio.sleep(30)

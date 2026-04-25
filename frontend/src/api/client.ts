@@ -37,6 +37,28 @@ const RETRYABLE_METHODS = new Set(['get', 'head', 'options'])
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
 
+const createTimedAbortSignal = (signal?: AbortSignal, timeoutMs = 30000) => {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(new Error('请求超时')), timeoutMs)
+
+  const abortFromParent = () => controller.abort(signal?.reason)
+  if (signal) {
+    if (signal.aborted) {
+      abortFromParent()
+    } else {
+      signal.addEventListener('abort', abortFromParent, { once: true })
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      window.clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', abortFromParent)
+    },
+  }
+}
+
 const shouldRetryRequest = (error: unknown): boolean => {
   if (axios.isCancel(error)) {
     return false
@@ -345,6 +367,7 @@ export async function chatCompletionStream(
   onError?: (error: Error) => void,
   signal?: AbortSignal
 ): Promise<void> {
+  const timedSignal = createTimedAbortSignal(signal, 30000)
   try {
     const serverStore = useServerStore()
     const response = await fetch(`${serverStore.v1Base}/chat/completions`, {
@@ -356,7 +379,7 @@ export async function chatCompletionStream(
         // Explicitly disable thinking mode to avoid reasoning_content errors
         enable_thinking: false,
       }),
-      signal,
+      signal: timedSignal.signal,
     })
 
     if (!response.ok) {
@@ -407,6 +430,8 @@ export async function chatCompletionStream(
     if (error instanceof Error && error.name === 'AbortError') throw error
     if (onError) onError(error instanceof Error ? error : new Error('Stream error'))
     else throw error
+  } finally {
+    timedSignal.cleanup()
   }
 }
 
@@ -525,13 +550,14 @@ export async function agentChatStream(
   onError?: (error: Error) => void,
   signal?: AbortSignal
 ): Promise<void> {
+  const timedSignal = createTimedAbortSignal(signal, 30000)
   try {
     const serverStore = useServerStore()
     const response = await fetch(`${serverStore.manageBase}/agent/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, stream: true }),
-      signal,
+      signal: timedSignal.signal,
     })
 
     if (!response.ok) {
@@ -571,5 +597,7 @@ export async function agentChatStream(
     if (error instanceof Error && error.name === 'AbortError') throw error
     if (onError) onError(error instanceof Error ? error : new Error('Stream error'))
     else throw error
+  } finally {
+    timedSignal.cleanup()
   }
 }

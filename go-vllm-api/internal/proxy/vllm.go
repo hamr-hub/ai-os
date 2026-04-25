@@ -75,8 +75,11 @@ func (p *VLLMProxy) ChatCompletion(ctx context.Context, port int, payload interf
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, string(body))
+		body := readErrorBody(resp)
+		if body == "" {
+			return nil, fmt.Errorf("vLLM returned %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, body)
 	}
 
 	var result interface{}
@@ -159,6 +162,7 @@ func (p *VLLMProxy) streamReader(resp *http.Response, ch chan<- StreamEvent) {
 	}
 
 	if err := scanner.Err(); err != nil {
+		p.logger.Warn("stream reader failed", zap.Error(err))
 		ch <- StreamEvent{Error: err}
 	}
 }
@@ -291,8 +295,11 @@ func (p *VLLMProxy) PostEndpoint(ctx context.Context, port int, path string, pay
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, string(body))
+		body := readErrorBody(resp)
+		if body == "" {
+			return nil, fmt.Errorf("vLLM returned %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, body)
 	}
 
 	var result interface{}
