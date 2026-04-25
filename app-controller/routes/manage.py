@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from typing import Optional, Dict, Any
 from datetime import datetime
 import asyncio
+import copy
 
 from schemas.service import ServiceControlRequest
 from core.deps import (
@@ -531,7 +532,7 @@ async def update_config(request: Request):
     try:
         body = await request.json()
 
-        current_config = config_watcher.get_config()
+        current_config = copy.deepcopy(config_watcher.get_config())
 
         if 'settings' in body:
             if 'settings' not in current_config:
@@ -552,19 +553,26 @@ async def update_config(request: Request):
 
         if success:
             from core.deps import _on_config_changed
-            _on_config_changed(current_config)
-            return {"status": "success", "message": "Configuration updated and persisted", "config": current_config}
+            persisted_config = config_watcher.get_config()
+            _on_config_changed(persisted_config)
+            return {"status": "success", "message": "Configuration updated and persisted", "config": persisted_config}
         else:
-            raise HTTPException(status_code=500, detail="Failed to persist configuration")
+            detail = config_watcher.get_last_error() or "Failed to persist configuration"
+            raise HTTPException(status_code=400, detail=detail)
     except yaml.YAMLError as e:
         raise HTTPException(status_code=400, detail=f"Invalid YAML format: {e}")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @manage_router.post("/config/reload")
 async def reload_config():
-    new_config = config_watcher.load_config()
+    ok, new_config = config_watcher.load_config_with_status()
+    if not ok:
+        detail = config_watcher.get_last_error() or "Failed to reload configuration"
+        raise HTTPException(status_code=400, detail=detail)
     from core.deps import _on_config_changed
     _on_config_changed(new_config)
     return {"status": "reloaded", "config": new_config}

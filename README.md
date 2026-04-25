@@ -154,9 +154,8 @@ npm start
 ### 使用 systemd 部署
 
 ```bash
-# 安装服务
-sudo cp systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
+# 安装/同步服务单元
+sudo ./scripts/install_systemd_services.sh --enable
 
 # 启动服务
 sudo systemctl enable redis

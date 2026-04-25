@@ -10,13 +10,15 @@ import os
 import sys
 import subprocess
 import argparse
+import shutil
 from pathlib import Path
 from datetime import datetime
 
 SCRIPTS_DIR = Path(__file__).parent.resolve()
-AI_SUITE_DIR = Path("/root/ai-suite")
+INSTALL_DIR = SCRIPTS_DIR
 MODEL_BASE = "/mnt/pve_models"
 VLLM_SERVICE = "vllm-aiclient"
+SYSTEMCTL_BIN = shutil.which("systemctl") or "/usr/bin/systemctl"
 
 
 def get_available_models():
@@ -37,7 +39,7 @@ def get_current_model():
     """获取当前运行的模型"""
     try:
         result = subprocess.run(
-            ['systemctl', 'show', VLLM_SERVICE, '--property=Environment', '--value'],
+            [SYSTEMCTL_BIN, 'show', VLLM_SERVICE, '--property=Environment', '--value'],
             capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
@@ -48,7 +50,7 @@ def get_current_model():
         pass
     
     # 尝试从启动脚本读取
-    start_script = AI_SUITE_DIR / "start_vllm_aiclient.sh"
+    start_script = INSTALL_DIR / "start_vllm_aiclient.sh"
     if start_script.exists():
         try:
             content = start_script.read_text()
@@ -67,7 +69,7 @@ def get_service_status():
     """获取服务状态"""
     try:
         result = subprocess.run(
-            ['systemctl', 'is-active', VLLM_SERVICE],
+            [SYSTEMCTL_BIN, 'is-active', VLLM_SERVICE],
             capture_output=True, text=True, timeout=5
         )
         return result.stdout.strip()
@@ -88,13 +90,13 @@ def switch_model(model_name: str, restart: bool = True):
     
     try:
         subprocess.run([
-            'systemctl', 'set-environment',
+            SYSTEMCTL_BIN, 'set-environment',
             f'VLLM_MODEL_PATH={model_path}'
         ], check=True)
         
         if restart:
             print("   重启服务...")
-            subprocess.run(['systemctl', 'restart', VLLM_SERVICE], check=True)
+            subprocess.run([SYSTEMCTL_BIN, 'restart', VLLM_SERVICE], check=True)
         
         print(f"✓ 模型切换完成: {model_name}")
         print(f"   查看日志: journalctl -u {VLLM_SERVICE} -f")
@@ -148,7 +150,7 @@ def main():
         print(f"服务名称: {VLLM_SERVICE}")
         print(f"服务状态: {status}")
         print(f"当前模型: {current or '未知'}")
-        print(f"安装目录: {AI_SUITE_DIR}")
+        print(f"安装目录: {INSTALL_DIR}")
         return 0
     
     if args.logs:

@@ -12,7 +12,7 @@ async def test_reload_runtime_config_applies_loaded_config(monkeypatch):
     apply_mock = Mock()
     log_mock = Mock()
 
-    monkeypatch.setattr(main.config_watcher, "load_config", lambda: loaded)
+    monkeypatch.setattr(main.config_watcher, "load_config_with_status", lambda: (True, loaded))
     monkeypatch.setattr(main, "_on_config_changed", apply_mock)
     monkeypatch.setattr(main.structured_logger, "info", log_mock)
 
@@ -28,7 +28,8 @@ async def test_reload_runtime_config_rejects_invalid_payload(monkeypatch):
     warn_mock = Mock()
     apply_mock = Mock()
 
-    monkeypatch.setattr(main.config_watcher, "load_config", lambda: None)
+    monkeypatch.setattr(main.config_watcher, "load_config_with_status", lambda: (False, {}))
+    monkeypatch.setattr(main.config_watcher, "get_last_error", lambda: "invalid config")
     monkeypatch.setattr(main.logger, "warning", warn_mock)
     monkeypatch.setattr(main, "_on_config_changed", apply_mock)
 

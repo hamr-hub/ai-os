@@ -129,6 +129,14 @@ const setStreamingError = (message: string) => {
   addMessage('system', `Error: ${message}`)
 }
 
+const appendStreamingNote = (note: string) => {
+  if (!streamingMessageId.value || !currentConv.value) return
+  const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
+  if (!msg) return
+  msg.content = msg.content.trim() ? `${msg.content}\n\n${note}` : note
+  nextTick(() => scrollToBottom(true))
+}
+
 const handleSend = async () => {
   if (!inputMessage.value.trim() || isLoading.value || !currentConv.value) return
 
@@ -270,6 +278,9 @@ const handleSend = async () => {
     executingTools.value = []
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      appendStreamingNote('已停止生成')
+      executingTools.value = []
+      streamingMessageId.value = null
       return
     }
     const errorMessage = error instanceof Error ? error.message : 'Failed to get response'
@@ -285,7 +296,6 @@ const handleStop = () => {
   if (abortController.value) {
     abortController.value.abort()
     isLoading.value = false
-    streamingMessageId.value = null
   }
 }
 

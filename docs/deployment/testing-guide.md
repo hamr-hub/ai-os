@@ -30,8 +30,8 @@
 # 基础健康检查
 curl -s http://localhost:35000/health | python -m json.tool
 
-# API 版本信息
-curl -s http://localhost:35000/api/version
+# Node.js 集成状态
+curl -s http://localhost:35000/api/v1/status | python -m json.tool
 ```
 
 ### 2. Go 后端服务
@@ -147,7 +147,8 @@ curl -s http://localhost:35001/manage/metrics | python -m json.tool
 ### 手动测试流程
 
 1. **仪表盘页面**
-   - 访问 http://localhost:30000
+   - 开发环境访问 http://localhost:30001
+   - Docker/生产环境访问 http://localhost:30000
    - 验证 GPU 监控数据显示
    - 验证模型列表加载
    - 验证使用统计图表渲染

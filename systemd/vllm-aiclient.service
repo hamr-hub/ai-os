@@ -7,14 +7,16 @@ Wants=nvidia-persistenced.service
 Type=simple
 User=root
 Group=root
-WorkingDirectory=/root/ai-suite
+WorkingDirectory=/root/ai-os/app-controller/scripts
 
 # 环境变量（修改 VLLM_MODEL_PATH 切换模型）
 Environment="VLLM_MODEL_PATH=/mnt/pve_models/Gemma-4-31B-Abliterated"
 Environment="CUDA_VISIBLE_DEVICES=0"
+Environment="VLLM_ENV_PATH=/root/ai-suite/vllm_env"
+Environment="VLLM_LOG_DIR=/root/ai-os/logs/vllm-aiclient"
 
 # 启动命令
-ExecStart=/root/ai-suite/start_vllm_aiclient.sh
+ExecStart=/root/ai-os/app-controller/scripts/start_vllm_aiclient.sh
 
 # 重启策略
 Restart=always

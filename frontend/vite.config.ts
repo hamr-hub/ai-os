@@ -4,8 +4,17 @@ import tailwindcss from '@tailwindcss/vite'
 import Markdown from 'unplugin-vue-markdown/vite'
 import { resolve } from 'path'
 
-const manageBackend = process.env.VITE_MANAGE_BACKEND || process.env.VITE_BACKEND || 'http://localhost:35000'
-const v1Backend = process.env.VITE_V1_BACKEND || 'http://localhost:35001'
+const normalizeTarget = (value: string) => value.trim().replace(/\/+$/, '')
+const resolvePort = (value: string | undefined, fallback: number) => {
+  const parsed = Number.parseInt(value ?? '', 10)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const manageBackend = normalizeTarget(
+  process.env.VITE_MANAGE_BACKEND || process.env.VITE_BACKEND || 'http://localhost:35000',
+)
+const v1Backend = normalizeTarget(process.env.VITE_V1_BACKEND || 'http://localhost:35001')
+const devServerPort = resolvePort(process.env.VITE_PORT || process.env.PORT, 30000)
 
 export default defineConfig({
   plugins: [
@@ -24,7 +33,7 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 30001,
+    port: devServerPort,
     strictPort: true,
     proxy: {
       '/manage': {

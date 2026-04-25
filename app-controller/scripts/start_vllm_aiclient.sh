@@ -1,10 +1,41 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # ===== 1. 获取脚本目录 =====
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+resolve_venv_path() {
+    local candidates=()
+
+    if [ -n "${VLLM_ENV_PATH:-}" ]; then
+        candidates+=("$VLLM_ENV_PATH")
+    fi
+
+    candidates+=(
+        "$SCRIPT_DIR/vllm_env"
+        "$PROJECT_ROOT/.venv-vllm"
+        "/root/ai-suite/vllm_env"
+    )
+
+    for candidate in "${candidates[@]}"; do
+        if [ -f "$candidate/bin/activate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
 
 # ===== 2. 激活虚拟环境 =====
-source "/root/ai-suite/vllm_env/bin/activate"
+VLLM_ENV_DIR="$(resolve_venv_path || true)"
+if [ -z "$VLLM_ENV_DIR" ]; then
+    echo "未找到 vLLM 虚拟环境，请设置 VLLM_ENV_PATH 或创建 /root/ai-suite/vllm_env" >&2
+    exit 1
+fi
+source "$VLLM_ENV_DIR/bin/activate"
 
 # ===== 3. 终端颜色支持 =====
 export TERM=xterm-256color
@@ -20,7 +51,7 @@ export OMP_NUM_THREADS=16
 MODEL_PATH="${VLLM_MODEL_PATH:-/mnt/pve_models/Gemma-4-31B-Abliterated}"
 
 # ===== 6. 日志配置 =====
-LOG_DIR="${SCRIPT_DIR}/logs"
+LOG_DIR="${VLLM_LOG_DIR:-${PROJECT_ROOT}/logs/vllm-aiclient}"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/vllm_aiclient_$(date +%Y%m%d_%H%M%S).log"
 

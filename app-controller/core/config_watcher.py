@@ -3,6 +3,7 @@ import os
 import asyncio
 import logging
 import tempfile
+import copy
 from typing import Dict, Callable, List, Tuple
 from core.config import load_config as load_app_config, validate_config
 
@@ -42,7 +43,7 @@ class ConfigWatcher:
             return False, {}
     
     def get_config(self) -> Dict:
-        return self._config
+        return copy.deepcopy(self._config)
 
     def get_last_error(self):
         return self._last_error

@@ -114,6 +114,47 @@ class TestConfigWatcher:
             config = watcher.load_config()
         assert config == {}
 
+    def test_load_config_with_status_rejects_invalid_model_config(self):
+        invalid_config = {
+            "models": {
+                "bad-model": {
+                    "service": "broken-service",
+                    "port": 70000,
+                }
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.dump(invalid_config, f)
+            temp_path = f.name
+
+        try:
+            watcher = ConfigWatcher(temp_path)
+            ok, config = watcher.load_config_with_status()
+
+            assert ok is False
+            assert config == {}
+            assert watcher.get_last_error() is not None
+        finally:
+            os.unlink(temp_path)
+
+    def test_save_config_rejects_invalid_payload(self, temp_config):
+        watcher = ConfigWatcher(temp_config)
+        original = watcher.load_config()
+
+        success = watcher.save_config({
+            "models": {
+                "bad-model": {
+                    "service": "broken-service",
+                    "port": 99999,
+                }
+            }
+        })
+
+        assert success is False
+        assert watcher.load_config() == original
+        assert watcher.get_last_error() is not None
+
 
 def mock_open_invalid():
     from unittest.mock import mock_open

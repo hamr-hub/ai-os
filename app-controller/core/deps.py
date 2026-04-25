@@ -34,7 +34,9 @@ import os
 
 config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
 config_watcher = ConfigWatcher(config_path)
-config = config_watcher.load_config() or {}
+config_ok, config = config_watcher.load_config_with_status()
+if not config_ok:
+    config = {}
 log_dir = config.get('settings', {}).get('logging', {}).get('log_dir', None)
 
 logger = setup_logger(log_dir=log_dir)
@@ -58,6 +60,7 @@ _background_tasks = []
 
 
 def _on_config_changed(new_config):
+    new_config = new_config if isinstance(new_config, dict) else {}
     model_count = len(new_config.get('models', {}))
     structured_logger.info(f"Configuration updated, models={model_count}, keys={list(new_config.get('models', {}).keys())[:5]}", action="config_reload")
     cache_service.delete_pattern("ai_controller:cache:*")

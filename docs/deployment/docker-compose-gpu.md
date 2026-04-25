@@ -130,8 +130,11 @@ docker exec ai-os-controller nvidia-smi
 ### 3. 验证 vLLM 服务
 
 ```bash
-# 检查模型列表
-curl http://localhost:35000/api/models
+# 检查模型管理列表（Python 管理接口）
+curl http://localhost:35000/manage/models
+
+# 检查 OpenAI 兼容模型列表（Go 推理接口）
+curl http://localhost:35001/v1/models
 
 # 发送测试请求
 curl http://localhost:35001/v1/chat/completions \
@@ -178,7 +181,7 @@ nvidia-smi -l 5   # 每 5 秒刷新
 docker exec ai-os-controller nvidia-smi
 
 # 通过 API 查询
-curl http://localhost:35000/api/gpu/status
+curl http://localhost:35000/manage/gpu
 ```
 
 ## 性能调优

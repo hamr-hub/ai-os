@@ -157,8 +157,7 @@ python main.py
 ### 使用 systemd 部署
 
 ```bash
-sudo cp systemd/ai-controller.service /etc/systemd/system/
-sudo systemctl daemon-reload
+sudo ../scripts/install_systemd_services.sh --enable
 sudo systemctl enable ai-controller
 sudo systemctl start ai-controller
 
