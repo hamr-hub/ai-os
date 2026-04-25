@@ -461,9 +461,31 @@ async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, mode
 
 def _update_vllm_script(model_path: str) -> bool:
     """
-    更新 vLLM 启动脚本中的模型路径
+    更新 vLLM systemd 服务文件中的模型路径
     """
     try:
+        # 尝试更新 systemd 服务文件中的环境变量
+        service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
+        if os.path.exists(service_file):
+            with open(service_file, 'r') as f:
+                content = f.read()
+            
+            # 更新 VLLM_MODEL_PATH 环境变量
+            import re
+            new_content = re.sub(
+                r'Environment="VLLM_MODEL_PATH=[^"]*"',
+                f'Environment="VLLM_MODEL_PATH={model_path}"',
+                content
+            )
+            
+            if new_content != content:
+                with open(service_file, 'w') as f:
+                    f.write(new_content)
+                # 重新加载 systemd 配置
+                subprocess.run(['systemctl', 'daemon-reload'], capture_output=True)
+                return True
+        
+        # 如果没有 systemd 服务文件，尝试更新启动脚本
         if not os.path.exists(VLLM_START_SCRIPT):
             return False
 
@@ -476,7 +498,15 @@ def _update_vllm_script(model_path: str) -> bool:
         replaced = False
 
         for line in lines:
-            if 'vllm serve' in line and not line.strip().startswith('#'):
+            if 'VLLM_MODEL_PATH' in line and '=' in line and not line.strip().startswith('#'):
+                # 更新环境变量
+                parts = line.split('=', 1)
+                if len(parts) >= 2:
+                    new_line = f'{parts[0]}="{model_path}"'
+                    new_lines.append(new_line)
+                    replaced = True
+                    continue
+            elif 'vllm serve' in line and not line.strip().startswith('#'):
                 # 替换模型路径
                 parts = line.split('vllm serve')
                 if len(parts) >= 2:

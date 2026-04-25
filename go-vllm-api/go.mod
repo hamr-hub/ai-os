@@ -16,7 +16,7 @@ require (
 )
 
 require (
-	github.com/NVIDIA/go-nvml v0.13.0-1 // indirect
+	github.com/NVIDIA/go-nvml v0.12.9-0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect

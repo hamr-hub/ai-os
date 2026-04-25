@@ -567,7 +567,7 @@ func (m *GPUMonitor) collectFromDevice(device nvml.Device, index int) *GPUInfo {
 		memUtilPercent = int(usedMB * 100 / totalMB)
 	}
 
-	eccErrors, _, ret := device.GetTotalEccErrors(nvml.MEMORY_ERROR_TYPE_SINGLE_BIT_ECC, nvml.ECC_COUNTER_TYPE_VOLATILE)
+	eccErrors, ret := device.GetTotalEccErrors(0, 0)
 	if ret != nvml.SUCCESS {
 		eccErrors = 0
 	}
