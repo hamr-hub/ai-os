@@ -70,134 +70,304 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div
-    class="vllm-metrics-card rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
-  >
-    <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-2">
-        <Server class="w-4 h-4 text-purple-500" />
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">vLLM 服务指标</h3>
-      </div>
-      <span
-        class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-        :class="
-          isAvailable
-            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-            : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-        "
-      >
-        {{ isAvailable ? '运行中' : '未运行' }}
-      </span>
-    </div>
+  <div class="card-header">
+    <div class="icon-wrap purple"><Server class="card-icon-inner" /></div>
+    <span class="card-title">vLLM 服务指标</span>
+    <span v-if="isAvailable" class="badge online"><span class="dot online"></span>运行中</span>
+    <span v-else class="badge offline"><span class="dot offline"></span>未运行</span>
+  </div>
 
-    <template v-if="isAvailable && metrics">
-      <div class="grid grid-cols-2 gap-3">
-        <div class="flex items-center gap-2 p-2 rounded bg-gray-50 dark:bg-gray-700/50">
-          <Activity class="w-4 h-4 text-blue-500" />
-          <div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">运行请求</div>
-            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {{ metrics.running_requests }}
-            </div>
-          </div>
+  <template v-if="isAvailable && metrics">
+    <div class="metrics-grid">
+      <div class="metric-item">
+        <Activity class="metric-icon blue" />
+        <div class="metric-content">
+          <div class="metric-label">运行请求</div>
+          <div class="metric-val">{{ metrics.running_requests }}</div>
         </div>
+      </div>
 
-        <div class="flex items-center gap-2 p-2 rounded bg-gray-50 dark:bg-gray-700/50">
-          <ArrowRight
-            class="w-4 h-4"
+      <div class="metric-item">
+        <ArrowRight
+          class="metric-icon"
+          :class="
+            queueStatus === 'critical'
+              ? 'red'
+              : queueStatus === 'warning'
+                ? 'yellow'
+                : 'green'
+          "
+        />
+        <div class="metric-content">
+          <div class="metric-label">等待请求</div>
+          <div
+            class="metric-val"
             :class="
               queueStatus === 'critical'
-                ? 'text-red-500'
+                ? 'red'
                 : queueStatus === 'warning'
-                  ? 'text-yellow-500'
-                  : 'text-green-500'
+                  ? 'yellow'
+                  : ''
             "
-          />
-          <div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">等待请求</div>
-            <div
-              class="text-sm font-semibold"
-              :class="
-                queueStatus === 'critical'
-                  ? 'text-red-500'
-                  : queueStatus === 'warning'
-                    ? 'text-yellow-500'
-                    : 'text-gray-900 dark:text-gray-100'
-              "
-            >
-              {{ metrics.waiting_requests }}
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 p-2 rounded bg-gray-50 dark:bg-gray-700/50">
-          <Layers
-            class="w-4 h-4"
-            :class="cacheStatus === 'warning' ? 'text-yellow-500' : 'text-purple-500'"
-          />
-          <div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">KV 缓存使用</div>
-            <div
-              class="text-sm font-semibold"
-              :class="
-                cacheStatus === 'warning' ? 'text-yellow-500' : 'text-gray-900 dark:text-gray-100'
-              "
-            >
-              {{ cacheUsagePercent.toFixed(1) }}%
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 p-2 rounded bg-gray-50 dark:bg-gray-700/50">
-          <Gauge class="w-4 h-4 text-green-500" />
-          <div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">生成吞吐</div>
-            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {{ metrics.generation_throughput.toFixed(1) }} tok/s
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 p-2 rounded bg-gray-50 dark:bg-gray-700/50">
-          <Clock class="w-4 h-4 text-orange-500" />
-          <div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">首 Token 延迟</div>
-            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {{ metrics.time_to_first_token.toFixed(3) }}s
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 p-2 rounded bg-gray-50 dark:bg-gray-700/50">
-          <Gauge class="w-4 h-4 text-indigo-500" />
-          <div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">缓存命中率</div>
-            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {{ metrics.prefix_cache_hit_rate.toFixed(1) }}%
-            </div>
+          >
+            {{ metrics.waiting_requests }}
           </div>
         </div>
       </div>
 
-      <div class="mt-3">
-        <div class="h-2 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden">
+      <div class="metric-item">
+        <Layers
+          class="metric-icon"
+          :class="cacheStatus === 'warning' ? 'yellow' : 'purple'"
+        />
+        <div class="metric-content">
+          <div class="metric-label">KV 缓存使用</div>
           <div
-            class="h-full rounded-full transition-all duration-300"
-            :class="getProgressColor(cacheUsagePercent)"
-            :style="{ width: `${Math.min(cacheUsagePercent, 100)}%` }"
-          />
-        </div>
-        <div class="text-xs text-gray-400 mt-1">
-          GPU KV Cache: {{ cacheUsagePercent.toFixed(1) }}%
+            class="metric-val"
+            :class="cacheStatus === 'warning' ? 'yellow' : ''"
+          >
+            {{ cacheUsagePercent.toFixed(1) }}%
+          </div>
         </div>
       </div>
-    </template>
 
-    <template v-else>
-      <div class="text-center py-4 text-gray-400 dark:text-gray-500">
-        <Server class="w-8 h-8 mx-auto mb-2 opacity-50" />
-        <p class="text-sm">vLLM 服务未运行或不可访问</p>
+      <div class="metric-item">
+        <Gauge class="metric-icon green" />
+        <div class="metric-content">
+          <div class="metric-label">生成吞吐</div>
+          <div class="metric-val">{{ metrics.generation_throughput.toFixed(1) }} tok/s</div>
+        </div>
       </div>
-    </template>
+
+      <div class="metric-item">
+        <Clock class="metric-icon orange" />
+        <div class="metric-content">
+          <div class="metric-label">首 Token 延迟</div>
+          <div class="metric-val">{{ metrics.time_to_first_token.toFixed(3) }}s</div>
+        </div>
+      </div>
+
+      <div class="metric-item">
+        <Gauge class="metric-icon indigo" />
+        <div class="metric-content">
+          <div class="metric-label">缓存命中率</div>
+          <div class="metric-val">{{ metrics.prefix_cache_hit_rate.toFixed(1) }}%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cache-bar-section">
+      <div class="cache-bar-track">
+        <div
+          class="cache-bar-fill"
+          :style="{
+            width: `${Math.min(cacheUsagePercent, 100)}%`,
+            background: getProgressColor(cacheUsagePercent),
+          }"
+        />
+      </div>
+      <div class="cache-bar-label">
+        GPU KV Cache: {{ cacheUsagePercent.toFixed(1) }}%
+      </div>
+    </div>
+  </template>
+
+  <div v-else class="empty-state">
+    <Server class="empty-icon" />
+    <p>vLLM 服务未运行或不可访问</p>
   </div>
 </template>
+
+<style scoped>
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.icon-wrap.purple {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+}
+
+.card-icon-inner {
+  width: 16px;
+  height: 16px;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge.online {
+  background: rgba(34, 197, 94, 0.1);
+  color: #059669;
+}
+
+.badge.offline {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot.online {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+
+.dot.offline {
+  background: #6b7280;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.metric-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.metric-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.metric-icon.blue {
+  color: #60a5fa;
+}
+
+.metric-icon.green {
+  color: #22c55e;
+}
+
+.metric-icon.red {
+  color: #ef4444;
+}
+
+.metric-icon.yellow {
+  color: #f59e0b;
+}
+
+.metric-icon.purple {
+  color: #8b5cf6;
+}
+
+.metric-icon.orange {
+  color: #f97316;
+}
+
+.metric-icon.indigo {
+  color: #6366f1;
+}
+
+.metric-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.metric-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.metric-val.red {
+  color: #ef4444;
+}
+
+.metric-val.yellow {
+  color: #f59e0b;
+}
+
+.cache-bar-section {
+  margin-top: 12px;
+}
+
+.cache-bar-track {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cache-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.cache-bar-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.empty-icon {
+  width: 32px;
+  height: 32px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  font-size: 13px;
+  margin: 0;
+}
+</style>
