@@ -3,8 +3,8 @@
 ## 架构
 
 ```
-前端 Vite (30000) → proxy /api/manage → Python FastAPI (35000)
-                                → proxy /v1, /health → Go go-vllm-api (35001)
+前端 Vite (30001) → proxy /api/manage, /api/* → Python FastAPI /manage/* (35000)
+                                → proxy /api/health, /v1, /health → Go go-vllm-api (35001)
                                 → aiclient2api (3000, Docker部署)
                                 → Redis (6379)
 ```
@@ -43,7 +43,7 @@ go run cmd/server/main.go --port 35001    # http://localhost:35001
 ### 4. 前端
 ```bash
 cd frontend
-pnpm install && pnpm dev    # http://localhost:30000
+pnpm install && pnpm dev    # http://localhost:30001
 ```
 
 ### 5. aiclient2api (Docker)
@@ -63,10 +63,15 @@ cd aiclient2api && docker compose up -d    # http://localhost:3000
 ```typescript
 // frontend/vite.config.ts
 server: {
-  port: 30000,
+  port: 30001,
   proxy: {
     '/api/manage': { target: 'http://localhost:35000', changeOrigin: true },
-    '/api': { target: 'http://localhost:35000', changeOrigin: true },
+    '/api/health': { target: 'http://localhost:35001', changeOrigin: true, rewrite: () => '/health' },
+    '/api': {
+      target: 'http://localhost:35000',
+      changeOrigin: true,
+      rewrite: (path) => path.replace(/^\/api/, '/manage'),
+    },
     '/v1': { target: 'http://localhost:35001', changeOrigin: true },
     '/health': { target: 'http://localhost:35001', changeOrigin: true },
   }

@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any
@@ -30,28 +32,6 @@ from middleware.error_handler import (
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.timeout_handler import TimeoutHandlerMiddleware
 
-app = FastAPI(title="AI Controller API", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.middleware("http")(RateLimitMiddleware(max_requests=100, window_seconds=60))
-app.middleware("http")(TimeoutHandlerMiddleware(timeout_seconds=60))
-
-app.include_router(v1_router)
-app.include_router(manage_router)
-app.include_router(integration_router)
-app.include_router(health_router)
-app.include_router(websocket_router)
-app.include_router(agent_router)
-
-
-@app.middleware("http")
 async def request_tracking_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
@@ -95,10 +75,6 @@ async def request_tracking_middleware(request: Request, call_next):
             )
         except Exception as exc:
             logger.error(f"metrics request record failed for {request.url.path}: {exc}")
-
-app.add_exception_handler(HTTPException, http_exception_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
-app.add_exception_handler(ControllerException, controller_exception_handler)
 
 config_watcher.register_callback(_on_config_changed)
 
@@ -175,8 +151,7 @@ async def save_history_loop():
         await asyncio.sleep(5)  # Changed to 5 seconds for more reasonable resolution
 
 
-@app.on_event("startup")
-async def startup_event():
+async def startup_event(app: FastAPI):
     app.state.vllm_request_client = httpx.AsyncClient(
         timeout=VLLM_REQUEST_TIMEOUT,
         limits=VLLM_CLIENT_LIMITS,
@@ -211,8 +186,7 @@ async def startup_event():
     structured_logger.info("AI Controller service started", action="startup")
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
+async def shutdown_event(app: FastAPI):
     config_watcher.stop_watching()
     await cache_updater.stop()
     for task in _background_tasks:
@@ -235,6 +209,41 @@ async def shutdown_event():
     sys_controller.cleanup_all_managed_processes()
 
     structured_logger.info("AI Controller service stopped", action="shutdown")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await startup_event(app)
+    try:
+        yield
+    finally:
+        await shutdown_event(app)
+
+
+app = FastAPI(title="AI Controller API", version="1.0.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.middleware("http")(RateLimitMiddleware(max_requests=100, window_seconds=60))
+app.middleware("http")(TimeoutHandlerMiddleware(timeout_seconds=60))
+app.middleware("http")(request_tracking_middleware)
+
+app.include_router(v1_router)
+app.include_router(manage_router)
+app.include_router(integration_router)
+app.include_router(health_router)
+app.include_router(websocket_router)
+app.include_router(agent_router)
+
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
+app.add_exception_handler(ControllerException, controller_exception_handler)
 
 
 if __name__ == "__main__":

@@ -135,6 +135,10 @@ server {
         proxy_pass http://python_backend/manage/;
     }
 
+    location = /api/health {
+        proxy_pass http://go_backend/health;
+    }
+
     location /v1/ {
         proxy_pass http://go_backend/v1/;
     }

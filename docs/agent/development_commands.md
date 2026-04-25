@@ -8,7 +8,7 @@
 
 ```bash
 cd frontend
-pnpm dev              # 开发服务器 http://localhost:30000
+pnpm dev              # 开发服务器 http://localhost:30001
 pnpm build            # 生产构建 → dist/
 pnpm lint             # 检查并自动修复
 pnpm lint:check       # 仅检查

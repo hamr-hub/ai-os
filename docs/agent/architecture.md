@@ -47,8 +47,9 @@ frontend/src/
 ```
 
 **代理路由**
-- `/api/manage/*` → Python 后端 (35000)
-- `/api/*` → Python 后端 (35000)
+- `/api/manage/*` → Python 后端 `/manage/*` (35000)
+- `/api/*` → Python 后端 `/manage/*` 别名 (35000)
+- `/api/health`、`/api/health/detailed` → Go 后端健康检查别名 (35001)
 - `/v1/*` → Go 后端 (35001)
 - `/health` → Go 后端 (35001)
 

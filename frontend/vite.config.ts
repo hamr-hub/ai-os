@@ -4,7 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import Markdown from 'unplugin-vue-markdown/vite'
 import { resolve } from 'path'
 
-const backend = process.env.VITE_BACKEND || 'http://localhost:35000'
+const manageBackend = process.env.VITE_MANAGE_BACKEND || process.env.VITE_BACKEND || 'http://localhost:35000'
+const v1Backend = process.env.VITE_V1_BACKEND || 'http://localhost:35001'
 
 export default defineConfig({
   plugins: [
@@ -27,24 +28,34 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/manage': {
-        target: backend,
+        target: manageBackend,
         changeOrigin: true,
       },
+      '/api/health/detailed': {
+        target: v1Backend,
+        changeOrigin: true,
+        rewrite: () => '/health/detailed',
+      },
+      '/api/health': {
+        target: v1Backend,
+        changeOrigin: true,
+        rewrite: () => '/health',
+      },
       '/api': {
-        target: backend,
+        target: manageBackend,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/manage'),
       },
       '/v1': {
-        target: backend,
+        target: v1Backend,
         changeOrigin: true,
       },
       '/health': {
-        target: backend,
+        target: v1Backend,
         changeOrigin: true,
       },
       '/ws': {
-        target: backend,
+        target: manageBackend,
         changeOrigin: true,
         ws: true,
       },

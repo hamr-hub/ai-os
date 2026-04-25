@@ -495,6 +495,12 @@ async def generate_image(request: Request, body: ImageGenerationRequest):
         raise ModelNotFoundException(body.model)
 
     try:
+        await ensure_model_ready(scheduler, body.model)
+
+        backend_url = get_backend_url(body.model, scheduler)
+        vllm_url = f"{backend_url}/v1/images/generations"
+
+        req_data = {
             "prompt": body.prompt,
             "n": body.n,
             "size": body.size,
@@ -513,12 +519,23 @@ async def generate_image(request: Request, body: ImageGenerationRequest):
         )
         return result
     except httpx.HTTPError as e:
+        logger.warning("Image generation proxy error for model %s: %s", body.model, e)
         metrics.record_request(
             endpoint="/v1/images/generations", status_code=503,
             response_time=(datetime.now() - start_time).total_seconds(),
             model_name=body.model
         )
         raise ModelServiceUnavailableException(body.model, str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Image generation failed for model %s", body.model)
+        metrics.record_request(
+            endpoint="/v1/images/generations", status_code=500,
+            response_time=(datetime.now() - start_time).total_seconds(),
+            model_name=body.model
+        )
+        raise HTTPException(status_code=500, detail=f"Image generation failed: {str(e)}")
 
 
 @v1_router.post("/embeddings")
@@ -566,12 +583,23 @@ async def create_embeddings(request: Request, body: EmbeddingRequest):
         )
         return result
     except httpx.HTTPError as e:
+        logger.warning("Embeddings proxy error for model %s: %s", model_name, e)
         metrics.record_request(
             endpoint="/v1/embeddings", status_code=503,
             response_time=(datetime.now() - start_time).total_seconds(),
             model_name=model_name
         )
         raise ModelServiceUnavailableException(model_name, str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Embeddings request failed for model %s", model_name)
+        metrics.record_request(
+            endpoint="/v1/embeddings", status_code=500,
+            response_time=(datetime.now() - start_time).total_seconds(),
+            model_name=model_name
+        )
+        raise HTTPException(status_code=500, detail=f"Embeddings request failed: {str(e)}")
     finally:
         if slot_acquired:
             scheduler.release_request(model_name)

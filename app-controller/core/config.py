@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator, ValidationError
+from pydantic import BaseModel, Field, field_validator, ValidationError
 from typing import Optional, Dict, List, Any
 import yaml
 import os
@@ -40,9 +40,10 @@ class ModelConfig(BaseModel):
     ctx_size: int = 4096
     n_threads: Optional[int] = None
     host: str = "0.0.0.0"
-    extra_args: List[str] = []
+    extra_args: List[str] = Field(default_factory=list)
 
-    @validator('required_memory')
+    @field_validator('required_memory')
+    @classmethod
     def validate_memory_format(cls, v):
         if not v:
             return "8GB"
@@ -79,12 +80,13 @@ class SettingsConfig(BaseModel):
     gpu_memory_utilization: float = Field(ge=0.5, le=0.99, default=0.9)
     default_memory_strategy: str = "balanced"
 
-    queue: QueueConfig = QueueConfig()
-    priority: PriorityConfig = PriorityConfig()
-    recovery: RecoveryConfig = RecoveryConfig()
+    queue: QueueConfig = Field(default_factory=QueueConfig)
+    priority: PriorityConfig = Field(default_factory=PriorityConfig)
+    recovery: RecoveryConfig = Field(default_factory=RecoveryConfig)
     redis: Optional[RedisConfig] = None
 
-    @validator('default_memory_strategy')
+    @field_validator('default_memory_strategy')
+    @classmethod
     def validate_memory_strategy(cls, v):
         valid_strategies = ["conservative", "balanced", "aggressive"]
         if v not in valid_strategies:
@@ -99,8 +101,8 @@ class LlamaCppConfig(BaseModel):
     default_host: str = "0.0.0.0"
 
 class AppConfig(BaseModel):
-    models: Dict[str, ModelConfig] = {}
-    settings: SettingsConfig = SettingsConfig()
+    models: Dict[str, ModelConfig] = Field(default_factory=dict)
+    settings: SettingsConfig = Field(default_factory=SettingsConfig)
     vllm: Optional[Dict[str, Any]] = None
     llama_cpp: Optional[LlamaCppConfig] = None
 

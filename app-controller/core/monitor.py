@@ -4,6 +4,7 @@ import os
 import asyncio
 import httpx
 import logging
+import warnings
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 from core.cache_service import cache_service
@@ -44,7 +45,9 @@ class NVMLCollector:
         self._driver_version = ""
         self._nvml_init_result = None
         try:
-            import pynvml
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", FutureWarning)
+                import pynvml
             self._pynvml = pynvml
             self._nvml_init_result = pynvml.nvmlInit()
             self._initialized = True

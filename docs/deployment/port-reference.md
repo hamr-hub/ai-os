@@ -4,7 +4,7 @@
 
 | 服务 | 开发端口 | Docker 端口 | 说明 |
 |------|---------|-------------|------|
-| 前端 Vite/Nginx | 30000 | 30000→80 | 开发 Vite / 生产 Nginx |
+| 前端 Vite/Nginx | 30001 | 30000→80 | 开发 Vite / 生产 Nginx |
 | Python 后端 FastAPI | 35000 | 35000 | 管理接口 `/manage/*` |
 | Go 后端 go-vllm-api | 35001 | 35001 | 推理接口 `/v1/*` |
 | aiclient2api | 3000 | 3000 | API 网关 (Docker部署) |
@@ -15,10 +15,12 @@
 
 | 路径 | 代理目标 | 后端 |
 |------|---------|------|
-| `/api/manage` | `http://localhost:35000` | Python FastAPI |
-| `/api` | `http://localhost:35000` | Python FastAPI |
-| `/v1` | `http://localhost:35001` | Go go-vllm-api |
-| `/health` | `http://localhost:35001` | Go go-vllm-api |
+| `/api/manage/*` | `http://localhost:35000/manage/*` | Python FastAPI |
+| `/api/*` | `http://localhost:35000/manage/*` | Python FastAPI 管理接口别名 |
+| `/api/health` | `http://localhost:35001/health` | Go go-vllm-api 健康检查别名 |
+| `/api/health/detailed` | `http://localhost:35001/health/detailed` | Go go-vllm-api 详细健康检查别名 |
+| `/v1/*` | `http://localhost:35001/v1/*` | Go go-vllm-api |
+| `/health` | `http://localhost:35001/health` | Go go-vllm-api |
 
 ## vLLM 端口
 

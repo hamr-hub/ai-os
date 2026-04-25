@@ -6,7 +6,7 @@
 
 | 测试对象 | 访问地址 | 端口 |
 |---------|---------|------|
-| 前端页面 | http://localhost:30000 | 30000 |
+| 前端页面 | http://localhost:30001 | 30001 |
 | Python 后端 API | http://localhost:35000 | 35000 |
 | Python API 文档 | http://localhost:35000/docs | 35000 |
 | Go 后端 API | http://localhost:35001 | 35001 |
@@ -71,7 +71,7 @@ docker exec ai-os-redis redis-cli info server
 
 ```bash
 # 页面可访问性
-curl -s -o /dev/null -w "%{http_code}" http://localhost:30000
+curl -s -o /dev/null -w "%{http_code}" http://localhost:30001
 # 预期输出：200
 ```
 
@@ -273,13 +273,19 @@ hey -n 100 -c 50 http://localhost:35001/v1/models
 
 ### 问题 1：前端 API 请求 404
 
-**原因**：Nginx 代理配置中 `proxy_pass` 地址不正确
+**原因**：前端代理路由与后端真实路由不一致，或 `proxy_pass` 地址不正确
 
-**解决**：修改 `frontend/nginx.conf`，确保容器内代理地址使用 Docker 服务名
+**解决**：修改 `frontend/nginx.conf` 或 `frontend/vite.config.ts`，确保：
+- `/api/*` 代理到 Python 后端 `/manage/*`
+- `/api/health*`、`/health*`、`/v1/*` 代理到 Go 后端
+- 容器内代理地址使用 Docker 服务名
 
 ```nginx
 location /api/manage/ {
     proxy_pass http://python_backend/manage/;  # upstream: ai-controller:35000
+}
+location = /api/health {
+    proxy_pass http://go_backend/health;
 }
 location /v1/ {
     proxy_pass http://go_backend/v1/;          # upstream: go-vllm-api:35001

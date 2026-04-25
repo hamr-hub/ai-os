@@ -13,6 +13,7 @@ logger = logging.getLogger("ai_controller.sys_ctl")
 class SystemController:
     def __init__(self):
         self._use_sudo = False
+        self._command_timeout = 15
 
         self._restart_attempts: Dict[str, int] = {}
         self._last_restart_time: Dict[str, datetime] = {}
@@ -30,7 +31,21 @@ class SystemController:
         if self._use_sudo and os.name != 'nt':
             actual_cmd = ['sudo'] + actual_cmd
         logger.info("Running command: %s", ' '.join(actual_cmd))
-        result = subprocess.run(actual_cmd, capture_output=True, text=True)
+        try:
+            result = subprocess.run(
+                actual_cmd,
+                capture_output=True,
+                text=True,
+                timeout=self._command_timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            logger.error("Command timed out after %ss: %s", self._command_timeout, ' '.join(actual_cmd))
+            return subprocess.CompletedProcess(
+                args=actual_cmd,
+                returncode=124,
+                stdout=exc.stdout or '',
+                stderr=(exc.stderr or '') or f"command timed out after {self._command_timeout}s",
+            )
         if result.returncode != 0:
             logger.warning("Command failed: %s rc=%s stderr=%s", ' '.join(actual_cmd), result.returncode, (result.stderr or '').strip())
         return result
@@ -129,7 +144,8 @@ class SystemController:
             result = subprocess.run(
                 ['lsof', '-i', f':{port}', '-s', 'TCP:LISTEN', '-F', 'pc'],
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0:
                 lines = result.stdout.strip().split('\n')
@@ -144,6 +160,8 @@ class SystemController:
                     info = {'pid': pid, 'command': cmd}
                     cache_service.set(cache_key, info, ttl_seconds=10)
                     return info
+        except subprocess.TimeoutExpired:
+            logger.warning("Timed out while checking process info for port: %s", port)
         except Exception:
             logger.exception("Failed to get process info for port: %s", port)
         return None
