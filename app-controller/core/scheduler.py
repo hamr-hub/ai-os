@@ -198,10 +198,12 @@ class Scheduler:
         cache_key = f"ai_controller:cache:model_running:{model_name}"
         cached = cache_service.get(cache_key)
         if cached is not None:
+            logger.info(f"is_model_running({model_name}): cached={cached}")
             return cached
 
         with self._model_lock:
             backend_type = self.get_model_backend_type(model_name)
+            logger.info(f"is_model_running({model_name}): checking, backend_type={backend_type}")
 
             if backend_type == 'llama_cpp':
                 running = llama_cpp_manager.is_server_running(model_name)
@@ -219,15 +221,17 @@ class Scheduler:
             if backend_type == 'vllm':
                 from core.vllm_manager import get_current_model_info
                 current_info = get_current_model_info()
-                logger.info(f"is_model_running({model_name}): backend_type=vllm, current_info={current_info}")
+                logger.info(f"is_model_running({model_name}): backend_type={backend_type}, current_info={current_info}")
                 if current_info and current_info.get('running'):
-                    if current_info.get('name') == model_name:
+                    current_name = current_info.get('name')
+                    logger.info(f"is_model_running: current_name={current_name}, requested={model_name}, match={current_name == model_name}")
+                    if current_name == model_name:
                         if model_name not in self.running_models:
                             self.running_models[model_name] = datetime.now()
                         cache_service.set(cache_key, True, ttl=3)
                         return True
                     else:
-                        logger.info(f"is_model_running: name mismatch, current={current_info.get('name')}, requested={model_name}")
+                        logger.info(f"is_model_running: name mismatch, current={current_name}, requested={model_name}")
                 
                 if model_name in self.running_models:
                     del self.running_models[model_name]

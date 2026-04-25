@@ -127,22 +127,22 @@ const toggleCollapse = () => {
                 <span class="stat-label">LOAD</span>
                 <span
                   class="stat-value digital-font"
-                  :class="gpuInfo.utilization > 80 ? 'text-red-400' : 'text-green-400'"
+                  :class="(gpuInfo.utilization ?? 0) > 80 ? 'text-red-400' : 'text-green-400'"
                 >
-                  {{ gpuInfo.utilization.toFixed(0) }}%
+                  {{ gpuInfo.utilization?.toFixed(0) ?? '--' }}%
                 </span>
               </div>
               <div class="stat-bar-bg">
                 <div
                   class="stat-bar-fill"
-                  :style="{ width: gpuInfo.utilization + '%' }"
-                  :class="gpuInfo.utilization > 80 ? 'bg-red-500' : 'bg-green-500'"
+                  :style="{ width: (gpuInfo.utilization ?? 0) + '%' }"
+                  :class="(gpuInfo.utilization ?? 0) > 80 ? 'bg-red-500' : 'bg-green-500'"
                 ></div>
               </div>
               <div class="stat-row mt-2">
                 <span class="stat-label">VRAM</span>
                 <span class="stat-value digital-font"
-                  >{{ (gpuInfo.used_memory / 1024).toFixed(1) }}G</span
+                  >{{ (gpuInfo.used_memory / 1024)?.toFixed(1) ?? '--' }}G</span
                 >
               </div>
             </div>

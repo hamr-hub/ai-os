@@ -52,6 +52,23 @@ class VLLMMetricsScraper:
         except Exception:
             return {}
 
+    def _extract_value(self, line: str) -> Optional[float]:
+        if "}" in line:
+            value_part = line.split("}", 1)[1].strip()
+            if value_part:
+                try:
+                    return float(value_part)
+                except ValueError:
+                    pass
+        else:
+            parts = line.split()
+            if len(parts) >= 2:
+                try:
+                    return float(parts[1])
+                except ValueError:
+                    pass
+        return None
+
     def _parse_prometheus_text(self, text: str) -> Dict:
         gauge_values = {}
         histogram_sums = {}
@@ -64,52 +81,46 @@ class VLLMMetricsScraper:
 
             for metric_key, alias in self.VLLM_METRIC_KEYS.items():
                 if line.startswith(metric_key + " ") or line.startswith(metric_key + "{"):
-                    match = re.search(r'=([\d.eE+-]+)', line)
-                    if match:
-                        try:
-                            gauge_values[alias] = float(match.group(1))
-                        except ValueError:
-                            pass
-                    elif line.startswith(metric_key + " ") and not "{" in line:
+                    if line.startswith(metric_key + " ") and "{" not in line:
                         parts = line.split()
                         if len(parts) >= 2:
                             try:
                                 gauge_values[alias] = float(parts[1])
                             except ValueError:
                                 pass
+                    else:
+                        value = self._extract_value(line)
+                        if value is not None:
+                            gauge_values[alias] = value
 
             for metric_key, alias in self.HISTOGRAM_SUM_KEYS.items():
                 sum_line = metric_key + "_sum"
                 if line.startswith(sum_line + " ") or line.startswith(sum_line + "{"):
-                    match = re.search(r'=([\d.eE+-]+)', line)
-                    if match:
-                        try:
-                            histogram_sums[alias] = float(match.group(1))
-                        except ValueError:
-                            pass
-                    elif line.startswith(sum_line + " ") and not "{" in line:
+                    if line.startswith(sum_line + " ") and "{" not in line:
                         parts = line.split()
                         if len(parts) >= 2:
                             try:
                                 histogram_sums[alias] = float(parts[1])
                             except ValueError:
                                 pass
+                    else:
+                        value = self._extract_value(line)
+                        if value is not None:
+                            histogram_sums[alias] = value
 
                 count_line = metric_key + "_count"
                 if line.startswith(count_line + " ") or line.startswith(count_line + "{"):
-                    match = re.search(r'=([\d.eE+-]+)', line)
-                    if match:
-                        try:
-                            histogram_counts[alias] = float(match.group(1))
-                        except ValueError:
-                            pass
-                    elif line.startswith(count_line + " ") and not "{" in line:
+                    if line.startswith(count_line + " ") and "{" not in line:
                         parts = line.split()
                         if len(parts) >= 2:
                             try:
                                 histogram_counts[alias] = float(parts[1])
                             except ValueError:
                                 pass
+                    else:
+                        value = self._extract_value(line)
+                        if value is not None:
+                            histogram_counts[alias] = value
 
         result = {}
         for alias in self.VLLM_METRIC_KEYS.values():

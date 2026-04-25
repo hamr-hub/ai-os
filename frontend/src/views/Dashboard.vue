@@ -373,6 +373,7 @@ const handleScale = (cardId: string, delta: number) => {
                   :y-max="100"
                 />
               </div>
+              </div>
             </template>
             <div v-else class="gpu-chart-empty-state">
               <TrendingUp class="chart-empty-icon" />

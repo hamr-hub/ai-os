@@ -101,7 +101,9 @@ export const useServerStore = defineStore('server', () => {
         const parsed = JSON.parse(savedConfig) as StoredServerConfig
         activeUrl.value = normalizeUrl(parsed.activeUrl ?? '')
         backendType.value = parsed.backendType ?? 'auto'
-      } catch {}
+      } catch (err) {
+        console.warn('[ServerStore] Failed to parse saved config:', err)
+      }
     }
 
     const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY)
@@ -118,7 +120,9 @@ export const useServerStore = defineStore('server', () => {
           .filter((item) => item.url)
           .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
           .slice(0, MAX_HISTORY)
-      } catch {}
+      } catch (err) {
+        console.warn('[ServerStore] Failed to parse saved history:', err)
+      }
     }
   }
 

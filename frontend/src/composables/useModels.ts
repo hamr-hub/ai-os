@@ -134,7 +134,9 @@ export function useModels() {
           const defaultModelResult = await getDefaultModel()
           defaultModel.value = defaultModelResult.default_model
         }
-      } catch {}
+      } catch (err) {
+        console.error('[useModels] Switch polling error:', err)
+      }
     }, 5000)
   }
 

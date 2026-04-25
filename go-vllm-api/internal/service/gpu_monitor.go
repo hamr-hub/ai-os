@@ -360,14 +360,15 @@ func parsePrometheusText(text string) *VLLMMetricsData {
 }
 
 func extractMetricValue(line string) *float64 {
-	re := regexp.MustCompile(`\} ([0-9.eE+-]+)$`)
-	match := re.FindStringSubmatch(line)
-	if len(match) > 1 {
-		if v, err := strconv.ParseFloat(match[1], 64); err == nil {
-			return &v
+	if strings.Contains(line, "}") {
+		idx := strings.Index(line, "}")
+		valuePart := strings.TrimSpace(line[idx+1:])
+		if valuePart != "" {
+			if v, err := strconv.ParseFloat(valuePart, 64); err == nil {
+				return &v
+			}
 		}
-	}
-	if !strings.Contains(line, "{") {
+	} else if !strings.Contains(line, "{") {
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
 			if v, err := strconv.ParseFloat(parts[1], 64); err == nil {
@@ -386,12 +387,13 @@ func extractHistogramBucket(line string) (string, string) {
 	}
 	leStr := leMatch[1]
 
-	valueRe := regexp.MustCompile(`\} ([0-9.eE+-]+)$`)
-	valMatch := valueRe.FindStringSubmatch(line)
-	if valMatch != nil {
-		return leStr, valMatch[1]
-	}
-	if !strings.Contains(line, "{") {
+	if strings.Contains(line, "}") {
+		idx := strings.Index(line, "}")
+		valuePart := strings.TrimSpace(line[idx+1:])
+		if valuePart != "" {
+			return leStr, valuePart
+		}
+	} else if !strings.Contains(line, "{") {
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
 			return leStr, parts[1]

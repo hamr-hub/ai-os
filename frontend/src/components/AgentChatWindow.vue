@@ -297,7 +297,9 @@ const copyMessage = async (id: string, content: string) => {
     setTimeout(() => {
       copiedId.value = null
     }, 2000)
-  } catch {}
+  } catch (err) {
+    console.warn('[AgentChat] Clipboard copy failed:', err)
+  }
 }
 
 const autoResize = (event: Event) => {

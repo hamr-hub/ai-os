@@ -305,7 +305,9 @@ export async function chatCompletionStream(
           }
           const content = json.choices?.[0]?.delta?.content
           if (content) onChunk(content)
-        } catch {}
+        } catch (err) {
+          if (data.length < 200) console.warn('[SSE] Parse skip:', data, err)
+        }
       }
     }
   } catch (error) {
@@ -466,7 +468,8 @@ export async function agentChatStream(
 
         try {
           onChunk(JSON.parse(data))
-        } catch {
+        } catch (err) {
+          if (data.length < 200) console.warn('[Agent SSE] Parse skip:', data, err)
           onChunk(data)
         }
       }

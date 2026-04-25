@@ -43,8 +43,8 @@ const fetchInitialData = async () => {
       selectedModel.value = models.value[0].id
       await fetchReport(selectedModel.value)
     }
-  } catch {
-    console.error('Failed to fetch benchmark data:')
+  } catch (err) {
+    console.error('Failed to fetch benchmark data:', err)
   } finally {
     loading.value = false
   }
@@ -58,7 +58,8 @@ const fetchReport = async (modelName: string) => {
     } else {
       currentReport.value = null
     }
-  } catch {
+  } catch (err) {
+    console.warn('[Benchmarks] Failed to fetch report:', err)
     currentReport.value = null
   }
 }
@@ -73,7 +74,8 @@ const runTest = async (modelName: string) => {
     }
     // Refresh history
     testHistory.value = await getTestHistory()
-  } catch {
+  } catch (err) {
+    console.error('[Benchmarks] Test failed:', err)
     appStore.error(`模型 ${modelName} 评测失败`)
   } finally {
     testingModel.value = null
@@ -193,13 +195,13 @@ const getStatusClass = (status: string) => {
               <div class="q-stat">
                 <span class="q-label">Avg TPS</span>
                 <span class="q-val text-blue-400">{{
-                  currentReport.performance_metrics?.overall?.avg_tps.toFixed(2)
+                  currentReport.performance_metrics?.overall?.avg_tps?.toFixed(2) ?? '--'
                 }}</span>
               </div>
               <div class="q-stat">
                 <span class="q-label">Latency</span>
                 <span class="q-val text-yellow-400"
-                  >{{ currentReport.performance_metrics?.overall?.avg_latency.toFixed(2) }}s</span
+                  >{{ currentReport.performance_metrics?.overall?.avg_latency?.toFixed(2) ?? '--' }}s</span
                 >
               </div>
               <div class="q-stat">

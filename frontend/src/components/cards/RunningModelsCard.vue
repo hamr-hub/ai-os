@@ -29,27 +29,21 @@ const handleStartWithToast = async (name: string) => {
   try {
     await props.handleStartModel(name)
     store.success(`模型 ${name} 已开始启动`)
-  } catch {
-    store.error(`模型 ${name} 启动失败`)
-  }
+  } catch {}
 }
 
 const handleStopWithToast = async (name: string) => {
   try {
     await props.handleStopModel(name)
     store.success(`模型 ${name} 已停止`)
-  } catch {
-    store.error(`模型 ${name} 停止失败`)
-  }
+  } catch {}
 }
 
 const handleSwitchWithToast = async (name: string) => {
   try {
     await props.handleSwitchAndSetDefault(name)
     store.success(`正在切换到模型 ${name}，请等待加载完成`)
-  } catch {
-    store.error(`切换模型 ${name} 失败`)
-  }
+  } catch {}
 }
 </script>
 

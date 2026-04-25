@@ -27,7 +27,8 @@ export function useSystemData(intervalMs = 10000, initialCount: MaybeRefOrGetter
       } else {
         try {
           queueStatusRef.value = await getQueueStatus()
-        } catch {
+        } catch (err) {
+          console.warn('[useSystemData] Queue status fetch failed:', err)
           queueStatusRef.value = null
         }
       }
