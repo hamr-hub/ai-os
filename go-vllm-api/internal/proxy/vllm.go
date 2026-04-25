@@ -191,7 +191,7 @@ func (p *VLLMProxy) Embeddings(ctx context.Context, port int, payload interface{
 }
 
 func (p *VLLMProxy) PostEndpoint(ctx context.Context, port int, path string, payload interface{}) (interface{}, error) {
-	url := fmt.Sprintf("http://localhost:%d%s", port, path)
+	url := fmt.Sprintf("http://localhost:%d/%s", port, path)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err

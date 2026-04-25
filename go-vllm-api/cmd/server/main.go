@@ -73,8 +73,8 @@ func main() {
 	gpuMonitor.Start(ctx)
 
 	if redisRepo.IsConnected() {
-		cacheUpdater.Start(ctx, metricsCollector)
-		zapLogger.Info("cache updater started")
+		go cacheUpdater.Start(ctx, metricsCollector)
+		zapLogger.Info("cache updater starting")
 	}
 
 	configWatcher := config.NewConfigWatcher(*configPath, zapLogger)

@@ -32,6 +32,8 @@ import {
   ChevronDown,
   ChevronUp,
   RotateCw,
+  Expand,
+  Minimize,
 } from 'lucide-vue-next'
 
 const store = useAppStore()
@@ -73,6 +75,19 @@ const {
 } = useSystemData()
 
 const alertExpanded = ref(false)
+const expandedCards = ref<Record<string, boolean>>({
+  system: false,
+  vllm: false,
+  token: false,
+  gpu: false,
+  queue: false,
+  health: false,
+  models: false,
+})
+
+const toggleCardExpand = (card: string) => {
+  expandedCards.value[card] = !expandedCards.value[card]
+}
 
 const isRefreshing = computed(
   () =>
@@ -195,84 +210,15 @@ const handleSwitchWithToast = async (name: string) => {
       </div>
 
       <div v-else class="grid">
-        <div class="card gpu-card card-glow-cyan scale-in stagger-1">
-          <div class="card-header">
-            <div class="icon-wrap cyan"><Monitor class="card-icon-inner" /></div>
-            <span class="card-title">GPU 监控</span>
-            <span v-if="gpuStatus === 'available'" class="badge online"
-              ><span class="dot online"></span>在线</span
-            >
-            <span v-else class="badge offline"><span class="dot offline"></span>离线</span>
-          </div>
-          <GpuMetricsCard
-            :gpu="gpu"
-            :gpu-history="gpuHistory"
-            :gpu-status="gpuStatus"
-            :error="gpuHistoryError"
-            mode="compact"
-          >
-            <template #error-action>
-              <button class="retry-btn" @click="refreshAll">
-                <RotateCw class="w-3 h-3" /> 重试
-              </button>
-            </template>
-          </GpuMetricsCard>
-        </div>
-
-        <div class="card vllm-card card-glow-purple scale-in stagger-2">
-          <VLLMMetricsCard />
-        </div>
-
-        <div class="card token-card card-glow-purple scale-in stagger-3">
-          <div class="card-header">
-            <div class="icon-wrap purple"><Coins class="card-icon-inner" /></div>
-            <span class="card-title">Token 用量</span>
-            <span v-if="tokenStats" class="count-badge">{{ formatTokens(totalTokens) }}</span>
-          </div>
-          <div v-if="tokenStats" class="token-grid">
-            <div class="token-item">
-              <Activity class="w-4 h-4 text-blue-400" />
-              <div class="token-info">
-                <span class="token-value">{{ formatTokens(promptTokens) }}</span>
-                <span class="token-label">Prompt</span>
-              </div>
-            </div>
-            <div class="token-item">
-              <Coins class="w-4 h-4 text-green-400" />
-              <div class="token-info">
-                <span class="token-value">{{ formatTokens(completionTokens) }}</span>
-                <span class="token-label">Completion</span>
-              </div>
-            </div>
-            <div class="token-item">
-              <Zap class="w-4 h-4 text-purple-400" />
-              <div class="token-info">
-                <span class="token-value">{{ formatTokens(totalTokens) }}</span>
-                <span class="token-label">Total</span>
-              </div>
-            </div>
-          </div>
-          <div v-if="tokenStats && Object.keys(modelStats).length" class="model-token-list">
-            <div v-for="(stats, name) in modelStats" :key="name" class="model-token-row">
-              <span class="mt-name">{{ name }}</span>
-              <div class="mt-bar-track">
-                <div
-                  class="mt-bar-fill"
-                  :style="{
-                    width: `${Math.min(100, (stats.total_tokens / Math.max(totalTokens, 1)) * 100)}%`,
-                  }"
-                ></div>
-              </div>
-              <span class="mt-count">{{ formatTokens(stats.total_tokens) }}</span>
-            </div>
-          </div>
-          <div v-if="!tokenStats" class="empty-state">暂无统计</div>
-        </div>
-
-        <div class="card system-card card-glow-primary scale-in stagger-3">
+        <!-- Row 1: System Status | vLLM Metrics | Token Usage -->
+        <div class="card system-card card-glow-primary scale-in stagger-1" :class="{ 'card-expanded': expandedCards.system }">
           <div class="card-header">
             <div class="icon-wrap primary"><Server class="card-icon-inner" /></div>
             <span class="card-title">系统状态</span>
+            <button class="expand-btn" @click="toggleCardExpand('system')">
+              <Expand v-if="!expandedCards.system" class="w-3.5 h-3.5" />
+              <Minimize v-else class="w-3.5 h-3.5" />
+            </button>
           </div>
           <template v-if="systemStatus">
             <div class="system-grid">
@@ -367,11 +313,107 @@ const handleSwitchWithToast = async (name: string) => {
           </div>
         </div>
 
-        <div class="card queue-card card-glow-primary scale-in stagger-4">
+        <div class="card vllm-card card-glow-purple scale-in stagger-2" :class="{ 'card-expanded': expandedCards.vllm }">
+          <div class="card-header">
+            <div class="icon-wrap purple"><Activity class="card-icon-inner" /></div>
+            <span class="card-title">vLLM 服务指标</span>
+            <button class="expand-btn" @click="toggleCardExpand('vllm')">
+              <Expand v-if="!expandedCards.vllm" class="w-3.5 h-3.5" />
+              <Minimize v-else class="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <VLLMMetricsCard />
+        </div>
+
+        <div class="card token-card card-glow-purple scale-in stagger-3" :class="{ 'card-expanded': expandedCards.token }">
+          <div class="card-header">
+            <div class="icon-wrap purple"><Coins class="card-icon-inner" /></div>
+            <span class="card-title">Token 用量</span>
+            <span v-if="tokenStats" class="count-badge">{{ formatTokens(totalTokens) }}</span>
+            <button class="expand-btn" @click="toggleCardExpand('token')">
+              <Expand v-if="!expandedCards.token" class="w-3.5 h-3.5" />
+              <Minimize v-else class="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div v-if="tokenStats" class="token-grid">
+            <div class="token-item">
+              <Activity class="w-4 h-4 text-blue-400" />
+              <div class="token-info">
+                <span class="token-value">{{ formatTokens(promptTokens) }}</span>
+                <span class="token-label">Prompt</span>
+              </div>
+            </div>
+            <div class="token-item">
+              <Coins class="w-4 h-4 text-green-400" />
+              <div class="token-info">
+                <span class="token-value">{{ formatTokens(completionTokens) }}</span>
+                <span class="token-label">Completion</span>
+              </div>
+            </div>
+            <div class="token-item">
+              <Zap class="w-4 h-4 text-purple-400" />
+              <div class="token-info">
+                <span class="token-value">{{ formatTokens(totalTokens) }}</span>
+                <span class="token-label">Total</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="tokenStats && Object.keys(modelStats).length" class="model-token-list">
+            <div v-for="(stats, name) in modelStats" :key="name" class="model-token-row">
+              <span class="mt-name">{{ name }}</span>
+              <div class="mt-bar-track">
+                <div
+                  class="mt-bar-fill"
+                  :style="{
+                    width: `${Math.min(100, (stats.total_tokens / Math.max(totalTokens, 1)) * 100)}%`,
+                  }"
+                ></div>
+              </div>
+              <span class="mt-count">{{ formatTokens(stats.total_tokens) }}</span>
+            </div>
+          </div>
+          <div v-if="!tokenStats" class="empty-state">暂无统计</div>
+        </div>
+
+        <!-- Row 2: GPU Monitor (Full Width) -->
+        <div class="card gpu-card card-glow-cyan scale-in stagger-4 gpu-full-width" :class="{ 'card-expanded': expandedCards.gpu }">
+          <div class="card-header">
+            <div class="icon-wrap cyan"><Monitor class="card-icon-inner" /></div>
+            <span class="card-title">GPU 监控</span>
+            <span v-if="gpuStatus === 'available'" class="badge online"
+              ><span class="dot online"></span>在线</span
+            >
+            <span v-else class="badge offline"><span class="dot offline"></span>离线</span>
+            <button class="expand-btn" @click="toggleCardExpand('gpu')">
+              <Expand v-if="!expandedCards.gpu" class="w-3.5 h-3.5" />
+              <Minimize v-else class="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <GpuMetricsCard
+            :gpu="gpu"
+            :gpu-history="gpuHistory"
+            :gpu-status="gpuStatus"
+            :error="gpuHistoryError"
+            mode="compact"
+          >
+            <template #error-action>
+              <button class="retry-btn" @click="refreshAll">
+                <RotateCw class="w-3 h-3" /> 重试
+              </button>
+            </template>
+          </GpuMetricsCard>
+        </div>
+
+        <!-- Row 3: Request Queue | Health Alerts | Running Models -->
+        <div class="card queue-card card-glow-primary scale-in stagger-5" :class="{ 'card-expanded': expandedCards.queue }">
           <div class="card-header">
             <div class="icon-wrap primary"><Layers class="card-icon-inner" /></div>
             <span class="card-title">请求队列</span>
             <span v-if="queueStatus" class="count-badge">{{ totalQueueRequests }} 请求</span>
+            <button class="expand-btn" @click="toggleCardExpand('queue')">
+              <Expand v-if="!expandedCards.queue" class="w-3.5 h-3.5" />
+              <Minimize v-else class="w-3.5 h-3.5" />
+            </button>
           </div>
           <template v-if="queueStatus">
             <div v-if="activeQueueEntries.length" class="queue-list">
@@ -397,7 +439,7 @@ const handleSwitchWithToast = async (name: string) => {
           </div>
         </div>
 
-        <div class="card health-card card-glow-green scale-in stagger-5">
+        <div class="card health-card card-glow-green scale-in stagger-6" :class="{ 'card-expanded': expandedCards.health }">
           <div class="card-header">
             <div class="icon-wrap green"><ShieldCheck class="card-icon-inner" /></div>
             <span class="card-title">健康告警</span>
@@ -408,6 +450,10 @@ const handleSwitchWithToast = async (name: string) => {
             >
               {{ healthStatusColor.label }}
             </span>
+            <button class="expand-btn" @click="toggleCardExpand('health')">
+              <Expand v-if="!expandedCards.health" class="w-3.5 h-3.5" />
+              <Minimize v-else class="w-3.5 h-3.5" />
+            </button>
           </div>
           <template v-if="healthAlert">
             <div class="health-score-row">
@@ -469,11 +515,15 @@ const handleSwitchWithToast = async (name: string) => {
           </div>
         </div>
 
-        <div class="card running-card card-glow-green scale-in stagger-6">
+        <div class="card running-card card-glow-green scale-in stagger-7" :class="{ 'card-expanded': expandedCards.models }">
           <div class="card-header">
             <div class="icon-wrap green"><Layers class="card-icon-inner" /></div>
             <span class="card-title">运行模型</span>
             <span class="count-badge">{{ runningModels.length }} / {{ modelList.length }}</span>
+            <button class="expand-btn" @click="toggleCardExpand('models')">
+              <Expand v-if="!expandedCards.models" class="w-3.5 h-3.5" />
+              <Minimize v-else class="w-3.5 h-3.5" />
+            </button>
           </div>
           <div v-if="runningModels.length" class="running-list">
             <div v-for="model in runningModels" :key="model.name" class="model-row">
@@ -617,14 +667,60 @@ const handleSwitchWithToast = async (name: string) => {
   padding: 20px 24px;
 }
 
+.gpu-full-width {
+  grid-column: 1 / -1;
+}
+
+.card-expanded {
+  grid-column: 1 / -1 !important;
+  min-height: 300px;
+}
+
+@media (max-width: 1440px) {
+  .grid {
+    gap: 16px;
+    padding: 16px 20px;
+  }
+}
+
 @media (max-width: 1024px) {
   .grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .gpu-full-width {
+    grid-column: 1 / -1;
+  }
+
+  .card-expanded {
+    grid-column: 1 / -1 !important;
   }
 }
 
 @media (max-width: 640px) {
   .grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .gpu-full-width {
+    grid-column: 1;
+  }
+
+  .card-expanded {
+    grid-column: 1 !important;
+  }
+
+  .card-header {
+    flex-wrap: wrap;
+  }
+
+  .card-title {
+    font-size: 13px;
+  }
+
+  .token-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -649,6 +745,11 @@ const handleSwitchWithToast = async (name: string) => {
   transform: translateY(-1px);
 }
 
+.card-expanded {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(1.02);
+}
+
 .card-header {
   display: flex;
   align-items: center;
@@ -660,6 +761,29 @@ const handleSwitchWithToast = async (name: string) => {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  flex: 1;
+}
+
+.expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.expand-btn:hover {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+  transform: scale(1.1);
 }
 
 .icon-wrap {

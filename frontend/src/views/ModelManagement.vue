@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, type Component } from 'vue'
 import { useModels } from '@/composables/useModels'
+import { useServerStore } from "@/stores/server"
 import { runModelTest, getTestResults, getTestHistory } from '@/api/client'
 import type { TestResponse, TestHistoryEntry, TestReport } from '@/types'
 import {
@@ -41,6 +42,7 @@ const {
   handleSetDefaultModel,
 } = useModels()
 
+const serverStore = useServerStore()
 const runningModels = computed(() => modelList.value.filter((m) => m.running))
 const stoppedModels = computed(() => modelList.value.filter((m) => !m.running))
 
@@ -64,7 +66,7 @@ onMounted(() => {
 async function fetchCapabilities() {
   for (const m of runningModels.value) {
     try {
-      const res = await serverStore.fetchWithAuth(`/v1/test/results/${m.name}`)
+      const res = await fetch(`${serverStore.v1Base}/test/results/${m.name}`)
       if (res.ok) {
         const data = await res.json()
         if (data.report?.feature_support) {
