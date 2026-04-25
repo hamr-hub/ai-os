@@ -221,6 +221,24 @@ class NVMLCollector:
             except Exception:
                 pass
 
+            perf_state = ""
+            try:
+                perf_state = pynvml.nvmlDeviceGetPerformanceState(handle)
+            except Exception:
+                pass
+
+            encoder_util = 0
+            try:
+                encoder_util = pynvml.nvmlDeviceGetEncoderUtilization(handle)
+            except Exception:
+                pass
+
+            decoder_util = 0
+            try:
+                decoder_util = pynvml.nvmlDeviceGetDecoderUtilization(handle)
+            except Exception:
+                pass
+
             total_mb = total_mem // (1024 ** 2)
             used_mb = used_mem // (1024 ** 2)
             memory_utilization = int(used_mb / total_mb * 100) if total_mb > 0 else 0
@@ -249,6 +267,9 @@ class NVMLCollector:
                 "bar1_used_memory": bar1_used,
                 "processes": processes,
                 "vbios_version": vbios_version,
+                "performance_state": perf_state,
+                "encoder_utilization": encoder_util,
+                "decoder_utilization": decoder_util,
             }
         except Exception:
             return None
@@ -498,6 +519,17 @@ class GPUMonitor:
     def get_gpu_status(self) -> Optional[Dict]:
         if self._cache_valid():
             return self._status_cache
+
+        if self._status_cache is not None:
+            cache_age = (datetime.now() - self._status_cache_time).total_seconds() if self._status_cache_time else float('inf')
+            if cache_age < 300:
+                if asyncio.get_event_loop().is_running():
+                    try:
+                        asyncio.create_task(self._refresh_cache())
+                    except RuntimeError:
+                        pass
+                return self._status_cache
+
         return None
 
     async def _refresh_vllm_metrics(self):
@@ -542,6 +574,9 @@ class GPUMonitor:
                 "bar1_used_memory": gpu.get("bar1_used_memory", 0),
                 "vbios_version": gpu.get("vbios_version", ""),
                 "processes": gpu.get("processes", []),
+                "performance_state": gpu.get("performance_state", ""),
+                "encoder_utilization": gpu.get("encoder_utilization", 0),
+                "decoder_utilization": gpu.get("decoder_utilization", 0),
             }
             enhanced["gpus"].append(gpu_enhanced)
         return enhanced
@@ -578,11 +613,11 @@ class GPUMonitor:
             primary = status.get("primary", {})
             if primary:
                 for k in ["ecc_errors", "throttle_reasons", "persistence_mode",
-                           "pcie_rx_throughput", "pcie_tx_throughput", "vbios_version"]:
+                           "pcie_rx_throughput", "pcie_tx_throughput", "vbios_version",
+                           "performance_state", "encoder_utilization", "decoder_utilization"]:
                     if k in primary:
                         current[k] = primary[k]
             
-            # Add health score
             health_score = self.get_health_score(status)
             
             return {

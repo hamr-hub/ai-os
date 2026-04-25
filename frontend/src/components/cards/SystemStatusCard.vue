@@ -60,8 +60,8 @@ const sparklineDatasets = (
             :show-legend="false"
             :animate="false"
             y-unit="%"
-            y-min="0"
-            y-max="100"
+            :y-min="0"
+            :y-max="100"
           />
         </div>
       </div>
@@ -88,8 +88,8 @@ const sparklineDatasets = (
             :show-legend="false"
             :animate="false"
             y-unit="%"
-            y-min="0"
-            y-max="100"
+            :y-min="0"
+            :y-max="100"
           />
         </div>
       </div>

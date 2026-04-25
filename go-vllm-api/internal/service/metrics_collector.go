@@ -343,9 +343,9 @@ func (m *MetricsCollector) calculateGPUScore(gpuStatus *GPUStatus) float64 {
 	}
 	memScore := 100.0
 	memUtil := float64(gpuStatus.MemoryUtilization)
-	if memUtil > 0.9 {
-		memScore = 100.0 - (memUtil-0.9)*1000
-		if memUtil > 0.95 {
+	if memUtil > 90 {
+		memScore = 100.0 - (memUtil-90)*10
+		if memUtil > 95 {
 			memScore = 0
 		}
 	}

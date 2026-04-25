@@ -6,6 +6,7 @@ import { useGPUHistory } from '@/composables/useGPUHistory'
 import { useTokenStats } from '@/composables/useTokenStats'
 import { useSystemData } from '@/composables/useSystemData'
 import { useAppStore } from '@/stores/app'
+import LineChart from '@/components/LineChart.vue'
 import GpuMetricsCard from '@/components/cards/GpuMetricsCard.vue'
 import VLLMMetricsCard from '@/components/cards/VLLMMetricsCard.vue'
 import SystemStatusCard from '@/components/cards/SystemStatusCard.vue'
@@ -13,7 +14,7 @@ import TokenUsageCard from '@/components/cards/TokenUsageCard.vue'
 import RequestQueueCard from '@/components/cards/RequestQueueCard.vue'
 import HealthAlertCard from '@/components/cards/HealthAlertCard.vue'
 import RunningModelsCard from '@/components/cards/RunningModelsCard.vue'
-import { RefreshCw, Monitor, RotateCw } from 'lucide-vue-next'
+import { RefreshCw, Monitor, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server } from 'lucide-vue-next'
 
 const store = useAppStore()
 const {
@@ -74,6 +75,104 @@ const refreshAll = () => {
 
 const gpu = computed(() => gpuSummary.value?.current ?? null)
 const gpuStatus = computed(() => gpuSummary.value?.status ?? 'unavailable')
+
+const gpuTimeLabels = computed(() =>
+  gpuHistory.value.map((e) => {
+    const d = new Date(e.timestamp)
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  })
+)
+
+const gpuUtilDataset = computed(() => [
+  {
+    label: 'GPU 利用率',
+    data: gpuHistory.value.map((e) => e.utilization),
+    borderColor: '#6366f1',
+    backgroundColor: 'rgba(99, 102, 241, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+])
+
+const gpuTempDataset = computed(() => [
+  {
+    label: 'GPU 温度',
+    data: gpuHistory.value.map((e) => e.temperature),
+    borderColor: '#f59e0b',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+])
+
+const gpuMemDataset = computed(() => [
+  {
+    label: '显存利用率',
+    data: gpuHistory.value.map((e) => e.memory_utilization),
+    borderColor: '#06b6d4',
+    backgroundColor: 'rgba(6, 182, 212, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+])
+
+const gpuPowerDataset = computed(() => [
+  {
+    label: '功耗',
+    data: gpuHistory.value.map((e) => e.power_percent ?? e.power_draw),
+    borderColor: '#ef4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+])
+
+const vllmRunningDataset = computed(() => [
+  {
+    label: '运行请求',
+    data: gpuHistory.value.map((e) => e.vllm_running_requests ?? 0),
+    borderColor: '#22c55e',
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+])
+
+const vllmWaitingDataset = computed(() => [
+  {
+    label: '等待请求',
+    data: gpuHistory.value.map((e) => e.vllm_waiting_requests ?? 0),
+    borderColor: '#f59e0b',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+])
+
+const vllmGpuCacheDataset = computed(() => [
+  {
+    label: 'KV 缓存使用',
+    data: gpuHistory.value.map((e) => e.vllm_gpu_cache_usage ?? 0),
+    borderColor: '#8b5cf6',
+    backgroundColor: 'rgba(139, 92, 246, 0.08)',
+    fill: true,
+    tension: 0.4,
+    pointRadius: 0,
+    borderWidth: 2,
+  },
+])
 
 const cardScale = ref<Record<string, number>>({
   system: 1,
@@ -164,7 +263,122 @@ const handleScale = (cardId: string, delta: number) => {
               <button class="scale-btn" @click="handleScale('gpu', 0.1)">+</button>
               <button class="scale-btn" @click="handleScale('gpu', -0.1)">−</button>
             </div>
-            <RequestQueueCard :queue-status="queueStatus" :default-model="defaultModel" />
+            <div class="gpu-card-header">
+              <div class="icon-wrap cyan"><Cpu class="card-icon-inner" /></div>
+              <span class="card-title">GPU 监控</span>
+              <span v-if="gpuStatus === 'available'" class="badge online"
+                ><span class="dot online"></span>在线</span
+              >
+              <span v-else class="badge offline"><span class="dot offline"></span>离线</span>
+            </div>
+            <GpuMetricsCard
+              :gpu="gpu"
+              :gpu-history="gpuHistory"
+              :gpu-status="gpuStatus"
+              :error="gpuHistoryError"
+            />
+            <template v-if="gpuHistory.length > 0">
+              <div class="gpu-charts-grid">
+              <div class="chart-card">
+                <div class="chart-header">
+                  <TrendingUp class="chart-icon purple" />
+                  <span class="chart-title">GPU 利用率</span>
+                </div>
+                <LineChart
+                  :labels="gpuTimeLabels"
+                  :datasets="gpuUtilDataset"
+                  :height="160"
+                  y-unit="%"
+                  :y-min="0"
+                  :y-max="100"
+                />
+              </div>
+              <div class="chart-card">
+                <div class="chart-header">
+                  <Thermometer class="chart-icon orange" />
+                  <span class="chart-title">GPU 温度</span>
+                </div>
+                <LineChart
+                  :labels="gpuTimeLabels"
+                  :datasets="gpuTempDataset"
+                  :height="160"
+                  y-unit="°C"
+                  :y-min="0"
+                />
+              </div>
+              <div class="chart-card">
+                <div class="chart-header">
+                  <MemoryStick class="chart-icon cyan" />
+                  <span class="chart-title">显存利用率</span>
+                </div>
+                <LineChart
+                  :labels="gpuTimeLabels"
+                  :datasets="gpuMemDataset"
+                  :height="160"
+                  y-unit="%"
+                  :y-min="0"
+                  :y-max="100"
+                />
+              </div>
+              <div class="chart-card">
+                <div class="chart-header">
+                  <Zap class="chart-icon red" />
+                  <span class="chart-title">功耗</span>
+                </div>
+                <LineChart
+                  :labels="gpuTimeLabels"
+                  :datasets="gpuPowerDataset"
+                  :height="160"
+                  y-unit="W"
+                  :y-min="0"
+                />
+              </div>
+              <div class="chart-card">
+                <div class="chart-header">
+                  <Activity class="chart-icon green" />
+                  <span class="chart-title">vLLM 运行请求</span>
+                </div>
+                <LineChart
+                  :labels="gpuTimeLabels"
+                  :datasets="vllmRunningDataset"
+                  :height="160"
+                  y-unit=""
+                  :y-min="0"
+                />
+              </div>
+              <div class="chart-card">
+                <div class="chart-header">
+                  <Activity class="chart-icon yellow" />
+                  <span class="chart-title">vLLM 等待请求</span>
+                </div>
+                <LineChart
+                  :labels="gpuTimeLabels"
+                  :datasets="vllmWaitingDataset"
+                  :height="160"
+                  y-unit=""
+                  :y-min="0"
+                />
+              </div>
+              <div class="chart-card">
+                <div class="chart-header">
+                  <Server class="chart-icon purple" />
+                  <span class="chart-title">vLLM KV 缓存</span>
+                </div>
+                <LineChart
+                  :labels="gpuTimeLabels"
+                  :datasets="vllmGpuCacheDataset"
+                  :height="160"
+                  y-unit="%"
+                  :y-min="0"
+                  :y-max="100"
+                />
+              </div>
+            </template>
+            <div v-else class="gpu-chart-empty-state">
+              <TrendingUp class="chart-empty-icon" />
+              <p>暂无 GPU 历史数据</p>
+              <span class="chart-empty-hint">历史数据将在后端运行后自动采集</span>
+            </div>
           </div>
 
           <div
@@ -369,7 +583,6 @@ const handleScale = (cardId: string, delta: number) => {
 .full-width {
   width: 100%;
 }
-}
 
 .card-header {
   display: flex;
@@ -524,5 +737,104 @@ const handleScale = (cardId: string, delta: number) => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.gpu-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.gpu-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+@media (max-width: 1200px) {
+  .gpu-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chart-card {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chart-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.chart-icon.purple {
+  color: #8b5cf6;
+}
+
+.chart-icon.orange {
+  color: #f59e0b;
+}
+
+.chart-icon.cyan {
+  color: #06b6d4;
+}
+
+.chart-icon.red {
+  color: #ef4444;
+}
+
+.chart-icon.green {
+  color: #22c55e;
+}
+
+.chart-icon.yellow {
+  color: #f59e0b;
+}
+
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.gpu-chart-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 20px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.chart-empty-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.gpu-chart-empty-state p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.chart-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 </style>

@@ -276,23 +276,6 @@ const refreshAll = () => {
             :y-min="0"
           />
         </div>
-      </div>
-
-      <div class="chart-section">
-        <div class="card chart-card">
-          <div class="card-header">
-            <Activity class="card-icon blue" />
-            <span class="card-title">GPU 利用率</span>
-          </div>
-          <LineChart
-            :labels="gpuTimeLabels"
-            :datasets="gpuUtilDataset"
-            :height="180"
-            y-unit="%"
-            :y-min="0"
-            :y-max="100"
-          />
-        </div>
 
         <div class="card chart-card">
           <div class="card-header">
@@ -308,7 +291,9 @@ const refreshAll = () => {
             :y-max="100"
           />
         </div>
+      </div>
 
+      <div class="chart-section">
         <div class="card chart-card wide">
           <div class="card-header">
             <Coins class="card-icon purple" />
@@ -323,6 +308,21 @@ const refreshAll = () => {
             :height="220"
             y-unit=""
             :show-legend="true"
+          />
+        </div>
+
+        <div class="card chart-card">
+          <div class="card-header">
+            <Activity class="card-icon blue" />
+            <span class="card-title">GPU 利用率</span>
+          </div>
+          <LineChart
+            :labels="gpuTimeLabels"
+            :datasets="gpuUtilDataset"
+            :height="180"
+            y-unit="%"
+            :y-min="0"
+            :y-max="100"
           />
         </div>
 

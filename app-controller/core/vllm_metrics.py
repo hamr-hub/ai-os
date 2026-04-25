@@ -8,6 +8,7 @@ class VLLMMetricsScraper:
     VLLM_METRIC_KEYS = {
         "vllm:num_requests_running": "running_requests",
         "vllm:num_requests_waiting": "waiting_requests",
+        "vllm:num_requests_swapped": "swapped_requests",
         "vllm:gpu_cache_usage_perc": "gpu_cache_usage",
         "vllm:cpu_cache_usage_perc": "cpu_cache_usage",
         "vllm:avg_generation_throughput": "generation_throughput",
@@ -17,12 +18,21 @@ class VLLMMetricsScraper:
         "vllm:max_num_seqs": "max_num_seqs",
         "vllm:max_model_len": "max_model_len",
         "vllm:gpu_prefix_cache_hit_rate_perc": "prefix_cache_hit_rate",
+        "vllm:gpu_prefix_cache_avg_hit_rate_perc": "avg_prefix_cache_hit_rate",
+        "vllm:queue_time_seconds": "queue_time",
+        "vllm:scheduler_num_preemptions": "num_preemptions",
     }
 
     HISTOGRAM_SUM_KEYS = {
         "vllm:time_to_first_token_seconds": "time_to_first_token",
         "vllm:time_per_output_token_seconds": "time_per_output_token",
         "vllm:e2e_request_latency_seconds": "e2e_request_latency",
+    }
+
+    GAUGE_KEYS = {
+        "vllm:gpu_running_requests": "gpu_running_requests",
+        "vllm:gpu_waiting_requests": "gpu_waiting_requests",
+        "vllm:gpu_cache_usage_perc": "gpu_cache_usage_perc",
     }
 
     def __init__(self, vllm_port: int = 8000):
@@ -45,6 +55,7 @@ class VLLMMetricsScraper:
     def _parse_prometheus_text(self, text: str) -> Dict:
         gauge_values = {}
         histogram_sums = {}
+        histogram_counts = {}
 
         for line in text.split('\n'):
             line = line.strip()
@@ -84,12 +95,32 @@ class VLLMMetricsScraper:
                             except ValueError:
                                 pass
 
+                count_line = metric_key + "_count"
+                if line.startswith(count_line + " ") or line.startswith(count_line + "{"):
+                    match = re.search(r'=([\d.eE+-]+)', line)
+                    if match:
+                        try:
+                            histogram_counts[alias] = float(match.group(1))
+                        except ValueError:
+                            pass
+                    elif line.startswith(count_line + " ") and not "{" in line:
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            try:
+                                histogram_counts[alias] = float(parts[1])
+                            except ValueError:
+                                pass
+
         result = {}
         for alias in self.VLLM_METRIC_KEYS.values():
             result[alias] = gauge_values.get(alias, 0)
 
         for alias in self.HISTOGRAM_SUM_KEYS.values():
             result[alias] = histogram_sums.get(alias, 0)
+            result[f"{alias}_count"] = histogram_counts.get(alias, 0)
+
+            if histogram_sums.get(alias, 0) > 0 and histogram_counts.get(alias, 0) > 0:
+                result[f"{alias}_avg"] = histogram_sums[alias] / histogram_counts[alias]
 
         result["vllm_available"] = len(gauge_values) > 0 or len(histogram_sums) > 0
         result["scraped_at"] = datetime.now().isoformat()
@@ -114,6 +145,8 @@ class VLLMMetricsScraper:
             defaults[alias] = 0
         for alias in self.HISTOGRAM_SUM_KEYS.values():
             defaults[alias] = 0
+            defaults[f"{alias}_count"] = 0
+            defaults[f"{alias}_avg"] = 0
         defaults["vllm_available"] = False
         defaults["scraped_at"] = ""
         return defaults

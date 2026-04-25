@@ -135,6 +135,19 @@ export interface ModelInfo {
   object: string
   created: number
   owned_by: string
+  name: string
+  running: boolean
+  port: number | null
+  service: string | null
+  active_requests: number
+  preloaded: boolean
+  last_used: string | null
+  supports_images?: boolean
+  supports_tool_calling?: boolean
+  supports_image_generation?: boolean
+  description?: string
+  required_memory?: string
+  backend_type?: string
 }
 
 export interface ModelsResponse {
@@ -224,9 +237,6 @@ export interface TestHistoryEntry {
 }
 
 export interface ModelWithTest extends ModelInfo {
-  running?: boolean
-  port?: number | null
-  active_requests?: number
   test_status?: string
   test_timestamp?: string
   feature_support?: TestReport['feature_support']

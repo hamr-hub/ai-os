@@ -167,6 +167,10 @@ export function useModels() {
   const modelList = computed(() => {
     if (!modelStatus.value) return []
     return Object.entries(modelStatus.value).map(([name, status]) => ({
+      id: name,
+      object: 'model',
+      created: 0,
+      owned_by: 'local',
       name,
       ...status,
     }))

@@ -3,14 +3,18 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
-	"os/exec"
+	"net/http"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"go.uber.org/zap"
 )
 
@@ -21,100 +25,110 @@ type GPUProcess struct {
 }
 
 type GPUInfo struct {
-	Name              string        `json:"name"`
-	Index             int           `json:"index"`
-	TotalMemory       int64         `json:"total_memory"`
-	UsedMemory        int64         `json:"used_memory"`
-	AvailableMemory   int64         `json:"available_memory"`
-	Temperature       int           `json:"temperature"`
-	Utilization       int           `json:"utilization"`
-	PowerDraw         int           `json:"power_draw"`
-	PowerLimit        int           `json:"power_limit"`
-	PowerPercent      int           `json:"power_percent"`
-	FanSpeed          int           `json:"fan_speed"`
-	ClockSM           int           `json:"clock_sm"`
-	ClockMem          int           `json:"clock_mem"`
-	MemoryUtilization int           `json:"memory_utilization"`
-	EccErrors         int           `json:"ecc_errors"`
-	ThrottleReasons   []string      `json:"throttle_reasons"`
-	PersistenceMode   bool          `json:"persistence_mode"`
-	PCIeRxThroughput  int           `json:"pcie_rx_throughput"`
-	PCIeTxThroughput  int           `json:"pcie_tx_throughput"`
-	Bar1TotalMemory   int64         `json:"bar1_total_memory"`
-	Bar1UsedMemory    int64         `json:"bar1_used_memory"`
-	Processes         []GPUProcess  `json:"processes"`
-	VbiosVersion      string        `json:"vbios_version"`
-	DriverVersion     string        `json:"driver_version"`
+	Name              string       `json:"name"`
+	Index             int          `json:"index"`
+	TotalMemory       int64        `json:"total_memory"`
+	UsedMemory        int64        `json:"used_memory"`
+	AvailableMemory   int64        `json:"available_memory"`
+	Temperature       int          `json:"temperature"`
+	Utilization       int          `json:"utilization"`
+	PowerDraw         int          `json:"power_draw"`
+	PowerLimit        int          `json:"power_limit"`
+	PowerPercent      int          `json:"power_percent"`
+	FanSpeed          int          `json:"fan_speed"`
+	ClockSM           int          `json:"clock_sm"`
+	ClockMem          int          `json:"clock_mem"`
+	MemoryUtilization int          `json:"memory_utilization"`
+	EccErrors         int          `json:"ecc_errors"`
+	ThrottleReasons   []string     `json:"throttle_reasons"`
+	PersistenceMode   bool         `json:"persistence_mode"`
+	PCIeRxThroughput  int          `json:"pcie_rx_throughput"`
+	PCIeTxThroughput  int          `json:"pcie_tx_throughput"`
+	Bar1TotalMemory   int64        `json:"bar1_total_memory"`
+	Bar1UsedMemory    int64        `json:"bar1_used_memory"`
+	Processes         []GPUProcess `json:"processes"`
+	VbiosVersion      string       `json:"vbios_version"`
+	DriverVersion     string       `json:"driver_version"`
+	PerformanceState  string       `json:"performance_state"`
+	GPUEncUtilization int          `json:"gpu_enc_utilization"`
+	GPUDecUtilization int          `json:"gpu_dec_utilization"`
+	JpgUtilization    int          `json:"jpg_utilization"`
+	OfaUtilization    int          `json:"ofa_utilization"`
 }
 
 type VLLMMetricsData struct {
-	VLLMAvailable        bool    `json:"vllm_available"`
-	RunningRequests      int     `json:"running_requests"`
-	WaitingRequests      int     `json:"waiting_requests"`
-	GPUCacheUsage        float64 `json:"gpu_cache_usage"`
-	CPUCacheUsage        float64 `json:"cpu_cache_usage"`
-	GenerationThroughput float64 `json:"generation_throughput"`
-	PromptThroughput     float64 `json:"prompt_throughput"`
-	TimeToFirstToken     float64 `json:"time_to_first_token"`
-	TimePerOutputToken   float64 `json:"time_per_output_token"`
-	PrefixCacheHitRate   float64 `json:"prefix_cache_hit_rate"`
-	ScrapedAt            string  `json:"scraped_at"`
+	VLLMAvailable         bool    `json:"vllm_available"`
+	RunningRequests       int     `json:"running_requests"`
+	WaitingRequests       int     `json:"waiting_requests"`
+	SchedulingRequests    int     `json:"scheduling_requests,omitempty"`
+	GPUCacheUsage         float64 `json:"gpu_cache_usage"`
+	CPUCacheUsage         float64 `json:"cpu_cache_usage"`
+	RequestThroughput     float64 `json:"request_throughput"`
+	PromptThroughput      float64 `json:"prompt_throughput"`
+	GenerationThroughput  float64 `json:"generation_throughput"`
+	TimeToFirstTokenP50   float64 `json:"time_to_first_token_p50"`
+	TimeToFirstTokenP95   float64 `json:"time_to_first_token_p95"`
+	TimeToFirstToken      float64 `json:"time_to_first_token"`
+	TimePerOutputTokenP50 float64 `json:"time_per_output_token_p50"`
+	TimePerOutputTokenP95 float64 `json:"time_per_output_token_p95"`
+	TimePerOutputToken    float64 `json:"time_per_output_token"`
+	PrefixCacheHitRate    float64 `json:"prefix_cache_hit_rate"`
+	ScrapedAt             string  `json:"scraped_at"`
 }
 
 type GPUStatus struct {
-	Status           string           `json:"status"`
-	GPUCount         int              `json:"gpu_count"`
-	Name             string           `json:"name"`
-	TotalMemory      int64            `json:"total_memory"`
-	UsedMemory       int64            `json:"used_memory"`
-	AvailableMemory  int64            `json:"available_memory"`
-	Temperature      int              `json:"temperature"`
-	Utilization      int              `json:"utilization"`
-	PowerDraw        int              `json:"power_draw"`
-	PowerLimit       int              `json:"power_limit"`
-	PowerPercent     int              `json:"power_percent"`
-	FanSpeed         int              `json:"fan_speed"`
-	ClockSM          int              `json:"clock_sm"`
-	ClockMem         int              `json:"clock_mem"`
-	MemoryUtilization int             `json:"memory_utilization"`
-	Primary          *GPUInfo         `json:"primary"`
-	AllGPUs          []GPUInfo        `json:"all_gpus"`
-	VLLMMetrics      *VLLMMetricsData `json:"vllm_metrics,omitempty"`
-	DriverVersion    string           `json:"driver_version,omitempty"`
-	ServerTime       string           `json:"serverTime,omitempty"`
+	Status            string           `json:"status"`
+	GPUCount          int              `json:"gpu_count"`
+	Name              string           `json:"name"`
+	TotalMemory       int64            `json:"total_memory"`
+	UsedMemory        int64            `json:"used_memory"`
+	AvailableMemory   int64            `json:"available_memory"`
+	Temperature       int              `json:"temperature"`
+	Utilization       int              `json:"utilization"`
+	PowerDraw         int              `json:"power_draw"`
+	PowerLimit        int              `json:"power_limit"`
+	PowerPercent      int              `json:"power_percent"`
+	FanSpeed          int              `json:"fan_speed"`
+	ClockSM           int              `json:"clock_sm"`
+	ClockMem          int              `json:"clock_mem"`
+	MemoryUtilization int              `json:"memory_utilization"`
+	Primary           *GPUInfo         `json:"primary"`
+	AllGPUs           []GPUInfo        `json:"all_gpus"`
+	VLLMMetrics       *VLLMMetricsData `json:"vllm_metrics,omitempty"`
+	DriverVersion     string           `json:"driver_version,omitempty"`
+	ServerTime        string           `json:"serverTime,omitempty"`
 }
 
-var throttleReasonMap = map[uint64]string{
-	0x00000001: "gpu_idle",
-	0x00000002: "applications_clocks_setting",
-	0x00000004: "sw_power_cap",
-	0x00000008: "hw_thermal_slowdown",
-	0x00000010: "sw_thermal_slowdown",
-	0x00000020: "hw_power_brake_slowdown",
-	0x00000040: "sw_power_brake_slowdown",
-	0x00000080: "display_clocks_setting",
-	0x00000100: "sw_power_sliding_window_slowdown",
-	0x00000200: "hw_thermal_slowdown_vmin",
-	0x00000400: "hw_thermal_slowdown_vrel",
+var throttleReasonMap = map[uint32]string{
+	0:  "gpu_idle",
+	1:  "applications_clocks_setting",
+	2:  "sw_power_cap",
+	3:  "hw_thermal_slowdown",
+	4:  "sw_thermal_slowdown",
+	5:  "hw_power_brake_slowdown",
+	6:  "sw_power_brake_slowdown",
+	7:  "display_clocks_setting",
+	8:  "sw_power_sliding_window_slowdown",
+	9:  "hw_thermal_slowdown_vmin",
+	10: "hw_thermal_slowdown_vrel",
 }
 
-func decodeThrottleReasons(bits uint64) []string {
-	if bits == 0 {
-		return nil
-	}
-	var reasons []string
-	for bit, name := range throttleReasonMap {
-		if bits&bit != 0 {
-			reasons = append(reasons, name)
+func decodeThrottleReasons(reasons uint64) []string {
+	var result []string
+	for reason, name := range throttleReasonMap {
+		if uint64(reasons)&uint64(reason) != 0 {
+			result = append(result, name)
 		}
 	}
-	return reasons
+	return result
 }
 
 type GPUMonitor struct {
 	logger            *zap.Logger
-	nvidiaSmiAvail    bool
-	nvmlAvail         bool
+	nvmlAvailable     bool
+	nvmlInitialized   bool
+	deviceCount       int
+	devices           []nvml.Device
 	statusCache       *GPUStatus
 	cacheTime         time.Time
 	mu                sync.RWMutex
@@ -125,47 +139,51 @@ type GPUMonitor struct {
 	vllmMetrics       *VLLMMetricsData
 	vllmMetricsTime   time.Time
 	vllmPort          int
+	driverVersion     string
 }
 
 func NewGPUMonitor(logger *zap.Logger) *GPUMonitor {
 	m := &GPUMonitor{
-		logger:          logger,
-		cacheInterval:   2 * time.Second,
-		memoryStrategy:  "balanced",
-		vllmPort:        8000,
+		logger:         logger,
+		cacheInterval:  2 * time.Second,
+		memoryStrategy: "balanced",
+		vllmPort:       8000,
 	}
-	m.nvmlAvail = m.initNVML()
-	if m.nvmlAvail {
-		logger.Info("NVML available, using NVML as primary GPU data source")
-	} else {
-		m.nvidiaSmiAvail = m.checkNvidiaSmi()
-		if m.nvidiaSmiAvail {
-			logger.Info("NVML not available, using nvidia-smi as fallback")
-		} else {
-			logger.Warn("no GPU monitoring available (neither NVML nor nvidia-smi)")
-		}
-	}
-	return m
-}
 
-func (m *GPUMonitor) initNVML() bool {
-	cmd := exec.Command("nvidia-smi", "--version")
-	if err := cmd.Run(); err != nil {
-		return false
+	ret := nvml.Init()
+	if ret == nvml.SUCCESS {
+		m.nvmlAvailable = true
+		m.nvmlInitialized = true
+		m.deviceCount, ret = nvml.DeviceGetCount()
+		if ret != nvml.SUCCESS {
+			logger.Error("Failed to get device count", zap.String("error", nvml.ErrorString(ret)))
+			m.nvmlAvailable = false
+			nvml.Shutdown()
+		} else {
+			for i := 0; i < m.deviceCount; i++ {
+				device, ret := nvml.DeviceGetHandleByIndex(i)
+				if ret != nvml.SUCCESS {
+					logger.Error("Failed to get device handle", zap.Int("index", i), zap.String("error", nvml.ErrorString(ret)))
+					continue
+				}
+				m.devices = append(m.devices, device)
+			}
+			version, ret := nvml.SystemGetDriverVersion()
+			if ret == nvml.SUCCESS {
+				m.driverVersion = version
+			}
+			logger.Info("NVML initialized successfully", zap.Int("device_count", m.deviceCount))
+		}
+	} else {
+		logger.Warn("NVML initialization failed, falling back to nvidia-smi", zap.String("error", nvml.ErrorString(ret)))
+		m.nvmlAvailable = false
 	}
-	return true
+
+	return m
 }
 
 func (m *GPUMonitor) SetVLLMPort(port int) {
 	m.vllmPort = port
-}
-
-func (m *GPUMonitor) checkNvidiaSmi() bool {
-	cmd := exec.Command("nvidia-smi", "--version")
-	if err := cmd.Run(); err != nil {
-		return false
-	}
-	return true
 }
 
 func (m *GPUMonitor) Start(ctx context.Context) {
@@ -177,6 +195,10 @@ func (m *GPUMonitor) Start(ctx context.Context) {
 func (m *GPUMonitor) Stop() {
 	if m.cancel != nil {
 		m.cancel()
+	}
+	if m.nvmlInitialized {
+		nvml.Shutdown()
+		m.nvmlInitialized = false
 	}
 	m.logger.Info("GPU monitor stopped")
 }
@@ -199,14 +221,33 @@ func (m *GPUMonitor) updateLoop(ctx context.Context) {
 	}
 }
 
+var metricsHTTPClient = &http.Client{
+	Timeout: 5 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        1,
+		MaxIdleConnsPerHost: 1,
+		IdleConnTimeout:     10 * time.Second,
+	},
+}
+
 func (m *GPUMonitor) refreshVLLMMetrics() error {
 	url := fmt.Sprintf("http://localhost:%d/metrics", m.vllmPort)
-	cmd := exec.Command("curl", "-s", "--max-time", "5", url)
-	output, err := cmd.Output()
+	resp, err := metricsHTTPClient.Get(url)
 	if err != nil {
 		return err
 	}
-	metrics := parsePrometheusText(string(output))
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("metrics endpoint returned %d", resp.StatusCode)
+	}
+
+	metrics := parsePrometheusText(string(body))
 	if metrics != nil {
 		m.mu.Lock()
 		m.vllmMetrics = metrics
@@ -219,23 +260,35 @@ func (m *GPUMonitor) refreshVLLMMetrics() error {
 	return nil
 }
 
+type histogramBucket struct {
+	le    float64
+	count uint64
+}
+
 func parsePrometheusText(text string) *VLLMMetricsData {
 	gaugeValues := map[string]float64{}
+	histogramBuckets := map[string][]histogramBucket{}
+	histogramCounts := map[string]uint64{}
 	histogramSums := map[string]float64{}
 
 	metricKeys := map[string]string{
 		"vllm:num_requests_running":             "running_requests",
 		"vllm:num_requests_waiting":             "waiting_requests",
+		"vllm:num_requests_swapped":             "scheduling_requests",
 		"vllm:gpu_cache_usage_perc":             "gpu_cache_usage",
 		"vllm:cpu_cache_usage_perc":             "cpu_cache_usage",
-		"vllm:avg_generation_throughput":        "generation_throughput",
-		"vllm:avg_prompt_throughput":            "prompt_throughput",
 		"vllm:gpu_prefix_cache_hit_rate_perc":   "prefix_cache_hit_rate",
+		"vllm:request_throughput":               "request_throughput",
+		"vllm:prompt_token_throughput":          "prompt_throughput",
+		"vllm:generation_token_throughput":      "generation_throughput",
+		"vllm:avg_prompt_throughput_toks_s":     "prompt_throughput_toks_s",
+		"vllm:avg_generation_throughput_toks_s": "generation_throughput_toks_s",
 	}
 
 	histogramKeys := map[string]string{
-		"vllm:time_to_first_token_seconds":     "time_to_first_token",
-		"vllm:time_per_output_token_seconds":   "time_per_output_token",
+		"vllm:time_to_first_token_seconds":   "time_to_first_token",
+		"vllm:time_per_output_token_seconds": "time_per_output_token",
+		"vllm:e2e_request_latency_seconds":   "e2e_request_latency",
 	}
 
 	for _, line := range strings.Split(text, "\n") {
@@ -243,67 +296,161 @@ func parsePrometheusText(text string) *VLLMMetricsData {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+
 		for metricKey, alias := range metricKeys {
 			if strings.HasPrefix(line, metricKey+" ") || strings.HasPrefix(line, metricKey+"{") {
-				re := regexp.MustCompile(`=([0-9.eE+-]+)`)
-				match := re.FindStringSubmatch(line)
-				if len(match) > 1 {
-					if v, err := strconv.ParseFloat(match[1], 64); err == nil {
-						gaugeValues[alias] = v
-					}
-				} else if !strings.Contains(line, "{") {
-					parts := strings.Fields(line)
-					if len(parts) >= 2 {
-						if v, err := strconv.ParseFloat(parts[1], 64); err == nil {
-							gaugeValues[alias] = v
-						}
-					}
+				if v := extractMetricValue(line); v != nil {
+					gaugeValues[alias] = *v
 				}
 			}
 		}
+
 		for metricKey, alias := range histogramKeys {
+			if strings.HasPrefix(line, metricKey+"_bucket ") || strings.HasPrefix(line, metricKey+"_bucket{") {
+				if leStr, countStr := extractHistogramBucket(line); leStr != "" && countStr != "" {
+					le, err1 := strconv.ParseFloat(leStr, 64)
+					count, err2 := strconv.ParseUint(countStr, 10, 64)
+					if err1 == nil && err2 == nil {
+						histogramBuckets[alias] = append(histogramBuckets[alias], histogramBucket{le: le, count: count})
+					}
+				}
+			}
+			countLine := metricKey + "_count"
+			if strings.HasPrefix(line, countLine+" ") || strings.HasPrefix(line, countLine+"{") {
+				if v := extractMetricValue(line); v != nil {
+					histogramCounts[alias] = uint64(*v)
+				}
+			}
 			sumLine := metricKey + "_sum"
 			if strings.HasPrefix(line, sumLine+" ") || strings.HasPrefix(line, sumLine+"{") {
-				re := regexp.MustCompile(`=([0-9.eE+-]+)`)
-				match := re.FindStringSubmatch(line)
-				if len(match) > 1 {
-					if v, err := strconv.ParseFloat(match[1], 64); err == nil {
-						histogramSums[alias] = v
-					}
-				} else if !strings.Contains(line, "{") {
-					parts := strings.Fields(line)
-					if len(parts) >= 2 {
-						if v, err := strconv.ParseFloat(parts[1], 64); err == nil {
-							histogramSums[alias] = v
-						}
-					}
+				if v := extractMetricValue(line); v != nil {
+					histogramSums[alias] = *v
 				}
 			}
 		}
 	}
 
-	if len(gaugeValues) == 0 && len(histogramSums) == 0 {
+	if len(gaugeValues) == 0 && len(histogramBuckets) == 0 && len(histogramCounts) == 0 {
 		return nil
 	}
 
+	ttftP50, ttftP95 := calculatePercentiles(histogramBuckets["time_to_first_token"], histogramCounts["time_to_first_token"], histogramSums["time_to_first_token"])
+	tpotP50, tpotP95 := calculatePercentiles(histogramBuckets["time_per_output_token"], histogramCounts["time_per_output_token"], histogramSums["time_per_output_token"])
+
 	data := &VLLMMetricsData{
-		VLLMAvailable:        true,
-		RunningRequests:      int(gaugeValues["running_requests"]),
-		WaitingRequests:      int(gaugeValues["waiting_requests"]),
-		GPUCacheUsage:        gaugeValues["gpu_cache_usage"],
-		CPUCacheUsage:        gaugeValues["cpu_cache_usage"],
-		GenerationThroughput: gaugeValues["generation_throughput"],
-		PromptThroughput:     gaugeValues["prompt_throughput"],
-		TimeToFirstToken:     histogramSums["time_to_first_token"],
-		TimePerOutputToken:   histogramSums["time_per_output_token"],
-		PrefixCacheHitRate:   gaugeValues["prefix_cache_hit_rate"],
-		ScrapedAt:            time.Now().Format(time.RFC3339),
+		VLLMAvailable:         true,
+		RunningRequests:       int(gaugeValues["running_requests"]),
+		WaitingRequests:       int(gaugeValues["waiting_requests"]),
+		SchedulingRequests:    int(gaugeValues["scheduling_requests"]),
+		GPUCacheUsage:         gaugeValues["gpu_cache_usage"],
+		CPUCacheUsage:         gaugeValues["cpu_cache_usage"],
+		PrefixCacheHitRate:    gaugeValues["prefix_cache_hit_rate"],
+		RequestThroughput:     gaugeValues["request_throughput"],
+		PromptThroughput:      gaugeValues["prompt_throughput"],
+		GenerationThroughput:  gaugeValues["generation_throughput"],
+		TimeToFirstTokenP50:   ttftP50,
+		TimeToFirstTokenP95:   ttftP95,
+		TimeToFirstToken:      ttftP50,
+		TimePerOutputTokenP50: tpotP50,
+		TimePerOutputTokenP95: tpotP95,
+		TimePerOutputToken:    tpotP50,
+		ScrapedAt:             time.Now().Format(time.RFC3339),
 	}
 	return data
 }
 
+func extractMetricValue(line string) *float64 {
+	re := regexp.MustCompile(`\} ([0-9.eE+-]+)$`)
+	match := re.FindStringSubmatch(line)
+	if len(match) > 1 {
+		if v, err := strconv.ParseFloat(match[1], 64); err == nil {
+			return &v
+		}
+	}
+	if !strings.Contains(line, "{") {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			if v, err := strconv.ParseFloat(parts[1], 64); err == nil {
+				return &v
+			}
+		}
+	}
+	return nil
+}
+
+func extractHistogramBucket(line string) (string, string) {
+	re := regexp.MustCompile(`le="([^"]+)"`)
+	leMatch := re.FindStringSubmatch(line)
+	if leMatch == nil {
+		return "", ""
+	}
+	leStr := leMatch[1]
+
+	valueRe := regexp.MustCompile(`\} ([0-9.eE+-]+)$`)
+	valMatch := valueRe.FindStringSubmatch(line)
+	if valMatch != nil {
+		return leStr, valMatch[1]
+	}
+	if !strings.Contains(line, "{") {
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			return leStr, parts[1]
+		}
+	}
+	return "", ""
+}
+
+func calculatePercentiles(buckets []histogramBucket, totalCount uint64, sum float64) (float64, float64) {
+	if len(buckets) == 0 {
+		return 0, 0
+	}
+
+	sort.Slice(buckets, func(i, j int) bool {
+		return buckets[i].le < buckets[j].le
+	})
+
+	p50 := interpolatePercentile(buckets, 50, totalCount)
+	p95 := interpolatePercentile(buckets, 95, totalCount)
+
+	if p50 == 0 && totalCount > 0 {
+		p50 = sum / float64(totalCount)
+	}
+	if p95 == 0 && totalCount > 0 {
+		p95 = sum / float64(totalCount)
+	}
+
+	return p50, p95
+}
+
+func interpolatePercentile(buckets []histogramBucket, percentile float64, totalCount uint64) float64 {
+	if totalCount == 0 || len(buckets) == 0 {
+		return 0
+	}
+
+	targetCount := float64(percentile) / 100.0 * float64(totalCount)
+
+	for i := 1; i < len(buckets); i++ {
+		if buckets[i].count >= uint64(targetCount) && buckets[i-1].count < uint64(targetCount) {
+			countDelta := float64(buckets[i].count - buckets[i-1].count)
+			if countDelta == 0 {
+				return buckets[i].le
+			}
+			rank := targetCount - float64(buckets[i-1].count)
+			fraction := rank / countDelta
+			bucketWidth := buckets[i].le - buckets[i-1].le
+			return buckets[i-1].le + fraction*bucketWidth
+		}
+	}
+
+	if buckets[len(buckets)-1].count < uint64(targetCount) {
+		return buckets[len(buckets)-1].le
+	}
+
+	return 0
+}
+
 func (m *GPUMonitor) refreshCache() error {
-	if !m.nvidiaSmiAvail && !m.nvmlAvail {
+	if !m.nvmlAvailable {
 		m.mu.Lock()
 		m.statusCache = nil
 		m.mu.Unlock()
@@ -337,7 +484,7 @@ func (m *GPUMonitor) refreshCache() error {
 		MemoryUtilization: primary.MemoryUtilization,
 		Primary:           &primary,
 		AllGPUs:           gpus,
-		DriverVersion:     primary.DriverVersion,
+		DriverVersion:     m.driverVersion,
 	}
 
 	m.mu.Lock()
@@ -351,328 +498,207 @@ func (m *GPUMonitor) refreshCache() error {
 }
 
 func (m *GPUMonitor) collectGPUData() []GPUInfo {
-	basicGPUs := m.collectViaNvidiaSmi()
-	if len(basicGPUs) == 0 {
-		return nil
-	}
-
-	enhancedData := m.collectEnhancedViaNvidiaSmi()
-
-	for i := range basicGPUs {
-		basicGPUs[i].Index = i
-		if enhanced, ok := enhancedData[i]; ok {
-			basicGPUs[i].EccErrors = enhanced.EccErrors
-			basicGPUs[i].ThrottleReasons = enhanced.ThrottleReasons
-			basicGPUs[i].PersistenceMode = enhanced.PersistenceMode
-			basicGPUs[i].PCIeRxThroughput = enhanced.PCIeRxThroughput
-			basicGPUs[i].PCIeTxThroughput = enhanced.PCIeTxThroughput
-			basicGPUs[i].Bar1TotalMemory = enhanced.Bar1TotalMemory
-			basicGPUs[i].Bar1UsedMemory = enhanced.Bar1UsedMemory
-			basicGPUs[i].Processes = enhanced.Processes
-			basicGPUs[i].VbiosVersion = enhanced.VbiosVersion
-			basicGPUs[i].DriverVersion = enhanced.DriverVersion
+	var gpus []GPUInfo
+	for i, device := range m.devices {
+		info := m.collectFromDevice(device, i)
+		if info != nil {
+			gpus = append(gpus, *info)
 		}
-	}
-	return basicGPUs
-}
-
-func (m *GPUMonitor) collectViaNvidiaSmi() []GPUInfo {
-	cmd := exec.Command("nvidia-smi",
-		"--query-gpu=name,memory.total,memory.used,memory.free,temperature.gpu,utilization.gpu,power.draw,power.limit,fan.speed,clocks.sm,clocks.mem",
-		"--format=csv,noheader,nounits")
-	output, err := cmd.Output()
-	if err != nil {
-		m.logger.Error("nvidia-smi query failed", zap.Error(err))
-		return nil
-	}
-	gpus, err := m.parseOutput(string(output))
-	if err != nil || len(gpus) == 0 {
-		return nil
 	}
 	return gpus
 }
 
-func (m *GPUMonitor) collectEnhancedViaNvidiaSmi() map[int]GPUInfo {
-	result := map[int]GPUInfo{}
-
-	driverCmd := exec.Command("nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader,nounits")
-	driverOutput, err := driverCmd.Output()
-	if err == nil {
-		lines := strings.Split(strings.TrimSpace(string(driverOutput)), "\n")
-		for i, line := range lines {
-			if existing, ok := result[i]; ok {
-				existing.DriverVersion = strings.TrimSpace(line)
-				result[i] = existing
-			} else {
-				result[i] = GPUInfo{DriverVersion: strings.TrimSpace(line)}
-			}
-		}
+func (m *GPUMonitor) collectFromDevice(device nvml.Device, index int) *GPUInfo {
+	name, ret := device.GetName()
+	if ret != nvml.SUCCESS {
+		m.logger.Error("Failed to get device name", zap.Int("index", index))
+		return nil
 	}
 
-	eccCmd := exec.Command("nvidia-smi", "--query-gpu=ecc.errors.corrected.volatile.total", "--format=csv,noheader,nounits")
-	eccOutput, err := eccCmd.Output()
-	if err == nil {
-		lines := strings.Split(strings.TrimSpace(string(eccOutput)), "\n")
-		for i, line := range lines {
-			eccErrors, _ := strconv.Atoi(strings.TrimSpace(line))
-			if existing, ok := result[i]; ok {
-				existing.EccErrors = eccErrors
-				result[i] = existing
-			} else {
-				result[i] = GPUInfo{EccErrors: eccErrors}
-			}
-		}
+	memInfo, ret := device.GetMemoryInfo()
+	if ret != nvml.SUCCESS {
+		return nil
 	}
 
-	throttleCmd := exec.Command("nvidia-smi", "--query-gpu=clocks_throttle_reasons", "--format=csv,noheader")
-	throttleOutput, err := throttleCmd.Output()
-	if err == nil {
-		lines := strings.Split(strings.TrimSpace(string(throttleOutput)), "\n")
-		for i, line := range lines {
-			reasons := parseThrottleReasonsFromCSV(strings.TrimSpace(line))
-			if existing, ok := result[i]; ok {
-				existing.ThrottleReasons = reasons
-				result[i] = existing
-			} else {
-				result[i] = GPUInfo{ThrottleReasons: reasons}
-			}
-		}
+	temp, ret := device.GetTemperature(nvml.TEMPERATURE_GPU)
+	if ret != nvml.SUCCESS {
+		temp = 0
 	}
 
-	pciCmd := exec.Command("nvidia-smi", "--query-gpu=pcie_rx_throughput.counter,pcie_tx_throughput.counter", "--format=csv,noheader,nounits")
-	pciOutput, err := pciCmd.Output()
-	if err == nil {
-		lines := strings.Split(strings.TrimSpace(string(pciOutput)), "\n")
-		for i, line := range lines {
-			parts := strings.Split(line, ",")
-			rx := 0
-			tx := 0
-			if len(parts) >= 1 {
-				rx, _ = strconv.Atoi(strings.TrimSpace(parts[0]))
-			}
-			if len(parts) >= 2 {
-				tx, _ = strconv.Atoi(strings.TrimSpace(parts[1]))
-			}
-			if existing, ok := result[i]; ok {
-				existing.PCIeRxThroughput = rx
-				existing.PCIeTxThroughput = tx
-				result[i] = existing
-			} else {
-				result[i] = GPUInfo{PCIeRxThroughput: rx, PCIeTxThroughput: tx}
-			}
-		}
+	utilRates, ret := device.GetUtilizationRates()
+	if ret != nvml.SUCCESS {
+		utilRates.Gpu = 0
 	}
 
-	persistenceCmd := exec.Command("nvidia-smi", "--query-gpu=persistence_mode", "--format=csv,noheader")
-	persistenceOutput, err := persistenceCmd.Output()
-	if err == nil {
-		lines := strings.Split(strings.TrimSpace(string(persistenceOutput)), "\n")
-		for i, line := range lines {
-			enabled := strings.TrimSpace(line) == "Enabled"
-			if existing, ok := result[i]; ok {
-				existing.PersistenceMode = enabled
-				result[i] = existing
-			} else {
-				result[i] = GPUInfo{PersistenceMode: enabled}
-			}
-		}
+	powerDraw, ret := device.GetPowerUsage()
+	if ret != nvml.SUCCESS {
+		powerDraw = 0
+	}
+	powerLimit, ret := device.GetPowerManagementLimit()
+	if ret != nvml.SUCCESS {
+		powerLimit = 0
 	}
 
-	vbiosCmd := exec.Command("nvidia-smi", "--query-gpu=vbios_version", "--format=csv,noheader")
-	vbiosOutput, err := vbiosCmd.Output()
-	if err == nil {
-		lines := strings.Split(strings.TrimSpace(string(vbiosOutput)), "\n")
-		for i, line := range lines {
-			if existing, ok := result[i]; ok {
-				existing.VbiosVersion = strings.TrimSpace(line)
-				result[i] = existing
-			} else {
-				result[i] = GPUInfo{VbiosVersion: strings.TrimSpace(line)}
-			}
-		}
+	powerDrawW := int(powerDraw / 1000)
+	powerLimitW := int(powerLimit / 1000)
+	powerPercent := 0
+	if powerLimit > 0 {
+		powerPercent = int(powerDraw * 100 / powerLimit)
 	}
 
-	bar1Cmd := exec.Command("nvidia-smi", "--query-gpu=bar1_memory.used,bar1_memory.total", "--format=csv,noheader,nounits")
-	bar1Output, err := bar1Cmd.Output()
-	if err == nil {
-		lines := strings.Split(strings.TrimSpace(string(bar1Output)), "\n")
-		for i, line := range lines {
-			parts := strings.Split(line, ",")
-			bar1Used := int64(0)
-			bar1Total := int64(0)
-			if len(parts) >= 1 {
-				v, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
-				bar1Used = int64(v) * 1024 * 1024
-			}
-			if len(parts) >= 2 {
-				v, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
-				bar1Total = int64(v) * 1024 * 1024
-			}
-			if existing, ok := result[i]; ok {
-				existing.Bar1UsedMemory = bar1Used
-				existing.Bar1TotalMemory = bar1Total
-				result[i] = existing
-			} else {
-				result[i] = GPUInfo{Bar1UsedMemory: bar1Used, Bar1TotalMemory: bar1Total}
-			}
-		}
+	fanSpeed, ret := device.GetFanSpeed()
+	if ret != nvml.SUCCESS {
+		fanSpeed = 0
 	}
 
-	processes := m.collectGPUProcesses()
-	for i, procs := range processes {
-		if existing, ok := result[i]; ok {
-			existing.Processes = procs
-			result[i] = existing
-		} else {
-			result[i] = GPUInfo{Processes: procs}
-		}
+	clockSM, ret := device.GetClockInfo(nvml.CLOCK_SM)
+	if ret != nvml.SUCCESS {
+		clockSM = 0
+	}
+	clockMem, ret := device.GetClockInfo(nvml.CLOCK_MEM)
+	if ret != nvml.SUCCESS {
+		clockMem = 0
 	}
 
+	totalMB := int(memInfo.Total / (1024 * 1024))
+	usedMB := int(memInfo.Used / (1024 * 1024))
+	memUtilPercent := 0
+	if totalMB > 0 {
+		memUtilPercent = int(usedMB * 100 / totalMB)
+	}
+
+	eccErrors, _, ret := device.GetTotalEccErrors(nvml.MEMORY_ERROR_TYPE_SINGLE_BIT_ECC, nvml.ECC_COUNTER_TYPE_VOLATILE)
+	if ret != nvml.SUCCESS {
+		eccErrors = 0
+	}
+
+	throttleReasons, ret := device.GetCurrentClocksThrottleReasons()
+	if ret != nvml.SUCCESS {
+		throttleReasons = 0
+	}
+
+	persistenceMode, ret := device.GetPersistenceMode()
+	if ret != nvml.SUCCESS {
+		persistenceMode = nvml.FEATURE_DISABLED
+	}
+
+	rxThroughput, ret := device.GetPcieThroughput(nvml.PCIE_UTIL_RX_BYTES)
+	if ret != nvml.SUCCESS {
+		rxThroughput = 0
+	}
+	txThroughput, ret := device.GetPcieThroughput(nvml.PCIE_UTIL_TX_BYTES)
+	if ret != nvml.SUCCESS {
+		txThroughput = 0
+	}
+
+	bar1Info, ret := device.GetBAR1MemoryInfo()
+	if ret != nvml.SUCCESS {
+		bar1Info.Bar1Total = 0
+		bar1Info.Bar1Used = 0
+	}
+
+	vbiosVersion, ret := device.GetVbiosVersion()
+	if ret != nvml.SUCCESS {
+		vbiosVersion = ""
+	}
+
+	perfState, ret := device.GetPerformanceState()
+	perfStateStr := fmt.Sprintf("P%d", perfState)
+	if ret != nvml.SUCCESS {
+		perfStateStr = ""
+	}
+
+	encoderUtil, _, ret := device.GetEncoderUtilization()
+	if ret != nvml.SUCCESS {
+		encoderUtil = 0
+	}
+
+	decoderUtil, _, ret := device.GetDecoderUtilization()
+	if ret != nvml.SUCCESS {
+		decoderUtil = 0
+	}
+
+	jpgUtil, _, ret := device.GetJpgUtilization()
+	if ret != nvml.SUCCESS {
+		jpgUtil = 0
+	}
+
+	ofaUtil, _, ret := device.GetOfaUtilization()
+	if ret != nvml.SUCCESS {
+		ofaUtil = 0
+	}
+
+	processes := m.collectProcesses(device)
+
+	return &GPUInfo{
+		Name:              name,
+		Index:             index,
+		TotalMemory:       int64(memInfo.Total),
+		UsedMemory:        int64(memInfo.Used),
+		AvailableMemory:   int64(memInfo.Free),
+		Temperature:       int(temp),
+		Utilization:       int(utilRates.Gpu),
+		PowerDraw:         powerDrawW,
+		PowerLimit:        powerLimitW,
+		PowerPercent:      powerPercent,
+		FanSpeed:          int(fanSpeed),
+		ClockSM:           int(clockSM),
+		ClockMem:          int(clockMem),
+		MemoryUtilization: memUtilPercent,
+		EccErrors:         int(eccErrors),
+		ThrottleReasons:   decodeThrottleReasons(throttleReasons),
+		PersistenceMode:   persistenceMode == nvml.FEATURE_ENABLED,
+		PCIeRxThroughput:  int(rxThroughput),
+		PCIeTxThroughput:  int(txThroughput),
+		Bar1TotalMemory:   int64(bar1Info.Bar1Total),
+		Bar1UsedMemory:    int64(bar1Info.Bar1Used),
+		Processes:         processes,
+		VbiosVersion:      vbiosVersion,
+		DriverVersion:     m.driverVersion,
+		PerformanceState:  perfStateStr,
+		GPUEncUtilization: int(encoderUtil),
+		GPUDecUtilization: int(decoderUtil),
+		JpgUtilization:    int(jpgUtil),
+		OfaUtilization:    int(ofaUtil),
+	}
+}
+
+func (m *GPUMonitor) collectProcesses(device nvml.Device) []GPUProcess {
+	processes, ret := device.GetComputeRunningProcesses()
+	if ret != nvml.SUCCESS {
+		return nil
+	}
+
+	var result []GPUProcess
+	for _, proc := range processes {
+		if proc.Pid == 0 {
+			continue
+		}
+		name := getProcessCmdline(int(proc.Pid))
+		if name == "" {
+			name = fmt.Sprintf("pid-%d", proc.Pid)
+		}
+		result = append(result, GPUProcess{
+			Pid:           int(proc.Pid),
+			Name:          name,
+			UsedGPUMemory: int64(proc.UsedGpuMemory),
+		})
+	}
 	return result
 }
 
-func parseThrottleReasonsFromCSV(csv string) []string {
-	if csv == "No" || csv == "Active" || csv == "" {
-		if csv == "Active" {
-			return []string{"throttling_active"}
-		}
-		return nil
-	}
-	parts := strings.Split(csv, "+")
-	var reasons []string
-	for _, p := range parts {
-		name := strings.TrimSpace(p)
-		if name != "" && name != "No" {
-			reasons = append(reasons, name)
-		}
-	}
-	return reasons
-}
-
-func (m *GPUMonitor) collectGPUProcesses() map[int][]GPUProcess {
-	cmd := exec.Command("nvidia-smi", "--query-compute-apps=pid,gpu_name,used_gpu_memory", "--format=csv,noheader,nounits")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-
-	gpuProcesses := map[int][]GPUProcess{}
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	for _, line := range lines {
-		parts := strings.Split(line, ",")
-		if len(parts) < 3 {
-			continue
-		}
-		pid, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
-		name := strings.TrimSpace(parts[1])
-		memKB, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
-		if pid == 0 {
-			continue
-		}
-
-		cmdline := getProcessCmdline(pid)
-		if cmdline != "" {
-			name = cmdline
-		}
-
-		proc := GPUProcess{
-			Pid:           pid,
-			Name:          name,
-			UsedGPUMemory: int64(memKB) * 1024,
-		}
-
-		gpuIdx := 0
-		gpuProcesses[gpuIdx] = append(gpuProcesses[gpuIdx], proc)
-	}
-	return gpuProcesses
-}
-
 func getProcessCmdline(pid int) string {
-	cmd := exec.Command("cat", fmt.Sprintf("/proc/%d/cmdline", pid))
-	output, err := cmd.Output()
+	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", pid)
+	data, err := os.ReadFile(cmdlinePath)
 	if err != nil {
 		return ""
 	}
-	cmdline := strings.ReplaceAll(string(output), "\x00", " ")
+	cmdline := strings.ReplaceAll(string(data), "\x00", " ")
 	cmdline = strings.TrimSpace(cmdline)
 	if len(cmdline) > 100 {
 		cmdline = cmdline[:100]
 	}
 	return cmdline
-}
-
-func (m *GPUMonitor) parseOutput(output string) ([]GPUInfo, error) {
-	var gpus []GPUInfo
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	for _, line := range lines {
-		info, err := m.parseLine(line)
-		if err != nil {
-			continue
-		}
-		gpus = append(gpus, info)
-	}
-	return gpus, nil
-}
-
-var whitespaceRe = regexp.MustCompile(`\s+`)
-
-func (m *GPUMonitor) parseLine(line string) (GPUInfo, error) {
-	parts := strings.Split(line, ",")
-	if len(parts) < 6 {
-		return GPUInfo{}, fmt.Errorf("insufficient fields: %d", len(parts))
-	}
-
-	totalMB, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
-	usedMB, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
-	freeMB, _ := strconv.Atoi(strings.TrimSpace(parts[3]))
-	temp, _ := strconv.Atoi(strings.TrimSpace(parts[4]))
-	util, _ := strconv.Atoi(strings.TrimSpace(parts[5]))
-
-	powerDraw := 0.0
-	powerLimit := 0.0
-	if len(parts) > 6 {
-		powerDraw, _ = strconv.ParseFloat(strings.TrimSpace(parts[6]), 64)
-	}
-	if len(parts) > 7 {
-		powerLimit, _ = strconv.ParseFloat(strings.TrimSpace(parts[7]), 64)
-	}
-	fanSpeed := 0
-	if len(parts) > 8 {
-		fanSpeed, _ = strconv.Atoi(strings.TrimSpace(parts[8]))
-	}
-	clockSM := 0
-	if len(parts) > 9 {
-		clockSM, _ = strconv.Atoi(strings.TrimSpace(parts[9]))
-	}
-	clockMem := 0
-	if len(parts) > 10 {
-		clockMem, _ = strconv.Atoi(strings.TrimSpace(parts[10]))
-	}
-
-	powerPercent := 0
-	if powerLimit > 0 {
-		powerPercent = int(powerDraw / powerLimit * 100)
-	}
-	memUtilPercent := 0
-	if totalMB > 0 {
-		memUtilPercent = int(float64(usedMB) / float64(totalMB) * 100)
-	}
-
-	return GPUInfo{
-		Name:              strings.TrimSpace(parts[0]),
-		TotalMemory:       int64(totalMB) * 1024 * 1024,
-		UsedMemory:        int64(usedMB) * 1024 * 1024,
-		AvailableMemory:   int64(freeMB) * 1024 * 1024,
-		Temperature:       temp,
-		Utilization:       util,
-		PowerDraw:         int(powerDraw),
-		PowerLimit:        int(powerLimit),
-		PowerPercent:      powerPercent,
-		FanSpeed:          fanSpeed,
-		ClockSM:           clockSM,
-		ClockMem:          clockMem,
-		MemoryUtilization: memUtilPercent,
-	}, nil
 }
 
 func (m *GPUMonitor) GetStatus() *GPUStatus {
@@ -717,17 +743,22 @@ func (m *GPUMonitor) GetEnhancedInfo() map[string]interface{} {
 	gpusList := make([]map[string]interface{}, 0)
 	for _, gpu := range status.AllGPUs {
 		gpuEnhanced := map[string]interface{}{
-			"index":              gpu.Index,
-			"name":               gpu.Name,
-			"ecc_errors":         gpu.EccErrors,
-			"throttle_reasons":   gpu.ThrottleReasons,
-			"persistence_mode":   gpu.PersistenceMode,
-			"pcie_rx_throughput": gpu.PCIeRxThroughput,
-			"pcie_tx_throughput": gpu.PCIeTxThroughput,
-			"bar1_total_memory":  gpu.Bar1TotalMemory,
-			"bar1_used_memory":   gpu.Bar1UsedMemory,
-			"vbios_version":      gpu.VbiosVersion,
-			"processes":          gpu.Processes,
+			"index":               gpu.Index,
+			"name":                gpu.Name,
+			"ecc_errors":          gpu.EccErrors,
+			"throttle_reasons":    gpu.ThrottleReasons,
+			"persistence_mode":    gpu.PersistenceMode,
+			"pcie_rx_throughput":  gpu.PCIeRxThroughput,
+			"pcie_tx_throughput":  gpu.PCIeTxThroughput,
+			"bar1_total_memory":   gpu.Bar1TotalMemory,
+			"bar1_used_memory":    gpu.Bar1UsedMemory,
+			"vbios_version":       gpu.VbiosVersion,
+			"processes":           gpu.Processes,
+			"performance_state":   gpu.PerformanceState,
+			"gpu_enc_utilization": gpu.GPUEncUtilization,
+			"gpu_dec_utilization": gpu.GPUDecUtilization,
+			"jpg_utilization":     gpu.JpgUtilization,
+			"ofa_utilization":     gpu.OfaUtilization,
 		}
 		gpusList = append(gpusList, gpuEnhanced)
 	}
@@ -891,6 +922,9 @@ func (m *GPUMonitor) GetGPUSummary() *GPUSummary {
 		current["throttle_reasons"] = status.Primary.ThrottleReasons
 		current["persistence_mode"] = status.Primary.PersistenceMode
 		current["vbios_version"] = status.Primary.VbiosVersion
+		current["performance_state"] = status.Primary.PerformanceState
+		current["gpu_enc_utilization"] = status.Primary.GPUEncUtilization
+		current["gpu_dec_utilization"] = status.Primary.GPUDecUtilization
 	}
 
 	return &GPUSummary{
@@ -902,20 +936,20 @@ func (m *GPUMonitor) GetGPUSummary() *GPUSummary {
 }
 
 type MemoryOptimizationStatus struct {
-	Strategy              string  `json:"strategy"`
-	Fragmentation         float64 `json:"fragmentation"`
-	AvgFragmentation      float64 `json:"avg_fragmentation"`
+	Strategy               string  `json:"strategy"`
+	Fragmentation          float64 `json:"fragmentation"`
+	AvgFragmentation       float64 `json:"avg_fragmentation"`
 	RecommendedUtilization float64 `json:"recommended_utilization"`
-	LastFlush             string  `json:"last_flush"`
-	FlushInterval         int     `json:"flush_interval"`
+	LastFlush              string  `json:"last_flush"`
+	FlushInterval          int     `json:"flush_interval"`
 }
 
 func (m *GPUMonitor) GetMemoryOptimizationStatus() *MemoryOptimizationStatus {
 	return &MemoryOptimizationStatus{
-		Strategy:              m.memoryStrategy,
-		Fragmentation:         m.DetectFragmentation(),
-		AvgFragmentation:      m.GetAverageFragmentation(),
+		Strategy:               m.memoryStrategy,
+		Fragmentation:          m.DetectFragmentation(),
+		AvgFragmentation:       m.GetAverageFragmentation(),
 		RecommendedUtilization: m.GetRecommendedUtilization(),
-		FlushInterval:         300,
+		FlushInterval:          300,
 	}
 }
