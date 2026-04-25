@@ -43,7 +43,7 @@ kill -9 <PID>      # 释放端口
 
 | 端口 | 常见占用 | 解决方案 |
 |------|---------|---------|
-| 30000 | 其他 Vite 项目 | 修改 `vite.config.ts` → `server.port` |
+| 30001 | 其他 Vite 项目 | 修改 `vite.config.ts` → `server.port` |
 | 35000 | 其他 Python 服务 | 修改 `.env` → `PORT` |
 | 35001 | 其他 Go 服务 | 修改启动 `--port` 参数 |
 | 3000 | Node.js 项目 | 修改 `.env` → `CLIENT_PORT` |

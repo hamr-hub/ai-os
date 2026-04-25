@@ -14,6 +14,7 @@ class SystemController:
     def __init__(self):
         self._use_sudo = False
         self._command_timeout = 15
+        self._systemctl_bin = shutil.which('systemctl') or '/usr/bin/systemctl'
 
         self._restart_attempts: Dict[str, int] = {}
         self._last_restart_time: Dict[str, datetime] = {}
@@ -24,7 +25,7 @@ class SystemController:
         self._managed_processes: Dict[str, subprocess.Popen] = {}
     
     def _supports_systemctl(self) -> bool:
-        return os.name != 'nt' and shutil.which('systemctl') is not None
+        return os.name != 'nt' and os.path.exists(self._systemctl_bin)
     
     def _run_command(self, cmd: list) -> subprocess.CompletedProcess:
         actual_cmd = list(cmd)
@@ -51,27 +52,27 @@ class SystemController:
         return result
     
     def _unsupported_result(self, stdout: str = '', stderr: str = 'systemctl not available') -> subprocess.CompletedProcess:
-        return subprocess.CompletedProcess(args=['systemctl'], returncode=1, stdout=stdout, stderr=stderr)
+        return subprocess.CompletedProcess(args=[self._systemctl_bin], returncode=1, stdout=stdout, stderr=stderr)
     
     def start_service(self, service_name: str) -> bool:
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when starting service: %s", service_name)
             return False
-        result = self._run_command(['systemctl', 'start', service_name])
+        result = self._run_command([self._systemctl_bin, 'start', service_name])
         return result.returncode == 0
     
     def stop_service(self, service_name: str) -> bool:
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when stopping service: %s", service_name)
             return False
-        result = self._run_command(['systemctl', 'stop', service_name])
+        result = self._run_command([self._systemctl_bin, 'stop', service_name])
         return result.returncode == 0
     
     def restart_service(self, service_name: str) -> bool:
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when restarting service: %s", service_name)
             return False
-        result = self._run_command(['systemctl', 'restart', service_name])
+        result = self._run_command([self._systemctl_bin, 'restart', service_name])
         return result.returncode == 0
     
     def get_service_status(self, service_name: str) -> str:
@@ -83,7 +84,7 @@ class SystemController:
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when checking service: %s", service_name)
             return 'inactive'
-        result = self._run_command(['systemctl', 'is-active', service_name])
+        result = self._run_command([self._systemctl_bin, 'is-active', service_name])
         status = result.stdout.strip() if result.returncode == 0 else 'inactive'
         
         cache_service.set(cache_key, status, ttl_seconds=5)
@@ -97,21 +98,21 @@ class SystemController:
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when enabling service: %s", service_name)
             return False
-        result = self._run_command(['systemctl', 'enable', service_name])
+        result = self._run_command([self._systemctl_bin, 'enable', service_name])
         return result.returncode == 0
     
     def disable_service(self, service_name: str) -> bool:
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when disabling service: %s", service_name)
             return False
-        result = self._run_command(['systemctl', 'disable', service_name])
+        result = self._run_command([self._systemctl_bin, 'disable', service_name])
         return result.returncode == 0
     
     def get_service_info(self, service_name: str) -> Optional[Dict[str, Any]]:
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when reading service info: %s", service_name)
             return None
-        result = self._run_command(['systemctl', 'show', service_name, '--json'])
+        result = self._run_command([self._systemctl_bin, 'show', service_name, '--json'])
         if result.returncode == 0:
             try:
                 return json.loads(result.stdout)
@@ -123,7 +124,7 @@ class SystemController:
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when listing services")
             return []
-        result = self._run_command(['systemctl', 'list-units', '--type=service', '--all', '--json'])
+        result = self._run_command([self._systemctl_bin, 'list-units', '--type=service', '--all', '--json'])
         if result.returncode == 0:
             try:
                 services = json.loads(result.stdout)

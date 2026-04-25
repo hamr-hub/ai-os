@@ -8,7 +8,7 @@
 
 ```
 ai-os/
-├── frontend/              # Vue 3 前端 (端口 30000)
+├── frontend/              # Vue 3 前端 (开发 30001 / 生产 30000)
 ├── app-controller/        # Python FastAPI 后端 (端口 35000)
 ├── go-vllm-api/           # Go Gin 后端 (端口 35001)
 ├── aiclient2api/          # API 网关 (端口 3000, Docker部署)
@@ -22,7 +22,7 @@ ai-os/
 
 ```bash
 # 前端
-cd frontend && pnpm install && pnpm dev              # http://localhost:30000
+cd frontend && pnpm install && pnpm dev              # http://localhost:30001
 
 # Python 后端
 cd app-controller && pip install -r requirements.txt && python main.py  # http://localhost:35000

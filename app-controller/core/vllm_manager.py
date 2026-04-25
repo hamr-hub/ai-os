@@ -13,11 +13,14 @@ import json
 import asyncio
 import httpx
 import logging
+import shutil
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from core.cache_service import cache_service
 
 logger = logging.getLogger("ai_controller.vllm_manager")
+
+SYSTEMCTL_BIN = shutil.which('systemctl') or '/usr/bin/systemctl'
 
 # 模型切换互斥锁，防止并发切换
 model_switch_lock = asyncio.Lock()
@@ -240,7 +243,7 @@ def _is_service_running() -> bool:
     """
     try:
         result = subprocess.run(
-            ['systemctl', 'is-active', VLLM_SERVICE_NAME],
+            [SYSTEMCTL_BIN, 'is-active', VLLM_SERVICE_NAME],
             capture_output=True, text=True, timeout=5
         )
         return result.stdout.strip() == 'active'
@@ -255,7 +258,7 @@ def start_vllm_service() -> bool:
     """
     try:
         result = subprocess.run(
-            ['systemctl', 'start', VLLM_SERVICE_NAME],
+            [SYSTEMCTL_BIN, 'start', VLLM_SERVICE_NAME],
             capture_output=True, text=True, timeout=10
         )
         return result.returncode == 0
@@ -270,7 +273,7 @@ def stop_vllm_service() -> bool:
     """
     try:
         result = subprocess.run(
-            ['systemctl', 'stop', VLLM_SERVICE_NAME],
+            [SYSTEMCTL_BIN, 'stop', VLLM_SERVICE_NAME],
             capture_output=True, text=True, timeout=30
         )
         return result.returncode == 0
@@ -285,7 +288,7 @@ def restart_vllm_service() -> bool:
     """
     try:
         result = subprocess.run(
-            ['systemctl', 'restart', VLLM_SERVICE_NAME],
+            [SYSTEMCTL_BIN, 'restart', VLLM_SERVICE_NAME],
             capture_output=True, text=True, timeout=30
         )
         return result.returncode == 0
@@ -300,7 +303,7 @@ def get_vllm_service_status() -> Dict[str, Any]:
     """
     try:
         result = subprocess.run(
-            ['systemctl', 'show', VLLM_SERVICE_NAME, '--property=ActiveState,SubState,MainPID,MemoryCurrent', '--value'],
+            [SYSTEMCTL_BIN, 'show', VLLM_SERVICE_NAME, '--property=ActiveState,SubState,MainPID,MemoryCurrent', '--value'],
             capture_output=True, text=True, timeout=5
         )
         lines = result.stdout.strip().split('\n')
@@ -507,7 +510,7 @@ def _update_vllm_script(model_path: str) -> bool:
                 with open(service_file, 'w') as f:
                     f.write(new_content)
                 # 重新加载 systemd 配置
-                subprocess.run(['systemctl', 'daemon-reload'], capture_output=True)
+                subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True)
                 return True
         
         # 如果没有 systemd 服务文件，尝试更新启动脚本

@@ -35,6 +35,24 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+detect_go_status() {
+    if curl -s "http://localhost:$GO_PORT/health" > /dev/null 2>&1; then
+        echo "http://localhost:$GO_PORT"
+    else
+        echo ""
+    fi
+}
+
+detect_frontend_status() {
+    if curl -s "http://localhost:$FRONTEND_PORT" > /dev/null 2>&1; then
+        echo "http://localhost:$FRONTEND_PORT"
+    elif [ "$FRONTEND_PORT" != "30001" ] && curl -s "http://localhost:30001" > /dev/null 2>&1; then
+        echo "http://localhost:30001"
+    else
+        echo ""
+    fi
+}
+
 show_help() {
     echo "AI OS Platform Startup Script"
     echo ""
@@ -43,7 +61,7 @@ show_help() {
     echo "Options:"
     echo "  -h, --help          Show this help message"
     echo "  -d, --docker        Force using Docker Compose"
-    echo "  -n, --native        Force native mode (Python + Node.js)"
+    echo "  -n, --native        Force native mode (Python + aiclient2api)"
     echo "  --redis-port PORT   Set Redis port (default: 6379)"
     echo "  --controller-port PORT  Set AI Controller port (default: 35000)"
     echo "  --go-port PORT          Set Go VLLM API port (default: 35001)"
@@ -76,6 +94,15 @@ show_status() {
     else
         log_error "AI Controller: not running"
     fi
+
+    # Check Go VLLM API
+    local go_url
+    go_url=$(detect_go_status)
+    if [ -n "$go_url" ]; then
+        log_success "Go VLLM API: running on $go_url"
+    else
+        log_warning "Go VLLM API: not running"
+    fi
     
     # Check AIClient-2-API
     if curl -s http://localhost:$AICLIENT_PORT > /dev/null 2>&1; then
@@ -85,10 +112,12 @@ show_status() {
     fi
     
     # Check Frontend
-    if curl -s http://localhost:$FRONTEND_PORT > /dev/null 2>&1; then
-        log_success "Frontend: running on http://localhost:$FRONTEND_PORT"
+    local frontend_url
+    frontend_url=$(detect_frontend_status)
+    if [ -n "$frontend_url" ]; then
+        log_success "Frontend: running on $frontend_url"
     else
-        log_error "Frontend: not running"
+        log_warning "Frontend: not running"
     fi
     
     echo ""
@@ -272,6 +301,10 @@ start_native_mode() {
         sleep 1
         retries=$((retries - 1))
     done
+
+    log_warning "Native mode does not auto-start Go VLLM API or frontend dev server."
+    log_info "Start Go VLLM API manually: cd go-vllm-api && go run cmd/server/main.go --port $GO_PORT"
+    log_info "Start frontend manually: cd frontend && pnpm dev"
     
     show_summary
     
@@ -289,12 +322,25 @@ show_summary() {
     echo ""
     echo "=== AI OS Platform Started Successfully ==="
     echo ""
+    local go_url
+    local frontend_url
+    go_url=$(detect_go_status)
+    frontend_url=$(detect_frontend_status)
+
     echo "Services:"
     echo "  ${GREEN}Redis${NC}:           localhost:$REDIS_PORT"
     echo "  ${GREEN}AI Controller${NC}:   http://localhost:$CONTROLLER_PORT"
-    echo "  ${GREEN}Go VLLM API${NC}:     http://localhost:$GO_PORT"
     echo "  ${GREEN}AIClient-2-API${NC}:  http://localhost:$AICLIENT_PORT"
-    echo "  ${GREEN}Frontend${NC}:        http://localhost:$FRONTEND_PORT"
+    if [ -n "$go_url" ]; then
+        echo "  ${GREEN}Go VLLM API${NC}:     $go_url"
+    else
+        echo "  ${YELLOW}Go VLLM API${NC}:     not started"
+    fi
+    if [ -n "$frontend_url" ]; then
+        echo "  ${GREEN}Frontend${NC}:        $frontend_url"
+    else
+        echo "  ${YELLOW}Frontend${NC}:        not started"
+    fi
     echo ""
     echo "API Endpoints:"
     echo "  - ${BLUE}/v1/chat/completions${NC}  - Chat completion API"
