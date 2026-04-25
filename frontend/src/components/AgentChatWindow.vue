@@ -45,8 +45,17 @@ const executingTools = ref<Array<{ name: string; id: string }>>([])
 
 const currentConv = computed(() => agentChatStore.currentConversation)
 const messages = computed(() => currentConv.value?.messages || [])
-const runningModelList = computed(() => modelList.value.filter((m) => m.running))
-const activeModel = computed(() => currentConv.value?.model || defaultModel.value)
+const selectableModelList = computed(() => modelList.value)
+const activeModel = computed(
+  () =>
+    currentConv.value?.model ||
+    defaultModel.value ||
+    modelList.value.find((m) => m.running)?.name ||
+    modelList.value[0]?.name ||
+    null
+)
+const activeModelInfo = computed(() => modelList.value.find((m) => m.name === activeModel.value) || null)
+const activeModelIsRunning = computed(() => activeModelInfo.value?.running ?? false)
 
 watch(
   currentConv,
@@ -108,8 +117,25 @@ const addMessage = (role: 'user' | 'assistant' | 'system', content: string) => {
   return message
 }
 
+const setStreamingError = (message: string) => {
+  if (streamingMessageId.value && currentConv.value) {
+    const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
+    if (msg) {
+      msg.content = `请求失败：${message}`
+      nextTick(() => scrollToBottom(true))
+      return
+    }
+  }
+  addMessage('system', `Error: ${message}`)
+}
+
 const handleSend = async () => {
   if (!inputMessage.value.trim() || isLoading.value || !currentConv.value) return
+
+  if (!activeModel.value) {
+    appStore.warning('当前没有可用模型，请先启动模型或设置默认模型')
+    return
+  }
 
   const userMessage = inputMessage.value.trim()
   inputMessage.value = ''
@@ -207,6 +233,7 @@ const handleSend = async () => {
         },
         (error) => {
           appStore.error(`请求失败: ${error.message}`)
+          setStreamingError(error.message)
           streamingMessageId.value = null
           executingTools.value = []
         },
@@ -232,6 +259,7 @@ const handleSend = async () => {
         },
         (error) => {
           appStore.error(`请求失败: ${error.message}`)
+          setStreamingError(error.message)
           streamingMessageId.value = null
         },
         abortController.value.signal
@@ -246,7 +274,7 @@ const handleSend = async () => {
     }
     const errorMessage = error instanceof Error ? error.message : 'Failed to get response'
     appStore.error(errorMessage)
-    addMessage('system', `Error: ${errorMessage}`)
+    setStreamingError(errorMessage)
   } finally {
     isLoading.value = false
     abortController.value = null
@@ -326,23 +354,23 @@ const autoResize = (event: Event) => {
       <div class="chat-topbar">
         <div class="topbar-left model-picker-wrap">
           <div class="model-selector" @click.stop="showModelPicker = !showModelPicker">
-            <span class="model-dot" :class="activeModel ? 'online' : 'offline'"></span>
+            <span class="model-dot" :class="activeModelIsRunning ? 'online' : 'offline'"></span>
             <span class="model-name">{{ activeModel || '选择模型' }}</span>
             <ChevronDown class="w-3.5 h-3.5" />
           </div>
           <div v-if="showModelPicker" class="model-picker">
             <div
-              v-for="m in runningModelList"
+              v-for="m in selectableModelList"
               :key="m.name"
               class="picker-item"
               :class="{ active: m.name === activeModel }"
               @click.stop="selectModel(m.name)"
             >
-              <span class="picker-dot online"></span>
+              <span class="picker-dot" :class="m.running ? 'online' : 'offline'"></span>
               {{ m.name }}
               <Check v-if="m.name === activeModel" class="w-3.5 h-3.5" />
             </div>
-            <div v-if="!runningModelList.length" class="picker-empty">暂无运行中模型</div>
+            <div v-if="!selectableModelList.length" class="picker-empty">暂无可用模型</div>
           </div>
         </div>
         <button
@@ -496,8 +524,9 @@ const autoResize = (event: Event) => {
         </div>
         <div class="input-footer">
           <span v-if="activeModel" class="model-info">
-            <span class="model-dot online"></span>
+            <span class="model-dot" :class="activeModelIsRunning ? 'online' : 'offline'"></span>
             {{ activeModel }}
+            <span v-if="!activeModelIsRunning">未运行</span>
           </span>
           <span v-else class="model-warn">请先选择或启动模型</span>
         </div>
@@ -642,6 +671,9 @@ const autoResize = (event: Event) => {
 }
 .picker-dot.online {
   background: #22c55e;
+}
+.picker-dot.offline {
+  background: #6b7280;
 }
 .picker-empty {
   padding: 14px;

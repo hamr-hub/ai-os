@@ -37,6 +37,24 @@ func NewV1Handler(scheduler *service.Scheduler, gpuMonitor *service.GPUMonitor, 
 	}
 }
 
+func (h *V1Handler) ensureModelReady(c *gin.Context, modelName string) error {
+	if h.scheduler.IsModelRunning(modelName) {
+		return nil
+	}
+
+	ok, err := h.scheduler.StartModel(c.Request.Context(), modelName)
+	if !ok {
+		return fmt.Errorf("failed to start model: %w", err)
+	}
+
+	port := h.scheduler.GetModelPort(modelName)
+	if err := h.proxy.WaitUntilReady(c.Request.Context(), port, 90*time.Second, time.Second); err != nil {
+		return fmt.Errorf("model started but readiness probe failed: %w", err)
+	}
+
+	return nil
+}
+
 func (h *V1Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	v1 := rg.Group("/v1")
 	{
@@ -197,14 +215,10 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		slotAcquired = true
 	}
 
-	if !h.scheduler.IsModelRunning(modelName) {
-		ok, err := h.scheduler.StartModel(c.Request.Context(), modelName)
-		if !ok {
-			statusCode = 503
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Failed to start model: %v", err)})
-			return
-		}
-		time.Sleep(5 * time.Second)
+	if err := h.ensureModelReady(c, modelName); err != nil {
+		statusCode = 503
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
 	}
 
 	port := h.scheduler.GetModelPort(modelName)
@@ -329,13 +343,9 @@ func (h *V1Handler) CreateEmbeddings(c *gin.Context) {
 	}
 	slotAcquired = true
 
-	if !h.scheduler.IsModelRunning(modelName) {
-		ok, _ := h.scheduler.StartModel(c.Request.Context(), modelName)
-		if !ok {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Failed to start model"})
-			return
-		}
-		time.Sleep(5 * time.Second)
+	if err := h.ensureModelReady(c, modelName); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
 	}
 
 	port := h.scheduler.GetModelPort(modelName)
@@ -414,8 +424,8 @@ func (h *V1Handler) UploadImage(c *gin.Context) {
 	validation := utils.ValidateImageData(contents)
 	if validation.Valid {
 		c.JSON(http.StatusOK, gin.H{
-			"success":    true,
-			"message":    "Image uploaded successfully",
+			"success": true,
+			"message": "Image uploaded successfully",
 			"image_info": gin.H{
 				"width":        validation.Width,
 				"height":       validation.Height,
@@ -461,13 +471,9 @@ func (h *V1Handler) GenerateImage(c *gin.Context) {
 		return
 	}
 
-	if !h.scheduler.IsModelRunning(req.Model) {
-		ok, _ := h.scheduler.StartModel(c.Request.Context(), req.Model)
-		if !ok {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Failed to start model"})
-			return
-		}
-		time.Sleep(5 * time.Second)
+	if err := h.ensureModelReady(c, req.Model); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
 	}
 
 	port := h.scheduler.GetModelPort(req.Model)
@@ -496,7 +502,12 @@ func (h *V1Handler) GetStatus(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, model.APIStatus{
-		Status:          func() string { if gpuStatus != nil { return "healthy" }; return "degraded" }(),
+		Status: func() string {
+			if gpuStatus != nil {
+				return "healthy"
+			}
+			return "degraded"
+		}(),
 		Timestamp:       time.Now().Format(time.RFC3339),
 		GPUAvailable:    gpuStatus != nil,
 		AvailableModels: len(models),

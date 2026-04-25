@@ -94,8 +94,12 @@ const formatTime = (timestamp: number) => {
 const applyServer = async () => {
   serverStore.switchServer(inputUrl.value, inputType.value)
   panelOpen.value = false
-  await serverStore.checkConnection()
-  appStore.success(`已切换到 ${serverStore.currentLabel}`)
+  const online = await serverStore.checkConnection()
+  if (online) {
+    appStore.success(`已切换到 ${serverStore.currentLabel}`)
+    return
+  }
+  appStore.error(serverStore.lastErrorMessage || `无法连接到 ${serverStore.currentLabel}`)
 }
 
 const useHistory = async (url: string, type: BackendType) => {
@@ -103,8 +107,12 @@ const useHistory = async (url: string, type: BackendType) => {
   inputType.value = type
   serverStore.switchServer(url, type)
   panelOpen.value = false
-  await serverStore.checkConnection()
-  appStore.success(`已切换到 ${serverStore.currentLabel}`)
+  const online = await serverStore.checkConnection()
+  if (online) {
+    appStore.success(`已切换到 ${serverStore.currentLabel}`)
+    return
+  }
+  appStore.error(serverStore.lastErrorMessage || `无法连接到 ${serverStore.currentLabel}`)
 }
 
 const useLocalProxy = async () => {
@@ -112,8 +120,12 @@ const useLocalProxy = async () => {
   inputType.value = 'auto'
   serverStore.switchServer('', 'auto')
   panelOpen.value = false
-  await serverStore.checkConnection()
-  appStore.success('已切换到本地代理')
+  const online = await serverStore.checkConnection()
+  if (online) {
+    appStore.success('已切换到本地代理')
+    return
+  }
+  appStore.error(serverStore.lastErrorMessage || '本地代理不可用')
 }
 
 const removeHistory = (url: string) => {
@@ -121,7 +133,12 @@ const removeHistory = (url: string) => {
 }
 
 const refreshStatus = async () => {
-  await serverStore.checkConnection()
+  const online = await serverStore.checkConnection()
+  if (online) {
+    appStore.success('连接状态正常', 2000)
+    return
+  }
+  appStore.warning(serverStore.lastErrorMessage || '连接检测失败', 3000)
 }
 
 const handleClickOutside = (event: MouseEvent) => {

@@ -15,19 +15,19 @@ import (
 )
 
 type ManageHandler struct {
-	scheduler      *service.Scheduler
-	gpuMonitor     *service.GPUMonitor
-	sysCtl         *service.SystemController
-	sysCollector   *service.SystemStatusCollector
-	metrics        *service.MetricsCollector
-	cache          *service.CacheService
-	cacheUpdater   *service.CacheUpdater
-	wsManager      *service.WSManager
-	vllmManager    *service.VLLMManager
-	llamaCppMgr    *service.LlamaCppManager
-	modelTesting   *service.ModelTestingFramework
-	redis          *repository.RedisRepo
-	configPath     string
+	scheduler    *service.Scheduler
+	gpuMonitor   *service.GPUMonitor
+	sysCtl       *service.SystemController
+	sysCollector *service.SystemStatusCollector
+	metrics      *service.MetricsCollector
+	cache        *service.CacheService
+	cacheUpdater *service.CacheUpdater
+	wsManager    *service.WSManager
+	vllmManager  *service.VLLMManager
+	llamaCppMgr  *service.LlamaCppManager
+	modelTesting *service.ModelTestingFramework
+	redis        *repository.RedisRepo
+	configPath   string
 }
 
 func NewManageHandler(
@@ -60,6 +60,14 @@ func NewManageHandler(
 		redis:        redis,
 		configPath:   configPath,
 	}
+}
+
+func (h *ManageHandler) waitForModelReady(ctx context.Context, modelName string) error {
+	port := h.scheduler.GetModelPort(modelName)
+	if err := h.vllmManager.WaitUntilReady(ctx, port, 90*time.Second, time.Second); err != nil {
+		return fmt.Errorf("model %s readiness probe failed: %w", modelName, err)
+	}
+	return nil
 }
 
 func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
@@ -176,17 +184,17 @@ func (h *ManageHandler) GetGPUSummary(c *gin.Context) {
 	}
 
 	current := gin.H{
-		"name":              status.Name,
-		"gpu_count":         status.GPUCount,
-		"utilization":       status.Utilization,
-		"temperature":       status.Temperature,
-		"power_draw":        status.PowerDraw,
-		"power_limit":       status.PowerLimit,
-		"power_percent":     status.PowerPercent,
+		"name":               status.Name,
+		"gpu_count":          status.GPUCount,
+		"utilization":        status.Utilization,
+		"temperature":        status.Temperature,
+		"power_draw":         status.PowerDraw,
+		"power_limit":        status.PowerLimit,
+		"power_percent":      status.PowerPercent,
 		"memory_utilization": status.MemoryUtilization,
-		"used_memory":       status.UsedMemory,
-		"available_memory":  status.AvailableMemory,
-		"total_memory":      status.TotalMemory,
+		"used_memory":        status.UsedMemory,
+		"available_memory":   status.AvailableMemory,
+		"total_memory":       status.TotalMemory,
 	}
 
 	result := gin.H{
@@ -224,8 +232,8 @@ func (h *ManageHandler) GetGPUHistory(c *gin.Context) {
 
 func (h *ManageHandler) ConfigureGPUHistory(c *gin.Context) {
 	var req struct {
-		Enabled  bool `json:"enabled"`
-		MaxDays  int  `json:"max_days"`
+		Enabled bool `json:"enabled"`
+		MaxDays int  `json:"max_days"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -240,18 +248,33 @@ func (h *ManageHandler) GetModelStatus(c *gin.Context) {
 	for _, m := range models {
 		mc := h.scheduler.GetModelConfig(m)
 		status[m] = gin.H{
-			"running":                  h.scheduler.IsModelRunning(m),
-			"port":                     h.scheduler.GetModelPort(m),
-			"service":                  h.scheduler.GetModelService(m),
-			"active_requests":          h.scheduler.GetActiveRequests(m),
-			"preloaded":                h.scheduler.IsModelPreloaded(m),
-			"supports_images":          h.scheduler.GetModelSupportsImages(m),
-			"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(m),
+			"running":                   h.scheduler.IsModelRunning(m),
+			"port":                      h.scheduler.GetModelPort(m),
+			"service":                   h.scheduler.GetModelService(m),
+			"active_requests":           h.scheduler.GetActiveRequests(m),
+			"preloaded":                 h.scheduler.IsModelPreloaded(m),
+			"supports_images":           h.scheduler.GetModelSupportsImages(m),
+			"supports_tool_calling":     h.scheduler.GetModelSupportsToolCalling(m),
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
-			"last_used":                nil,
-			"description":              func() string { if mc != nil { return mc.Description }; return "" }(),
-			"required_memory":          func() string { if mc != nil { return mc.RequiredMemory }; return "" }(),
-			"backend_type":             func() string { if mc != nil { return mc.Service }; return "" }(),
+			"last_used":                 nil,
+			"description": func() string {
+				if mc != nil {
+					return mc.Description
+				}
+				return ""
+			}(),
+			"required_memory": func() string {
+				if mc != nil {
+					return mc.RequiredMemory
+				}
+				return ""
+			}(),
+			"backend_type": func() string {
+				if mc != nil {
+					return mc.Service
+				}
+				return ""
+			}(),
 		}
 	}
 	c.JSON(http.StatusOK, status)
@@ -269,12 +292,12 @@ func (h *ManageHandler) ModelsSummary(c *gin.Context) {
 	for _, m := range models {
 		mc := h.scheduler.GetModelConfig(m)
 		entry := gin.H{
-			"name":                     m,
-			"running":                  h.scheduler.IsModelRunning(m),
-			"preloaded":                h.scheduler.IsModelPreloaded(m),
-			"port":                     h.scheduler.GetModelPort(m),
-			"supports_images":          h.scheduler.GetModelSupportsImages(m),
-			"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(m),
+			"name":                      m,
+			"running":                   h.scheduler.IsModelRunning(m),
+			"preloaded":                 h.scheduler.IsModelPreloaded(m),
+			"port":                      h.scheduler.GetModelPort(m),
+			"supports_images":           h.scheduler.GetModelSupportsImages(m),
+			"supports_tool_calling":     h.scheduler.GetModelSupportsToolCalling(m),
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
 		}
 		if mc != nil {
@@ -388,9 +411,9 @@ func (h *ManageHandler) GetQueueStatus(c *gin.Context) {
 	info := make(map[string]interface{})
 	for _, m := range models {
 		info[m] = gin.H{
-			"active_requests":    h.scheduler.GetActiveRequests(m),
+			"active_requests":   h.scheduler.GetActiveRequests(m),
 			"concurrency_limit": h.scheduler.GetConcurrencyLimit(),
-			"can_accept":         h.scheduler.CanAcceptRequest(m),
+			"can_accept":        h.scheduler.CanAcceptRequest(m),
 		}
 	}
 	h.cache.Set(cacheKey, info, 3)
@@ -413,7 +436,12 @@ func (h *ManageHandler) GetPreloadStatus(c *gin.Context) {
 			"name":      m,
 			"preloaded": h.scheduler.IsModelPreloaded(m),
 			"running":   h.scheduler.IsModelRunning(m),
-			"keep_alive": func() bool { if mc != nil { return mc.KeepAlive }; return false }(),
+			"keep_alive": func() bool {
+				if mc != nil {
+					return mc.KeepAlive
+				}
+				return false
+			}(),
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -572,8 +600,8 @@ func (h *ManageHandler) GetConfig(c *gin.Context) {
 	cfg := h.scheduler.GetModelConfig("")
 	_ = cfg
 	c.JSON(http.StatusOK, gin.H{
-		"models":   h.scheduler.GetAvailableModels(),
-		"message":  "Use PUT /manage/config to update config",
+		"models":  h.scheduler.GetAvailableModels(),
+		"message": "Use PUT /manage/config to update config",
 	})
 }
 
@@ -594,14 +622,30 @@ func (h *ManageHandler) UpdateConfig(c *gin.Context) {
 		for name, v := range models {
 			if mData, ok := v.(map[string]interface{}); ok {
 				mc := config.ModelConfig{}
-				if s, ok := mData["service"].(string); ok { mc.Service = s }
-				if p, ok := mData["port"].(float64); ok { mc.Port = int(p) }
-				if rm, ok := mData["required_memory"].(string); ok { mc.RequiredMemory = rm }
-				if pre, ok := mData["preload"].(bool); ok { mc.Preload = pre }
-				if ka, ok := mData["keep_alive"].(bool); ok { mc.KeepAlive = ka }
-				if mp, ok := mData["model_path"].(string); ok { mc.ModelPath = mp }
-				if desc, ok := mData["description"].(string); ok { mc.Description = desc }
-				if si, ok := mData["supports_images"].(bool); ok { mc.SupportsImages = si }
+				if s, ok := mData["service"].(string); ok {
+					mc.Service = s
+				}
+				if p, ok := mData["port"].(float64); ok {
+					mc.Port = int(p)
+				}
+				if rm, ok := mData["required_memory"].(string); ok {
+					mc.RequiredMemory = rm
+				}
+				if pre, ok := mData["preload"].(bool); ok {
+					mc.Preload = pre
+				}
+				if ka, ok := mData["keep_alive"].(bool); ok {
+					mc.KeepAlive = ka
+				}
+				if mp, ok := mData["model_path"].(string); ok {
+					mc.ModelPath = mp
+				}
+				if desc, ok := mData["description"].(string); ok {
+					mc.Description = desc
+				}
+				if si, ok := mData["supports_images"].(bool); ok {
+					mc.SupportsImages = si
+				}
 				cfg.Models[name] = mc
 			}
 		}
@@ -740,11 +784,11 @@ func (h *ManageHandler) GetTokenHistory(c *gin.Context) {
 	frontendHistory := make([]gin.H, len(history))
 	for i, entry := range history {
 		frontendHistory[i] = gin.H{
-			"timestamp":        entry.Timestamp,
-			"total_tokens":     entry.Total,
-			"prompt_tokens":    entry.Prompt,
+			"timestamp":         entry.Timestamp,
+			"total_tokens":      entry.Total,
+			"prompt_tokens":     entry.Prompt,
 			"completion_tokens": entry.Completion,
-			"model_name":       entry.ModelName,
+			"model_name":        entry.ModelName,
 		}
 	}
 
@@ -807,7 +851,12 @@ func (h *ManageHandler) MonitorAll(c *gin.Context) {
 			"service":         h.scheduler.GetModelService(m),
 			"active_requests": h.scheduler.GetActiveRequests(m),
 			"preloaded":       h.scheduler.IsModelPreloaded(m),
-			"backend_type":    func() string { if mc != nil { return mc.Service }; return "" }(),
+			"backend_type": func() string {
+				if mc != nil {
+					return mc.Service
+				}
+				return ""
+			}(),
 		}
 	}
 
@@ -825,12 +874,12 @@ func (h *ManageHandler) MonitorAll(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"gpu":      gpuStatus,
-		"models":   modelStatus,
-		"queue":    queueStatus,
-		"health":   healthInfo,
-		"service":  serviceStatus,
-		"system":   h.sysCollector.GetSystemStatus(),
+		"gpu":       gpuStatus,
+		"models":    modelStatus,
+		"queue":     queueStatus,
+		"health":    healthInfo,
+		"service":   serviceStatus,
+		"system":    h.sysCollector.GetSystemStatus(),
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }
@@ -839,15 +888,15 @@ func (h *ManageHandler) GetLlamaCppModels(c *gin.Context) {
 	ggufModels := h.llamaCppMgr.ScanGGUFModels()
 	serverStatus := h.llamaCppMgr.GetServerStatus()
 	c.JSON(http.StatusOK, gin.H{
-		"gguf_models":  ggufModels,
+		"gguf_models":     ggufModels,
 		"running_servers": serverStatus,
-		"timestamp":    time.Now().Format(time.RFC3339),
+		"timestamp":       time.Now().Format(time.RFC3339),
 	})
 }
 
 func (h *ManageHandler) GetLlamaCppStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"servers":  h.llamaCppMgr.GetServerStatus(),
+		"servers":   h.llamaCppMgr.GetServerStatus(),
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }
@@ -868,23 +917,28 @@ func (h *ManageHandler) NodeIntegrationStatus(c *gin.Context) {
 	modelStatuses := make(map[string]interface{})
 	for _, m := range models {
 		modelStatuses[m] = gin.H{
-			"available":                h.scheduler.IsModelAvailable(m),
-			"running":                  h.scheduler.IsModelRunning(m),
-			"preloaded":                h.scheduler.IsModelPreloaded(m),
-			"port":                     h.scheduler.GetModelPort(m),
-			"supports_images":          h.scheduler.GetModelSupportsImages(m),
-			"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(m),
+			"available":                 h.scheduler.IsModelAvailable(m),
+			"running":                   h.scheduler.IsModelRunning(m),
+			"preloaded":                 h.scheduler.IsModelPreloaded(m),
+			"port":                      h.scheduler.GetModelPort(m),
+			"supports_images":           h.scheduler.GetModelSupportsImages(m),
+			"supports_tool_calling":     h.scheduler.GetModelSupportsToolCalling(m),
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
-			"active_requests":          h.scheduler.GetActiveRequests(m),
-			"can_accept":               h.scheduler.CanAcceptRequest(m),
+			"active_requests":           h.scheduler.GetActiveRequests(m),
+			"can_accept":                h.scheduler.CanAcceptRequest(m),
 		}
 	}
 
 	result := gin.H{
-		"service":  "ai-controller",
-		"status":   func() string { if gpuStatus != nil { return "healthy" }; return "degraded" }(),
+		"service": "ai-controller",
+		"status": func() string {
+			if gpuStatus != nil {
+				return "healthy"
+			}
+			return "degraded"
+		}(),
 		"timestamp": time.Now().Format(time.RFC3339),
-		"models":   modelStatuses,
+		"models":    modelStatuses,
 		"queue": gin.H{
 			"concurrency_limit": h.scheduler.GetConcurrencyLimit(),
 		},
@@ -900,18 +954,18 @@ func (h *ManageHandler) ModelInfo(c *gin.Context) {
 	}
 	mc := h.scheduler.GetModelConfig(modelName)
 	info := gin.H{
-		"name":                     modelName,
-		"available":                true,
-		"running":                  h.scheduler.IsModelRunning(modelName),
-		"preloaded":                h.scheduler.IsModelPreloaded(modelName),
-		"port":                     h.scheduler.GetModelPort(modelName),
-		"model_path":               h.scheduler.GetModelPath(modelName),
-		"service":                  h.scheduler.GetModelService(modelName),
-		"supports_images":          h.scheduler.GetModelSupportsImages(modelName),
-		"supports_tool_calling":    h.scheduler.GetModelSupportsToolCalling(modelName),
+		"name":                      modelName,
+		"available":                 true,
+		"running":                   h.scheduler.IsModelRunning(modelName),
+		"preloaded":                 h.scheduler.IsModelPreloaded(modelName),
+		"port":                      h.scheduler.GetModelPort(modelName),
+		"model_path":                h.scheduler.GetModelPath(modelName),
+		"service":                   h.scheduler.GetModelService(modelName),
+		"supports_images":           h.scheduler.GetModelSupportsImages(modelName),
+		"supports_tool_calling":     h.scheduler.GetModelSupportsToolCalling(modelName),
 		"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(modelName),
-		"active_requests":          h.scheduler.GetActiveRequests(modelName),
-		"can_accept":               h.scheduler.CanAcceptRequest(modelName),
+		"active_requests":           h.scheduler.GetActiveRequests(modelName),
+		"can_accept":                h.scheduler.CanAcceptRequest(modelName),
 	}
 	if mc != nil {
 		info["description"] = mc.Description
@@ -935,7 +989,10 @@ func (h *ManageHandler) RunModelTest(c *gin.Context) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Failed to start model: %v", err)})
 			return
 		}
-		time.Sleep(5 * time.Second)
+		if err := h.waitForModelReady(c.Request.Context(), modelName); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	mc := h.scheduler.GetModelConfig(modelName)
@@ -957,8 +1014,13 @@ func (h *ManageHandler) RunModelTest(c *gin.Context) {
 		historyEntry := gin.H{
 			"model_name": modelName,
 			"timestamp":  report.Timestamp,
-			"status":     func() string { if report.PassRate >= 1.0 { return "passed" }; return "partial" }(),
-			"pass_rate":  report.PassRate,
+			"status": func() string {
+				if report.PassRate >= 1.0 {
+					return "passed"
+				}
+				return "partial"
+			}(),
+			"pass_rate": report.PassRate,
 		}
 		data, _ := json.Marshal(historyEntry)
 		h.redis.LPush(ctx, historyKey, string(data))
@@ -974,7 +1036,12 @@ func (h *ManageHandler) RunModelTest(c *gin.Context) {
 
 func (h *ManageHandler) GetTestHistory(c *gin.Context) {
 	if h.redis == nil || !h.redis.IsConnected() {
-		c.JSON(http.StatusOK, []interface{}{})
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "empty",
+			"reports": gin.H{},
+			"history": []interface{}{},
+			"count":   0,
+		})
 		return
 	}
 
@@ -986,13 +1053,25 @@ func (h *ManageHandler) GetTestHistory(c *gin.Context) {
 	}
 
 	result := make([]interface{}, 0)
+	reports := make(map[string]interface{})
 	for _, item := range items {
-		var entry interface{}
+		var entry map[string]interface{}
 		if err := json.Unmarshal([]byte(item), &entry); err == nil {
 			result = append(result, entry)
+			modelName, _ := entry["model_name"].(string)
+			if modelName != "" {
+				if _, exists := reports[modelName]; !exists {
+					reports[modelName] = entry
+				}
+			}
 		}
 	}
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"reports": reports,
+		"history": result,
+		"count":   len(result),
+	})
 }
 
 func (h *ManageHandler) GetTestResults(c *gin.Context) {
@@ -1046,14 +1125,14 @@ func (h *ManageHandler) GetHealthDetail(c *gin.Context) {
 	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
 	healthScores := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
 	gpuAlerts := h.metrics.GetGPUAlerts(gpuStatus)
-healthScore := h.gpuMonitor.GetHealthScore()
+	healthScore := h.gpuMonitor.GetHealthScore()
 	c.JSON(http.StatusOK, gin.H{
-		"health_scores":       healthScores,
-		"gpu_alerts":          gpuAlerts,
-		"health_score":        healthScore,
-		"gpu_status_summary":  gpuStatus,
+		"health_scores":        healthScores,
+		"gpu_alerts":           gpuAlerts,
+		"health_score":         healthScore,
+		"gpu_status_summary":   gpuStatus,
 		"vllm_metrics_summary": vllmMetrics,
-		"timestamp":           time.Now().Format(time.RFC3339),
+		"timestamp":            time.Now().Format(time.RFC3339),
 	})
 }
 func (h *ManageHandler) StartLlamaCppModel(c *gin.Context) {

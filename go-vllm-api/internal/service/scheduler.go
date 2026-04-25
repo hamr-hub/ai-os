@@ -24,7 +24,7 @@ type Scheduler struct {
 	preloaded     map[string]bool
 	modelLastUsed map[string]time.Time
 	defaultModel  string
-	mu            sync.Mutex
+	mu            sync.RWMutex
 	rateLimiter   *RateLimiter
 }
 
@@ -60,12 +60,18 @@ func (s *Scheduler) initPreloaded() {
 func (s *Scheduler) SetConfig(cfg *config.AppConfig) {
 	s.mu.Lock()
 	s.cfg = cfg
+	s.preloaded = make(map[string]bool)
+	for name, mc := range cfg.Models {
+		if mc.Preload {
+			s.preloaded[name] = true
+		}
+	}
 	s.mu.Unlock()
 }
 
 func (s *Scheduler) GetAvailableModels() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	var models []string
 	for name := range s.cfg.Models {
 		models = append(models, name)
@@ -73,9 +79,7 @@ func (s *Scheduler) GetAvailableModels() []string {
 	return models
 }
 
-func (s *Scheduler) FindMatchingModel(name string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *Scheduler) findMatchingModelLocked(name string) string {
 	if _, ok := s.cfg.Models[name]; ok {
 		return name
 	}
@@ -101,14 +105,20 @@ func (s *Scheduler) FindMatchingModel(name string) string {
 	return ""
 }
 
+func (s *Scheduler) FindMatchingModel(name string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.findMatchingModelLocked(name)
+}
+
 func (s *Scheduler) IsModelAvailable(name string) bool {
 	return s.FindMatchingModel(name) != ""
 }
 
 func (s *Scheduler) GetModelConfig(name string) *config.ModelConfig {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	matched := s.FindMatchingModel(name)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	matched := s.findMatchingModelLocked(name)
 	if matched == "" {
 		return nil
 	}
@@ -212,14 +222,14 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 }
 
 func (s *Scheduler) GetMinAvailableMemory() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return config.ParseMemorySize(s.cfg.Settings.MinAvailableMemory)
 }
 
 func (s *Scheduler) GetConcurrencyLimit() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.cfg.Settings.ConcurrencyLimit
 }
 
@@ -230,8 +240,12 @@ func (s *Scheduler) AcquireRequest(model string) bool {
 
 func (s *Scheduler) ReleaseRequest(model string) {
 	s.rateLimiter.ReleaseRequest(model)
+	matched := s.FindMatchingModel(model)
+	if matched == "" {
+		matched = model
+	}
 	s.mu.Lock()
-	s.modelLastUsed[model] = time.Now()
+	s.modelLastUsed[matched] = time.Now()
 	s.mu.Unlock()
 }
 
@@ -263,14 +277,14 @@ func (s *Scheduler) WaitForSlot(ctx context.Context, model string, timeout time.
 }
 
 func (s *Scheduler) IsModelPreloaded(name string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.preloaded[name]
 }
 
 func (s *Scheduler) GetPreloadedModels() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	var models []string
 	for name := range s.preloaded {
 		models = append(models, name)
@@ -279,10 +293,9 @@ func (s *Scheduler) GetPreloadedModels() []string {
 }
 
 func (s *Scheduler) GetCurrentModelName() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	models := s.GetAvailableModels()
 	var running []string
-	for name := range s.cfg.Models {
+	for _, name := range models {
 		if s.IsModelRunning(name) {
 			running = append(running, name)
 		}
@@ -290,32 +303,34 @@ func (s *Scheduler) GetCurrentModelName() string {
 	if len(running) == 0 {
 		return ""
 	}
-	var used []string
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var (
+		latestModel string
+		latestTime  time.Time
+		found       bool
+	)
 	for _, m := range running {
 		if t, ok := s.modelLastUsed[m]; ok {
-			used = append(used, m)
-			_ = t
-		}
-	}
-	if len(used) > 0 {
-		latest := used[0]
-		latestTime := s.modelLastUsed[latest]
-		for _, m := range used[1:] {
-			if s.modelLastUsed[m].After(latestTime) {
-				latest = m
-				latestTime = s.modelLastUsed[m]
+			if !found || t.After(latestTime) {
+				latestModel = m
+				latestTime = t
+				found = true
 			}
 		}
-		return latest
+	}
+	if found {
+		return latestModel
 	}
 	return running[0]
 }
 
 func (s *Scheduler) GetDefaultModel() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.defaultModel != "" && s.IsModelAvailable(s.defaultModel) {
-		return s.defaultModel
+	s.mu.RLock()
+	defaultModel := s.defaultModel
+	s.mu.RUnlock()
+	if defaultModel != "" && s.IsModelAvailable(defaultModel) {
+		return defaultModel
 	}
 	return ""
 }
@@ -337,8 +352,12 @@ func (s *Scheduler) ClearDefaultModel() {
 }
 
 func (s *Scheduler) MarkModelSelected(name string) {
+	matched := s.FindMatchingModel(name)
+	if matched == "" {
+		matched = name
+	}
 	s.mu.Lock()
-	s.modelLastUsed[name] = time.Now()
+	s.modelLastUsed[matched] = time.Now()
 	s.mu.Unlock()
 }
 
@@ -499,19 +518,22 @@ func (s *Scheduler) SwitchModel(ctx context.Context, name string) bool {
 }
 
 func (s *Scheduler) freeUpMemory(ctx context.Context, targetModel string) (bool, error) {
-	s.mu.Lock()
+	s.mu.RLock()
 	var toStop []string
 	for name := range s.runningModels {
 		if name == targetModel {
 			continue
 		}
-		mc := s.GetModelConfig(name)
-		if mc != nil && mc.KeepAlive {
+		matched := s.findMatchingModelLocked(name)
+		if matched == "" {
+			matched = name
+		}
+		if mc, ok := s.cfg.Models[matched]; ok && mc.KeepAlive {
 			continue
 		}
 		toStop = append(toStop, name)
 	}
-	s.mu.Unlock()
+	s.mu.RUnlock()
 
 	for _, name := range toStop {
 		s.StopModel(ctx, name)
@@ -530,13 +552,16 @@ func (s *Scheduler) freeUpMemory(ctx context.Context, targetModel string) (bool,
 }
 
 func (s *Scheduler) PreloadModels(ctx context.Context) {
-	s.mu.Lock()
+	s.mu.RLock()
 	var preloadOrder []string
 	var keepAlive []string
 	var normal []string
 	for name := range s.preloaded {
-		mc := s.GetModelConfig(name)
-		if mc != nil && mc.KeepAlive {
+		matched := s.findMatchingModelLocked(name)
+		if matched == "" {
+			matched = name
+		}
+		if mc, ok := s.cfg.Models[matched]; ok && mc.KeepAlive {
 			keepAlive = append(keepAlive, name)
 		} else {
 			normal = append(normal, name)
@@ -544,7 +569,7 @@ func (s *Scheduler) PreloadModels(ctx context.Context) {
 	}
 	preloadOrder = append(preloadOrder, keepAlive...)
 	preloadOrder = append(preloadOrder, normal...)
-	s.mu.Unlock()
+	s.mu.RUnlock()
 
 	for _, name := range preloadOrder {
 		if !s.IsModelRunning(name) {
@@ -566,7 +591,7 @@ func (s *Scheduler) PreloadWatcherLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(30 * time.Second):
-			for name := range s.preloaded {
+			for _, name := range s.GetPreloadedModels() {
 				mc := s.GetModelConfig(name)
 				if mc != nil && mc.KeepAlive && !s.IsModelRunning(name) {
 					s.logger.Warn("preloaded model not running, restarting", zap.String("model", name))
@@ -578,15 +603,15 @@ func (s *Scheduler) PreloadWatcherLoop(ctx context.Context) {
 }
 
 type PreloadStatusDetail struct {
-	Preloaded    bool   `json:"preloaded"`
-	Running      bool   `json:"running"`
-	PreloadConfig bool  `json:"preload_config"`
-	KeepAlive    bool   `json:"keep_alive"`
+	Preloaded     bool `json:"preloaded"`
+	Running       bool `json:"running"`
+	PreloadConfig bool `json:"preload_config"`
+	KeepAlive     bool `json:"keep_alive"`
 }
 
 type PreloadStatus struct {
-	PreloadedModels []string                      `json:"preloaded_models"`
-	AllModels       []string                      `json:"all_models"`
+	PreloadedModels []string                       `json:"preloaded_models"`
+	AllModels       []string                       `json:"all_models"`
 	Status          map[string]PreloadStatusDetail `json:"status"`
 }
 
@@ -596,10 +621,20 @@ func (s *Scheduler) GetPreloadStatus() *PreloadStatus {
 	for _, m := range allModels {
 		mc := s.GetModelConfig(m)
 		status[m] = PreloadStatusDetail{
-			Preloaded:    s.IsModelPreloaded(m),
-			Running:      s.IsModelRunning(m),
-			PreloadConfig: func() bool { if mc != nil { return mc.Preload }; return false }(),
-			KeepAlive:    func() bool { if mc != nil { return mc.KeepAlive }; return false }(),
+			Preloaded: s.IsModelPreloaded(m),
+			Running:   s.IsModelRunning(m),
+			PreloadConfig: func() bool {
+				if mc != nil {
+					return mc.Preload
+				}
+				return false
+			}(),
+			KeepAlive: func() bool {
+				if mc != nil {
+					return mc.KeepAlive
+				}
+				return false
+			}(),
 		}
 	}
 	return &PreloadStatus{

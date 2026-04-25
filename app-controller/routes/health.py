@@ -3,8 +3,27 @@ from typing import Optional
 from datetime import datetime
 
 from core.deps import gpu_monitor, metrics, cache_service, prometheus, scheduler
+from core.logger import setup_logger
 
 health_router = APIRouter()
+logger = setup_logger()
+
+
+def _build_fallback_health(reason: str):
+    return {
+        "status": "critical",
+        "timestamp": datetime.now().isoformat(),
+        "health_score": 0,
+        "details": {
+            "overall": 0,
+            "status": "critical",
+            "service": 0,
+            "gpu_overall": 0,
+            "vllm_inference": 0,
+            "response_time": 0,
+            "alerts": [f"health check fallback: {reason}"],
+        },
+    }
 
 
 @health_router.get("/health")
@@ -16,16 +35,20 @@ async def health_check(refresh: Optional[bool] = False):
         if cached is not None:
             return cached
 
-    gpu_status = gpu_monitor.get_gpu_status()
-    health_info = metrics.get_comprehensive_health_score(gpu_status)
-    result = {
-        "status": health_info["status"],
-        "timestamp": datetime.now().isoformat(),
-        "health_score": health_info["overall"],
-        "details": health_info
-    }
-
-    cache_service.set(cache_key, result, ttl_seconds=5)
+    try:
+        gpu_status = gpu_monitor.get_gpu_status()
+        vllm_metrics = gpu_monitor.get_vllm_metrics()
+        health_info = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
+        result = {
+            "status": health_info["status"],
+            "timestamp": datetime.now().isoformat(),
+            "health_score": health_info["overall"],
+            "details": health_info
+        }
+        cache_service.set(cache_key, result, ttl_seconds=5)
+    except Exception as exc:
+        logger.error(f"health_check failed: {exc}")
+        result = _build_fallback_health(str(exc))
     return result
 
 
@@ -36,35 +59,50 @@ async def health_check_detailed():
     if cached is not None:
         return cached
 
-    gpu_status = gpu_monitor.get_gpu_status()
-    health_info = metrics.get_comprehensive_health_score(gpu_status)
-    result = {
-        "status": health_info["status"],
-        "timestamp": datetime.now().isoformat(),
-        "scores": health_info,
-        "gpu": gpu_status,
-        "metrics": metrics.get_detailed_metrics()
-    }
-
-    cache_service.set(cache_key, result, ttl_seconds=5)
+    try:
+        gpu_status = gpu_monitor.get_gpu_status()
+        vllm_metrics = gpu_monitor.get_vllm_metrics()
+        health_info = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
+        result = {
+            "status": health_info["status"],
+            "timestamp": datetime.now().isoformat(),
+            "scores": health_info,
+            "gpu": gpu_status,
+            "metrics": metrics.get_detailed_metrics()
+        }
+        cache_service.set(cache_key, result, ttl_seconds=5)
+    except Exception as exc:
+        logger.error(f"health_check_detailed failed: {exc}")
+        fallback = _build_fallback_health(str(exc))
+        result = {
+            "status": fallback["status"],
+            "timestamp": fallback["timestamp"],
+            "scores": fallback["details"],
+            "gpu": None,
+            "metrics": {},
+        }
     return result
 
 
 @health_router.get("/metrics")
 async def get_prometheus_metrics():
-    gpu_status = gpu_monitor.get_gpu_status()
-    prometheus.update_gpu_metrics(gpu_status)
+    try:
+        gpu_status = gpu_monitor.get_gpu_status()
+        vllm_metrics = gpu_monitor.get_vllm_metrics()
+        prometheus.update_gpu_metrics(gpu_status)
 
-    health_info = metrics.get_comprehensive_health_score(gpu_status)
-    prometheus.set_health_score(health_info["overall"])
+        health_info = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
+        prometheus.set_health_score(health_info["overall"])
 
-    for model_name in scheduler.get_available_models():
-        prometheus.set_model_status(
-            model_name,
-            scheduler.get_model_service(model_name) or "",
-            scheduler.is_model_running(model_name)
-        )
-        prometheus.set_active_requests(model_name, scheduler.get_active_requests(model_name))
+        for model_name in scheduler.get_available_models():
+            prometheus.set_model_status(
+                model_name,
+                scheduler.get_model_service(model_name) or "",
+                scheduler.is_model_running(model_name)
+            )
+            prometheus.set_active_requests(model_name, scheduler.get_active_requests(model_name))
+    except Exception as exc:
+        logger.error(f"get_prometheus_metrics failed: {exc}")
 
     return prometheus.generate_metrics()
 

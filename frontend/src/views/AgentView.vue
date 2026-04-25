@@ -270,7 +270,7 @@ const formatTime = (date: Date) => {
   position: absolute;
   top: 12px;
   left: 12px;
-  z-index: 10;
+  z-index: 30;
   width: 36px;
   height: 36px;
   border-radius: 10px;

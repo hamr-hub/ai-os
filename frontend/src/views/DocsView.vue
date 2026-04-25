@@ -51,7 +51,7 @@ async function loadDoc(slug: string) {
   }
 
   if (route.params.slug !== slug) {
-    router.push({ name: 'docs', params: { slug } })
+    router.push({ name: 'docs-slug', params: { slug } })
   }
 }
 

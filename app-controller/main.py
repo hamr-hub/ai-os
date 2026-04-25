@@ -5,6 +5,7 @@ from datetime import datetime
 import asyncio
 import httpx
 import uuid
+import signal
 
 from routes.v1 import v1_router
 from routes.manage import manage_router, integration_router
@@ -55,33 +56,45 @@ async def request_tracking_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
     start_time = datetime.now()
+    status_code = 500
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        duration = (datetime.now() - start_time).total_seconds()
 
-    duration = (datetime.now() - start_time).total_seconds()
+        try:
+            structured_logger.log_request(
+                endpoint=str(request.url.path),
+                method=request.method,
+                status_code=status_code,
+                duration=duration,
+                request_id=request_id
+            )
+        except Exception as exc:
+            logger.error(f"structured logging failed for {request.url.path}: {exc}")
 
-    structured_logger.log_request(
-        endpoint=str(request.url.path),
-        method=request.method,
-        status_code=response.status_code,
-        duration=duration,
-        request_id=request_id
-    )
+        try:
+            prometheus.record_request(
+                endpoint=str(request.url.path),
+                method=request.method,
+                status_code=status_code,
+                duration=duration
+            )
+        except Exception as exc:
+            logger.error(f"prometheus request metric failed for {request.url.path}: {exc}")
 
-    prometheus.record_request(
-        endpoint=str(request.url.path),
-        method=request.method,
-        status_code=response.status_code,
-        duration=duration
-    )
-
-    metrics.record_request(
-        endpoint=str(request.url.path),
-        status_code=response.status_code,
-        response_time=duration
-    )
-
-    return response
+        try:
+            metrics.record_request(
+                endpoint=str(request.url.path),
+                status_code=status_code,
+                response_time=duration
+            )
+        except Exception as exc:
+            logger.error(f"metrics request record failed for {request.url.path}: {exc}")
 
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
@@ -101,6 +114,29 @@ cache_service = cache_service
 cache_updater = cache_updater
 redis_client = redis_client
 structured_logger = structured_logger
+
+
+async def reload_runtime_config():
+    new_config = config_watcher.load_config()
+    _on_config_changed(new_config)
+    structured_logger.info("Runtime configuration reloaded", action="config_reload_signal")
+
+
+def _install_signal_handlers():
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.warning("No running event loop available for signal handlers")
+        return
+
+    def _schedule_reload():
+        loop.create_task(reload_runtime_config())
+
+    try:
+        loop.add_signal_handler(signal.SIGHUP, _schedule_reload)
+        structured_logger.info("Installed SIGHUP config reload handler", action="startup")
+    except (NotImplementedError, RuntimeError) as exc:
+        logger.warning(f"Failed to install SIGHUP handler: {exc}")
 
 
 async def broadcast_status_loop():
@@ -158,6 +194,7 @@ async def startup_event():
     else:
         logger.warning("Failed to connect to Redis, cache updater will not start")
 
+    _install_signal_handlers()
     config_watcher.start_watching()
 
     await scheduler.preload_models()

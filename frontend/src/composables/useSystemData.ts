@@ -34,22 +34,32 @@ export function useSystemData(intervalMs = 10000, initialCount: MaybeRefOrGetter
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to fetch system status'
-      systemStatus.value = null
+      if (!systemStatus.value) {
+        systemStatus.value = null
+      }
     }
-    try {
-      healthAlert.value = await getHealthAlert()
-    } catch (err) {
-      if (!error.value)
-        error.value = err instanceof Error ? err.message : 'Failed to fetch health alert'
-      healthAlert.value = null
+    const [healthResult, historyResult] = await Promise.allSettled([
+      getHealthAlert(),
+      getSystemHistory(toValue(initialCount)),
+    ])
+
+    if (healthResult.status === 'fulfilled') {
+      healthAlert.value = healthResult.value
+    } else if (!error.value) {
+      error.value =
+        healthResult.reason instanceof Error
+          ? healthResult.reason.message
+          : 'Failed to fetch health alert'
     }
-    try {
-      const historyData = await getSystemHistory(toValue(initialCount))
-      systemHistory.value = historyData.history
-    } catch (err) {
-      if (!error.value)
-        error.value = err instanceof Error ? err.message : 'Failed to fetch system history'
-      systemHistory.value = []
+
+    if (historyResult.status === 'fulfilled') {
+      systemHistory.value = historyResult.value.history
+    } else if (!error.value) {
+      error.value =
+        historyResult.reason instanceof Error
+          ? historyResult.reason.message
+          : 'Failed to fetch system history'
+    }
     } finally {
       loading.value = false
       isRefreshing.value = false

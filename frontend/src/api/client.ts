@@ -27,6 +27,80 @@ const v1Client = axios.create({
   timeout: 60000,
 })
 
+type RetryableConfig = {
+  __retryCount?: number
+  method?: string
+  url?: string
+}
+
+const RETRYABLE_METHODS = new Set(['get', 'head', 'options'])
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+const shouldRetryRequest = (error: unknown): boolean => {
+  if (axios.isCancel(error)) {
+    return false
+  }
+
+  const err = error as {
+    code?: string
+    response?: { status?: number }
+    config?: RetryableConfig
+  }
+  const method = err.config?.method?.toLowerCase() ?? 'get'
+
+  if (!RETRYABLE_METHODS.has(method)) {
+    return false
+  }
+
+  if (!err.response) {
+    return true
+  }
+
+  const status = err.response.status ?? 0
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+const normalizeErrorMessage = (error: unknown) => {
+  const err = error as {
+    code?: string
+    response?: { status?: number; data?: unknown }
+    message?: string
+  }
+  const data = err.response?.data as Record<string, unknown> | undefined
+  const explicitMessage =
+    (data?.message as string) || (data?.error as string) || err.message || 'API Request Failed'
+
+  if (err.code === 'ECONNABORTED') {
+    return '请求超时，请稍后重试'
+  }
+
+  if (!err.response) {
+    return '网络连接异常，请检查服务状态'
+  }
+
+  if (err.response.status === 503) {
+    return explicitMessage || '服务暂时不可用，请稍后重试'
+  }
+
+  return explicitMessage
+}
+
+const attachRetryInterceptor = (instance: typeof client) => {
+  instance.interceptors.response.use(undefined, async (error) => {
+    const config = (error as { config?: RetryableConfig }).config
+    const retryCount = config?.__retryCount ?? 0
+
+    if (config && retryCount < 2 && shouldRetryRequest(error)) {
+      config.__retryCount = retryCount + 1
+      await sleep(250 * config.__retryCount)
+      return instance(config)
+    }
+
+    return Promise.reject(error)
+  })
+}
+
 // Request Interceptors
 client.interceptors.request.use((config) => {
   const serverStore = useServerStore()
@@ -43,19 +117,18 @@ v1Client.interceptors.request.use((config) => {
 // Response Interceptors
 const handleResponseError = (error: unknown) => {
   const appStore = useAppStore()
-  const err = error as { response?: { data?: unknown }; message?: string }
-  const data = err.response?.data as Record<string, unknown> | undefined
-  const message =
-    (data?.message as string) || (data?.error as string) || err.message || 'API Request Failed'
 
   // Don't toast for cancelled requests
   if (axios.isCancel(error)) {
     return Promise.reject(error)
   }
 
-  appStore.error(message)
+  appStore.error(normalizeErrorMessage(error))
   return Promise.reject(error)
 }
+
+attachRetryInterceptor(client)
+attachRetryInterceptor(v1Client)
 
 client.interceptors.response.use((response) => response, handleResponseError)
 
@@ -119,20 +192,40 @@ export async function getTestResults(name: string): Promise<TestResponse> {
 }
 
 export async function getTestHistory(): Promise<TestHistoryEntry[]> {
-  const { data } = await v1Client.get<{
-    status: string
-    reports: Record<string, Record<string, unknown>>
-  }>('/test/reports')
-  const reports = data.reports || {}
-  return Object.entries(reports).map(([model_name, report]) => ({
-    model_name,
-    timestamp: (report.test_timestamp as string) || '',
-    status: (report.overall_status as string) || 'unknown',
+  const { data } = await v1Client.get<
+    | {
+        status?: string
+        reports?: Record<string, Record<string, unknown>>
+        history?: Array<Record<string, unknown>>
+      }
+    | Array<Record<string, unknown>>
+  >('/test/reports')
+
+  const normalizeEntry = (
+    modelName: string,
+    report: Record<string, unknown> = {}
+  ): TestHistoryEntry => ({
+    model_name: modelName,
+    timestamp: (report.test_timestamp as string) || (report.timestamp as string) || '',
+    status:
+      (report.overall_status as string) || (report.status as string) || (report.message as string) || 'unknown',
     overall_status: report.overall_status as string | undefined,
     duration: (report.resource_utilization as Record<string, unknown>)?.test_duration_seconds as
       | number
       | undefined,
-  }))
+  })
+
+  if (Array.isArray(data)) {
+    return data.map((entry) => normalizeEntry((entry.model_name as string) || '', entry))
+  }
+
+  const reports = data.reports || {}
+  if (Object.keys(reports).length > 0) {
+    return Object.entries(reports).map(([model_name, report]) => normalizeEntry(model_name, report))
+  }
+
+  const history = data.history || []
+  return history.map((entry) => normalizeEntry((entry.model_name as string) || '', entry))
 }
 
 export async function getTokenStats(): Promise<TokenStats> {

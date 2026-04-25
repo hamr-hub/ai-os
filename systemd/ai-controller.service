@@ -5,9 +5,9 @@ After=network.target redis-server.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/AIClient-2-API/app-controller
-Environment=PATH=/root/AIClient-2-API/app-controller/.venv/bin
-ExecStart=/root/AIClient-2-API/app-controller/.venv/bin/python main.py
+WorkingDirectory=/root/ai-os/app-controller
+Environment=PATH=/root/ai-os/app-controller/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/root/ai-os/app-controller/.venv/bin/python main.py
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10
@@ -22,7 +22,8 @@ LimitNPROC=4096
 # Security settings
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/root/AIClient-2-API/app-controller/logs
+ReadWritePaths=/root/ai-os/app-controller
+ReadWritePaths=/root/ai-os/app-controller/logs
 
 [Install]
 WantedBy=multi-user.target

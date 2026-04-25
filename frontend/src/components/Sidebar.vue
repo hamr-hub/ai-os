@@ -18,6 +18,7 @@ import {
 } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
 import { useGPU } from '@/composables/useGPU'
+import { formatBytes } from '@/utils/format'
 
 const router = useRouter()
 const route = useRoute()
@@ -141,9 +142,7 @@ const toggleCollapse = () => {
               </div>
               <div class="stat-row mt-2">
                 <span class="stat-label">VRAM</span>
-                <span class="stat-value digital-font"
-                  >{{ (gpuInfo.used_memory / 1024)?.toFixed(1) ?? '--' }}G</span
-                >
+                <span class="stat-value digital-font">{{ formatBytes(gpuInfo.used_memory) }}</span>
               </div>
             </div>
           </div>

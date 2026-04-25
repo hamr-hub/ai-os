@@ -21,17 +21,17 @@ import (
 )
 
 type VLLMManager struct {
-	logger       *zap.Logger
-	cfg          *config.VLLMConfig
-	switchLock   sync.Mutex
+	logger        *zap.Logger
+	cfg           *config.VLLMConfig
+	switchLock    sync.Mutex
 	requestClient *http.Client
 }
 
 type ModelScanResult struct {
-	Name         string `json:"name"`
-	Path         string `json:"path"`
+	Name          string `json:"name"`
+	Path          string `json:"path"`
 	EstimatedVRAM string `json:"estimated_vram"`
-	SizeBytes    int64  `json:"size_bytes"`
+	SizeBytes     int64  `json:"size_bytes"`
 }
 
 func NewVLLMManager(cfg *config.VLLMConfig, logger *zap.Logger) *VLLMManager {
@@ -135,7 +135,7 @@ func (vm *VLLMManager) replaceModelPath(content string, newPath string) string {
 	lines := strings.Split(content, "\n")
 	modified := false
 	for i, line := range lines {
-	trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(line)
 		if strings.Contains(trimmed, "--model") || strings.Contains(trimmed, "-m ") {
 			if strings.HasPrefix(trimmed, "#") {
 				continue
@@ -189,7 +189,9 @@ func (vm *VLLMManager) SwitchModelWithTest(ctx context.Context, modelPath string
 	}
 	vm.logger.Info("vllm service restarted", zap.String("model", modelName))
 
-	time.Sleep(5 * time.Second)
+	if err := vm.WaitUntilReady(ctx, port, 90*time.Second, time.Second); err != nil {
+		return fmt.Errorf("wait for vllm readiness: %w", err)
+	}
 
 	if err := vm.TestModel(ctx, port, modelName); err != nil {
 		vm.logger.Warn("model test failed after switch", zap.String("model", modelName), zap.Error(err))
@@ -220,7 +222,7 @@ func (vm *VLLMManager) TestModel(ctx context.Context, port int, modelName string
 func (vm *VLLMManager) sendTestRequest(ctx context.Context, port int, modelName string) error {
 	url := fmt.Sprintf("http://localhost:%d/v1/chat/completions", port)
 	payload := map[string]interface{}{
-		"model":  modelName,
+		"model": modelName,
 		"messages": []map[string]interface{}{
 			{"role": "user", "content": "Hello"},
 		},
@@ -259,6 +261,55 @@ func (vm *VLLMManager) sendTestRequest(ctx context.Context, port int, modelName 
 		return nil
 	}
 	return fmt.Errorf("no choices in response")
+}
+
+func (vm *VLLMManager) WaitUntilReady(ctx context.Context, port int, timeout time.Duration, interval time.Duration) error {
+	if timeout <= 0 {
+		timeout = 90 * time.Second
+	}
+	if interval <= 0 {
+		interval = time.Second
+	}
+
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+
+	for {
+		req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://localhost:%d/v1/models", port), nil)
+		if err != nil {
+			return err
+		}
+
+		resp, err := vm.requestClient.Do(req)
+		if err == nil {
+			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+			resp.Body.Close()
+			if readErr != nil {
+				lastErr = fmt.Errorf("read readiness response: %w", readErr)
+			} else if resp.StatusCode == http.StatusOK {
+				return nil
+			} else {
+				lastErr = fmt.Errorf("readiness returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+			}
+		} else {
+			lastErr = fmt.Errorf("readiness probe failed: %w", err)
+		}
+
+		if time.Now().After(deadline) {
+			if lastErr == nil {
+				lastErr = fmt.Errorf("readiness probe timed out")
+			}
+			return lastErr
+		}
+
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func (vm *VLLMManager) ReadStartScript() (string, error) {
@@ -316,7 +367,7 @@ func (vm *VLLMManager) FlushKVCache(ctx context.Context, port int) error {
 func (vm *VLLMManager) StreamTestModel(ctx context.Context, port int, modelName string) error {
 	url := fmt.Sprintf("http://localhost:%d/v1/chat/completions", port)
 	payload := map[string]interface{}{
-		"model":  modelName,
+		"model": modelName,
 		"messages": []map[string]interface{}{
 			{"role": "user", "content": "Hello"},
 		},

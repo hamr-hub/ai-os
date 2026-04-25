@@ -34,13 +34,26 @@ func NewVLLMProxy(logger *zap.Logger) *VLLMProxy {
 		streamClient: &http.Client{
 			Timeout: 0,
 			Transport: &http.Transport{
-				MaxIdleConns:        200,
-				MaxIdleConnsPerHost: 50,
-				IdleConnTimeout:     90 * time.Second,
+				MaxIdleConns:          200,
+				MaxIdleConnsPerHost:   50,
+				IdleConnTimeout:       90 * time.Second,
 				ResponseHeaderTimeout: 120 * time.Second,
 			},
 		},
 	}
+}
+
+func readErrorBody(resp *http.Response) string {
+	if resp == nil || resp.Body == nil {
+		return ""
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(string(body))
 }
 
 func (p *VLLMProxy) ChatCompletion(ctx context.Context, port int, payload interface{}) (interface{}, error) {
@@ -92,8 +105,12 @@ func (p *VLLMProxy) StreamChatCompletion(ctx context.Context, port int, payload 
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		body := readErrorBody(resp)
 		resp.Body.Close()
-		return nil, fmt.Errorf("vLLM returned %d", resp.StatusCode)
+		if body == "" {
+			return nil, fmt.Errorf("vLLM returned %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, body)
 	}
 
 	ch := make(chan StreamEvent, 256)
@@ -158,11 +175,68 @@ func (p *VLLMProxy) ListModels(ctx context.Context, port int) (interface{}, erro
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		body := readErrorBody(resp)
+		if body == "" {
+			return nil, fmt.Errorf("vLLM returned %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, body)
+	}
+
 	var result interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+func (p *VLLMProxy) WaitUntilReady(ctx context.Context, port int, timeout time.Duration, interval time.Duration) error {
+	if timeout <= 0 {
+		timeout = 90 * time.Second
+	}
+	if interval <= 0 {
+		interval = time.Second
+	}
+
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+
+	for {
+		req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://localhost:%d/v1/models", port), nil)
+		if err != nil {
+			return err
+		}
+
+		resp, err := p.requestClient.Do(req)
+		if err == nil {
+			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
+			resp.Body.Close()
+			if readErr != nil {
+				lastErr = fmt.Errorf("read readiness response: %w", readErr)
+			} else if resp.StatusCode == http.StatusOK {
+				return nil
+			} else {
+				lastErr = fmt.Errorf("readiness returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+			}
+		} else {
+			lastErr = fmt.Errorf("readiness probe failed: %w", err)
+		}
+
+		if time.Now().After(deadline) {
+			if lastErr == nil {
+				lastErr = fmt.Errorf("readiness probe timed out")
+			}
+			return lastErr
+		}
+
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func (p *VLLMProxy) Embeddings(ctx context.Context, port int, payload interface{}) (interface{}, error) {
@@ -182,6 +256,14 @@ func (p *VLLMProxy) Embeddings(ctx context.Context, port int, payload interface{
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body := readErrorBody(resp)
+		if body == "" {
+			return nil, fmt.Errorf("vLLM returned %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, body)
+	}
 
 	var result interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

@@ -27,6 +27,7 @@ export const useServerStore = defineStore('server', () => {
   const backendType = ref<BackendType>('auto')
   const connectionStatus = ref<ConnectionStatus>('checking')
   const lastCheckedAt = ref<number | null>(null)
+  const lastErrorMessage = ref<string | null>(null)
   const history = ref<ServerHistoryEntry[]>([])
 
   const manageBase = computed(() => (activeUrl.value ? `${activeUrl.value}/manage` : '/api'))
@@ -79,19 +80,47 @@ export const useServerStore = defineStore('server', () => {
     saveHistory()
   }
 
-  const checkConnection = async () => {
+  const checkConnection = async (maxAttempts = 2): Promise<boolean> => {
     connectionStatus.value = 'checking'
-    try {
+    lastErrorMessage.value = null
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const controller = new AbortController()
       const timeout = window.setTimeout(() => controller.abort(), 5000)
-      const response = await fetch(healthUrl.value, { signal: controller.signal })
-      window.clearTimeout(timeout)
-      connectionStatus.value = response.ok ? 'online' : 'offline'
-    } catch {
-      connectionStatus.value = 'offline'
-    } finally {
-      lastCheckedAt.value = Date.now()
+
+      try {
+        const response = await fetch(healthUrl.value, {
+          signal: controller.signal,
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        })
+
+        if (response.ok) {
+          connectionStatus.value = 'online'
+          lastCheckedAt.value = Date.now()
+          return true
+        }
+
+        lastErrorMessage.value = `HTTP ${response.status}`
+      } catch (error) {
+        if (error instanceof Error) {
+          lastErrorMessage.value =
+            error.name === 'AbortError' ? '连接超时' : error.message || '连接失败'
+        } else {
+          lastErrorMessage.value = '连接失败'
+        }
+      } finally {
+        window.clearTimeout(timeout)
+      }
+
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => window.setTimeout(resolve, attempt * 300))
+      }
     }
+
+    connectionStatus.value = 'offline'
+    lastCheckedAt.value = Date.now()
+    return false
   }
 
   const initFromStorage = () => {
@@ -131,6 +160,7 @@ export const useServerStore = defineStore('server', () => {
     backendType,
     connectionStatus,
     lastCheckedAt,
+    lastErrorMessage,
     history,
     manageBase,
     v1Base,

@@ -95,15 +95,23 @@ class Scheduler:
         }
     
     def _init_preloaded_models(self):
+        self.preloaded_models.clear()
         for model_name, model_config in self.config.get('models', {}).items():
             if model_config.get('preload', False):
                 self.preloaded_models.add(model_name)
 
     def _register_llama_cpp_models(self):
+        for model_name in list(llama_cpp_manager._configs.keys()):
+            llama_cpp_manager.unregister_model(model_name)
         for model_name, model_config in self.config.get('models', {}).items():
             service = model_config.get('service', '')
             if service == 'llama_cpp':
                 llama_cpp_manager.register_model(model_name, model_config)
+
+    def set_config(self, new_config: Dict):
+        self.config = new_config if isinstance(new_config, dict) else {}
+        self._init_preloaded_models()
+        self._register_llama_cpp_models()
 
     def get_model_backend_type(self, model_name: str) -> str:
         config = self.get_model_config(model_name)
@@ -196,10 +204,10 @@ class Scheduler:
     
     def is_model_running(self, model_name: str) -> bool:
         cache_key = f"ai_controller:cache:model_running:{model_name}"
+        # Only cache positive results (True), skip cache for False to allow re-checking
         cached = cache_service.get(cache_key)
-        if cached is not None:
-            logger.info(f"is_model_running({model_name}): cached={cached}")
-            return cached
+        if cached is True:
+            return True
 
         with self._model_lock:
             backend_type = self.get_model_backend_type(model_name)
