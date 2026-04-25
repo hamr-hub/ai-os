@@ -190,6 +190,21 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
                 for i, part in enumerate(parts):
                     if part == 'serve' and i + 1 < len(parts):
                         model_path = parts[i + 1].strip('"').strip("'")
+                        # 处理环境变量（如 $MODEL_PATH 或 ${MODEL_PATH}）
+                        if model_path.startswith('$'):
+                            var_name = model_path.lstrip('$').strip('{}')
+                            model_path = os.environ.get(var_name, '')
+                            # 如果环境变量未设置，使用默认值（脚本中的 :- 语法）
+                            if not model_path:
+                                # 查找脚本中 MODEL_PATH 变量的默认值
+                                for env_line in content.split('\n'):
+                                    if 'MODEL_PATH=' in env_line and ':-' in env_line:
+                                        # 提取默认值，如 ${VLLM_MODEL_PATH:-/mnt/pve_models/Gemma-4-31B-Abliterated}
+                                        import re
+                                        match = re.search(r':-([^}]+)\}', env_line)
+                                        if match:
+                                            model_path = match.group(1).strip('"').strip("'")
+                                            break
                         break
 
         if not model_path:

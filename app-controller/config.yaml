@@ -1,6 +1,6 @@
 models:
   Gemma-4-31B-Abliterated:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 40GB
     preload: true
@@ -12,7 +12,7 @@ models:
     description: "Gemma 4 31B 模型（去审查版）"
   
   Qwen3-235B-A22B-Instruct-2507-AWQ:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 120GB
     preload: false
@@ -22,7 +22,7 @@ models:
     description: "Qwen3 235B AWQ 量化模型"
   
   Qwen3.6-35B-A3B:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 40GB
     preload: false
@@ -32,7 +32,7 @@ models:
     description: "Qwen3.6 35B 稀疏激活模型"
   
   Qwen3.6-35B-A3B-NVFP4:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 30GB
     preload: false
@@ -42,7 +42,7 @@ models:
     description: "Qwen3.6 35B NVFP4 量化模型"
   
   Qwen3.6-35B-A3B-Uncensored:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 40GB
     preload: false
@@ -52,7 +52,7 @@ models:
     description: "Qwen3.6 35B 去审查版"
   
   llama-3.3-70b-8.0bpw:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 80GB
     preload: false
@@ -62,7 +62,7 @@ models:
     description: "Llama 3.3 70B 8bit 量化模型"
   
   llama-3.3-70b-abliterated-gguf:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 80GB
     preload: false
@@ -72,7 +72,7 @@ models:
     description: "Llama 3.3 70B GGUF 去审查版"
   
   llama-3.3-70b-exl2-6_5:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 70GB
     preload: false
@@ -82,7 +82,7 @@ models:
     description: "Llama 3.3 70B EXL2 6.5bpw 量化"
   
   llama-3.3-70b-exl2-8_0:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 80GB
     preload: false
@@ -92,7 +92,7 @@ models:
     description: "Llama 3.3 70B EXL2 8.0bpw 量化"
   
   midnight-miqu-103b-5.0bpw:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 100GB
     preload: false
@@ -102,7 +102,7 @@ models:
     description: "Midnight Miqu 103B 5bpw 量化"
   
   qwen2.5-72b-exl2-8_0:
-    service: vllm
+    service: vllm-aiclient
     port: 8000
     required_memory: 80GB
     preload: false

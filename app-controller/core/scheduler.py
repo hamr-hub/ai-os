@@ -219,12 +219,15 @@ class Scheduler:
             if backend_type == 'vllm':
                 from core.vllm_manager import get_current_model_info
                 current_info = get_current_model_info()
+                logger.info(f"is_model_running({model_name}): backend_type=vllm, current_info={current_info}")
                 if current_info and current_info.get('running'):
                     if current_info.get('name') == model_name:
                         if model_name not in self.running_models:
                             self.running_models[model_name] = datetime.now()
                         cache_service.set(cache_key, True, ttl=3)
                         return True
+                    else:
+                        logger.info(f"is_model_running: name mismatch, current={current_info.get('name')}, requested={model_name}")
                 
                 if model_name in self.running_models:
                     del self.running_models[model_name]

@@ -189,11 +189,12 @@ async def agent_chat(request: Request, body: AgentRequest):
 
     vllm_port = scheduler.get_model_port(model_name)
     backend_url = f"http://localhost:{vllm_port}"
+    vllm_model_name = scheduler.get_model_path(model_name) or model_name
 
     if body.stream:
         return StreamingResponse(
             _agent_stream(
-                backend_url, model_name, body.messages, tools, executor,
+                backend_url, vllm_model_name, body.messages, tools, executor,
                 body.max_iterations, body.auto_confirm
             ),
             media_type="text/event-stream",
@@ -204,7 +205,7 @@ async def agent_chat(request: Request, body: AgentRequest):
         )
     else:
         result = await _agent_completion(
-            backend_url, model_name, body.messages, tools, executor,
+            backend_url, vllm_model_name, body.messages, tools, executor,
             body.max_iterations, body.auto_confirm
         )
         return result
