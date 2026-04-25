@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -25,6 +26,39 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
+
+type schedulerConfigApplier interface {
+	SetConfig(*config.AppConfig)
+}
+
+type vllmConfigApplier interface {
+	SetConfig(*config.VLLMConfig)
+}
+
+type llamaConfigApplier interface {
+	RegisterModelsFromConfig(*config.AppConfig)
+}
+
+func applyRuntimeConfig(cfg *config.AppConfig, scheduler schedulerConfigApplier, vllmManager vllmConfigApplier, llamaCppMgr llamaConfigApplier, zapLogger *zap.Logger, source string) error {
+	if cfg == nil {
+		return errors.New("config is nil")
+	}
+
+	scheduler.SetConfig(cfg)
+	vllmManager.SetConfig(&cfg.VLLM)
+	llamaCppMgr.RegisterModelsFromConfig(cfg)
+	zapLogger.Info("runtime config applied", zap.String("source", source), zap.Int("models", len(cfg.Models)))
+	return nil
+}
+
+func reloadRuntimeConfig(configPath string, scheduler schedulerConfigApplier, vllmManager vllmConfigApplier, llamaCppMgr llamaConfigApplier, zapLogger *zap.Logger, source string) error {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("reload config: %w", err)
+	}
+
+	return applyRuntimeConfig(cfg, scheduler, vllmManager, llamaCppMgr, zapLogger, source)
+}
 
 func main() {
 	port := flag.Int("port", 35001, "Server port")
@@ -79,10 +113,9 @@ func main() {
 
 	configWatcher := config.NewConfigWatcher(*configPath, zapLogger)
 	configWatcher.RegisterCallback(func(newCfg *config.AppConfig) {
-		scheduler.SetConfig(newCfg)
-		vllmManager.SetConfig(&newCfg.VLLM)
-		llamaCppMgr.RegisterModelsFromConfig(newCfg)
-		zapLogger.Info("config reloaded via watcher", zap.Int("models", len(newCfg.Models)))
+		if err := applyRuntimeConfig(newCfg, scheduler, vllmManager, llamaCppMgr, zapLogger, "watcher"); err != nil {
+			zapLogger.Error("config reload via watcher failed", zap.Error(err))
+		}
 	})
 	if err := configWatcher.Start(); err != nil {
 		zapLogger.Warn("config watcher start failed", zap.Error(err))
@@ -137,10 +170,20 @@ func main() {
 	}()
 
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	for {
+		sig := <-quit
+		if sig == syscall.SIGHUP {
+			if err := reloadRuntimeConfig(*configPath, scheduler, vllmManager, llamaCppMgr, zapLogger, "signal"); err != nil {
+				zapLogger.Error("runtime config reload failed", zap.Error(err))
+			}
+			continue
+		}
 
-	zapLogger.Info("shutting down server...")
+		zapLogger.Info("shutting down server...", zap.String("signal", sig.String()))
+		break
+	}
+
 	configWatcher.Stop()
 	cacheUpdater.Stop()
 	gpuMonitor.Stop()

@@ -1,7 +1,10 @@
 import re
 import httpx
+import logging
 from datetime import datetime
 from typing import Dict, Optional
+
+logger = logging.getLogger("ai_controller.vllm_metrics")
 
 
 class VLLMMetricsScraper:
@@ -47,9 +50,11 @@ class VLLMMetricsScraper:
             async with httpx.AsyncClient(timeout=5) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
+                    logger.warning("vLLM metrics endpoint returned status %s", resp.status_code)
                     return {}
                 return self._parse_prometheus_text(resp.text)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to scrape vLLM metrics from %s: %s", url, exc)
             return {}
 
     def _extract_value(self, line: str) -> Optional[float]:

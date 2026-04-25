@@ -3,6 +3,7 @@ import json
 import os
 import asyncio
 import httpx
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 from core.cache_service import cache_service
@@ -21,6 +22,8 @@ _THROTTLE_REASON_MAP = {
     0x00000200: "hw_thermal_slowdown_vmin",
     0x00000400: "hw_thermal_slowdown_vrel",
 }
+
+logger = logging.getLogger("ai_controller.monitor")
 
 
 def _decode_throttle_reasons(reasons_bits: int) -> List[str]:
@@ -52,13 +55,14 @@ class NVMLCollector:
             except Exception:
                 pass
         except ImportError:
-            pass
-        except Exception:
+            logger.info("pynvml not available, GPU monitor will fall back to nvidia-smi")
+        except Exception as exc:
             try:
                 self._pynvml.nvmlShutdown()
             except Exception:
                 pass
             self._initialized = False
+            logger.warning("Failed to initialize NVML collector: %s", exc)
 
     @property
     def is_available(self) -> bool:
@@ -68,8 +72,8 @@ class NVMLCollector:
         if self._initialized:
             try:
                 self._pynvml.nvmlShutdown()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to shutdown NVML cleanly: %s", exc)
             self._initialized = False
 
     def collect_all(self) -> Optional[Dict]:
@@ -271,7 +275,8 @@ class NVMLCollector:
                 "encoder_utilization": encoder_util,
                 "decoder_utilization": decoder_util,
             }
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to collect NVML metrics for GPU %s: %s", index, exc)
             return None
 
     def _get_process_name(self, pid: int) -> str:
@@ -337,7 +342,7 @@ class GPUMonitor:
                 await self._refresh_cache()
                 await self._refresh_vllm_metrics()
             except Exception:
-                pass
+                logger.exception("GPU cache updater loop failed")
             await asyncio.sleep(self._cache_update_interval)
 
     async def _refresh_cache(self):
@@ -348,8 +353,8 @@ class GPUMonitor:
                     self._status_cache = status
                     self._status_cache_time = datetime.now()
                     return
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("NVML cache refresh failed, falling back to nvidia-smi: %s", exc)
 
         if not self._nvidia_smi_available:
             self._status_cache = None
@@ -369,6 +374,9 @@ class GPUMonitor:
             stdout_str = stdout.decode('utf-8').strip() if stdout else ''
 
             if process.returncode != 0 or not stdout_str:
+                stderr_str = stderr.decode('utf-8', errors='replace').strip() if stderr else ''
+                if process.returncode != 0:
+                    logger.warning("nvidia-smi refresh failed with code %s: %s", process.returncode, stderr_str[:200])
                 self._status_cache = None
                 self._status_cache_time = None
                 return
@@ -406,6 +414,7 @@ class GPUMonitor:
                 self._status_cache = None
                 self._status_cache_time = None
         except Exception:
+            logger.exception("Failed to refresh GPU cache using nvidia-smi")
             self._status_cache = None
             self._status_cache_time = None
 
@@ -471,8 +480,8 @@ class GPUMonitor:
                 status = self._nvml_collector.collect_all()
                 if status:
                     return status
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Synchronous NVML status collection failed: %s", exc)
 
         if not self._nvidia_smi_available:
             return None
@@ -514,6 +523,7 @@ class GPUMonitor:
                 }
             return None
         except Exception:
+            logger.exception("Synchronous GPU status collection failed")
             return None
 
     def get_gpu_status(self) -> Optional[Dict]:
@@ -523,11 +533,15 @@ class GPUMonitor:
         if self._status_cache is not None:
             cache_age = (datetime.now() - self._status_cache_time).total_seconds() if self._status_cache_time else float('inf')
             if cache_age < 300:
-                if asyncio.get_event_loop().is_running():
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+                if loop and loop.is_running():
                     try:
                         asyncio.create_task(self._refresh_cache())
-                    except RuntimeError:
-                        pass
+                    except RuntimeError as exc:
+                        logger.debug("Failed to schedule GPU cache refresh task: %s", exc)
                 return self._status_cache
 
         return None
@@ -539,7 +553,7 @@ class GPUMonitor:
             if self._status_cache and metrics:
                 self._status_cache["vllm_metrics"] = metrics
         except Exception:
-            pass
+            logger.exception("Failed to refresh vLLM metrics cache")
 
     def get_vllm_metrics(self) -> Optional[Dict]:
         if self._vllm_metrics_cache:
@@ -717,15 +731,15 @@ class GPUMonitor:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 await client.post(f"http://localhost:{port}/v1/cache/flush")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to flush vLLM cache on port %s: %s", port, exc)
 
     async def _clear_vllm_kv_cache(self, port: int):
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 await client.post(f"http://localhost:{port}/v1/clear_cache")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to clear vLLM KV cache on port %s: %s", port, exc)
 
     async def _adjust_gpu_utilization(self, port: int, utilization: float):
         try:
@@ -734,8 +748,8 @@ class GPUMonitor:
                     f"http://localhost:{port}/v1/control",
                     json={"gpu_memory_utilization": utilization}
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to adjust GPU utilization on port %s to %.2f: %s", port, utilization, exc)
 
     async def _perform_memory_cleanup(self, vllm_port: int = 8000):
         await self._flush_vllm_cache(vllm_port)
@@ -845,6 +859,7 @@ class GPUMonitor:
                 self._last_history_cleanup = datetime.now()
             return True
         except Exception:
+            logger.exception("Failed to save GPU history")
             return False
 
     def _clean_old_history(self):
@@ -862,14 +877,14 @@ class GPUMonitor:
                     entry_time = datetime.fromisoformat(entry.get("timestamp", ""))
                     if entry_time >= cutoff_time:
                         valid_entries.append(item)
-                except:
+                except Exception:
                     valid_entries.append(item)
             if len(valid_entries) < len(history_data):
                 self._redis_client.delete("gpu:history")
                 for entry in reversed(valid_entries):
                     self._redis_client.rpush("gpu:history", entry)
         except Exception:
-            pass
+            logger.exception("Failed to clean old GPU history")
 
     def set_history_enabled(self, enabled: bool):
         self._history_enabled = enabled
@@ -900,10 +915,11 @@ class GPUMonitor:
             for item in history_data:
                 try:
                     history.append(json.loads(item))
-                except:
-                    pass
+                except Exception:
+                    logger.debug("Skipping invalid GPU history entry")
             return history[::-1]
         except Exception:
+            logger.exception("Failed to load GPU history")
             return []
 
 
@@ -942,6 +958,7 @@ class SystemMonitor:
             self._redis_client.expire("system:history", ttl_30_days)
             return True
         except Exception:
+            logger.exception("Failed to save system history")
             return False
 
     def get_system_history(self, count: int = 60) -> List[Dict]:
@@ -952,6 +969,7 @@ class SystemMonitor:
             history = [json.loads(item) for item in history_data]
             return history[::-1]
         except Exception:
+            logger.exception("Failed to load system history")
             return []
 
     def set_history_enabled(self, enabled: bool):

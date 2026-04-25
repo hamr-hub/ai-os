@@ -118,8 +118,12 @@ structured_logger = structured_logger
 
 async def reload_runtime_config():
     new_config = config_watcher.load_config()
+    if not isinstance(new_config, dict):
+        logger.warning(f"Ignoring invalid runtime config payload: {type(new_config).__name__}")
+        return False
     _on_config_changed(new_config)
     structured_logger.info("Runtime configuration reloaded", action="config_reload_signal")
+    return True
 
 
 def _install_signal_handlers():

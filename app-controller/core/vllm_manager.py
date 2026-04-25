@@ -12,9 +12,12 @@ import subprocess
 import json
 import asyncio
 import httpx
+import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from core.cache_service import cache_service
+
+logger = logging.getLogger("ai_controller.vllm_manager")
 
 # 模型切换互斥锁，防止并发切换
 model_switch_lock = asyncio.Lock()
@@ -30,8 +33,8 @@ def _load_vllm_config() -> Dict[str, Any]:
             with open(config_path, 'r') as f:
                 config = yaml.safe_load(f)
             return config.get('vllm', {})
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to load vLLM config: %s", exc)
     return {}
 
 VLLM_CONFIG = _load_vllm_config()
@@ -126,7 +129,8 @@ def _find_model_name_from_path(model_path: str) -> Optional[str]:
                 return model_name
         
         return None
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to map model path to configured model name: %s", exc)
         return None
 
 
@@ -165,7 +169,8 @@ def _get_model_size(model_path: str) -> int:
                 except:
                     pass
         return int(total_size / (1024 * 1024))
-    except:
+    except Exception as exc:
+        logger.warning("Failed to calculate model size for %s: %s", model_path, exc)
         return 0
 
 
@@ -225,6 +230,7 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
             "status": "running" if service_running else "stopped"
         }
     except Exception as e:
+        logger.warning("Failed to get current vLLM model info: %s", e)
         return None
 
 
@@ -238,7 +244,8 @@ def _is_service_running() -> bool:
             capture_output=True, text=True, timeout=5
         )
         return result.stdout.strip() == 'active'
-    except:
+    except Exception as exc:
+        logger.warning("Failed to query vLLM service status: %s", exc)
         return False
 
 
@@ -253,6 +260,7 @@ def start_vllm_service() -> bool:
         )
         return result.returncode == 0
     except Exception as e:
+        logger.error("Failed to start vLLM service: %s", e)
         return False
 
 
@@ -267,6 +275,7 @@ def stop_vllm_service() -> bool:
         )
         return result.returncode == 0
     except Exception as e:
+        logger.error("Failed to stop vLLM service: %s", e)
         return False
 
 
@@ -281,6 +290,7 @@ def restart_vllm_service() -> bool:
         )
         return result.returncode == 0
     except Exception as e:
+        logger.error("Failed to restart vLLM service: %s", e)
         return False
 
 

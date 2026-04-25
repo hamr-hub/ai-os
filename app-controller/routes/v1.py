@@ -6,6 +6,7 @@ from functools import lru_cache
 import asyncio
 import httpx
 import json
+import logging
 import os
 
 from schemas.chat import (
@@ -27,6 +28,7 @@ from middleware.error_handler import (
 )
 
 v1_router = APIRouter(prefix="/v1")
+logger = logging.getLogger("ai_controller.routes.v1")
 
 
 def _scheduler():
@@ -74,6 +76,9 @@ def get_backend_model_name(model_name: str, scheduler) -> str:
     if backend_type == 'llama_cpp':
         return model_config.get('model_path', model_name) if model_config else model_name
     return model_config.get('model_path', model_name) if model_config else model_name
+
+
+def get_vllm_request_client(request: Request) -> httpx.AsyncClient:
     client = getattr(request.app.state, "vllm_request_client", None)
     if client is None:
         raise RuntimeError("vLLM request client not initialized")
@@ -85,6 +90,15 @@ def get_vllm_stream_client(request: Request) -> httpx.AsyncClient:
     if client is None:
         raise RuntimeError("vLLM stream client not initialized")
     return client
+
+
+async def ensure_model_ready(scheduler, model_name: str) -> None:
+    if scheduler.is_model_running(model_name):
+        return
+
+    success = await scheduler.start_model(model_name)
+    if not success:
+        raise ModelServiceUnavailableException(model_name, "Failed to start service")
 
 
 @v1_router.get("/models")
@@ -207,13 +221,8 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
         if gpu_status and available_mb < min_memory_mb:
             raise InsufficientMemoryException(available_mb, min_memory_mb)
 
-        if not scheduler.is_model_running(model_name):
-            success = await scheduler.start_model(model_name)
-            if not success:
-                raise ModelServiceUnavailableException(model_name, "Failed to start service")
-            await asyncio.sleep(5)
+        await ensure_model_ready(scheduler, model_name)
 
-        vllm_port = scheduler.get_model_port(model_name)
         backend_url = get_backend_url(model_name, scheduler)
         vllm_url = f"{backend_url}/v1/chat/completions"
 
@@ -299,7 +308,8 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
                         'choices': [{'index': 0, 'delta': {'content': '[Stream timeout]'}, 'finish_reason': 'error'}]
                     })}\n\n"
                     yield "data: [DONE]\n\n"
-                except httpx.HTTPError:
+                except httpx.HTTPError as exc:
+                    logger.warning("Streaming proxy error for model %s: %s", model_name, exc)
                     yield f"data: {json.dumps({
                         'id': chat_completion_id,
                         'object': 'chat.completion.chunk',
@@ -309,12 +319,20 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
                     })}\n\n"
                     yield "data: [DONE]\n\n"
                 except Exception:
-                    pass
+                    logger.exception("Unexpected streaming error for model %s", model_name)
+                    yield f"data: {json.dumps({
+                        'id': chat_completion_id,
+                        'object': 'chat.completion.chunk',
+                        'created': int(datetime.now().timestamp()),
+                        'model': model_name,
+                        'choices': [{'index': 0, 'delta': {'content': '[Internal stream error]'}, 'finish_reason': 'error'}]
+                    })}\n\n"
+                    yield "data: [DONE]\n\n"
                 finally:
                     try:
                         await response.aclose()
-                    except:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Failed to close streaming response for model %s: %s", model_name, exc)
 
             return StreamingResponse(generate(), media_type="text/event-stream", headers={
                 "Cache-Control": "no-cache",
@@ -340,13 +358,17 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
             )
 
         return result
-    except (HTTPException, Exception) as e:
-        if isinstance(e, HTTPException):
-            status_code = e.status_code
-        raise
     except httpx.HTTPError as e:
         status_code = 503
+        logger.warning("Chat completion proxy error for model %s: %s", model_name, e)
         raise ModelServiceUnavailableException(model_name, str(e))
+    except HTTPException as e:
+        status_code = e.status_code
+        raise
+    except Exception as e:
+        status_code = 500
+        logger.exception("Chat completion failed for model %s", model_name)
+        raise HTTPException(status_code=500, detail=f"Chat completion failed: {str(e)}")
     finally:
         if slot_acquired:
             scheduler.release_request(model_name)
@@ -472,18 +494,7 @@ async def generate_image(request: Request, body: ImageGenerationRequest):
     if not scheduler.is_model_available(body.model):
         raise ModelNotFoundException(body.model)
 
-    if not scheduler.is_model_running(body.model):
-        success = await scheduler.start_model(body.model)
-        if not success:
-            raise ModelServiceUnavailableException(body.model, "Failed to start model")
-        await asyncio.sleep(5)
-
-    vllm_port = scheduler.get_model_port(body.model)
-    backend_url = get_backend_url(body.model, scheduler)
-    vllm_url = f"{backend_url}/v1/images/generations"
-
     try:
-        req_data = {
             "prompt": body.prompt,
             "n": body.n,
             "size": body.size,
@@ -520,13 +531,8 @@ async def create_embeddings(request: Request, body: EmbeddingRequest):
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
 
-    if not scheduler.is_model_running(model_name):
-        success = await scheduler.start_model(model_name)
-        if not success:
-            raise ModelServiceUnavailableException(model_name, "Failed to start model")
-        await asyncio.sleep(5)
+    await ensure_model_ready(scheduler, model_name)
 
-    vllm_port = scheduler.get_model_port(model_name)
     backend_url = get_backend_url(model_name, scheduler)
     vllm_url = f"{backend_url}/v1/embeddings"
 
@@ -707,8 +713,6 @@ async def switch_and_test_model(model_name: str):
             }
 
         scheduler.mark_model_selected(model_name)
-        await asyncio.sleep(5)
-
         report = await model_tester.run_tests(model_name)
         return {
             "status": "completed",
