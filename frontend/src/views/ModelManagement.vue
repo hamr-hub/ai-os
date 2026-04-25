@@ -63,6 +63,14 @@ onMounted(() => {
 
 async function fetchCapabilities() {
   for (const m of runningModels.value) {
+    try {
+      const res = await serverStore.fetchWithAuth(`/v1/test/results/${m.name}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.report?.feature_support) {
+          modelCapabilities.value[m.name] = data.report.feature_support
+        }
+      }
     } catch (e) {
       console.warn(`Failed to fetch test results for ${m.name}:`, e)
     }
