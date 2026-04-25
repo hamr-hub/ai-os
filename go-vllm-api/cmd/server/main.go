@@ -100,7 +100,7 @@ func main() {
 		zapLogger.Warn("config watcher start failed", zap.Error(err))
 	}
 
-	scheduler.PreloadModels(ctx)
+	go scheduler.PreloadModels(ctx)
 	go scheduler.PreloadWatcherLoop(ctx)
 
 	go broadcastStatusLoop(ctx, gpuMonitor, scheduler, wsManager, metricsCollector, sysCollector, zapLogger)
