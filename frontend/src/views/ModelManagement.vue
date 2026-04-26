@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, type Component } from 'vue'
+import { ref, computed, onMounted, watch, type Component } from 'vue'
 import { useModels } from '@/composables/useModels'
 import { runModelTest, getTestResults, getTestHistory } from '@/api/client'
 import type { TestResponse, TestHistoryEntry, TestReport } from '@/types'
@@ -58,14 +58,15 @@ const modelCapabilities = ref<Record<string, TestReport['feature_support']>>({})
 
 onMounted(() => {
   fetchHistory()
-  fetchCapabilities()
 })
 
-async function fetchCapabilities() {
+async function fetchCapabilities(modelNames: string[] = runningModels.value.map((model) => model.name)) {
+  if (!modelNames.length) return
+
   const results = await Promise.allSettled(
-    runningModels.value.map(async (model) => {
-      const data = await getTestResults(model.name)
-      return { modelName: model.name, featureSupport: data.report?.feature_support }
+    modelNames.map(async (modelName) => {
+      const data = await getTestResults(modelName)
+      return { modelName, featureSupport: data.report?.feature_support }
     })
   )
 
@@ -86,12 +87,18 @@ const getCapabilityBadges = (
   modelName: string
 ): Array<{ label: string; icon: Component; color: string }> => {
   const caps = modelCapabilities.value[modelName]
+  const model = modelList.value.find((m) => m.name === modelName)
   const badges: Array<{ label: string; icon: Component; color: string }> = []
   badges.push({ label: '对话', icon: MessageSquare, color: '#6366f1' })
-  if (caps?.tool_calling) badges.push({ label: '工具调用', icon: Wrench, color: '#3b82f6' })
-  if (caps?.image_generation) badges.push({ label: '图片生成', icon: Image, color: '#8b5cf6' })
-  const model = modelList.value.find((m) => m.name === modelName)
-  if (model?.supports_images) badges.push({ label: '多模态', icon: Eye, color: '#f59e0b' })
+  if (caps?.tool_calling || model?.supports_tool_calling) {
+    badges.push({ label: '工具调用', icon: Wrench, color: '#3b82f6' })
+  }
+  if (caps?.image_generation || model?.supports_image_generation) {
+    badges.push({ label: '图片生成', icon: Image, color: '#8b5cf6' })
+  }
+  if (caps?.multimodal || model?.supports_images) {
+    badges.push({ label: '多模态', icon: Eye, color: '#f59e0b' })
+  }
   return badges
 }
 
@@ -134,6 +141,9 @@ async function loadTestResults(modelName: string) {
     const result = await getTestResults(modelName)
     testResult.value = result
     cachedResults.value[modelName] = result
+    if (result.report?.feature_support) {
+      modelCapabilities.value[modelName] = result.report.feature_support
+    }
   } catch (e) {
     console.warn(`Failed to load test results for ${modelName}:`, e)
   }
@@ -200,6 +210,54 @@ const statusLabel = computed(() => {
 
 const perfMetrics = computed(() => testResult.value?.report?.performance_metrics)
 const resUtil = computed(() => testResult.value?.report?.resource_utilization)
+const selectedTestModelInfo = computed(
+  () => modelList.value.find((model) => model.name === selectedTestModel.value) ?? null
+)
+const selectedRuntimeStatus = computed(() => {
+  const model = selectedTestModelInfo.value
+  if (!model) return null
+
+  const activeVllmModel =
+    model.backend_type === 'vllm'
+      ? modelList.value.find((item) => item.backend_type === 'vllm' && item.running) ?? null
+      : null
+
+  return {
+    model,
+    isRunning: model.running,
+    activeModelName:
+      model.backend_type === 'vllm' ? activeVllmModel?.name ?? null : model.running ? model.name : null,
+    activeMatches: model.backend_type === 'vllm' ? activeVllmModel?.name === model.name : model.running,
+  }
+})
+const reportRuntimeStatus = computed(() => testResult.value?.report?.runtime_status ?? null)
+
+watch(
+  modelList,
+  (models) => {
+    if (!models.length) return
+    if (selectedTestModel.value && models.some((model) => model.name === selectedTestModel.value)) {
+      return
+    }
+    selectedTestModel.value =
+      defaultModel.value ?? models.find((model) => model.running)?.name ?? models[0]?.name ?? ''
+  },
+  { immediate: true }
+)
+
+watch(
+  () => runningModels.value.map((model) => model.name).sort().join('|'),
+  async () => {
+    const missingModels = runningModels.value
+      .map((model) => model.name)
+      .filter((modelName) => !modelCapabilities.value[modelName])
+
+    if (missingModels.length > 0) {
+      await fetchCapabilities(missingModels)
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -353,6 +411,47 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
             </button>
           </div>
 
+          <div v-if="selectedRuntimeStatus" class="runtime-panel">
+            <div class="runtime-header">
+              <Activity class="w-4 h-4" />
+              <span>实际运行情况</span>
+            </div>
+            <div class="runtime-grid">
+              <div class="runtime-item">
+                <span class="runtime-label">当前模型</span>
+                <span class="runtime-value">{{ selectedRuntimeStatus.model.name }}</span>
+              </div>
+              <div class="runtime-item">
+                <span class="runtime-label">运行状态</span>
+                <span class="runtime-value" :class="selectedRuntimeStatus.isRunning ? 'ok' : 'muted'">
+                  {{ selectedRuntimeStatus.isRunning ? '运行中' : '未运行' }}
+                </span>
+              </div>
+              <div class="runtime-item">
+                <span class="runtime-label">实际活动模型</span>
+                <span class="runtime-value">{{ selectedRuntimeStatus.activeModelName || '无' }}</span>
+              </div>
+              <div class="runtime-item">
+                <span class="runtime-label">是否当前实例</span>
+                <span class="runtime-value" :class="selectedRuntimeStatus.activeMatches ? 'ok' : 'warn'">
+                  {{ selectedRuntimeStatus.activeMatches ? '是' : '否' }}
+                </span>
+              </div>
+              <div class="runtime-item">
+                <span class="runtime-label">后端</span>
+                <span class="runtime-value">{{ selectedRuntimeStatus.model.backend_type || '--' }}</span>
+              </div>
+              <div class="runtime-item">
+                <span class="runtime-label">端口 / 请求</span>
+                <span class="runtime-value"
+                  >{{ selectedRuntimeStatus.model.port ?? '--' }} / {{
+                    selectedRuntimeStatus.model.active_requests
+                  }}</span
+                >
+              </div>
+            </div>
+          </div>
+
           <div v-if="testError" class="error-banner">
             <AlertTriangle class="w-4 h-4" />
             <span>{{ testError }}</span>
@@ -366,6 +465,35 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
               <span class="status-time">{{
                 formatTime(testResult.report?.test_timestamp ?? null)
               }}</span>
+            </div>
+
+            <div v-if="reportRuntimeStatus" class="runtime-panel subtle">
+              <div class="runtime-header">
+                <Server class="w-4 h-4" />
+                <span>检测时运行快照</span>
+              </div>
+              <div class="runtime-grid">
+                <div class="runtime-item">
+                  <span class="runtime-label">请求模型</span>
+                  <span class="runtime-value">{{ reportRuntimeStatus.requested_model }}</span>
+                </div>
+                <div class="runtime-item">
+                  <span class="runtime-label">实际活动模型</span>
+                  <span class="runtime-value">{{ reportRuntimeStatus.active_model || '无' }}</span>
+                </div>
+                <div class="runtime-item">
+                  <span class="runtime-label">服务状态</span>
+                  <span class="runtime-value" :class="reportRuntimeStatus.service_running ? 'ok' : 'warn'">
+                    {{ reportRuntimeStatus.service_running ? '运行中' : '未运行' }}
+                  </span>
+                </div>
+                <div class="runtime-item">
+                  <span class="runtime-label">模型匹配</span>
+                  <span class="runtime-value" :class="reportRuntimeStatus.active_model_matches ? 'ok' : 'warn'">
+                    {{ reportRuntimeStatus.active_model_matches ? '匹配' : '不匹配' }}
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div class="features-grid">
@@ -969,6 +1097,61 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
 .test-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.runtime-panel {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.18);
+}
+.runtime-panel.subtle {
+  margin-bottom: 0;
+  background: var(--bg-secondary);
+  border-color: var(--border-primary);
+}
+.runtime-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.runtime-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+.runtime-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.runtime-value {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.runtime-value.ok {
+  color: #22c55e;
+}
+.runtime-value.warn {
+  color: #f59e0b;
+}
+.runtime-value.muted {
+  color: #6b7280;
 }
 
 .error-banner {

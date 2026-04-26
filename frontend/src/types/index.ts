@@ -172,10 +172,24 @@ export interface TestReport {
   model_name: string
   test_timestamp: string
   overall_status: string
+  runtime_status?: {
+    checked_at: string
+    requested_model: string
+    backend_type: string
+    port: number | null
+    service: string | null
+    active_requests: number
+    requested_model_running: boolean
+    service_running: boolean
+    active_model?: string | null
+    active_model_matches?: boolean
+    active_model_path?: string
+    default_model?: string | null
+  }
   feature_support: {
     chat: boolean
-    tool_calling: boolean
     image: boolean
+    tool_calling: boolean
     multimodal: boolean
     image_generation: boolean
   }

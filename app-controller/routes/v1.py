@@ -628,6 +628,7 @@ def _serialize_report(report):
         "model_name": report.model_name,
         "test_timestamp": report.test_timestamp,
         "overall_status": report.overall_status,
+        "runtime_status": report.runtime_status,
         "feature_support": report.feature_support,
         "performance_metrics": report.performance_metrics,
         "resource_utilization": report.resource_utilization,

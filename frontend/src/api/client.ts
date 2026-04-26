@@ -174,8 +174,8 @@ export async function getVLLMMetrics(): Promise<VLLMMetricsData> {
   return data
 }
 
-export async function getModelsStatus(): Promise<ModelStatus> {
-  const { data } = await client.get<ModelStatus>('/models', silentRequestConfig())
+export async function getModelsStatus(config: AxiosRequestConfig = {}): Promise<ModelStatus> {
+  const { data } = await client.get<ModelStatus>('/models', silentRequestConfig(config))
   return data
 }
 
@@ -281,10 +281,12 @@ export async function healthCheck(): Promise<{ status: string }> {
   return data
 }
 
-export async function getDefaultModel(): Promise<{ default_model: string | null }> {
+export async function getDefaultModel(
+  config: AxiosRequestConfig = {}
+): Promise<{ default_model: string | null }> {
   const { data } = await client.get<{ default_model: string | null }>(
     '/default-model',
-    silentRequestConfig()
+    silentRequestConfig(config)
   )
   return data
 }

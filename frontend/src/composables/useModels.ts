@@ -123,7 +123,7 @@ export function useModels() {
     switchingModel.value = modelName
     error.value = null
     try {
-      await switchModel(modelName)
+      await switchModel(modelName, false)
       if (setAsDefault) {
         await setDefaultModel(modelName)
         defaultModel.value = modelName

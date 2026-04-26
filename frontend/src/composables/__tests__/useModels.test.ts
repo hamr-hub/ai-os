@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useModels } from '@/composables/useModels'
 import { startModel, stopModel } from '@/api/client'
 
+const flushPromises = async () => {
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
 const { mockModelStatus } = vi.hoisted(() => ({
   mockModelStatus: {
     'model-a': {
@@ -59,16 +64,16 @@ describe('useModels', () => {
   })
 
   it('fetch后填充数据', async () => {
-    const { modelStatus, modelList, defaultModel, fetchModelStatus } = useModels()
-    await fetchModelStatus()
+    const { modelStatus, modelList, defaultModel } = useModels()
+    await flushPromises()
     expect(modelStatus.value).toBeTruthy()
     expect(modelList.value.length).toBe(2)
     expect(defaultModel.value).toBe('model-a')
   })
 
   it('modelList正确展开', async () => {
-    const { modelList, fetchModelStatus } = useModels()
-    await fetchModelStatus()
+    const { modelList } = useModels()
+    await flushPromises()
     const running = modelList.value.filter((m) => m.running)
     expect(running.length).toBe(1)
     expect(running[0].name).toBe('model-a')
@@ -87,8 +92,8 @@ describe('useModels', () => {
   })
 
   it('runningModelsCount计算正确', async () => {
-    const { runningModelsCount, fetchModelStatus } = useModels()
-    await fetchModelStatus()
+    const { runningModelsCount } = useModels()
+    await flushPromises()
     expect(runningModelsCount.value).toBe(1)
   })
 })

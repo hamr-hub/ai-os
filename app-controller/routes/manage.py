@@ -25,7 +25,7 @@ structured_logger = _structured_logger
 config_watcher = _config_watcher
 logger = _logger
 redis_client = _redis_client
-from core.vllm_manager import switch_vllm_model_with_test
+from core.vllm_manager import wait_for_vllm_model_ready_and_test
 from core.llama_cpp_manager import llama_cpp_manager, test_llama_cpp_model
 from middleware.error_handler import ModelNotFoundException
 
@@ -269,10 +269,7 @@ async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True):
                     "test_result": test_result
                 }
 
-            model_config = scheduler.get_model_config(model_name)
-            model_path = model_config.get('model_path', model_name) if model_config else model_name
-
-            test_result = await switch_vllm_model_with_test(model_name, test_enabled=True, model_path=model_path)
+            test_result = await wait_for_vllm_model_ready_and_test(model_name, test_enabled=True)
 
             if not test_result.get("success", False):
                 error_msg = test_result.get("error", "Unknown error during model test")

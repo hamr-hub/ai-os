@@ -38,6 +38,7 @@ class ModelTestReport:
     model_name: str
     test_timestamp: str
     overall_status: str
+    runtime_status: Dict[str, Any]
     feature_support: Dict[str, bool]
     performance_metrics: Dict[str, Any]
     resource_utilization: Dict[str, Any]
@@ -69,6 +70,7 @@ class ModelTestingFramework:
                     model_name=model_name,
                     test_timestamp=datetime.now().isoformat(),
                     overall_status="skipped",
+                    runtime_status=self._collect_runtime_status(model_name),
                     feature_support={},
                     performance_metrics={},
                     resource_utilization={},
@@ -98,6 +100,7 @@ class ModelTestingFramework:
                 model_name=model_name,
                 test_timestamp=start_time.isoformat(),
                 overall_status="failed",
+                runtime_status=self._collect_runtime_status(model_name),
                 feature_support={},
                 performance_metrics={},
                 resource_utilization={},
@@ -115,6 +118,7 @@ class ModelTestingFramework:
                     model_name=model_name,
                     test_timestamp=start_time.isoformat(),
                     overall_status="failed",
+                    runtime_status=self._collect_runtime_status(model_name),
                     feature_support={},
                     performance_metrics={},
                     resource_utilization={},
@@ -122,6 +126,23 @@ class ModelTestingFramework:
                     errors=errors,
                     warnings=[]
                 )
+
+            ready = await self._wait_for_model_ready(model_name)
+            if not ready:
+                errors.append(f"Model {model_name} did not become ready within timeout")
+                return ModelTestReport(
+                    model_name=model_name,
+                    test_timestamp=start_time.isoformat(),
+                    overall_status="failed",
+                    runtime_status=self._collect_runtime_status(model_name),
+                    feature_support={},
+                    performance_metrics={},
+                    resource_utilization={},
+                    test_results=[],
+                    errors=errors,
+                    warnings=[]
+                )
+        else:
             await asyncio.sleep(self.WARMUP_DELAY)
         
         resource_start = self._get_system_resources()
@@ -137,12 +158,20 @@ class ModelTestingFramework:
             test_results.append(self._create_skipped_test("image_processing", FeatureType.IMAGE, "Model does not support images"))
         
         feature_support = {
+            "chat": any(r.status == TestStatus.PASSED for r in test_results if r.feature_type == FeatureType.CHAT),
+            "tool_calling": any(
+                r.status == TestStatus.PASSED for r in test_results if r.feature_type == FeatureType.TOOLS
+            ),
             "image": supports_images and any(
                 r.status == TestStatus.PASSED for r in test_results 
                 if r.feature_type == FeatureType.IMAGE
             ),
-            "tools": any(r.status == TestStatus.PASSED for r in test_results if r.feature_type == FeatureType.TOOLS),
-            "chat": any(r.status == TestStatus.PASSED for r in test_results if r.feature_type == FeatureType.CHAT)
+            "multimodal": supports_images and any(
+                r.status == TestStatus.PASSED for r in test_results
+                if r.feature_type == FeatureType.IMAGE
+            ),
+            # 目前图片生成功能尚未做主动自测，先展示配置层声明能力。
+            "image_generation": self.scheduler.get_model_supports_image_generation(model_name),
         }
         
         resource_end = self._get_system_resources()
@@ -159,6 +188,7 @@ class ModelTestingFramework:
             model_name=model_name,
             test_timestamp=start_time.isoformat(),
             overall_status=overall_status,
+            runtime_status=self._collect_runtime_status(model_name),
             feature_support=feature_support,
             performance_metrics=performance_metrics,
             resource_utilization=resource_utilization,
@@ -171,6 +201,65 @@ class ModelTestingFramework:
         
         logger.info(f"Tests completed for {model_name}: {overall_status}")
         return report
+
+    async def _wait_for_model_ready(self, model_name: str) -> bool:
+        port = self.scheduler.get_model_port(model_name)
+        if not port:
+            return False
+
+        timeout = self.scheduler.config.get('settings', {}).get('preload_timeout', 180)
+        wait_fn = getattr(self.scheduler, '_wait_for_model_ready', None)
+        if callable(wait_fn):
+            try:
+                return await wait_fn(model_name, port, timeout)
+            except Exception as exc:
+                logger.warning("Fallback readiness wait for %s after scheduler wait error: %s", model_name, exc)
+
+        deadline = time.time() + timeout
+        url = f"http://localhost:{port}/v1/models"
+        while time.time() < deadline:
+            try:
+                async with httpx.AsyncClient(timeout=3) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        return True
+            except Exception:
+                pass
+            await asyncio.sleep(2)
+        return False
+
+    def _collect_runtime_status(self, model_name: str) -> Dict[str, Any]:
+        backend_type = self.scheduler.get_model_backend_type(model_name)
+        runtime_status = {
+            "checked_at": datetime.now().isoformat(),
+            "requested_model": model_name,
+            "backend_type": backend_type,
+            "port": self.scheduler.get_model_port(model_name),
+            "service": self.scheduler.get_model_service(model_name),
+            "active_requests": self.scheduler.get_active_requests(model_name),
+            "requested_model_running": self.scheduler.is_model_running(model_name),
+            "default_model": self.scheduler.get_default_model(),
+        }
+
+        if backend_type == 'vllm':
+            from core.vllm_manager import get_current_model_info
+
+            current_info = get_current_model_info() or {}
+            active_model = current_info.get("name")
+            runtime_status.update({
+                "service_running": current_info.get("running", False),
+                "active_model": active_model,
+                "active_model_matches": active_model == model_name,
+                "active_model_path": current_info.get("path"),
+            })
+        else:
+            runtime_status.update({
+                "service_running": runtime_status["requested_model_running"],
+                "active_model": model_name if runtime_status["requested_model_running"] else None,
+                "active_model_matches": runtime_status["requested_model_running"],
+            })
+
+        return runtime_status
 
     async def _test_chat_basic(self, model_name: str) -> TestResult:
         start_time = time.time()

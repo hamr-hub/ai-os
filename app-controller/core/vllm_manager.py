@@ -576,6 +576,56 @@ async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, mode
     }
 
 
+async def wait_for_vllm_model_ready_and_test(model_name: str, test_enabled: bool = True) -> Dict[str, Any]:
+    """
+    对已经发起切换的 vLLM 模型执行后续等待与自测，不再重复改脚本/重启服务。
+    """
+    model_path = os.path.join(MODEL_BASE_PATH, model_name)
+    if not os.path.exists(model_path):
+        return {
+            "success": False,
+            "error": f"Model not found: {model_name}",
+            "model": model_name,
+            "model_path": model_path,
+            "service": VLLM_SERVICE_NAME,
+            "status": "missing",
+        }
+
+    service_ready = await _wait_for_vllm_ready(max_wait=180, check_interval=5)
+    if not service_ready:
+        return {
+            "success": False,
+            "error": "vLLM service failed to start within timeout",
+            "model": model_name,
+            "model_path": model_path,
+            "service": VLLM_SERVICE_NAME,
+            "status": "timeout",
+        }
+
+    test_result = None
+    if test_enabled:
+        test_result = await _test_vllm_model(model_name)
+        if not test_result.get("success", False):
+            return {
+                "success": False,
+                "error": f"Model switch failed: {test_result.get('message', 'Unknown error')}",
+                "model": model_name,
+                "model_path": model_path,
+                "service": VLLM_SERVICE_NAME,
+                "status": "test_failed",
+                "test_result": test_result,
+            }
+
+    return {
+        "success": True,
+        "model": model_name,
+        "model_path": model_path,
+        "service": VLLM_SERVICE_NAME,
+        "status": "ready" if not test_enabled else "ready_and_tested",
+        "test_result": test_result,
+    }
+
+
 def _write_runtime_service_override(model_path: str) -> bool:
     """Write a writable runtime override so model switching still works when /etc is read-only."""
     try:
