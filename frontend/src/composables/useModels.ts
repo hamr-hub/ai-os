@@ -10,6 +10,7 @@ import {
 } from '@/api/client'
 import type { ModelStatus } from '@/types'
 import { isAbortError } from '@/utils/request'
+import { useAppStore } from '@/stores/app'
 
 export function useModels() {
   const modelStatus = ref<ModelStatus | null>(null)
@@ -91,6 +92,7 @@ export function useModels() {
   }
 
   const handleStartModel = async (modelName: string) => {
+    const appStore = useAppStore()
     actionLoading.value = modelName
     error.value = null
     try {
@@ -98,8 +100,18 @@ export function useModels() {
       switchingModel.value = modelName
       startSwitchPolling(modelName)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : `Failed to start model ${modelName}`
+      const errMsg = err instanceof Error ? err.message : `Failed to start model ${modelName}`
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } }
+      const apiError = axiosErr.response?.data?.error || axiosErr.response?.data?.message
+      const fullError = apiError || errMsg
+      error.value = fullError
       console.error('Failed to start model:', err)
+
+      if (fullError.includes('insufficient memory') || fullError.includes('memory')) {
+        appStore.warning(`模型 ${modelName} 所需显存超过当前可用显存，启动失败，请尝试停止其他模型后重试`)
+      } else {
+        appStore.warning(`模型 ${modelName} 启动失败：${fullError}`)
+      }
       actionLoading.value = null
     }
   }
@@ -119,6 +131,7 @@ export function useModels() {
   }
 
   const handleSwitchModel = async (modelName: string, setAsDefault = false) => {
+    const appStore = useAppStore()
     actionLoading.value = modelName
     switchingModel.value = modelName
     error.value = null
@@ -130,8 +143,21 @@ export function useModels() {
       }
       startSwitchPolling(modelName)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : `Failed to switch to model ${modelName}`
+      const errMsg = err instanceof Error ? err.message : `Failed to switch to model ${modelName}`
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } }
+      const apiError = axiosErr.response?.data?.error || axiosErr.response?.data?.message
+      const fullError = apiError || errMsg
+      error.value = fullError
       console.error('Failed to switch model:', err)
+
+      if (fullError.includes('insufficient memory') || fullError.includes('memory')) {
+        appStore.warning(`模型 ${modelName} 所需显存超过当前可用显存，切换失败，请尝试停止其他模型后重试`)
+      } else if (fullError.includes('503')) {
+        appStore.warning(`模型 ${modelName} 切换失败：服务不可用，请检查模型服务状态`)
+      } else {
+        appStore.warning(`模型 ${modelName} 切换失败：${fullError}`)
+      }
+
       actionLoading.value = null
       switchingModel.value = null
     }
