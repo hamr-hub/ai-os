@@ -27,3 +27,26 @@ export const formatTimeLabel = (ts: string) => {
   const d = new Date(ts)
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
+
+/**
+ * 格式化相对时间
+ */
+export const formatRelativeTime = (ts?: string | null) => {
+  if (!ts) return '暂无更新'
+
+  const date = new Date(ts)
+  const time = date.getTime()
+  if (Number.isNaN(time)) return '暂无更新'
+
+  const diffMs = Date.now() - time
+  if (diffMs < 0) return `刚刚 ${formatTimeLabel(ts)}`
+
+  const diffMinutes = Math.floor(diffMs / 60000)
+  if (diffMinutes < 1) return `刚刚 ${formatTimeLabel(ts)}`
+  if (diffMinutes < 60) return `${diffMinutes}分钟前`
+
+  const diffHours = Math.floor(diffMinutes / 60)
+  if (diffHours < 24) return `${diffHours}小时前`
+
+  return formatTimeLabel(ts)
+}

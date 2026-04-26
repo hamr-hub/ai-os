@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { getVLLMMetrics } from '@/api/client'
+import { formatRelativeTime } from '@/utils/format'
 import { getProgressColor } from '@/utils/theme'
+import { isAbortError } from '@/utils/request'
 import type { VLLMMetricsData } from '@/types'
 import { Activity, Layers, Clock, Gauge, ArrowRight, Server } from 'lucide-vue-next'
 
@@ -19,12 +21,18 @@ const props = withDefaults(
 const metrics = ref<VLLMMetricsData | null>(props.initialMetrics)
 const loading = ref(false)
 let intervalId: number | null = null
+let activeController: AbortController | null = null
 
 const fetchMetrics = async () => {
+  if (activeController) return
+
+  const controller = new AbortController()
+  activeController = controller
   loading.value = true
   try {
-    metrics.value = await getVLLMMetrics()
-  } catch {
+    metrics.value = await getVLLMMetrics({ signal: controller.signal })
+  } catch (error) {
+    if (isAbortError(error)) return
     if (!metrics.value) {
       metrics.value = {
         vllm_available: false,
@@ -41,7 +49,10 @@ const fetchMetrics = async () => {
       }
     }
   } finally {
-    loading.value = false
+    if (activeController === controller) {
+      activeController = null
+      loading.value = false
+    }
   }
 }
 
@@ -58,6 +69,7 @@ const cacheStatus = computed(() => {
   if (u > 90) return 'warning'
   return 'ok'
 })
+const lastUpdatedLabel = computed(() => formatRelativeTime(metrics.value?.scraped_at))
 
 onMounted(() => {
   if (!props.initialMetrics) fetchMetrics()
@@ -66,6 +78,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (intervalId) clearInterval(intervalId)
+  if (activeController) {
+    activeController.abort()
+    activeController = null
+  }
 })
 </script>
 
@@ -73,6 +89,7 @@ onUnmounted(() => {
   <div class="card-header">
     <div class="icon-wrap purple"><Server class="card-icon-inner" /></div>
     <span class="card-title">vLLM 服务指标</span>
+    <span class="card-meta">更新 {{ lastUpdatedLabel }}</span>
     <span v-if="isAvailable" class="badge online"><span class="dot online"></span>运行中</span>
     <span v-else class="badge offline"><span class="dot offline"></span>未运行</span>
   </div>
@@ -175,6 +192,7 @@ onUnmounted(() => {
   <div v-else class="empty-state">
     <Server class="empty-icon" />
     <p>vLLM 服务未运行或不可访问</p>
+    <span class="empty-hint">服务恢复后将自动刷新指标</span>
   </div>
 </template>
 
@@ -210,6 +228,12 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.card-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .badge {
@@ -369,5 +393,10 @@ onUnmounted(() => {
 .empty-state p {
   font-size: 13px;
   margin: 0;
+}
+
+.empty-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 </style>

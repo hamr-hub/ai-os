@@ -1,19 +1,9 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import type { ConnectionDetailsLike, ConnectionStatus as ConnectionStatusType } from '@/utils/connection'
 
 export type BackendType = 'go' | 'python' | 'auto'
-export type ConnectionStatus = 'checking' | 'online' | 'degraded' | 'offline'
-
-interface EndpointProbeStatus {
-  ok: boolean
-  status?: number
-  error?: string
-}
-
-interface ConnectionDetails {
-  manage: EndpointProbeStatus
-  inference: EndpointProbeStatus
-}
+export type ConnectionStatus = ConnectionStatusType
 
 interface ServerHistoryEntry {
   url: string
@@ -34,7 +24,7 @@ const DEFAULT_PROBE_TIMEOUT_MS = 5000
 
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, '')
 
-const formatProbeError = (result: EndpointProbeStatus) => {
+const formatProbeError = (result: ConnectionDetailsLike['manage']) => {
   if (result.error) return result.error
   if (typeof result.status === 'number') return `HTTP ${result.status}`
   return '连接失败'
@@ -47,7 +37,7 @@ export const useServerStore = defineStore('server', () => {
   const lastCheckedAt = ref<number | null>(null)
   const lastErrorMessage = ref<string | null>(null)
   const history = ref<ServerHistoryEntry[]>([])
-  const connectionDetails = ref<ConnectionDetails>({
+  const connectionDetails = ref<ConnectionDetailsLike>({
     manage: { ok: false },
     inference: { ok: false },
   })

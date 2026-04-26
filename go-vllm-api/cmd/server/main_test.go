@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -88,5 +89,22 @@ func TestReloadRuntimeConfig(t *testing.T) {
 	}
 	if llamaManager.cfg == nil || llamaManager.cfg.Models["demo"].Port != 8001 {
 		t.Fatalf("llama config was not reloaded")
+	}
+}
+
+func TestExitCodeForListenError(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	_, err = net.Listen("tcp", listener.Addr().String())
+	if err == nil {
+		t.Fatalf("expected address in use error")
+	}
+
+	if got := exitCodeForListenError(err); got != 98 {
+		t.Fatalf("exitCodeForListenError() = %d, want 98", got)
 	}
 }

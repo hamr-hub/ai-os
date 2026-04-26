@@ -9,6 +9,7 @@ import {
   clearDefaultModel,
 } from '@/api/client'
 import type { ModelStatus } from '@/types'
+import { isAbortError } from '@/utils/request'
 
 export function useModels() {
   const modelStatus = ref<ModelStatus | null>(null)
@@ -20,8 +21,18 @@ export function useModels() {
   const isRefreshing = ref(false)
   let refreshInterval: number | null = null
   let switchPollingInterval: number | null = null
+  let fetchController: AbortController | null = null
+  let switchPollingController: AbortController | null = null
 
   const fetchModelStatus = async (manualRefresh = false) => {
+    if (fetchController) {
+      if (!manualRefresh) return
+      fetchController.abort()
+    }
+
+    const controller = new AbortController()
+    fetchController = controller
+
     if (manualRefresh) {
       isRefreshing.value = true
     } else {
@@ -29,15 +40,24 @@ export function useModels() {
     }
     error.value = null
     try {
-      modelStatus.value = await getModelsStatus()
-      const defaultModelResult = await getDefaultModel()
+      const [status, defaultModelResult] = await Promise.all([
+        getModelsStatus({ signal: controller.signal }),
+        getDefaultModel({ signal: controller.signal }),
+      ])
+      modelStatus.value = status
       defaultModel.value = defaultModelResult.default_model
     } catch (err) {
+      if (isAbortError(err)) return
       error.value = err instanceof Error ? err.message : 'Failed to fetch model status'
-      console.error('Failed to fetch model status:', err)
+      if (manualRefresh) {
+        console.error('Failed to fetch model status:', err)
+      }
     } finally {
-      loading.value = false
-      isRefreshing.value = false
+      if (fetchController === controller) {
+        fetchController = null
+        loading.value = false
+        isRefreshing.value = false
+      }
     }
   }
 
@@ -119,9 +139,17 @@ export function useModels() {
 
   const startSwitchPolling = (modelName: string) => {
     if (switchPollingInterval) clearInterval(switchPollingInterval)
+    if (switchPollingController) {
+      switchPollingController.abort()
+      switchPollingController = null
+    }
     switchPollingInterval = window.setInterval(async () => {
+      if (switchPollingController) return
+
+      const controller = new AbortController()
+      switchPollingController = controller
       try {
-        const status = await getModelsStatus()
+        const status = await getModelsStatus({ signal: controller.signal })
         modelStatus.value = status
         const modelEntry = status[modelName]
         if (modelEntry?.running) {
@@ -131,11 +159,17 @@ export function useModels() {
             clearInterval(switchPollingInterval)
             switchPollingInterval = null
           }
-          const defaultModelResult = await getDefaultModel()
+          const defaultModelResult = await getDefaultModel({ signal: controller.signal })
           defaultModel.value = defaultModelResult.default_model
         }
       } catch (err) {
-        console.error('[useModels] Switch polling error:', err)
+        if (!isAbortError(err)) {
+          console.error('[useModels] Switch polling error:', err)
+        }
+      } finally {
+        if (switchPollingController === controller) {
+          switchPollingController = null
+        }
       }
     }, 5000)
   }
@@ -153,6 +187,10 @@ export function useModels() {
     if (refreshInterval) {
       clearInterval(refreshInterval)
       refreshInterval = null
+    }
+    if (fetchController) {
+      fetchController.abort()
+      fetchController = null
     }
   }
 
@@ -193,6 +231,10 @@ export function useModels() {
     if (switchPollingInterval) {
       clearInterval(switchPollingInterval)
       switchPollingInterval = null
+    }
+    if (switchPollingController) {
+      switchPollingController.abort()
+      switchPollingController = null
     }
   })
 

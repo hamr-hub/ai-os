@@ -27,6 +27,7 @@ import type {
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
 import { readSSEStream, DONE_SENTINEL } from '@/utils/sse'
+import { buildStreamErrorMessage } from '@/utils/connection'
 
 const client = axios.create({
   baseURL: '/api',
@@ -99,6 +100,8 @@ const normalizeErrorMessage = (error: unknown) => {
 
   return explicitMessage
 }
+
+export const getApiErrorMessage = (error: unknown) => normalizeErrorMessage(error)
 
 const attachRetryInterceptor = (instance: typeof client) => {
   instance.interceptors.response.use(undefined, async (error) => {
@@ -199,12 +202,19 @@ export async function switchModel(name: string, testEnabled = true): Promise<Act
 }
 
 export async function runModelTest(name: string): Promise<TestResponse> {
-  const { data } = await v1Client.post<TestResponse>(`/test/model/${name}`)
+  const { data } = await v1Client.post<TestResponse>(
+    `/test/model/${name}`,
+    null,
+    silentRequestConfig({ timeout: 180000 })
+  )
   return data
 }
 
 export async function getTestResults(name: string): Promise<TestResponse> {
-  const { data } = await v1Client.get<TestResponse>(`/test/report/${name}`)
+  const { data } = await v1Client.get<TestResponse>(
+    `/test/report/${name}`,
+    silentRequestConfig()
+  )
   return data
 }
 
@@ -358,11 +368,18 @@ export async function chatCompletionStream(
       }
     },
     onError: (error) => {
+      const message = buildStreamErrorMessage(
+        error.message,
+        'inference',
+        serverStore.connectionStatus,
+        serverStore.connectionDetails,
+        serverStore.lastErrorMessage
+      )
       if (error.message.includes('reasoning_content') || error.message.includes('thinking is enabled')) {
         onError?.(new Error('模型thinking模式错误，请联系后端管理员关闭thinking模式或更新API配置'))
         return
       }
-      onError?.(error)
+      onError?.(new Error(message))
     },
   })
 }
@@ -389,7 +406,16 @@ export async function agentChatStream(
         onChunk(rawData)
       }
     },
-    onError,
+    onError: (error) => {
+      const message = buildStreamErrorMessage(
+        error.message,
+        'manage',
+        serverStore.connectionStatus,
+        serverStore.connectionDetails,
+        serverStore.lastErrorMessage
+      )
+      onError?.(new Error(message))
+    },
   })
 }
 

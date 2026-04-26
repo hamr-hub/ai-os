@@ -1,0 +1,33 @@
+[Unit]
+Description=Go vLLM API Service
+After=network.target redis-server.service
+Wants=redis-server.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/ai-os/go-vllm-api
+Environment=PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CUDA_VISIBLE_DEVICES=0
+Environment=REDIS_URL=redis://localhost:6379
+ExecStart=/root/ai-os/go-vllm-api/bin/go-vllm-api --config configs/config.yaml --port 35001 --log-dir /root/ai-os/go-vllm-api/logs
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+RestartPreventExitStatus=98
+KillSignal=SIGINT
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=go-vllm-api
+LimitNOFILE=65536
+LimitNPROC=4096
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/root/ai-os/go-vllm-api
+ReadWritePaths=/root/ai-os/go-vllm-api/logs
+
+[Install]
+WantedBy=multi-user.target

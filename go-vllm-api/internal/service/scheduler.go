@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +22,7 @@ type Scheduler struct {
 	redis         *repository.RedisRepo
 	cfg           *config.AppConfig
 	llamaCppMgr   *LlamaCppManager
+	vllmManager   *VLLMManager
 	runningModels map[string]time.Time
 	preloaded     map[string]bool
 	modelLastUsed map[string]time.Time
@@ -28,7 +31,7 @@ type Scheduler struct {
 	rateLimiter   *RateLimiter
 }
 
-func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig, llamaCppMgr *LlamaCppManager) *Scheduler {
+func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig, llamaCppMgr *LlamaCppManager, vllmManager *VLLMManager) *Scheduler {
 	s := &Scheduler{
 		logger:        logger,
 		gpuMonitor:    gpuMonitor,
@@ -36,6 +39,7 @@ func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemCont
 		redis:         redis,
 		cfg:           cfg,
 		llamaCppMgr:   llamaCppMgr,
+		vllmManager:   vllmManager,
 		runningModels: make(map[string]time.Time),
 		preloaded:     make(map[string]bool),
 		modelLastUsed: make(map[string]time.Time),
@@ -206,8 +210,26 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 		return running
 	}
 
+	mc := s.GetModelConfig(matched)
+	if mc == nil {
+		return false
+	}
+
 	port := s.GetModelPort(matched)
 	if port > 0 && s.sysCtl.GetProcessInfo(port) {
+		currentModelPath := s.getCurrentVLLMModelPath()
+		if currentModelPath != "" && mc.ModelPath != "" && currentModelPath != mc.ModelPath {
+			s.mu.Lock()
+			delete(s.runningModels, matched)
+			s.mu.Unlock()
+			return false
+		}
+		if mc.Service != "" && !s.sysCtl.IsServiceRunning(mc.Service) {
+			s.mu.Lock()
+			delete(s.runningModels, matched)
+			s.mu.Unlock()
+			return false
+		}
 		s.mu.Lock()
 		if _, ok := s.runningModels[matched]; !ok {
 			s.runningModels[matched] = time.Now()
@@ -219,6 +241,32 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 	delete(s.runningModels, matched)
 	s.mu.Unlock()
 	return false
+}
+
+func (s *Scheduler) getCurrentVLLMModelPath() string {
+	if s.cfg == nil || s.cfg.VLLM.StartScript == "" {
+		return ""
+	}
+
+	stateFile := filepath.Join(filepath.Dir(s.cfg.VLLM.StartScript), ".vllm_model_path")
+	data, err := os.ReadFile(stateFile)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(string(data))
+}
+
+func (s *Scheduler) shouldSkipKeepAlivePreload(name string) bool {
+	if s.GetModelBackendType(name) != "vllm" {
+		return false
+	}
+	currentModelPath := s.getCurrentVLLMModelPath()
+	mc := s.GetModelConfig(name)
+	if mc == nil || currentModelPath == "" {
+		return false
+	}
+	return currentModelPath != mc.ModelPath
 }
 
 func (s *Scheduler) GetMinAvailableMemory() int64 {
@@ -433,9 +481,28 @@ func (s *Scheduler) StartModel(ctx context.Context, name string) (bool, error) {
 	}
 
 	if s.sysCtl.IsServiceRunning(mc.Service) {
+		currentModelPath := s.getCurrentVLLMModelPath()
+		if currentModelPath == "" || currentModelPath == mc.ModelPath {
+			s.mu.Lock()
+			s.runningModels[matched] = time.Now()
+			s.mu.Unlock()
+			return true, nil
+		}
+
+		if s.vllmManager == nil {
+			return false, fmt.Errorf("vllm manager unavailable for model switch")
+		}
+		if err := s.vllmManager.SwitchModel(ctx, mc.ModelPath); err != nil {
+			return false, fmt.Errorf("switch vllm model state: %w", err)
+		}
+		if !s.sysCtl.RestartService(mc.Service) {
+			return false, fmt.Errorf("restart service %s after switching model", mc.Service)
+		}
 		s.mu.Lock()
 		s.runningModels[matched] = time.Now()
+		s.modelLastUsed[matched] = time.Now()
 		s.mu.Unlock()
+		s.logger.Info("vllm model switched via restart", zap.String("model", matched), zap.String("path", mc.ModelPath))
 		return true, nil
 	}
 	mem := s.gpuMonitor.GetMemoryUsage()
@@ -572,6 +639,10 @@ func (s *Scheduler) PreloadModels(ctx context.Context) {
 	s.mu.RUnlock()
 
 	for _, name := range preloadOrder {
+		if s.shouldSkipKeepAlivePreload(name) {
+			s.logger.Info("skip preload for different active vllm target", zap.String("model", name))
+			continue
+		}
 		if !s.IsModelRunning(name) {
 			s.logger.Info("preloading model", zap.String("model", name))
 			ok, _ := s.StartModel(ctx, name)
@@ -594,6 +665,10 @@ func (s *Scheduler) PreloadWatcherLoop(ctx context.Context) {
 			for _, name := range s.GetPreloadedModels() {
 				mc := s.GetModelConfig(name)
 				if mc != nil && mc.KeepAlive && !s.IsModelRunning(name) {
+					if s.shouldSkipKeepAlivePreload(name) {
+						s.logger.Info("skip keep-alive restart for different active vllm target", zap.String("model", name))
+						continue
+					}
 					s.logger.Warn("preloaded model not running, restarting", zap.String("model", name))
 					s.StartModel(ctx, name)
 				}

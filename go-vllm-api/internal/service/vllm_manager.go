@@ -112,6 +112,14 @@ func (vm *VLLMManager) SwitchModel(ctx context.Context, modelPath string) error 
 		scriptPath = "/root/ai-suite/start_vllm.sh"
 	}
 
+	stateFile := filepath.Join(filepath.Dir(scriptPath), ".vllm_model_path")
+	if err := os.WriteFile(stateFile, []byte(modelPath+"\n"), 0644); err == nil {
+		vm.logger.Info("vllm model state updated", zap.String("path", modelPath), zap.String("state_file", stateFile))
+		return nil
+	} else {
+		vm.logger.Warn("write model state file failed, falling back to start script update", zap.String("state_file", stateFile), zap.Error(err))
+	}
+
 	content, err := os.ReadFile(scriptPath)
 	if err != nil {
 		return fmt.Errorf("read start script: %w", err)

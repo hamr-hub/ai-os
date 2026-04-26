@@ -14,7 +14,7 @@ const manageBackend = normalizeTarget(
   process.env.VITE_MANAGE_BACKEND || process.env.VITE_BACKEND || 'http://localhost:35000',
 )
 const v1Backend = normalizeTarget(process.env.VITE_V1_BACKEND || 'http://localhost:35001')
-const devServerPort = resolvePort(process.env.VITE_PORT || process.env.PORT, 30000)
+const devServerPort = resolvePort(process.env.VITE_PORT || process.env.PORT, 30001)
 
 export default defineConfig({
   plugins: [

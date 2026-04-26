@@ -160,11 +160,14 @@ sudo ./scripts/install_systemd_services.sh --enable
 # 启动服务
 sudo systemctl enable redis
 sudo systemctl enable ai-controller
+sudo systemctl enable go-vllm-api
 sudo systemctl start redis
 sudo systemctl start ai-controller
+sudo systemctl start go-vllm-api
 
 # 查看状态
 sudo systemctl status ai-controller
+journalctl -u go-vllm-api -f
 journalctl -u ai-controller -f
 ```
 

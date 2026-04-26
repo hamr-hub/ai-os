@@ -22,12 +22,15 @@ import {
 } from '@/api/client'
 import { useModels } from '@/composables/useModels'
 import { useAppStore } from '@/stores/app'
-import { useAgentChatStore } from '@/stores/agentChat'
+import { useAgentChatStore, type Message, type ToolInvocation } from '@/stores/agentChat'
+import { useServerStore } from '@/stores/server'
 import { renderMarkdown } from '@/composables/useMarkdown'
+import { getConnectionIssueMessage } from '@/utils/connection'
 
 const { modelList, defaultModel } = useModels()
 const appStore = useAppStore()
 const agentChatStore = useAgentChatStore()
+const serverStore = useServerStore()
 
 const inputMessage = ref('')
 const isLoading = ref(false)
@@ -35,13 +38,13 @@ const chatContainer = ref<HTMLElement | null>(null)
 const streamingMessageId = ref<string | null>(null)
 const abortController = ref<AbortController | null>(null)
 const copiedId = ref<string | null>(null)
+const expandedToolIds = ref<string[]>([])
 const showModelPicker = ref(false)
 const showSystemPrompt = ref(false)
 const systemPromptInput = ref('')
 const showScrollBottom = ref(false)
 const isAutoScrolling = ref(true)
 const enableTools = ref(false)
-const executingTools = ref<Array<{ name: string; id: string }>>([])
 
 const currentConv = computed(() => agentChatStore.currentConversation)
 const messages = computed(() => currentConv.value?.messages || [])
@@ -56,6 +59,15 @@ const activeModel = computed(
 )
 const activeModelInfo = computed(() => modelList.value.find((m) => m.name === activeModel.value) || null)
 const activeModelIsRunning = computed(() => activeModelInfo.value?.running ?? false)
+const streamTarget = computed(() => (enableTools.value ? 'manage' : 'inference'))
+const streamConnectionIssue = computed(() =>
+  getConnectionIssueMessage(
+    streamTarget.value,
+    serverStore.connectionStatus,
+    serverStore.connectionDetails,
+    serverStore.lastErrorMessage
+  )
+)
 
 watch(
   currentConv,
@@ -117,23 +129,114 @@ const addMessage = (role: 'user' | 'assistant' | 'system', content: string) => {
   return message
 }
 
+const getToolStatusLabel = (status: ToolInvocation['status']) => {
+  switch (status) {
+    case 'running':
+      return '执行中'
+    case 'success':
+      return '成功'
+    case 'error':
+      return '失败'
+    case 'cancelled':
+      return '已中断'
+    default:
+      return '等待中'
+  }
+}
+
+const getToolPhaseLabel = (message: Message) => {
+  switch (message.toolPhase) {
+    case 'preparing':
+      return message.expectedToolCalls ? `准备调用 ${message.expectedToolCalls} 个工具` : '准备调用工具'
+    case 'running':
+      return '工具执行中'
+    case 'cancelled':
+      return '工具调用已中断'
+    case 'finished':
+      return '工具调用完成'
+    default:
+      return '工具调用'
+  }
+}
+
+const isToolExpanded = (toolId: string) => expandedToolIds.value.includes(toolId)
+
+const toggleToolExpanded = (toolId: string) => {
+  if (isToolExpanded(toolId)) {
+    expandedToolIds.value = expandedToolIds.value.filter((id) => id !== toolId)
+    return
+  }
+  expandedToolIds.value = [...expandedToolIds.value, toolId]
+}
+
+const updateStreamingMessage = (updater: (message: Message) => void) => {
+  if (!streamingMessageId.value || !currentConv.value) return false
+  return agentChatStore.updateMessage(currentConv.value.id, streamingMessageId.value, updater)
+}
+
+const upsertToolInvocation = (
+  toolId: string,
+  toolName: string,
+  updater: (tool: ToolInvocation) => void
+) => {
+  updateStreamingMessage((message) => {
+    if (!message.toolInvocations) {
+      message.toolInvocations = []
+    }
+
+    let tool = message.toolInvocations.find((item) => item.id === toolId)
+    if (!tool) {
+      tool = {
+        id: toolId,
+        name: toolName,
+        status: 'pending',
+      }
+      message.toolInvocations.push(tool)
+    }
+
+    updater(tool)
+  })
+}
+
+const finalizeToolInvocations = (status: ToolInvocation['status']) => {
+  updateStreamingMessage((message) => {
+    if (!message.toolInvocations?.length) return
+    message.toolInvocations.forEach((tool) => {
+      if (tool.status === 'pending' || tool.status === 'running') {
+        tool.status = status
+        tool.finishedAt = new Date()
+      }
+    })
+    message.toolPhase = status === 'cancelled' ? 'cancelled' : 'finished'
+  })
+}
+
 const setStreamingError = (message: string) => {
   if (streamingMessageId.value && currentConv.value) {
-    const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
-    if (msg) {
+    updateStreamingMessage((msg) => {
       msg.content = `请求失败：${message}`
-      nextTick(() => scrollToBottom(true))
-      return
-    }
+      if (msg.toolInvocations?.length) {
+        msg.toolPhase = 'finished'
+        msg.toolInvocations.forEach((tool) => {
+          if (tool.status === 'pending' || tool.status === 'running') {
+            tool.status = 'error'
+            tool.error = message
+            tool.finishedAt = new Date()
+          }
+        })
+      }
+    })
+    nextTick(() => scrollToBottom(true))
+    return
   }
   addMessage('system', `Error: ${message}`)
 }
 
 const appendStreamingNote = (note: string) => {
-  if (!streamingMessageId.value || !currentConv.value) return
-  const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
-  if (!msg) return
-  msg.content = msg.content.trim() ? `${msg.content}\n\n${note}` : note
+  const updated = updateStreamingMessage((msg) => {
+    msg.content = msg.content.trim() ? `${msg.content}\n\n${note}` : note
+  })
+  if (!updated) return
   nextTick(() => scrollToBottom(true))
 }
 
@@ -142,6 +245,16 @@ const handleSend = async () => {
 
   if (!activeModel.value) {
     appStore.warning('当前没有可用模型，请先启动模型或设置默认模型')
+    return
+  }
+
+  if (streamTarget.value === 'manage' && !serverStore.connectionDetails.manage.ok) {
+    appStore.warning(streamConnectionIssue.value)
+    return
+  }
+
+  if (streamTarget.value === 'inference' && !serverStore.connectionDetails.inference.ok) {
+    appStore.warning(streamConnectionIssue.value)
     return
   }
 
@@ -189,53 +302,67 @@ const handleSend = async () => {
           const type = typedData.type as string | undefined
 
           if (type === 'tool_calls_start') {
-            // Clear previous content, show tool execution status
-            if (streamingMessageId.value && currentConv.value) {
-              const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
-              if (msg) {
-                msg.content = '\n🔄 正在执行工具...\n'
-              }
-            }
-            executingTools.value = []
+            updateStreamingMessage((msg) => {
+              msg.toolPhase = 'preparing'
+              msg.expectedToolCalls = Number(typedData.calls || 0)
+              msg.toolInvocations = []
+              msg.content = ''
+            })
           } else if (type === 'tool_executing') {
             const name = typedData.name as string
             const id = typedData.id as string
-            executingTools.value.push({ name, id })
-            if (streamingMessageId.value && currentConv.value) {
-              const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
-              if (msg) {
-                msg.content += `\n⚙️ 执行: ${name}...\n`
-                nextTick(() => scrollToBottom())
-              }
-            }
+            upsertToolInvocation(id, name, (tool) => {
+              tool.name = name
+              tool.status = 'running'
+              tool.startedAt = tool.startedAt || new Date()
+            })
+            updateStreamingMessage((msg) => {
+              msg.toolPhase = 'running'
+            })
+            nextTick(() => scrollToBottom())
           } else if (type === 'tool_result') {
             const name = typedData.name as string
             const success = typedData.success as boolean
-            if (streamingMessageId.value && currentConv.value) {
-              const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
-              if (msg) {
-                const icon = success ? '✅' : '❌'
-                msg.content += `${icon} ${name}: ${success ? '成功' : '失败'}\n`
-                nextTick(() => scrollToBottom())
+            const id = typedData.id as string
+            upsertToolInvocation(id, name, (tool) => {
+              tool.name = name
+              tool.status = success ? 'success' : 'error'
+              tool.error = (typedData.error as string | undefined) || undefined
+              tool.resultDetails = success ? JSON.stringify(typedData.result ?? '', null, 2) : undefined
+              tool.resultPreview = success ? JSON.stringify(typedData.result ?? '').slice(0, 120) : undefined
+              tool.finishedAt = new Date()
+            })
+            updateStreamingMessage((msg) => {
+              if (msg.toolInvocations?.length) {
+                const hasPending = msg.toolInvocations.some(
+                  (tool) => tool.status === 'pending' || tool.status === 'running'
+                )
+                msg.toolPhase = hasPending ? 'running' : 'finished'
               }
-            }
+            })
+            nextTick(() => scrollToBottom())
+          } else if (type === 'tool_calls_end') {
+            updateStreamingMessage((msg) => {
+              if (msg.toolInvocations?.length) {
+                const hasPending = msg.toolInvocations.some(
+                  (tool) => tool.status === 'pending' || tool.status === 'running'
+                )
+                msg.toolPhase = hasPending ? 'running' : 'finished'
+              } else {
+                msg.toolPhase = 'finished'
+              }
+            })
           } else if (typedData.choices && Array.isArray(typedData.choices)) {
             // Regular streaming content
             const delta = typedData.choices[0]?.delta as { content?: string } | undefined
             if (delta?.content) {
-              if (streamingMessageId.value && currentConv.value) {
-                const msg = currentConv.value.messages.find(
-                  (m) => m.id === streamingMessageId.value
-                )
-                if (msg) {
-                  // Clear tool execution status on first content
-                  if (msg.content.includes('正在执行工具') || msg.content.includes('执行:')) {
-                    msg.content = ''
-                  }
-                  msg.content += delta.content
-                  nextTick(() => scrollToBottom())
+              updateStreamingMessage((msg) => {
+                msg.content += delta.content
+                if (msg.toolInvocations?.length) {
+                  msg.toolPhase = 'finished'
                 }
-              }
+              })
+              nextTick(() => scrollToBottom())
             }
           }
         },
@@ -243,7 +370,6 @@ const handleSend = async () => {
           appStore.error(`请求失败: ${error.message}`)
           setStreamingError(error.message)
           streamingMessageId.value = null
-          executingTools.value = []
         },
         abortController.value.signal
       )
@@ -257,13 +383,10 @@ const handleSend = async () => {
           temperature: 0.7,
         },
         (chunk) => {
-          if (streamingMessageId.value && currentConv.value) {
-            const msg = currentConv.value.messages.find((m) => m.id === streamingMessageId.value)
-            if (msg) {
-              msg.content += chunk
-              nextTick(() => scrollToBottom())
-            }
-          }
+          updateStreamingMessage((msg) => {
+            msg.content += chunk
+          })
+          nextTick(() => scrollToBottom())
         },
         (error) => {
           appStore.error(`请求失败: ${error.message}`)
@@ -275,11 +398,10 @@ const handleSend = async () => {
     }
 
     streamingMessageId.value = null
-    executingTools.value = []
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      finalizeToolInvocations('cancelled')
       appendStreamingNote('已停止生成')
-      executingTools.value = []
       streamingMessageId.value = null
       return
     }
@@ -415,6 +537,17 @@ const autoResize = (event: Event) => {
         <p class="sys-prompt-hint">设定后将在下次发送消息时生效</p>
       </div>
 
+      <div
+        v-if="serverStore.connectionStatus !== 'online' && serverStore.connectionStatus !== 'checking'"
+        class="connection-banner"
+        :class="serverStore.connectionStatus"
+      >
+        <span class="banner-label">
+          {{ serverStore.connectionStatus === 'degraded' ? '部分可用' : '连接异常' }}
+        </span>
+        <span class="banner-text">{{ streamConnectionIssue }}</span>
+      </div>
+
       <div ref="chatContainer" class="messages-area scrollbar-thin" @scroll="handleScroll">
         <div v-if="messages.length === 0" class="msg-empty">
           <Bot class="w-8 h-8 opacity-40" />
@@ -457,11 +590,49 @@ const autoResize = (event: Event) => {
               ></div>
               <p v-else class="msg-text">{{ message.content }}</p>
 
-              <div v-if="message.toolCalls?.length" class="tool-calls-block">
-                <div v-for="tc in message.toolCalls" :key="tc.id" class="tool-call-item">
+              <div
+                v-if="message.toolInvocations?.length || (message.toolPhase && message.toolPhase !== 'idle')"
+                class="tool-calls-block"
+              >
+                <div class="tool-calls-header">
                   <Wrench class="w-3.5 h-3.5" />
-                  <span class="tc-name">{{ tc.function.name }}</span>
-                  <span class="tc-badge">工具调用</span>
+                  <span class="tc-title">{{ getToolPhaseLabel(message) }}</span>
+                  <span
+                    v-if="message.toolInvocations?.length"
+                    class="tc-badge"
+                  >
+                    {{ message.toolInvocations.length }} 个
+                  </span>
+                </div>
+                <div
+                  v-for="tool in message.toolInvocations || []"
+                  :key="tool.id"
+                  class="tool-call-item"
+                >
+                  <div class="tool-call-main">
+                    <span class="tc-name">{{ tool.name }}</span>
+                    <span class="tc-status" :class="`status-${tool.status}`">
+                      {{ getToolStatusLabel(tool.status) }}
+                    </span>
+                  </div>
+                  <p v-if="tool.error" class="tc-error">{{ tool.error }}</p>
+                  <p
+                    v-else-if="tool.resultPreview && tool.status === 'success'"
+                    class="tc-result"
+                  >
+                    {{ tool.resultPreview }}
+                  </p>
+                  <button
+                    v-if="tool.resultDetails || tool.error"
+                    class="tc-toggle"
+                    @click="toggleToolExpanded(tool.id)"
+                  >
+                    {{ isToolExpanded(tool.id) ? '收起详情' : '查看详情' }}
+                  </button>
+                  <pre
+                    v-if="isToolExpanded(tool.id) && (tool.resultDetails || tool.error)"
+                    class="tc-details"
+                  ><code>{{ tool.resultDetails || tool.error }}</code></pre>
                 </div>
               </div>
 
@@ -795,6 +966,33 @@ const autoResize = (event: Event) => {
   color: var(--text-muted);
 }
 
+.connection-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 12px;
+}
+.connection-banner.degraded {
+  background: rgba(249, 115, 22, 0.08);
+  color: #f97316;
+}
+.connection-banner.offline {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+}
+.banner-label {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.12);
+}
+.banner-text {
+  color: var(--text-secondary);
+}
+
 .messages-area {
   flex: 1;
   overflow-y: auto;
@@ -882,18 +1080,36 @@ const autoResize = (event: Event) => {
   margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
-.tool-call-item {
+.tool-calls-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px;
-  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.tc-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.tool-call-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
   background: rgba(99, 102, 241, 0.06);
   border: 1px solid rgba(99, 102, 241, 0.15);
   font-size: 12px;
   color: var(--text-secondary);
+}
+.tool-call-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
 }
 .tc-name {
   font-weight: 500;
@@ -907,6 +1123,60 @@ const autoResize = (event: Event) => {
   background: rgba(99, 102, 241, 0.1);
   padding: 1px 5px;
   border-radius: 3px;
+}
+.tc-status {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.tc-status.status-pending,
+.tc-status.status-running {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+.tc-status.status-success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+.tc-status.status-error,
+.tc-status.status-cancelled {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+.tc-error,
+.tc-result {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.tc-error {
+  color: #ef4444;
+}
+.tc-result {
+  color: var(--text-muted);
+  word-break: break-word;
+}
+.tc-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #6366f1;
+  font-size: 11px;
+  cursor: pointer;
+}
+.tc-details {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
 }
 
 .streaming-cursor {

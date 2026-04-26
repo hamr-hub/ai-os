@@ -13,7 +13,7 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-vue-next'
-import { runModelTest, getTestHistory, getModels, getTestResults } from '@/api/client'
+import { runModelTest, getTestHistory, getModels, getTestResults, getApiErrorMessage } from '@/api/client'
 import type { TestHistoryEntry, TestReport, ModelInfo } from '@/types'
 import { useAppStore } from '@/stores/app'
 
@@ -40,7 +40,7 @@ const fetchInitialData = async () => {
     testHistory.value = historyData
 
     if (models.value.length > 0) {
-      selectedModel.value = models.value[0].id
+      selectedModel.value = models.value.find((model) => model.running)?.id || models.value[0].id
       await fetchReport(selectedModel.value)
     }
   } catch (err) {
@@ -76,7 +76,7 @@ const runTest = async (modelName: string) => {
     testHistory.value = await getTestHistory()
   } catch (err) {
     console.error('[Benchmarks] Test failed:', err)
-    appStore.error(`模型 ${modelName} 评测失败`)
+    appStore.error(`模型 ${modelName} 评测失败：${getApiErrorMessage(err)}`, 5000)
   } finally {
     testingModel.value = null
   }

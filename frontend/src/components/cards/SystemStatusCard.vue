@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { SystemStatus, SystemHistoryEntry } from '@/types'
-import { formatTimeLabel } from '@/utils/format'
+import { formatRelativeTime, formatTimeLabel } from '@/utils/format'
 import { getProgressColor, getStatusLevel } from '@/utils/theme'
 import LineChart from '@/components/LineChart.vue'
 import { Cpu, MemoryStick, HardDrive, Server } from 'lucide-vue-next'
@@ -12,6 +12,7 @@ const props = defineProps<{
 }>()
 
 const timeLabels = computed(() => props.systemHistory.map((e) => formatTimeLabel(e.timestamp)))
+const lastUpdatedLabel = computed(() => formatRelativeTime(props.systemStatus?.timestamp))
 
 const sparklineDatasets = (
   key: 'cpu_percent' | 'memory_percent',
@@ -35,6 +36,7 @@ const sparklineDatasets = (
   <div class="card-header">
     <div class="icon-wrap primary"><Server class="card-icon-inner" /></div>
     <span class="card-title">系统状态</span>
+    <span class="card-meta">更新 {{ lastUpdatedLabel }}</span>
   </div>
   <template v-if="systemStatus">
     <div class="system-grid">
@@ -122,6 +124,7 @@ const sparklineDatasets = (
   <div v-else class="empty-state">
     <Server class="empty-icon" />
     <p>系统数据不可用</p>
+    <span class="empty-hint">请检查管理后端连接状态</span>
   </div>
 </template>
 
@@ -159,6 +162,12 @@ const sparklineDatasets = (
   color: var(--text-primary);
 }
 
+.card-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .empty-state {
   text-align: center;
   color: var(--text-muted);
@@ -174,6 +183,11 @@ const sparklineDatasets = (
   width: 40px;
   height: 40px;
   color: var(--text-muted);
+}
+
+.empty-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .system-grid {

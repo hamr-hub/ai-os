@@ -6,8 +6,8 @@ import type { GPUHistoryEntry } from '@/types'
 export function useGPUHistory(count: MaybeRefOrGetter<number> = 120, intervalMs = 10000) {
   const gpuHistory = ref<GPUHistoryEntry[]>([])
 
-  const { loading, isRefreshing, error, refresh } = usePolling(async () => {
-    const res = await getGPUHistory(Number(toValue(count)))
+  const { loading, isRefreshing, error, refresh } = usePolling(async (signal) => {
+    const res = await getGPUHistory(Number(toValue(count)), { signal })
     gpuHistory.value = res?.history ?? []
   }, intervalMs)
 

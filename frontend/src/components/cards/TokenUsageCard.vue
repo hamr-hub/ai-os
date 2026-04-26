@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { TokenStats } from '@/types'
+import { formatRelativeTime } from '@/utils/format'
 import { Activity, Coins, Zap } from 'lucide-vue-next'
 
-defineProps<{
+const props = defineProps<{
   stats: TokenStats | null
   totalTokens: number
   promptTokens: number
@@ -16,6 +17,7 @@ defineProps<{
   <div class="card-header">
     <div class="icon-wrap purple"><Coins class="card-icon-inner" /></div>
     <span class="card-title">Token 用量</span>
+    <span class="card-meta">更新 {{ formatRelativeTime(props.stats?.timestamp) }}</span>
     <span v-if="stats" class="count-badge">{{ formatTokens(totalTokens) }}</span>
   </div>
   <div v-if="stats" class="token-grid">
@@ -55,7 +57,10 @@ defineProps<{
       <span class="mt-count">{{ formatTokens(s.total_tokens) }}</span>
     </div>
   </div>
-  <div v-if="!stats" class="empty-state">暂无统计</div>
+  <div v-if="!stats" class="empty-state">
+    <p>暂无 Token 统计</p>
+    <span class="empty-hint">等待请求产生后将自动更新</span>
+  </div>
 </template>
 
 <style scoped>
@@ -92,6 +97,12 @@ defineProps<{
   color: var(--text-primary);
 }
 
+.card-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .count-badge {
   font-size: 12px;
   color: var(--text-muted);
@@ -106,6 +117,17 @@ defineProps<{
   color: var(--text-muted);
   padding: 24px 0;
   font-size: 13px;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .token-grid {

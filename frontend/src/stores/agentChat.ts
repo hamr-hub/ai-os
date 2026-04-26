@@ -1,12 +1,26 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+export interface ToolInvocation {
+  id: string
+  name: string
+  status: 'pending' | 'running' | 'success' | 'error' | 'cancelled'
+  error?: string
+  resultPreview?: string
+  resultDetails?: string
+  startedAt?: Date
+  finishedAt?: Date
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: Date
   toolCalls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>
+  toolInvocations?: ToolInvocation[]
+  toolPhase?: 'idle' | 'preparing' | 'running' | 'finished' | 'cancelled'
+  expectedToolCalls?: number
 }
 
 export interface Conversation {
@@ -115,6 +129,23 @@ export const useAgentChatStore = defineStore('agentChat', () => {
     return null
   }
 
+  const updateMessage = (
+    conversationId: string,
+    messageId: string,
+    updater: (message: Message) => void
+  ) => {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    const message = conv?.messages.find((m) => m.id === messageId)
+    if (!conv || !message) {
+      return false
+    }
+
+    updater(message)
+    conv.updatedAt = new Date()
+    saveToStorage()
+    return true
+  }
+
   const clearMessages = (conversationId: string) => {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (conv) {
@@ -142,6 +173,13 @@ export const useAgentChatStore = defineStore('agentChat', () => {
           messages: c.messages.map((m: Message) => ({
             ...m,
             toolCalls: m.toolCalls ?? [],
+            toolInvocations: (m.toolInvocations ?? []).map((tool) => ({
+              ...tool,
+              startedAt: tool.startedAt ? new Date(tool.startedAt) : undefined,
+              finishedAt: tool.finishedAt ? new Date(tool.finishedAt) : undefined,
+            })),
+            toolPhase: m.toolPhase ?? 'idle',
+            expectedToolCalls: m.expectedToolCalls ?? 0,
             timestamp: new Date(m.timestamp),
           })),
         }))
@@ -165,6 +203,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
     setConversationModel,
     setConversationSystemPrompt,
     addMessage,
+    updateMessage,
     clearMessages,
   }
 })

@@ -8,8 +8,8 @@ export function useTokenStats(intervalMs = 10000) {
   const stats = ref<TokenStats | null>(null)
 
   const { loading, isRefreshing, error, refresh } = usePolling(
-    async () => {
-      stats.value = await getTokenStats()
+    async (signal) => {
+      stats.value = await getTokenStats({ signal })
     },
     intervalMs
   )

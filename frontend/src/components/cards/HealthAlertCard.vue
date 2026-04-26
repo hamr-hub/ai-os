@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { HealthAlert } from '@/types'
+import { formatRelativeTime } from '@/utils/format'
 import { getHealthStatusConfig } from '@/utils/theme'
 import { ShieldCheck, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-vue-next'
 
@@ -13,12 +14,14 @@ const alertExpanded = ref(false)
 const healthStatusColor = computed(() =>
   getHealthStatusConfig(props.healthAlert?.status ?? 'critical')
 )
+const lastUpdatedLabel = computed(() => formatRelativeTime(props.healthAlert?.timestamp))
 </script>
 
 <template>
   <div class="card-header">
     <div class="icon-wrap green"><ShieldCheck class="card-icon-inner" /></div>
     <span class="card-title">健康告警</span>
+    <span class="card-meta">更新 {{ lastUpdatedLabel }}</span>
     <span
       v-if="healthAlert"
       class="badge"
@@ -84,6 +87,7 @@ const healthStatusColor = computed(() =>
   <div v-else class="empty-state">
     <ShieldCheck class="empty-icon" />
     <p>健康数据不可用</p>
+    <span class="empty-hint">未获取到健康评分与告警信息</span>
   </div>
 </template>
 
@@ -121,6 +125,12 @@ const healthStatusColor = computed(() =>
   color: var(--text-primary);
 }
 
+.card-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -146,6 +156,11 @@ const healthStatusColor = computed(() =>
   width: 40px;
   height: 40px;
   color: var(--text-muted);
+}
+
+.empty-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .health-score-row {

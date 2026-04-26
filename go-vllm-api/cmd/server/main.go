@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -60,6 +61,13 @@ func reloadRuntimeConfig(configPath string, scheduler schedulerConfigApplier, vl
 	return applyRuntimeConfig(cfg, scheduler, vllmManager, llamaCppMgr, zapLogger, source)
 }
 
+func exitCodeForListenError(err error) int {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return 98
+	}
+	return 1
+}
+
 func main() {
 	port := flag.Int("port", 35001, "Server port")
 	configPath := flag.String("config", "configs/config.yaml", "Config file path")
@@ -92,7 +100,7 @@ func main() {
 	vllmManager := service.NewVLLMManager(&cfg.VLLM, zapLogger)
 	llamaCppMgr := service.NewLlamaCppManager(zapLogger, cfg)
 	llamaCppMgr.RegisterModelsFromConfig(cfg)
-	scheduler := service.NewScheduler(zapLogger, gpuMonitor, sysCtl, redisRepo, cfg, llamaCppMgr)
+	scheduler := service.NewScheduler(zapLogger, gpuMonitor, sysCtl, redisRepo, cfg, llamaCppMgr, vllmManager)
 	metricsCollector := service.NewMetricsCollector(redisRepo, zapLogger)
 	promExporter := prometheus.NewPrometheusExporter()
 	vllmProxy := proxy.NewVLLMProxy(zapLogger)
@@ -162,10 +170,20 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	listener, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		exitCode := exitCodeForListenError(err)
+		if exitCode == 98 {
+			zapLogger.Error("listen address already in use", zap.Error(err), zap.String("addr", srv.Addr))
+			os.Exit(exitCode)
+		}
+		zapLogger.Fatal("listen", zap.Error(err))
+	}
+
 	go func() {
 		zapLogger.Info("server starting", zap.Int("port", *port))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			zapLogger.Fatal("listen", zap.Error(err))
+		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
+			zapLogger.Fatal("serve", zap.Error(err))
 		}
 	}()
 

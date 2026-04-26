@@ -475,6 +475,7 @@ class Scheduler:
 
         backend_type = self.get_model_backend_type(model_name)
         model_path = config.get('model_path')
+        replaced_model_name = None
 
         if backend_type == 'llama_cpp':
             if llama_cpp_manager.is_server_running(model_name):
@@ -522,23 +523,43 @@ class Scheduler:
                     self.running_models[model_name] = datetime.now()
                 return True
             
-            # If service is running with wrong model, stop it first
-            if self.sys_controller.is_service_running(service_name):
-                logger.info(f"vLLM service running with different model, stopping it first")
-                self.sys_controller.stop_service(service_name)
-            
-            # Update script to point to new model
+            # Apply the new model target before touching the currently running service.
             if model_path:
                 logger.info(f"Updating vLLM script to model path: {model_path}")
                 if not _update_vllm_script(model_path):
                     logger.error(f"Failed to update vLLM script for {model_name}")
                     return False
 
+            # If service is running with wrong model, stop it first
+            if self.sys_controller.is_service_running(service_name):
+                logger.info(f"vLLM service running with different model, stopping it first")
+                replaced_model_name = current_info.get('name') if current_info else None
+                if not self.sys_controller.stop_service(service_name):
+                    logger.error("Failed to stop vLLM service %s before starting %s", service_name, model_name)
+                    return False
+                if replaced_model_name:
+                    self._mark_model_stopped(replaced_model_name)
+                # Give the driver/monitor cache a chance to observe released VRAM before re-checking memory.
+                await self._cleanup_memory_fragmentation()
+                await self.gpu_monitor.refresh_cache()
+
         # General service start logic
         mem_info = self.gpu_monitor.get_memory_usage()
         if mem_info:
             required_memory = _parse_memory_size(config.get('required_memory', 0))
-            if mem_info.get('available', 0) < required_memory + self.get_min_available_memory():
+            required_with_headroom = required_memory + self.get_min_available_memory()
+
+            if backend_type == 'vllm' and replaced_model_name and mem_info.get('available', 0) < required_with_headroom:
+                # The immediate reading after a vLLM stop can be stale; refresh once before failing memory checks.
+                gpu_status = await self.gpu_monitor.refresh_cache()
+                if gpu_status:
+                    mem_info = {
+                        "total": gpu_status.get("total_memory", mem_info.get("total", 0)),
+                        "used": gpu_status.get("used_memory", mem_info.get("used", 0)),
+                        "available": gpu_status.get("available_memory", mem_info.get("available", 0)),
+                    }
+
+            if mem_info.get('available', 0) < required_with_headroom:
                 success = await self._free_up_memory(model_name)
                 if not success:
                     logger.error(f"Failed to free up enough memory for {model_name}")
@@ -548,6 +569,10 @@ class Scheduler:
         if success:
             with self._model_lock:
                 self.running_models[model_name] = datetime.now()
+
+            if backend_type == 'vllm':
+                # vLLM 大模型加载时间长，接口层返回“starting”后由前端/状态轮询继续观察。
+                return True
 
             # Poll for readiness instead of arbitrary sleep
             preload_timeout = self.config.get('settings', {}).get('preload_timeout', 120)
@@ -808,6 +833,14 @@ class Scheduler:
                 for model_name in self.preloaded_models:
                     config = self.get_model_config(model_name)
                     if config and config.get('keep_alive', False):
+                        if self.get_model_backend_type(model_name) == 'vllm':
+                            from core.vllm_manager import get_current_model_info
+
+                            current_info = get_current_model_info()
+                            current_target = current_info.get('name') if current_info else None
+                            if current_target and current_target != model_name:
+                                # vLLM 是单实例服务，切换到其他模型后不能让 keep_alive 抢回服务。
+                                continue
                         if not self.is_model_running(model_name):
                             logger.warning(f"Preloaded model {model_name} is not running, restarting...")
                             restarted = await self.start_model(model_name)

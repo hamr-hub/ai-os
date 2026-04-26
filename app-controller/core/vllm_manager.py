@@ -40,12 +40,35 @@ def _load_vllm_config() -> Dict[str, Any]:
         logger.warning("Failed to load vLLM config: %s", exc)
     return {}
 
+
+def _resolve_vllm_start_script(configured_path: str, service_name: str) -> str:
+    service_file = f"/etc/systemd/system/{service_name}.service"
+    if os.path.exists(service_file):
+        try:
+            import re
+
+            with open(service_file, 'r') as f:
+                content = f.read()
+            match = re.search(r'^ExecStart=(\S+)', content, re.MULTILINE)
+            if match:
+                return match.group(1)
+        except Exception as exc:
+            logger.warning("Failed to resolve ExecStart from service file: %s", exc)
+    return configured_path
+
 VLLM_CONFIG = _load_vllm_config()
 
 MODEL_BASE_PATH = VLLM_CONFIG.get('model_base_path', '/mnt/pve_models')
 VLLM_SERVICE_NAME = VLLM_CONFIG.get('service_name', 'vllm-aiclient')
-VLLM_START_SCRIPT = VLLM_CONFIG.get('start_script', '/root/ai-suite/start_vllm_aiclient.sh')
+VLLM_START_SCRIPT = _resolve_vllm_start_script(
+    VLLM_CONFIG.get('start_script', '/root/ai-suite/start_vllm_aiclient.sh'),
+    VLLM_SERVICE_NAME,
+)
 VLLM_DEFAULT_PORT = VLLM_CONFIG.get('default_port', 8000)
+VLLM_MODEL_STATE_FILE = VLLM_CONFIG.get(
+    'model_state_file',
+    os.path.join(os.path.dirname(VLLM_START_SCRIPT), '.vllm_model_path'),
+)
 
 # 模型显存估算配置（基于模型参数和量化类型）
 # 格式：{"pattern": {"vram_gb": 数值, "multimodal": 布尔值}}
@@ -184,12 +207,35 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
     """
     try:
         import re
-        
-        # 优先从 systemd 服务环境变量读取
-        service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
+
         model_path = None
-        
-        if os.path.exists(service_file):
+
+        # 优先读取启动脚本使用的状态文件，避免只读 systemd 环境导致识别漂移。
+        if os.path.exists(VLLM_MODEL_STATE_FILE):
+            with open(VLLM_MODEL_STATE_FILE, 'r') as f:
+                state_model_path = f.read().strip()
+            if state_model_path:
+                model_path = state_model_path
+
+        # 其次读取 systemd 当前生效的环境变量，兼容 /run runtime override。
+
+        try:
+            result = subprocess.run(
+                [SYSTEMCTL_BIN, 'show', VLLM_SERVICE_NAME, '--property=Environment', '--value'],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if not model_path and result.returncode == 0:
+                match = re.search(r'VLLM_MODEL_PATH=([^\s"]+)', result.stdout)
+                if match:
+                    model_path = match.group(1)
+        except Exception as exc:
+            logger.warning("Failed to read effective systemd environment: %s", exc)
+
+        # 如果拿不到生效环境，再回退到持久化 service 文件。
+        service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
+        if not model_path and os.path.exists(service_file):
             with open(service_file, 'r') as f:
                 content = f.read()
             match = re.search(r'Environment="VLLM_MODEL_PATH=([^"]*)"', content)
@@ -530,6 +576,41 @@ async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, mode
     }
 
 
+def _write_runtime_service_override(model_path: str) -> bool:
+    """Write a writable runtime override so model switching still works when /etc is read-only."""
+    try:
+        override_dir = f"/run/systemd/system/{VLLM_SERVICE_NAME}.service.d"
+        override_file = os.path.join(override_dir, "override.conf")
+        os.makedirs(override_dir, exist_ok=True)
+        with open(override_file, 'w') as f:
+            f.write('[Service]\n')
+            f.write(f'Environment="VLLM_MODEL_PATH={model_path}"\n')
+        result = subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            logger.warning("daemon-reload failed after runtime override: %s", (result.stderr or '').strip())
+            return False
+        logger.info("Updated runtime service override: %s", model_path)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to write runtime service override: %s", exc)
+        return False
+
+
+def _write_model_state_file(model_path: str) -> bool:
+    try:
+        state_dir = os.path.dirname(VLLM_MODEL_STATE_FILE)
+        if state_dir:
+            os.makedirs(state_dir, exist_ok=True)
+        with open(VLLM_MODEL_STATE_FILE, 'w') as f:
+            f.write(model_path)
+            f.write('\n')
+        logger.info("Updated model state file: %s", model_path)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to write model state file: %s", exc)
+        return False
+
+
 def _update_vllm_script(model_path: str) -> bool:
     """
     更新 vLLM systemd 服务文件和启动脚本中的模型路径
@@ -537,26 +618,34 @@ def _update_vllm_script(model_path: str) -> bool:
     """
     try:
         import re
-        
-        # 优先更新 systemd 服务文件中的环境变量
+
+        state_updated = _write_model_state_file(model_path)
+
+        # 再尝试写入 runtime override，兼容 /etc 只读的部署环境。
+        runtime_updated = _write_runtime_service_override(model_path)
+
+        # 同时尽量更新持久化 service 文件；失败时不影响 runtime 切换。
         systemd_updated = False
         service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
         if os.path.exists(service_file):
-            with open(service_file, 'r') as f:
-                content = f.read()
-            
-            new_content = re.sub(
-                r'Environment="VLLM_MODEL_PATH=[^"]*"',
-                f'Environment="VLLM_MODEL_PATH={model_path}"',
-                content
-            )
-            
-            if new_content != content:
-                with open(service_file, 'w') as f:
-                    f.write(new_content)
-                subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True, timeout=10)
-                logger.info("Updated systemd service file: %s", model_path)
-                systemd_updated = True
+            try:
+                with open(service_file, 'r') as f:
+                    content = f.read()
+
+                new_content = re.sub(
+                    r'Environment="VLLM_MODEL_PATH=[^"]*"',
+                    f'Environment="VLLM_MODEL_PATH={model_path}"',
+                    content
+                )
+
+                if new_content != content:
+                    with open(service_file, 'w') as f:
+                        f.write(new_content)
+                    subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True, timeout=10)
+                    logger.info("Updated systemd service file: %s", model_path)
+                    systemd_updated = True
+            except OSError as exc:
+                logger.warning("Failed to persist systemd service file update: %s", exc)
         
         if not os.path.exists(VLLM_START_SCRIPT):
             logger.warning("Start script not found: %s", VLLM_START_SCRIPT)
@@ -614,7 +703,7 @@ def _update_vllm_script(model_path: str) -> bool:
             
             new_lines.append(line)
 
-        if not replaced and not systemd_updated:
+        if not replaced and not systemd_updated and not runtime_updated and not state_updated:
             logger.warning("No model path found in start script to update")
             return False
 
@@ -623,7 +712,7 @@ def _update_vllm_script(model_path: str) -> bool:
                 f.write('\n'.join(new_lines))
             logger.info("Updated start script: %s", model_path)
 
-        return systemd_updated or replaced
+        return state_updated or runtime_updated or systemd_updated or replaced
     except Exception as e:
         logger.error("Failed to update vLLM script: %s", e)
         return False

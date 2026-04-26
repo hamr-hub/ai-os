@@ -374,6 +374,8 @@ async def _agent_stream(
                 "content": json.dumps(result.result) if result.success else json.dumps({"error": result.error})
             })
 
+        yield f"data: {json.dumps({'type': 'tool_calls_end', 'calls': len(tool_calls), 'iteration': iteration})}\n\n"
+
     yield f"data: {json.dumps({'error': 'Max iterations reached'})}\n\n"
 
 

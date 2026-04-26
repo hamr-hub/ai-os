@@ -11,10 +11,10 @@ export function useTokenHistory(intervalMs = 30000, initialCount: MaybeRefOrGett
   >([])
 
   const { loading, isRefreshing, error, refresh } = usePolling(
-    async () => {
+    async (signal) => {
       const [stats, historyData] = await Promise.all([
-        getTokenStats(),
-        getTokenHistory(toValue(initialCount)),
+        getTokenStats({ signal }),
+        getTokenHistory(toValue(initialCount), { signal }),
       ])
 
       tokenStats.value = stats

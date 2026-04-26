@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getGPUSummary } from '@/api/client'
 import type { GPUSummary } from '@/types'
+import { isAbortError } from '@/utils/request'
 
 export const useGPUStore = defineStore('gpu', () => {
   const gpuSummary = ref<GPUSummary | null>(null)
@@ -9,16 +10,29 @@ export const useGPUStore = defineStore('gpu', () => {
   const error = ref<string | null>(null)
   let timer: number | null = null
   let subscriberCount = 0
+  let activeController: AbortController | null = null
 
-  const fetchGPUData = async () => {
+  const fetchGPUData = async (force = false) => {
+    if (activeController) {
+      if (!force) return
+      activeController.abort()
+    }
+
+    const controller = new AbortController()
+    activeController = controller
     loading.value = true
     error.value = null
     try {
-      gpuSummary.value = await getGPUSummary()
+      gpuSummary.value = await getGPUSummary({ signal: controller.signal })
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch GPU data'
+      if (!isAbortError(err)) {
+        error.value = err instanceof Error ? err.message : 'Failed to fetch GPU data'
+      }
     } finally {
-      loading.value = false
+      if (activeController === controller) {
+        activeController = null
+        loading.value = false
+      }
     }
   }
 
@@ -35,9 +49,13 @@ export const useGPUStore = defineStore('gpu', () => {
       clearInterval(timer)
       timer = null
     }
+    if (subscriberCount === 0 && activeController) {
+      activeController.abort()
+      activeController = null
+    }
   }
 
-  const refresh = () => fetchGPUData()
+  const refresh = () => fetchGPUData(true)
 
   const gpuCurrent = computed(() => gpuSummary.value?.current ?? null)
   const gpuStatus = computed(() => gpuSummary.value?.status ?? 'unavailable')

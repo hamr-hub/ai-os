@@ -87,7 +87,7 @@ func (mtf *ModelTestingFramework) RunAllTests(ctx context.Context, modelName str
 	}
 
 	for _, cat := range categories {
-		result := mtf.runTest(ctx, cat, modelPath, port)
+		result := mtf.runTest(ctx, cat, modelName, port)
 		report.Results = append(report.Results, result)
 		if result.Passed {
 			report.TotalPassed++
@@ -114,14 +114,14 @@ func (mtf *ModelTestingFramework) RunAllTests(ctx context.Context, modelName str
 	return report
 }
 
-func (mtf *ModelTestingFramework) runTest(ctx context.Context, category TestCategory, modelPath string, port int) ModelTestResult {
+func (mtf *ModelTestingFramework) runTest(ctx context.Context, category TestCategory, modelName string, port int) ModelTestResult {
 	switch category {
 	case TestChatBasic:
-		return mtf.testChatBasic(ctx, modelPath, port)
+		return mtf.testChatBasic(ctx, modelName, port)
 	case TestChatStreaming:
-		return mtf.testChatStreaming(ctx, modelPath, port)
+		return mtf.testChatStreaming(ctx, modelName, port)
 	case TestToolIntegration:
-		return mtf.testToolIntegration(ctx, modelPath, port)
+		return mtf.testToolIntegration(ctx, modelName, port)
 	case TestImageProcessing:
 		return ModelTestResult{
 			Category:     TestImageProcessing,
@@ -137,11 +137,11 @@ func (mtf *ModelTestingFramework) runTest(ctx context.Context, category TestCate
 	}
 }
 
-func (mtf *ModelTestingFramework) testChatBasic(ctx context.Context, modelPath string, port int) ModelTestResult {
+func (mtf *ModelTestingFramework) testChatBasic(ctx context.Context, modelName string, port int) ModelTestResult {
 	start := time.Now()
 	url := fmt.Sprintf("http://localhost:%d/v1/chat/completions", port)
 	payload := map[string]interface{}{
-		"model": modelPath,
+		"model": modelName,
 		"messages": []map[string]interface{}{
 			{"role": "system", "content": "You are a helpful assistant."},
 			{"role": "user", "content": "Write a short poem about the sea."},
@@ -211,11 +211,11 @@ func (mtf *ModelTestingFramework) testChatBasic(ctx context.Context, modelPath s
 	}
 }
 
-func (mtf *ModelTestingFramework) testChatStreaming(ctx context.Context, modelPath string, port int) ModelTestResult {
+func (mtf *ModelTestingFramework) testChatStreaming(ctx context.Context, modelName string, port int) ModelTestResult {
 	start := time.Now()
 	url := fmt.Sprintf("http://localhost:%d/v1/chat/completions", port)
 	payload := map[string]interface{}{
-		"model": modelPath,
+		"model": modelName,
 		"messages": []map[string]interface{}{
 			{"role": "user", "content": "Count from 1 to 10."},
 		},
@@ -281,11 +281,11 @@ func (mtf *ModelTestingFramework) testChatStreaming(ctx context.Context, modelPa
 	}
 }
 
-func (mtf *ModelTestingFramework) testToolIntegration(ctx context.Context, modelPath string, port int) ModelTestResult {
+func (mtf *ModelTestingFramework) testToolIntegration(ctx context.Context, modelName string, port int) ModelTestResult {
 	start := time.Now()
 	url := fmt.Sprintf("http://localhost:%d/v1/chat/completions", port)
 	payload := map[string]interface{}{
-		"model": modelPath,
+		"model": modelName,
 		"messages": []map[string]interface{}{
 			{"role": "user", "content": "What's the weather in Beijing?"},
 		},

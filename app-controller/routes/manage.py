@@ -206,7 +206,14 @@ async def start_model(model_name: str):
     if scheduler.is_model_running(model_name):
         return {"status": "already_running", "model": model_name}
 
-    success = await scheduler.start_model(model_name)
+    backend_type = scheduler.get_model_backend_type(model_name)
+    if backend_type == 'vllm':
+        # vLLM 后端是单实例服务，界面上的“启动”实际等价于切换到该模型。
+        success = await scheduler.switch_model(model_name)
+        if success:
+            scheduler.mark_model_selected(model_name)
+    else:
+        success = await scheduler.start_model(model_name)
     if success:
         _clear_model_caches()
         return {"status": "starting", "model": model_name}

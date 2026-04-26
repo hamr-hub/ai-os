@@ -5,3 +5,4 @@ __pycache__
 go-vllm-api/server
 frontend/playwright-report/
 frontend/test-results/
+logs/

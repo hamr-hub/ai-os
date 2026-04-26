@@ -2,6 +2,7 @@ import { ref, computed, toValue, type MaybeRefOrGetter } from 'vue'
 import { getSystemStatus, getHealthAlert, getSystemHistory, getQueueStatus } from '@/api/client'
 import { usePolling } from '@/composables/usePolling'
 import type { SystemStatus, HealthAlert, QueueStatus, SystemHistoryEntry } from '@/types'
+import { isAbortError } from '@/utils/request'
 
 export function useSystemData(intervalMs = 10000, initialCount: MaybeRefOrGetter<number> = 60) {
   const systemStatus = ref<SystemStatus | null>(null)
@@ -10,30 +11,43 @@ export function useSystemData(intervalMs = 10000, initialCount: MaybeRefOrGetter
   const queueStatusRef = ref<QueueStatus | null>(null)
 
   const { loading, isRefreshing, error, refresh } = usePolling(
-    async () => {
+    async (signal) => {
       try {
-        const status = await getSystemStatus()
+        const status = await getSystemStatus(false, toValue(initialCount), { signal })
         systemStatus.value = status
         if (status.queue) {
           queueStatusRef.value = status.queue
         } else {
           try {
-            queueStatusRef.value = await getQueueStatus()
+            queueStatusRef.value = await getQueueStatus({ signal })
           } catch (err) {
+            if (isAbortError(err)) {
+              throw err
+            }
             console.warn('[useSystemData] Queue status fetch failed:', err)
             queueStatusRef.value = null
           }
         }
-      } catch {
+      } catch (err) {
+        if (isAbortError(err)) {
+          throw err
+        }
         if (!systemStatus.value) {
           systemStatus.value = null
         }
       }
 
       const [healthResult, historyResult] = await Promise.allSettled([
-        getHealthAlert(),
-        getSystemHistory(toValue(initialCount)),
+        getHealthAlert({ signal }),
+        getSystemHistory(toValue(initialCount), { signal }),
       ])
+
+      const abortedResult = [healthResult, historyResult].find(
+        (result) => result.status === 'rejected' && isAbortError(result.reason)
+      )
+      if (abortedResult?.status === 'rejected') {
+        throw abortedResult.reason
+      }
 
       if (healthResult.status === 'fulfilled') {
         healthAlert.value = healthResult.value
