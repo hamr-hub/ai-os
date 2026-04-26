@@ -165,7 +165,7 @@ const handleScale = (cardId: string, delta: number) => {
 
         <div
           class="dashboard-row gpu-row"
-          :style="{ transform: `scale(${cardScale.gpu})`, transformOrigin: 'top center' }"
+          :style="{ transform: `scale(${cardScale.gpu})`, transformOrigin: 'top left' }"
         >
           <div class="card gpu-card card-glow-cyan scale-in stagger-2 full-width">
             <div class="scale-controls">
@@ -196,7 +196,7 @@ const handleScale = (cardId: string, delta: number) => {
                 <LineChart
                   :labels="gpuTimeLabels"
                   :datasets="gpuUtilDataset"
-                  :height="160"
+                  :height="120"
                   y-unit="%"
                   :y-min="0"
                   :y-max="100"
@@ -210,7 +210,7 @@ const handleScale = (cardId: string, delta: number) => {
                 <LineChart
                   :labels="gpuTimeLabels"
                   :datasets="gpuTempDataset"
-                  :height="160"
+                  :height="120"
                   y-unit="°C"
                   :y-min="0"
                 />
@@ -223,7 +223,7 @@ const handleScale = (cardId: string, delta: number) => {
                 <LineChart
                   :labels="gpuTimeLabels"
                   :datasets="gpuMemDataset"
-                  :height="160"
+                  :height="120"
                   y-unit="%"
                   :y-min="0"
                   :y-max="100"
@@ -237,7 +237,7 @@ const handleScale = (cardId: string, delta: number) => {
                 <LineChart
                   :labels="gpuTimeLabels"
                   :datasets="gpuPowerDataset"
-                  :height="160"
+                  :height="120"
                   y-unit="W"
                   :y-min="0"
                 />
@@ -250,7 +250,7 @@ const handleScale = (cardId: string, delta: number) => {
                 <LineChart
                   :labels="gpuTimeLabels"
                   :datasets="vllmRunningDataset"
-                  :height="160"
+                  :height="120"
                   y-unit=""
                   :y-min="0"
                 />
@@ -263,7 +263,7 @@ const handleScale = (cardId: string, delta: number) => {
                 <LineChart
                   :labels="gpuTimeLabels"
                   :datasets="vllmWaitingDataset"
-                  :height="160"
+                  :height="120"
                   y-unit=""
                   :y-min="0"
                 />
@@ -276,7 +276,7 @@ const handleScale = (cardId: string, delta: number) => {
                 <LineChart
                   :labels="gpuTimeLabels"
                   :datasets="vllmGpuCacheDataset"
-                  :height="160"
+                  :height="120"
                   y-unit="%"
                   :y-min="0"
                   :y-max="100"
@@ -291,34 +291,35 @@ const handleScale = (cardId: string, delta: number) => {
             </div>
           </div>
 
-          <div
-            class="card health-card card-glow-green scale-in stagger-5"
-            :style="{ transform: `scale(${cardScale.health})`, transformOrigin: 'top center' }"
-          >
-            <div class="scale-controls">
-              <button class="scale-btn" @click="handleScale('health', 0.1)">+</button>
-              <button class="scale-btn" @click="handleScale('health', -0.1)">−</button>
+          <div class="gpu-side-cards">
+            <div class="card health-card card-glow-green scale-in stagger-5"
+              :style="{ transform: `scale(${cardScale.health})`, transformOrigin: 'top left' }"
+            >
+              <div class="scale-controls">
+                <button class="scale-btn" @click="handleScale('health', 0.1)">+</button>
+                <button class="scale-btn" @click="handleScale('health', -0.1)">−</button>
+              </div>
+              <HealthAlertCard :health-alert="healthAlert" />
             </div>
-            <HealthAlertCard :health-alert="healthAlert" />
-          </div>
 
-          <div
-            class="card running-card card-glow-green scale-in stagger-6"
-            :style="{ transform: `scale(${cardScale.models})`, transformOrigin: 'top right' }"
-          >
-            <div class="scale-controls">
-              <button class="scale-btn" @click="handleScale('models', 0.1)">+</button>
-              <button class="scale-btn" @click="handleScale('models', -0.1)">−</button>
+            <div
+              class="card running-card card-glow-green scale-in stagger-6"
+              :style="{ transform: `scale(${cardScale.models})`, transformOrigin: 'top right' }"
+            >
+              <div class="scale-controls">
+                <button class="scale-btn" @click="handleScale('models', 0.1)">+</button>
+                <button class="scale-btn" @click="handleScale('models', -0.1)">−</button>
+              </div>
+              <RunningModelsCard
+                :model-list="modelList"
+                :default-model="defaultModel"
+                :action-loading="actionLoading"
+                :switching-model="switchingModel"
+                :handle-start-model="handleStartModel"
+                :handle-stop-model="handleStopModel"
+                :handle-switch-and-set-default="handleSwitchAndSetDefault"
+              />
             </div>
-            <RunningModelsCard
-              :model-list="modelList"
-              :default-model="defaultModel"
-              :action-loading="actionLoading"
-              :switching-model="switchingModel"
-              :handle-start-model="handleStartModel"
-              :handle-stop-model="handleStopModel"
-              :handle-switch-and-set-default="handleSwitchAndSetDefault"
-            />
           </div>
         </div>
       </div>
@@ -406,12 +407,14 @@ const handleScale = (cardId: string, delta: number) => {
   width: 100%;
   max-width: 100%;
   height: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-row {
   display: grid;
   gap: 12px;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .top-row {
@@ -420,11 +423,19 @@ const handleScale = (cardId: string, delta: number) => {
 }
 
 .gpu-row {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
   gap: 12px;
   flex: 1;
   min-height: 0;
+  width: 100%;
+}
+
+.gpu-side-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
 }
 
 .bottom-row {
@@ -456,8 +467,8 @@ const handleScale = (cardId: string, delta: number) => {
 
 @media (max-width: 768px) {
   .dashboard-layout {
-    padding: 12px;
-    gap: 12px;
+    padding: 8px;
+    gap: 8px;
   }
 
   .top-row {
