@@ -22,6 +22,12 @@ const HISTORY_STORAGE_KEY = 'server-history'
 const MAX_HISTORY = 10
 const DEFAULT_PROBE_TIMEOUT_MS = 5000
 
+interface EndpointProbeStatus {
+  ok: boolean
+  status?: number
+  error?: string
+}
+
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, '')
 
 const formatProbeError = (result: ConnectionDetailsLike['manage']) => {

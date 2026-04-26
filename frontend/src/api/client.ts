@@ -151,8 +151,8 @@ client.interceptors.response.use((response) => response, handleResponseError)
 
 v1Client.interceptors.response.use((response) => response, handleResponseError)
 
-export async function getGPUSummary(): Promise<GPUSummary> {
-  const { data } = await client.get<GPUSummary>('/gpu/summary', silentRequestConfig())
+export async function getGPUSummary(config: AxiosRequestConfig = {}): Promise<GPUSummary> {
+  const { data } = await client.get<GPUSummary>('/gpu/summary', silentRequestConfig(config))
   return data
 }
 
@@ -169,8 +169,8 @@ export async function getGPUProcesses(): Promise<{ processes: GPUProcess[]; coun
   return data
 }
 
-export async function getVLLMMetrics(): Promise<VLLMMetricsData> {
-  const { data } = await client.get<VLLMMetricsData>('/vllm/metrics', silentRequestConfig())
+export async function getVLLMMetrics(config: AxiosRequestConfig = {}): Promise<VLLMMetricsData> {
+  const { data } = await client.get<VLLMMetricsData>('/vllm/metrics', silentRequestConfig(config))
   return data
 }
 
@@ -255,23 +255,27 @@ export async function getTestHistory(): Promise<TestHistoryEntry[]> {
   return history.map((entry) => normalizeEntry((entry.model_name as string) || '', entry))
 }
 
-export async function getTokenStats(): Promise<TokenStats> {
-  const { data } = await client.get<TokenStats>('/token/stats', silentRequestConfig())
+export async function getTokenStats(config: AxiosRequestConfig = {}): Promise<TokenStats> {
+  const { data } = await client.get<TokenStats>('/token/stats', silentRequestConfig(config))
   return data
 }
 
-export async function getTokenHistory(count: number = 60): Promise<TokenHistoryResponse> {
+export async function getTokenHistory(
+  count: number = 60,
+  config: AxiosRequestConfig = {}
+): Promise<TokenHistoryResponse> {
   const { data } = await client.get<TokenHistoryResponse>(
     '/token/history',
-    silentRequestConfig({ params: { count } })
+    silentRequestConfig({ params: { count }, ...config })
   )
   return data
 }
 
 export async function getGPUHistory(
-  count: number = 60
+  count: number = 60,
+  config: AxiosRequestConfig = {}
 ): Promise<{ history: GPUHistoryEntry[]; count: number; enabled: boolean; max_days: number }> {
-  const { data } = await client.get('/gpu/history', silentRequestConfig({ params: { count } }))
+  const { data } = await client.get('/gpu/history', silentRequestConfig({ params: { count }, ...config }))
   return data
 }
 
@@ -303,32 +307,37 @@ export async function clearDefaultModel(): Promise<ActionResponse> {
 
 export async function getSystemStatus(
   includeHistory = false,
-  historyCount = 60
+  historyCount = 60,
+  config: AxiosRequestConfig = {}
 ): Promise<SystemStatus & { history?: SystemHistoryResponse['history'] }> {
   const { data } = await client.get<SystemStatus & { history?: SystemHistoryResponse['history'] }>(
     '/system/status',
     silentRequestConfig({
       params: { include_history: includeHistory, history_count: historyCount },
+      ...config,
     })
   )
   return data
 }
 
-export async function getSystemHistory(count: number = 60): Promise<SystemHistoryResponse> {
+export async function getSystemHistory(
+  count: number = 60,
+  config: AxiosRequestConfig = {}
+): Promise<SystemHistoryResponse> {
   const { data } = await client.get<SystemHistoryResponse>(
     '/system/history',
-    silentRequestConfig({ params: { count } })
+    silentRequestConfig({ params: { count }, ...config })
   )
   return data
 }
 
-export async function getQueueStatus(): Promise<QueueStatus> {
-  const { data } = await client.get<QueueStatus>('/queue', silentRequestConfig())
+export async function getQueueStatus(config: AxiosRequestConfig = {}): Promise<QueueStatus> {
+  const { data } = await client.get<QueueStatus>('/queue', silentRequestConfig(config))
   return data
 }
 
-export async function getHealthAlert(): Promise<HealthAlert> {
-  const { data } = await client.get<HealthAlert>('/health/alert', silentRequestConfig())
+export async function getHealthAlert(config: AxiosRequestConfig = {}): Promise<HealthAlert> {
+  const { data } = await client.get<HealthAlert>('/health/alert', silentRequestConfig(config))
   return data
 }
 
