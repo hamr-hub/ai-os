@@ -75,11 +75,12 @@ class SystemController:
         result = self._run_command([self._systemctl_bin, 'restart', service_name])
         return result.returncode == 0
     
-    def get_service_status(self, service_name: str) -> str:
+    def get_service_status(self, service_name: str, use_cache: bool = True) -> str:
         cache_key = f"ai_controller:cache:service_status:{service_name}"
-        cached = cache_service.get(cache_key)
-        if cached is not None:
-            return cached
+        if use_cache:
+            cached = cache_service.get(cache_key)
+            if cached is not None:
+                return cached
         
         if not self._supports_systemctl():
             logger.warning("systemctl unsupported when checking service: %s", service_name)
@@ -91,7 +92,7 @@ class SystemController:
         return status
     
     def is_service_running(self, service_name: str) -> bool:
-        status = self.get_service_status(service_name)
+        status = self.get_service_status(service_name, use_cache=False)
         return status == 'active'
     
     def enable_service(self, service_name: str) -> bool:

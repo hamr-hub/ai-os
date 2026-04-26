@@ -1,47 +1,18 @@
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { getTokenStats } from '@/api/client'
+import { usePolling } from '@/composables/usePolling'
 import { formatTokens } from '@/utils/format'
 import type { TokenStats } from '@/types'
 
 export function useTokenStats(intervalMs = 10000) {
   const stats = ref<TokenStats | null>(null)
-  const loading = ref(false)
-  const isRefreshing = ref(false)
-  const error = ref<string | null>(null)
-  let timer: number | null = null
 
-  const fetch = async (manualRefresh = false) => {
-    if (manualRefresh) {
-      isRefreshing.value = true
-    } else {
-      loading.value = true
-    }
-    error.value = null
-    try {
+  const { loading, isRefreshing, error, refresh } = usePolling(
+    async () => {
       stats.value = await getTokenStats()
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch token stats'
-    } finally {
-      loading.value = false
-      isRefreshing.value = false
-    }
-  }
-
-  const refresh = () => {
-    fetch(true)
-  }
-
-  const startPolling = () => {
-    if (timer) return
-    timer = window.setInterval(fetch, intervalMs)
-  }
-
-  const stopPolling = () => {
-    if (timer) {
-      clearInterval(timer)
-      timer = null
-    }
-  }
+    },
+    intervalMs
+  )
 
   const totalTokens = computed(() => stats.value?.total_tokens ?? 0)
   const promptTokens = computed(
@@ -51,15 +22,6 @@ export function useTokenStats(intervalMs = 10000) {
     () => stats.value?.total_completion_tokens ?? stats.value?.completion_tokens ?? 0
   )
   const modelStats = computed(() => stats.value?.models ?? {})
-
-  onMounted(() => {
-    fetch()
-    startPolling()
-  })
-
-  onUnmounted(() => {
-    stopPolling()
-  })
 
   return {
     stats,
@@ -71,9 +33,6 @@ export function useTokenStats(intervalMs = 10000) {
     completionTokens,
     modelStats,
     formatTokens,
-    fetch,
     refresh,
-    startPolling,
-    stopPolling,
   }
 }

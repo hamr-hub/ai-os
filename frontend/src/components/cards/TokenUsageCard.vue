@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { TokenStats } from '@/types'
 import { Activity, Coins, Zap } from 'lucide-vue-next'
 
-const props = defineProps<{
+defineProps<{
   stats: TokenStats | null
   totalTokens: number
   promptTokens: number

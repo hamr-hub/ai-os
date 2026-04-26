@@ -5,18 +5,15 @@ import { useGPU } from '@/composables/useGPU'
 import { useGPUHistory } from '@/composables/useGPUHistory'
 import { useTokenStats } from '@/composables/useTokenStats'
 import { useSystemData } from '@/composables/useSystemData'
-import { useAppStore } from '@/stores/app'
 import LineChart from '@/components/LineChart.vue'
 import GpuMetricsCard from '@/components/cards/GpuMetricsCard.vue'
 import VLLMMetricsCard from '@/components/cards/VLLMMetricsCard.vue'
 import SystemStatusCard from '@/components/cards/SystemStatusCard.vue'
 import TokenUsageCard from '@/components/cards/TokenUsageCard.vue'
-import RequestQueueCard from '@/components/cards/RequestQueueCard.vue'
 import HealthAlertCard from '@/components/cards/HealthAlertCard.vue'
 import RunningModelsCard from '@/components/cards/RunningModelsCard.vue'
-import { RefreshCw, Monitor, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server } from 'lucide-vue-next'
+import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server } from 'lucide-vue-next'
 
-const store = useAppStore()
 const {
   modelList,
   defaultModel,
@@ -47,7 +44,6 @@ const {
 } = useTokenStats()
 const {
   systemStatus,
-  queueStatus,
   healthAlert,
   systemHistory,
   refresh: refreshSystem,

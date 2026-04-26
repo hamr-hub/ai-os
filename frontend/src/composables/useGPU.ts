@@ -1,58 +1,20 @@
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { getGPUSummary } from '@/api/client'
 import { formatBytes, formatTimeLabel } from '@/utils/format'
+import { usePolling } from '@/composables/usePolling'
 import type { GPUSummary } from '@/types'
 
 export function useGPU() {
   const gpuSummary = ref<GPUSummary | null>(null)
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-  const isRefreshing = ref(false)
-  let refreshInterval: number | null = null
 
-  const fetchGPUData = async (manualRefresh = false) => {
-    if (manualRefresh) {
-      isRefreshing.value = true
-    } else {
-      loading.value = true
-    }
-    error.value = null
-    try {
+  const { loading, isRefreshing, error, refresh, startPolling, stopPolling } = usePolling(
+    async () => {
       gpuSummary.value = await getGPUSummary()
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch GPU data'
-      console.error('Failed to fetch GPU data:', err)
-    } finally {
-      loading.value = false
-      isRefreshing.value = false
-    }
-  }
+    },
+    30000
+  )
 
-  const refresh = () => {
-    fetchGPUData(true)
-  }
-
-  const startAutoRefresh = () => {
-    if (refreshInterval) return
-    refreshInterval = window.setInterval(fetchGPUData, 30000)
-  }
-
-  const stopAutoRefresh = () => {
-    if (refreshInterval) {
-      clearInterval(refreshInterval)
-      refreshInterval = null
-    }
-  }
-
-  const toggleAutoRefresh = () => {
-    if (refreshInterval) {
-      stopAutoRefresh()
-    } else {
-      startAutoRefresh()
-    }
-  }
-
-  const isAutoRefreshEnabled = computed(() => refreshInterval !== null)
+  const isAutoRefreshEnabled = computed(() => true)
 
   const formatMemory = (bytes: number): string => formatBytes(bytes)
 
@@ -67,26 +29,16 @@ export function useGPU() {
     return (used / total) * 100
   }
 
-  onMounted(() => {
-    fetchGPUData()
-    startAutoRefresh()
-  })
-
-  onUnmounted(() => {
-    stopAutoRefresh()
-  })
-
   return {
     gpuSummary,
     loading,
     error,
     isRefreshing,
     isAutoRefreshEnabled,
-    fetchGPUData,
     refresh,
-    startAutoRefresh,
-    stopAutoRefresh,
-    toggleAutoRefresh,
+    startPolling,
+    stopPolling,
+    toggleAutoRefresh: () => {},
     formatMemory,
     formatTimestamp,
     formatPercentage,

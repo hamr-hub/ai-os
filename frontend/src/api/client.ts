@@ -3,6 +3,7 @@ import type {
   GPUSummary,
   GPUHistoryEntry,
   GPUProcess,
+  GPUEnhancedInfo,
   VLLMMetricsData,
   ModelStatus,
   ModelsResponse,
@@ -10,12 +11,22 @@ import type {
   TestResponse,
   TestHistoryEntry,
   TokenStats,
+  TokenHistoryResponse,
+  SystemHistoryResponse,
   SystemStatus,
   QueueStatus,
   HealthAlert,
+  ChatMessage,
+  ChatCompletionRequest,
+  ChatCompletionResponse,
+  AgentToolCall,
+  AgentMessage,
+  AgentRequest,
+  ToolResult,
 } from '@/types'
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
+import { readSSEStream, DONE_SENTINEL } from '@/utils/sse'
 
 const client = axios.create({
   baseURL: '/api',
@@ -36,28 +47,6 @@ type RetryableConfig = {
 const RETRYABLE_METHODS = new Set(['get', 'head', 'options'])
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
-
-const createTimedAbortSignal = (signal?: AbortSignal, timeoutMs = 30000) => {
-  const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(new Error('请求超时')), timeoutMs)
-
-  const abortFromParent = () => controller.abort(signal?.reason)
-  if (signal) {
-    if (signal.aborted) {
-      abortFromParent()
-    } else {
-      signal.addEventListener('abort', abortFromParent, { once: true })
-    }
-  }
-
-  return {
-    signal: controller.signal,
-    cleanup: () => {
-      window.clearTimeout(timeoutId)
-      signal?.removeEventListener('abort', abortFromParent)
-    },
-  }
-}
 
 const shouldRetryRequest = (error: unknown): boolean => {
   if (axios.isCancel(error)) {
@@ -123,7 +112,6 @@ const attachRetryInterceptor = (instance: typeof client) => {
   })
 }
 
-// Request Interceptors
 client.interceptors.request.use((config) => {
   const serverStore = useServerStore()
   config.baseURL = serverStore.manageBase
@@ -136,11 +124,9 @@ v1Client.interceptors.request.use((config) => {
   return config
 })
 
-// Response Interceptors
 const handleResponseError = (error: unknown) => {
   const appStore = useAppStore()
 
-  // Don't toast for cancelled requests
   if (axios.isCancel(error)) {
     return Promise.reject(error)
   }
@@ -161,8 +147,8 @@ export async function getGPUSummary(): Promise<GPUSummary> {
   return data
 }
 
-export async function getGPUEnhancedInfo(): Promise<Record<string, any>> {
-  const { data } = await client.get('/gpu/enhanced')
+export async function getGPUEnhancedInfo(): Promise<GPUEnhancedInfo> {
+  const { data } = await client.get<GPUEnhancedInfo>('/gpu/enhanced')
   return data
 }
 
@@ -255,17 +241,8 @@ export async function getTokenStats(): Promise<TokenStats> {
   return data
 }
 
-export async function getTokenHistory(count: number = 60): Promise<{
-  history: Array<{
-    timestamp: string
-    total_tokens: number
-    prompt_tokens: number
-    completion_tokens: number
-    models: Record<string, any>
-  }>
-  count: number
-}> {
-  const { data } = await client.get('/token/history', { params: { count } })
+export async function getTokenHistory(count: number = 60): Promise<TokenHistoryResponse> {
+  const { data } = await client.get<TokenHistoryResponse>('/token/history', { params: { count } })
   return data
 }
 
@@ -300,17 +277,15 @@ export async function clearDefaultModel(): Promise<ActionResponse> {
 export async function getSystemStatus(
   includeHistory = false,
   historyCount = 60
-): Promise<SystemStatus & { history?: any[] }> {
-  const { data } = await client.get<SystemStatus & { history?: any[] }>('/system/status', {
+): Promise<SystemStatus & { history?: SystemHistoryResponse['history'] }> {
+  const { data } = await client.get<SystemStatus & { history?: SystemHistoryResponse['history'] }>('/system/status', {
     params: { include_history: includeHistory, history_count: historyCount },
   })
   return data
 }
 
-export async function getSystemHistory(
-  count: number = 60
-): Promise<{ history: any[]; count: number }> {
-  const { data } = await client.get('/system/history', { params: { count } })
+export async function getSystemHistory(count: number = 60): Promise<SystemHistoryResponse> {
+  const { data } = await client.get<SystemHistoryResponse>('/system/history', { params: { count } })
   return data
 }
 
@@ -324,34 +299,6 @@ export async function getHealthAlert(): Promise<HealthAlert> {
   return data
 }
 
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system'
-  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>
-}
-
-export interface ChatCompletionRequest {
-  model?: string
-  messages: ChatMessage[]
-  stream?: boolean
-  max_tokens?: number
-  temperature?: number
-  // Disable thinking mode for models that support it (DeepSeek R1, Qwen, etc.)
-  enable_thinking?: boolean
-}
-
-export interface ChatCompletionResponse {
-  id: string
-  object: string
-  created: number
-  model: string
-  choices: {
-    index: number
-    message: { role: string; content: string }
-    finish_reason: string
-  }[]
-  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
-}
-
 export async function chatCompletion(
   request: ChatCompletionRequest
 ): Promise<ChatCompletionResponse> {
@@ -359,189 +306,44 @@ export async function chatCompletion(
   return data
 }
 
-const DONE_SENTINEL = '[DONE]'
-
 export async function chatCompletionStream(
   request: Omit<ChatCompletionRequest, 'stream'>,
   onChunk: (content: string) => void,
   onError?: (error: Error) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const timedSignal = createTimedAbortSignal(signal, 30000)
-  try {
-    const serverStore = useServerStore()
-    const response = await fetch(`${serverStore.v1Base}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...request,
-        stream: true,
-        // Explicitly disable thinking mode to avoid reasoning_content errors
-        enable_thinking: false,
-      }),
-      signal: timedSignal.signal,
-    })
+  const serverStore = useServerStore()
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      // Check for thinking mode error and provide guidance
-      if (errorText.includes('reasoning_content') || errorText.includes('thinking is enabled')) {
-        throw new Error('模型thinking模式错误，请联系后端管理员关闭thinking模式或更新API配置')
-      }
-      throw new Error(`HTTP ${response.status}: ${errorText}`)
-    }
-
-    const reader = response.body?.getReader()
-    if (!reader) throw new Error('No response body')
-
-    const decoder = new TextDecoder('utf-8')
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || !trimmed.startsWith('data: ')) continue
-        const data = trimmed.slice(6)
-        if (data === DONE_SENTINEL) return
-
-        try {
-          const json = JSON.parse(data)
-          // Handle reasoning_content if present (for thinking-enabled models)
-          const reasoningContent = json.choices?.[0]?.delta?.reasoning_content
-          if (reasoningContent) {
-            // Skip reasoning content or handle separately if needed
-            // For now, we just ignore it to avoid mixing with regular content
-          }
-          const content = json.choices?.[0]?.delta?.content
-          if (content) onChunk(content)
-        } catch (err) {
-          if (data.length < 200) console.warn('[SSE] Parse skip:', data, err)
+  await readSSEStream({
+    url: `${serverStore.v1Base}/chat/completions`,
+    body: {
+      ...request,
+      stream: true,
+      enable_thinking: false,
+    },
+    signal,
+    timeoutMs: 30000,
+    onChunk: (rawData) => {
+      try {
+        const json = JSON.parse(rawData)
+        const reasoningContent = json.choices?.[0]?.delta?.reasoning_content
+        if (reasoningContent) {
+          // Skip reasoning content to avoid mixing with regular content
         }
+        const content = json.choices?.[0]?.delta?.content
+        if (content) onChunk(content)
+      } catch (err) {
+        if (rawData.length < 200) console.warn('[SSE] Parse skip:', rawData, err)
       }
-    }
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw error
-    if (onError) onError(error instanceof Error ? error : new Error('Stream error'))
-    else throw error
-  } finally {
-    timedSignal.cleanup()
-  }
-}
-
-// Agent API
-export interface AgentToolCall {
-  name: string
-  arguments: Record<string, unknown>
-}
-
-export interface AgentMessage {
-  role: 'user' | 'assistant' | 'system' | 'tool'
-  content: string
-  tool_calls?: Array<{
-    id: string
-    type: 'function'
-    function: { name: string; arguments: string }
-  }>
-  tool_call_id?: string
-}
-
-export interface AgentRequest {
-  model?: string
-  messages: AgentMessage[]
-  tools?: string[]
-  max_iterations?: number
-  stream?: boolean
-  auto_confirm?: boolean
-}
-
-export interface ToolResult {
-  tool_name: string
-  success: boolean
-  result: unknown
-  error?: string
-  execution_time: number
-}
-
-export async function listAgentTools(categories?: string): Promise<{
-  tools: Array<{ type: string; function: unknown }>
-  categories: string[]
-  count: number
-}> {
-  const params = categories ? { categories } : {}
-  const { data } = await client.get('/agent/tools', { params })
-  return data
-}
-
-export async function getAgentToolInfo(toolName: string): Promise<{
-  name: string
-  description: string
-  parameters: unknown[]
-  category: string
-  dangerous: boolean
-  requires_confirmation: boolean
-}> {
-  const { data } = await client.get(`/agent/tools/${toolName}`)
-  return data
-}
-
-export async function executeToolCall(
-  name: string,
-  args: Record<string, unknown>,
-  autoConfirm = false
-): Promise<ToolResult> {
-  const { data } = await client.post(`/agent/execute/${name}`, {
-    name,
-    arguments: args,
-    auto_confirm: autoConfirm,
+    },
+    onError: (error) => {
+      if (error.message.includes('reasoning_content') || error.message.includes('thinking is enabled')) {
+        onError?.(new Error('模型thinking模式错误，请联系后端管理员关闭thinking模式或更新API配置'))
+        return
+      }
+      onError?.(error)
+    },
   })
-  return data
-}
-
-export async function executeToolBatch(
-  calls: AgentToolCall[],
-  autoConfirm = false
-): Promise<{ results: ToolResult[]; success: boolean }> {
-  const { data } = await client.post('/agent/execute', {
-    calls,
-    auto_confirm: autoConfirm,
-  })
-  return data
-}
-
-export async function getToolExecutionHistory(limit = 100): Promise<{
-  history: ToolResult[]
-  statistics: unknown
-}> {
-  const { data } = await client.get('/agent/history', {
-    params: { limit },
-  })
-  return data
-}
-
-export async function clearToolExecutionHistory(): Promise<{ status: string }> {
-  const { data } = await client.delete('/agent/history')
-  return data
-}
-
-export async function agentChatCompletion(request: AgentRequest): Promise<{
-  id: string
-  model: string
-  message: { role: string; content: string }
-  iterations: number
-  finished: boolean
-}> {
-  const { data } = await client.post('/agent/chat', {
-    ...request,
-    stream: false,
-  })
-  return data
 }
 
 export async function agentChatStream(
@@ -550,54 +352,25 @@ export async function agentChatStream(
   onError?: (error: Error) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const timedSignal = createTimedAbortSignal(signal, 30000)
-  try {
-    const serverStore = useServerStore()
-    const response = await fetch(`${serverStore.manageBase}/agent/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...request, stream: true }),
-      signal: timedSignal.signal,
-    })
+  const serverStore = useServerStore()
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`HTTP ${response.status}: ${errorText}`)
-    }
-
-    const reader = response.body?.getReader()
-    if (!reader) throw new Error('No response body')
-
-    const decoder = new TextDecoder('utf-8')
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || !trimmed.startsWith('data: ')) continue
-        const data = trimmed.slice(6)
-        if (data === '[DONE]') return
-
-        try {
-          onChunk(JSON.parse(data))
-        } catch (err) {
-          if (data.length < 200) console.warn('[Agent SSE] Parse skip:', data, err)
-          onChunk(data)
-        }
+  await readSSEStream({
+    url: `${serverStore.manageBase}/agent/chat`,
+    body: { ...request, stream: true },
+    signal,
+    timeoutMs: 30000,
+    doneSentinel: DONE_SENTINEL,
+    onChunk: (rawData) => {
+      try {
+        onChunk(JSON.parse(rawData))
+      } catch (err) {
+        if (rawData.length < 200) console.warn('[Agent SSE] Parse skip:', rawData, err)
+        onChunk(rawData)
       }
-    }
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw error
-    if (onError) onError(error instanceof Error ? error : new Error('Stream error'))
-    else throw error
-  } finally {
-    timedSignal.cleanup()
-  }
+    },
+    onError,
+  })
 }
+
+export { DONE_SENTINEL }
+export type { ChatMessage, ChatCompletionRequest, ChatCompletionResponse, AgentToolCall, AgentMessage, AgentRequest, ToolResult }

@@ -133,7 +133,8 @@ class ConfigWatcher:
             finally:
                 if temp_path and os.path.exists(temp_path):
                     os.unlink(temp_path)
-        except Exception:
+        except Exception as exc:
+            self._last_error = str(exc)
             logger.exception("Error saving config: %s", self.config_path)
             return False
 

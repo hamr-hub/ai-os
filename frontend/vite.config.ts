@@ -31,6 +31,21 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
+  build: {
+    target: 'es2020',
+    sourcemap: false,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vue-vendor': ['vue', 'vue-router', 'pinia'],
+          'chart': ['chart.js', 'vue-chartjs'],
+          'markdown': ['marked', 'dompurify', 'highlight.js/lib/core'],
+          'ui-icons': ['lucide-vue-next'],
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: devServerPort,

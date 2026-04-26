@@ -45,9 +45,8 @@ const getToastClass = (type: string) => {
         <component :is="getToastIcon(toast.type)" class="w-5 h-5 flex-shrink-0 mt-0.5" />
         <p class="flex-1 text-sm font-medium leading-relaxed">{{ toast.message }}</p>
         <button
-          class="flex-shrink-0 p-1 rounded-lg transition-colors"
+          class="flex-shrink-0 p-1 rounded-lg transition-colors toast-close-btn"
           :class="getToastClass(toast.type)"
-          style="opacity: 0.7; hover:opacity: 1"
           @click="store.removeToast(toast.id)"
         >
           <X class="w-4 h-4" />
@@ -68,6 +67,14 @@ const getToastClass = (type: string) => {
 
 .toast-move {
   transition: transform 0.3s ease;
+}
+
+.toast-close-btn {
+  opacity: 0.7;
+}
+
+.toast-close-btn:hover {
+  opacity: 1;
 }
 
 @keyframes toast-in {

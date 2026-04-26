@@ -3,11 +3,10 @@ import tsParser from '@typescript-eslint/parser'
 import vue from 'eslint-plugin-vue'
 import vueParser from 'vue-eslint-parser'
 import prettier from 'eslint-config-prettier/flat'
-import prettierPlugin from 'eslint-plugin-prettier'
 
 export default [
   {
-    ignores: ['node_modules/**', 'dist/**', 'dist-ssr/**', '*.local.ts'],
+    ignores: ['node_modules/**', 'dist/**', 'dist-ssr/**', '*.local.ts', 'e2e-manual-test.cjs'],
   },
   ...vue.configs['flat/recommended'],
   {
@@ -38,16 +37,15 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tseslint,
-      prettier: prettierPlugin,
     },
     rules: {
       ...tseslint.configs.recommended.rules,
       ...prettier.rules,
-      'prettier/prettier': 'error',
       'vue/multi-word-component-names': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-undef': 'off',
+      'vue/no-v-html': 'warn',
     },
   },
 ]

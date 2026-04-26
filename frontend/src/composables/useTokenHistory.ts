@@ -1,5 +1,6 @@
-import { ref, onMounted, onUnmounted, computed, type MaybeRefOrGetter, toValue } from 'vue'
+import { ref, computed, toValue, type MaybeRefOrGetter } from 'vue'
 import { getTokenStats, getTokenHistory } from '@/api/client'
+import { usePolling } from '@/composables/usePolling'
 import { formatTimeLabel } from '@/utils/format'
 import type { TokenStats } from '@/types'
 
@@ -8,21 +9,9 @@ export function useTokenHistory(intervalMs = 30000, initialCount: MaybeRefOrGett
   const tokenHistory = ref<
     Array<{ timestamp: string; total: number; prompt: number; completion: number }>
   >([])
-  const loading = ref(false)
-  const isRefreshing = ref(false)
-  const error = ref<string | null>(null)
-  let timer: number | null = null
 
-  const fetchTokenData = async (manualRefresh = false) => {
-    if (manualRefresh) {
-      isRefreshing.value = true
-    } else {
-      loading.value = true
-    }
-
-    error.value = null
-
-    try {
+  const { loading, isRefreshing, error, refresh } = usePolling(
+    async () => {
       const [stats, historyData] = await Promise.all([
         getTokenStats(),
         getTokenHistory(toValue(initialCount)),
@@ -30,34 +19,15 @@ export function useTokenHistory(intervalMs = 30000, initialCount: MaybeRefOrGett
 
       tokenStats.value = stats
 
-      // Convert server history format to internal format
       tokenHistory.value = historyData.history.map((entry: any) => ({
         timestamp: entry.timestamp,
         total: entry.total_tokens,
         prompt: entry.prompt_tokens,
         completion: entry.completion_tokens,
       }))
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Token统计获取失败'
-    } finally {
-      loading.value = false
-      isRefreshing.value = false
-    }
-  }
-
-  const refresh = () => fetchTokenData(true)
-
-  const startPolling = () => {
-    if (timer) return
-    timer = window.setInterval(fetchTokenData, intervalMs)
-  }
-
-  const stopPolling = () => {
-    if (timer) {
-      clearInterval(timer)
-      timer = null
-    }
-  }
+    },
+    intervalMs
+  )
 
   const tokenTimeLabels = computed(() =>
     tokenHistory.value.map((entry) => formatTimeLabel(entry.timestamp))
@@ -95,15 +65,6 @@ export function useTokenHistory(intervalMs = 30000, initialCount: MaybeRefOrGett
     },
   ])
 
-  onMounted(() => {
-    fetchTokenData()
-    startPolling()
-  })
-
-  onUnmounted(() => {
-    stopPolling()
-  })
-
   return {
     tokenStats,
     tokenHistory,
@@ -112,9 +73,6 @@ export function useTokenHistory(intervalMs = 30000, initialCount: MaybeRefOrGett
     loading,
     isRefreshing,
     error,
-    fetchTokenData,
     refresh,
-    startPolling,
-    stopPolling,
   }
 }

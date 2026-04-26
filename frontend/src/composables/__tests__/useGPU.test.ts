@@ -32,9 +32,9 @@ describe('useGPU', () => {
     expect(loading.value).toBe(false)
   })
 
-  it('fetch后填充数据', async () => {
-    const { gpuSummary, fetchGPUData } = useGPU()
-    await fetchGPUData()
+  it('refresh后填充数据', async () => {
+    const { gpuSummary, refresh } = useGPU()
+    await refresh()
     expect(gpuSummary.value).toBeTruthy()
     expect(gpuSummary.value!.status).toBe('available')
     expect(gpuSummary.value!.current!.name).toBe('NVIDIA RTX 4090')

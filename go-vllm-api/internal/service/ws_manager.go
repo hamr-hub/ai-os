@@ -19,9 +19,9 @@ type WSManager struct {
 }
 
 type WSEvent struct {
-	Channel   string `json:"channel"`
+	Channel   string      `json:"channel"`
 	Data      interface{} `json:"data"`
-	Timestamp string `json:"timestamp"`
+	Timestamp string      `json:"timestamp"`
 }
 
 func NewWSManager(logger *zap.Logger) *WSManager {
@@ -56,26 +56,39 @@ func (m *WSManager) Disconnect(conn *websocket.Conn, channel string) {
 }
 
 func (m *WSManager) Broadcast(channel string, data interface{}) {
+	msg, err := json.Marshal(data)
+	if err != nil {
+		m.logger.Warn("ws broadcast marshal error", zap.Error(err))
+		return
+	}
+
 	m.mu.Lock()
-	conns := m.channels[channel]
+	conns := make([]*websocket.Conn, 0, len(m.channels[channel]))
+	for conn := range m.channels[channel] {
+		conns = append(conns, conn)
+	}
+	m.mu.Unlock()
+
 	var toRemove []*websocket.Conn
-	for conn := range conns {
-		msg, err := json.Marshal(data)
-		if err != nil {
-			toRemove = append(toRemove, conn)
-			continue
-		}
+	for _, conn := range conns {
 		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 			toRemove = append(toRemove, conn)
 		}
 	}
-	for _, conn := range toRemove {
-		delete(m.connections, conn)
-		delete(m.channels[channel], conn)
-		conn.Close()
-	}
-	m.mu.Unlock()
 
+	if len(toRemove) > 0 {
+		m.mu.Lock()
+		for _, conn := range toRemove {
+			delete(m.connections, conn)
+			if m.channels[channel] != nil {
+				delete(m.channels[channel], conn)
+			}
+			conn.Close()
+		}
+		m.mu.Unlock()
+	}
+
+	m.mu.Lock()
 	m.history = append(m.history, WSEvent{
 		Channel:   channel,
 		Data:      data,
@@ -84,6 +97,7 @@ func (m *WSManager) Broadcast(channel string, data interface{}) {
 	if len(m.history) > m.maxHistory {
 		m.history = m.history[len(m.history)-m.maxHistory:]
 	}
+	m.mu.Unlock()
 }
 
 func (m *WSManager) BroadcastStatus(gpuSummary, modelStatus interface{}) {

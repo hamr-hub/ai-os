@@ -23,7 +23,8 @@ class RateLimiter:
             r = redis.from_url(self.redis_url)
             r.ping()
             return r
-        except:
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"[RateLimiter] Redis连接失败，降级为允许所有请求: {e}")
             return None
     
     def _get_active_key(self, model_name: str) -> str:
@@ -69,9 +70,8 @@ class RateLimiter:
         return value
     
     def acquire_request(self, model_name: str, max_concurrent: int) -> bool:
-        """兼容旧接口：获取请求槽位"""
         if not self.client:
-            return False
+            return True
         key = self._get_active_key(model_name)
         while True:
             try:
@@ -109,15 +109,13 @@ class RateLimiter:
         return self.is_available(model_name, max_concurrent)
     
     def is_queue_available(self, model_name: str) -> bool:
-        """检查队列是否还有空间"""
         if not self.client:
-            return False
+            return True
         return self.get_total_queue_length(model_name) < self.max_queue_length
     
     async def wait_for_slot(self, model_name: str, max_concurrent: int, timeout: int = 30) -> bool:
-        """等待可用槽位，超时返回False"""
         if not self.client:
-            return False
+            return True
         
         end_time = datetime.now() + timedelta(seconds=timeout)
         

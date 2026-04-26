@@ -4,6 +4,7 @@ from typing import Optional, Any, Dict, List, Callable, TypeVar
 import json
 import os
 import hashlib
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 import logging
@@ -15,12 +16,6 @@ logger = logging.getLogger(__name__)
 T = TypeVar('T')
 
 def redis_cache(key_prefix: str, expire: int = 60, key_builder: Optional[Callable[..., str]] = None):
-    """
-    Redis缓存装饰器
-    :param key_prefix: 缓存键前缀
-    :param expire: 过期时间（秒），默认60秒
-    :param key_builder: 自定义键生成函数
-    """
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(*args, **kwargs) -> T:
@@ -47,12 +42,6 @@ def redis_cache(key_prefix: str, expire: int = 60, key_builder: Optional[Callabl
     return decorator
 
 def async_redis_cache(key_prefix: str, expire: int = 60, key_builder: Optional[Callable[..., str]] = None):
-    """
-    异步Redis缓存装饰器
-    :param key_prefix: 缓存键前缀
-    :param expire: 过期时间（秒），默认60秒
-    :param key_builder: 自定义键生成函数
-    """
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
@@ -82,6 +71,7 @@ class RedisClient:
     _instance = None
     _default_expire = 300
     _config_loaded = False
+    _ping_cache_ttl = 5
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -128,6 +118,9 @@ class RedisClient:
 
         self._client = None
         self._initialized = True
+        self._last_ping_time = None
+        self._last_ping_result = False
+        self._reconnect_cooldown = 0
         self._cache_stats = {
             'hits': 0,
             'misses': 0,
@@ -140,9 +133,13 @@ class RedisClient:
             try:
                 self._client.ping()
                 return True
-            except:
+            except Exception:
                 pass
         
+        now = time.time()
+        if now < self._reconnect_cooldown:
+            return False
+
         try:
             self._client = redis.Redis(
                 host=self.host,
@@ -150,21 +147,34 @@ class RedisClient:
                 db=self.db,
                 decode_responses=True,
                 socket_timeout=5,
-                socket_connect_timeout=5
+                socket_connect_timeout=5,
+                max_connections=50,
             )
             self._client.ping()
+            self._last_ping_time = now
+            self._last_ping_result = True
             return True
         except Exception as e:
             self._client = None
+            self._reconnect_cooldown = now + 5
+            logger.warning(f"[Redis] 连接失败: {e}")
             return False
     
     def is_connected(self) -> bool:
         if self._client is None:
             return False
+        now = time.time()
+        if self._last_ping_time and (now - self._last_ping_time) < self._ping_cache_ttl:
+            return self._last_ping_result
         try:
             self._client.ping()
+            self._last_ping_time = now
+            self._last_ping_result = True
             return True
-        except:
+        except Exception as e:
+            self._last_ping_time = now
+            self._last_ping_result = False
+            logger.debug(f"[Redis] PING 失败: {e}")
             return False
     
     def get_client(self) -> Optional[redis.Redis]:
@@ -188,14 +198,16 @@ class RedisClient:
             else:
                 client.set(key, value)
             return True
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] SET 失败 key={key}: {e}")
             return False
     
     def set_json(self, key: str, value: Any, expire: Optional[int] = None) -> bool:
         try:
             json_str = json.dumps(value)
             return self.set(key, json_str, expire)
-        except:
+        except (TypeError, ValueError) as e:
+            logger.warning(f"[Redis] JSON序列化失败 key={key}: {e}")
             return False
     
     def get_json(self, key: str) -> Optional[Any]:
@@ -204,7 +216,8 @@ class RedisClient:
             return None
         try:
             return json.loads(value)
-        except:
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"[Redis] JSON反序列化失败 key={key}: {e}")
             return None
     
     def delete(self, key: str) -> bool:
@@ -214,20 +227,36 @@ class RedisClient:
         try:
             client.delete(key)
             return True
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] DELETE 失败 key={key}: {e}")
             return False
     
     def exists(self, key: str) -> bool:
         client = self.get_client()
         if client is None:
             return False
-        return client.exists(key) > 0
+        try:
+            return client.exists(key) > 0
+        except Exception as e:
+            logger.warning(f"[Redis] EXISTS 失败 key={key}: {e}")
+            return False
     
     def keys(self, pattern: str = "*") -> List[str]:
         client = self.get_client()
         if client is None:
             return []
-        return client.keys(pattern)
+        try:
+            result = []
+            cursor = 0
+            while True:
+                cursor, batch = client.scan(cursor=cursor, match=pattern, count=100)
+                result.extend(batch)
+                if cursor == 0:
+                    break
+            return result
+        except Exception as e:
+            logger.warning(f"[Redis] SCAN 失败 pattern={pattern}: {e}")
+            return []
     
     def flush_db(self) -> bool:
         client = self.get_client()
@@ -236,7 +265,8 @@ class RedisClient:
         try:
             client.flushdb()
             return True
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] FLUSHDB 失败: {e}")
             return False
     
     def hset(self, key: str, mapping: Dict[str, str]) -> bool:
@@ -246,20 +276,29 @@ class RedisClient:
         try:
             client.hset(key, mapping=mapping)
             return True
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] HSET 失败 key={key}: {e}")
             return False
     
     def hget(self, key: str, field: str) -> Optional[str]:
         client = self.get_client()
         if client is None:
             return None
-        return client.hget(key, field)
+        try:
+            return client.hget(key, field)
+        except Exception as e:
+            logger.warning(f"[Redis] HGET 失败 key={key}: {e}")
+            return None
     
     def hgetall(self, key: str) -> Dict[str, str]:
         client = self.get_client()
         if client is None:
             return {}
-        return client.hgetall(key)
+        try:
+            return client.hgetall(key)
+        except Exception as e:
+            logger.warning(f"[Redis] HGETALL 失败 key={key}: {e}")
+            return {}
     
     def lpush(self, key: str, *values: str) -> bool:
         client = self.get_client()
@@ -268,7 +307,8 @@ class RedisClient:
         try:
             client.lpush(key, *values)
             return True
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] LPUSH 失败 key={key}: {e}")
             return False
     
     def rpush(self, key: str, *values: str) -> bool:
@@ -278,14 +318,19 @@ class RedisClient:
         try:
             client.rpush(key, *values)
             return True
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] RPUSH 失败 key={key}: {e}")
             return False
     
     def lrange(self, key: str, start: int = 0, end: int = -1) -> List[str]:
         client = self.get_client()
         if client is None:
             return []
-        return client.lrange(key, start, end)
+        try:
+            return client.lrange(key, start, end)
+        except Exception as e:
+            logger.warning(f"[Redis] LRANGE 失败 key={key}: {e}")
+            return []
     
     def incr(self, key: str) -> Optional[int]:
         client = self.get_client()
@@ -293,7 +338,8 @@ class RedisClient:
             return None
         try:
             return client.incr(key)
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] INCR 失败 key={key}: {e}")
             return None
     
     def decr(self, key: str) -> Optional[int]:
@@ -302,7 +348,8 @@ class RedisClient:
             return None
         try:
             return client.decr(key)
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] DECR 失败 key={key}: {e}")
             return None
     
     def _record_hit(self):
@@ -353,13 +400,14 @@ class RedisClient:
         if client is None:
             return 0
         try:
-            keys = client.keys(pattern)
+            keys = self.keys(pattern)
             if keys:
                 client.delete(*keys)
                 self._cache_stats['deletes'] += len(keys)
                 return len(keys)
             return 0
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] DELETE_PATTERN 失败 pattern={pattern}: {e}")
             return 0
     
     def set_with_tag(self, key: str, value: Any, tag: str, expire: Optional[int] = None) -> bool:
@@ -369,9 +417,12 @@ class RedisClient:
             tag_key = f"tag:{tag}"
             client = self.get_client()
             if client:
-                client.sadd(tag_key, key)
-                if expire:
-                    client.expire(tag_key, expire)
+                try:
+                    client.sadd(tag_key, key)
+                    if expire:
+                        client.expire(tag_key, expire)
+                except Exception as e:
+                    logger.warning(f"[Redis] SADD 失败 tag_key={tag_key}: {e}")
         return success
     
     def delete_by_tag(self, tag: str) -> int:
@@ -388,7 +439,8 @@ class RedisClient:
                 self._cache_stats['deletes'] += len(keys)
                 return len(keys)
             return 0
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] DELETE_BY_TAG 失败 tag={tag}: {e}")
             return 0
     
     def get_keys_by_tag(self, tag: str) -> List[str]:
@@ -398,7 +450,8 @@ class RedisClient:
             return []
         try:
             return list(client.smembers(tag_key))
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] GET_KEYS_BY_TAG 失败 tag={tag}: {e}")
             return []
     
     def mget_json(self, keys: List[str]) -> Dict[str, Any]:
@@ -413,12 +466,13 @@ class RedisClient:
                     try:
                         result[key] = json.loads(values[i])
                         self._record_hit()
-                    except:
+                    except (json.JSONDecodeError, ValueError):
                         result[key] = None
                 else:
                     self._record_miss()
             return result
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] MGET 失败: {e}")
             return {}
     
     def mset_json(self, items: Dict[str, Any], expire: Optional[int] = None) -> bool:
@@ -436,7 +490,8 @@ class RedisClient:
             pipeline.execute()
             self._cache_stats['sets'] += len(items)
             return True
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] MSET 失败: {e}")
             return False
     
     def setnx_json(self, key: str, value: Any, expire: Optional[int] = None) -> bool:
@@ -449,7 +504,8 @@ class RedisClient:
             if result:
                 self._record_set()
             return result is not None
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] SETNX 失败 key={key}: {e}")
             return False
     
     def ttl(self, key: str) -> Optional[int]:
@@ -458,7 +514,8 @@ class RedisClient:
             return None
         try:
             return client.ttl(key)
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] TTL 失败 key={key}: {e}")
             return None
     
     def persist(self, key: str) -> bool:
@@ -467,7 +524,8 @@ class RedisClient:
             return False
         try:
             return client.persist(key)
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] PERSIST 失败 key={key}: {e}")
             return False
     
     def get_memory_usage(self) -> Dict[str, int]:
@@ -483,7 +541,8 @@ class RedisClient:
                 'peak_human': info.get('used_memory_peak_human', ''),
                 'fragmentation': info.get('mem_fragmentation_ratio', 0)
             }
-        except:
+        except Exception as e:
+            logger.warning(f"[Redis] INFO MEMORY 失败: {e}")
             return {}
 
 redis_client = RedisClient()

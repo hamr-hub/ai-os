@@ -510,7 +510,7 @@ class Scheduler:
             return success
 
         # For vLLM, we need to check if the correct model is already loaded
-        if service_name == 'vllm':
+        if backend_type == 'vllm':
             from core.vllm_manager import get_current_model_info, _update_vllm_script
             
             current_info = get_current_model_info()

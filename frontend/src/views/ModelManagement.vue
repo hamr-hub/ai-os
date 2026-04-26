@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, type Component } from 'vue'
 import { useModels } from '@/composables/useModels'
-import { useServerStore } from "@/stores/server"
 import { runModelTest, getTestResults, getTestHistory } from '@/api/client'
 import type { TestResponse, TestHistoryEntry, TestReport } from '@/types'
 import {
@@ -42,7 +41,6 @@ const {
   handleSetDefaultModel,
 } = useModels()
 
-const serverStore = useServerStore()
 const runningModels = computed(() => modelList.value.filter((m) => m.running))
 const stoppedModels = computed(() => modelList.value.filter((m) => !m.running))
 
@@ -443,7 +441,9 @@ const resUtil = computed(() => testResult.value?.report?.resource_utilization)
                 <div v-if="resUtil.test_duration_seconds" class="res-item">
                   <Clock class="w-3.5 h-3.5" />
                   <span>检测耗时</span>
-                  <span class="res-val">{{ resUtil.test_duration_seconds?.toFixed(1) ?? '--' }}s</span>
+                  <span class="res-val"
+                    >{{ resUtil.test_duration_seconds?.toFixed(1) ?? '--' }}s</span
+                  >
                 </div>
               </div>
             </div>

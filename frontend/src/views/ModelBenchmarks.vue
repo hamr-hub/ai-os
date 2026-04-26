@@ -201,7 +201,9 @@ const getStatusClass = (status: string) => {
               <div class="q-stat">
                 <span class="q-label">Latency</span>
                 <span class="q-val text-yellow-400"
-                  >{{ currentReport.performance_metrics?.overall?.avg_latency?.toFixed(2) ?? '--' }}s</span
+                  >{{
+                    currentReport.performance_metrics?.overall?.avg_latency?.toFixed(2) ?? '--'
+                  }}s</span
                 >
               </div>
               <div class="q-stat">
@@ -288,7 +290,7 @@ const getStatusClass = (status: string) => {
             <AlertCircle class="w-12 h-12 text-muted mb-4" />
             <h3>暂无该模型的评测数据</h3>
             <p>点击右上角的播放按钮开始运行自动化评测</p>
-            <button class="primary-btn mt-6" @click="runTest(selectedModel)">
+            <button class="primary-btn mt-6" @click="selectedModel && runTest(selectedModel)">
               <Play class="w-4 h-4" />
               <span>立即开始评测</span>
             </button>

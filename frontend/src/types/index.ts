@@ -319,3 +319,111 @@ export interface TokenStats {
   history?: TokenHistoryEntry[]
   timestamp: string
 }
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>
+}
+
+export interface ChatCompletionRequest {
+  model?: string
+  messages: ChatMessage[]
+  stream?: boolean
+  max_tokens?: number
+  temperature?: number
+  enable_thinking?: boolean
+}
+
+export interface ChatCompletionResponse {
+  id: string
+  object: string
+  created: number
+  model: string
+  choices: {
+    index: number
+    message: { role: string; content: string }
+    finish_reason: string
+  }[]
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+}
+
+export interface AgentToolCall {
+  name: string
+  arguments: Record<string, unknown>
+}
+
+export interface AgentMessage {
+  role: 'user' | 'assistant' | 'system' | 'tool'
+  content: string
+  tool_calls?: Array<{
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+  }>
+  tool_call_id?: string
+}
+
+export interface AgentRequest {
+  model?: string
+  messages: AgentMessage[]
+  tools?: string[]
+  max_iterations?: number
+  stream?: boolean
+  auto_confirm?: boolean
+}
+
+export interface ToolResult {
+  tool_name: string
+  success: boolean
+  result: unknown
+  error?: string
+  execution_time: number
+}
+
+export interface ModelStatusEntry {
+  running: boolean
+  port: number | null
+  service: string | null
+  active_requests: number
+  preloaded: boolean
+  last_used: string | null
+  supports_images?: boolean
+  supports_tool_calling?: boolean
+  supports_image_generation?: boolean
+  description?: string
+  required_memory?: string
+  backend_type?: string
+}
+
+export interface GPUEnhancedInfo {
+  gpus: Array<{
+    index: number
+    name: string
+    total_memory: number
+    used_memory: number
+    available_memory: number
+    utilization: number
+    temperature: number
+    power_draw: number
+    power_limit: number
+    processes: GPUProcess[]
+  }>
+  driver_version: string
+  cuda_version: string
+}
+
+export interface TokenHistoryResponse {
+  history: Array<{
+    timestamp: string
+    total_tokens: number
+    prompt_tokens: number
+    completion_tokens: number
+    models: Record<string, TokenModelStats>
+  }>
+  count: number
+}
+
+export interface SystemHistoryResponse {
+  history: SystemHistoryEntry[]
+  count: number
+}
