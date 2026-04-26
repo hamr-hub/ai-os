@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useGPU } from '@/composables/useGPU'
 import { useGPUHistory } from '@/composables/useGPUHistory'
+import { useGPUChartDatasets } from '@/composables/useGPUChartDatasets'
 import { useModels } from '@/composables/useModels'
 import { useTokenHistory } from '@/composables/useTokenHistory'
 import { useSystemData } from '@/composables/useSystemData'
@@ -37,6 +38,14 @@ const historyCount = computed(() => {
 })
 const { gpuHistory, refresh: refreshGPUHistory } = useGPUHistory(historyCount)
 const {
+  gpuTimeLabels,
+  gpuUtilDataset,
+  gpuTempDataset,
+  gpuMemDataset,
+  gpuPowerDataset,
+  gpuMultiDataset,
+} = useGPUChartDatasets(gpuHistory)
+const {
   systemHistory,
   refresh: refreshSystem,
   isRefreshing: isRefreshingSystem,
@@ -59,98 +68,6 @@ const isRefreshing = computed(
 const gpu = computed(() => gpuSummary.value?.current ?? null)
 const gpuStatus = computed(() => gpuSummary.value?.status ?? 'unavailable')
 const runningModels = computed(() => modelList.value.filter((m) => m.running))
-
-const gpuTimeLabels = computed(() =>
-  gpuHistory.value.map((e) => {
-    const d = new Date(e.timestamp)
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  })
-)
-
-const gpuUtilDataset = computed(() => [
-  {
-    label: 'GPU 利用率',
-    data: gpuHistory.value.map((e) => e.utilization),
-    borderColor: '#6366f1',
-    backgroundColor: 'rgba(99, 102, 241, 0.08)',
-    fill: true,
-    tension: 0.4,
-    pointRadius: 0,
-    borderWidth: 2,
-  },
-])
-
-const gpuTempDataset = computed(() => [
-  {
-    label: 'GPU 温度',
-    data: gpuHistory.value.map((e) => e.temperature),
-    borderColor: '#f59e0b',
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
-    fill: true,
-    tension: 0.4,
-    pointRadius: 0,
-    borderWidth: 2,
-  },
-])
-
-const gpuMemDataset = computed(() => [
-  {
-    label: '显存利用率',
-    data: gpuHistory.value.map((e) => e.memory_utilization),
-    borderColor: '#06b6d4',
-    backgroundColor: 'rgba(6, 182, 212, 0.08)',
-    fill: true,
-    tension: 0.4,
-    pointRadius: 0,
-    borderWidth: 2,
-  },
-])
-
-const gpuPowerDataset = computed(() => [
-  {
-    label: '功耗',
-    data: gpuHistory.value.map((e) => e.power_percent ?? e.power_draw),
-    borderColor: '#ef4444',
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    fill: true,
-    tension: 0.4,
-    pointRadius: 0,
-    borderWidth: 2,
-  },
-])
-
-const gpuMultiDataset = computed(() => [
-  {
-    label: '利用率 (%)',
-    data: gpuHistory.value.map((e) => e.utilization),
-    borderColor: '#6366f1',
-    backgroundColor: 'rgba(99, 102, 241, 0.08)',
-    fill: true,
-    tension: 0.4,
-    pointRadius: 0,
-    borderWidth: 2,
-  },
-  {
-    label: '温度 (°C)',
-    data: gpuHistory.value.map((e) => e.temperature),
-    borderColor: '#f59e0b',
-    backgroundColor: 'rgba(245, 158, 11, 0.05)',
-    fill: false,
-    tension: 0.4,
-    pointRadius: 0,
-    borderWidth: 1.5,
-  },
-  {
-    label: '显存 (%)',
-    data: gpuHistory.value.map((e) => e.memory_utilization),
-    borderColor: '#06b6d4',
-    backgroundColor: 'rgba(6, 182, 212, 0.05)',
-    fill: false,
-    tension: 0.4,
-    pointRadius: 0,
-    borderWidth: 1.5,
-  },
-])
 
 const systemTimeLabels = computed(() =>
   systemHistory.value.map((e) => {

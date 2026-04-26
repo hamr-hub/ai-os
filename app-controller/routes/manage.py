@@ -235,48 +235,52 @@ async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True):
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
 
-    success = await scheduler.switch_model(model_name)
-    if not success:
-        raise HTTPException(status_code=503, detail=f"Failed to switch to model {model_name}, insufficient memory")
+    scheduler._switching_in_progress = True
+    try:
+        success = await scheduler.switch_model(model_name)
+        if not success:
+            raise HTTPException(status_code=503, detail=f"Failed to switch to model {model_name}, insufficient memory")
 
-    scheduler.mark_model_selected(model_name)
-    _clear_model_caches()
+        scheduler.mark_model_selected(model_name)
+        _clear_model_caches()
 
-    if test_enabled:
-        backend_type = scheduler.get_model_backend_type(model_name)
+        if test_enabled:
+            backend_type = scheduler.get_model_backend_type(model_name)
 
-        if backend_type == 'llama_cpp':
-            port = scheduler.get_model_port(model_name)
-            test_result = await test_llama_cpp_model(model_name, port)
+            if backend_type == 'llama_cpp':
+                port = scheduler.get_model_port(model_name)
+                test_result = await test_llama_cpp_model(model_name, port)
+
+                if not test_result.get("success", False):
+                    error_msg = test_result.get("message", "Unknown error during model test")
+                    raise HTTPException(status_code=503, detail=f"Model switch successful but self-test failed: {error_msg}")
+
+                return {
+                    "status": "switched_and_tested",
+                    "model": model_name,
+                    "backend_type": "llama_cpp",
+                    "test_result": test_result
+                }
+
+            model_config = scheduler.get_model_config(model_name)
+            model_path = model_config.get('model_path', model_name) if model_config else model_name
+
+            test_result = await switch_vllm_model_with_test(model_name, test_enabled=True, model_path=model_path)
 
             if not test_result.get("success", False):
-                error_msg = test_result.get("message", "Unknown error during model test")
+                error_msg = test_result.get("error", "Unknown error during model test")
                 raise HTTPException(status_code=503, detail=f"Model switch successful but self-test failed: {error_msg}")
 
             return {
                 "status": "switched_and_tested",
                 "model": model_name,
-                "backend_type": "llama_cpp",
-                "test_result": test_result
+                "backend_type": "vllm",
+                "test_result": test_result.get("test_result")
             }
 
-        model_config = scheduler.get_model_config(model_name)
-        model_path = model_config.get('model_path', model_name) if model_config else model_name
-
-        test_result = await switch_vllm_model_with_test(model_name, test_enabled=True, model_path=model_path)
-
-        if not test_result.get("success", False):
-            error_msg = test_result.get("error", "Unknown error during model test")
-            raise HTTPException(status_code=503, detail=f"Model switch successful but self-test failed: {error_msg}")
-
-        return {
-            "status": "switched_and_tested",
-            "model": model_name,
-            "backend_type": "vllm",
-            "test_result": test_result.get("test_result")
-        }
-
-    return {"status": "switched", "model": model_name}
+        return {"status": "switched", "model": model_name}
+    finally:
+        scheduler._switching_in_progress = False
 
 
 @manage_router.get("/default-model")
@@ -648,7 +652,7 @@ async def system_status(include_history: bool = False, history_count: int = 60):
 
     import psutil
 
-    cpu_percent = psutil.cpu_percent(interval=0.1)
+    cpu_percent = psutil.cpu_percent(interval=None)
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { computed, watch, ref } from 'vue'
+import { watch, ref, shallowRef, triggerRef } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -61,7 +61,7 @@ const props = withDefaults(
 
 const chartRef = ref<{ chart: { data: unknown; update: (mode?: string) => void } } | null>(null)
 
-const chartData = computed(() => ({
+const buildChartData = () => ({
   labels: props.labels,
   datasets: props.datasets.map((ds) => ({
     label: ds.label,
@@ -73,9 +73,11 @@ const chartData = computed(() => ({
     pointRadius: ds.pointRadius ?? 0,
     borderWidth: ds.borderWidth ?? 2,
   })),
-}))
+})
 
-const chartOptions = computed(() => ({
+const chartData = shallowRef(buildChartData())
+
+const chartOptions = shallowRef({
   responsive: true,
   maintainAspectRatio: false,
   animation: props.animate ? ({ duration: 300 } as const) : (false as const),
@@ -149,17 +151,20 @@ const chartOptions = computed(() => ({
       border: { display: false },
     },
   },
-}))
+})
 
 watch(
-  chartData,
+  () => [props.labels, props.datasets] as const,
   () => {
+    const newData = buildChartData()
+    chartData.value = newData
+    triggerRef(chartData)
     if (chartRef.value?.chart) {
-      chartRef.value.chart.data = chartData.value
+      chartRef.value.chart.data = newData
       chartRef.value.chart.update('none')
     }
   },
-  { deep: true }
+  { deep: false }
 )
 </script>
 

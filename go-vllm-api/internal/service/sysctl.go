@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net"
 	"os/exec"
 	"strings"
 	"sync"
@@ -109,12 +110,20 @@ func (sc *SystemController) GetServiceInfo(name string) map[string]string {
 }
 
 func (sc *SystemController) GetProcessInfo(port int) bool {
-	cmd := exec.Command("lsof", "-i", fmt.Sprintf(":%d", port), "-P", "-n")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
+	addresses := []string{
+		fmt.Sprintf("127.0.0.1:%d", port),
+		fmt.Sprintf("localhost:%d", port),
 	}
-	return strings.Contains(string(output), fmt.Sprintf(":%d", port))
+
+	for _, addr := range addresses {
+		conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return true
+		}
+	}
+
+	return false
 }
 
 func (sc *SystemController) StartWatchdog(ctx context.Context, serviceName string, interval time.Duration, maxAttempts int, cooldown time.Duration) {

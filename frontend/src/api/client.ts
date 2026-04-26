@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import type {
   GPUSummary,
   GPUHistoryEntry,
@@ -38,15 +38,18 @@ const v1Client = axios.create({
   timeout: 60000,
 })
 
-type RetryableConfig = {
+type RetryableConfig = AxiosRequestConfig & {
   __retryCount?: number
-  method?: string
-  url?: string
+  suppressGlobalErrorToast?: boolean
 }
 
 const RETRYABLE_METHODS = new Set(['get', 'head', 'options'])
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+const silentRequestConfig = (config: AxiosRequestConfig = {}): RetryableConfig => ({
+  ...config,
+  suppressGlobalErrorToast: true,
+})
 
 const shouldRetryRequest = (error: unknown): boolean => {
   if (axios.isCancel(error)) {
@@ -125,13 +128,16 @@ v1Client.interceptors.request.use((config) => {
 })
 
 const handleResponseError = (error: unknown) => {
+  const config = (error as { config?: RetryableConfig }).config
   const appStore = useAppStore()
 
   if (axios.isCancel(error)) {
     return Promise.reject(error)
   }
 
-  appStore.error(normalizeErrorMessage(error))
+  if (!config?.suppressGlobalErrorToast) {
+    appStore.error(normalizeErrorMessage(error))
+  }
   return Promise.reject(error)
 }
 
@@ -143,27 +149,30 @@ client.interceptors.response.use((response) => response, handleResponseError)
 v1Client.interceptors.response.use((response) => response, handleResponseError)
 
 export async function getGPUSummary(): Promise<GPUSummary> {
-  const { data } = await client.get<GPUSummary>('/gpu/summary')
+  const { data } = await client.get<GPUSummary>('/gpu/summary', silentRequestConfig())
   return data
 }
 
 export async function getGPUEnhancedInfo(): Promise<GPUEnhancedInfo> {
-  const { data } = await client.get<GPUEnhancedInfo>('/gpu/enhanced')
+  const { data } = await client.get<GPUEnhancedInfo>('/gpu/enhanced', silentRequestConfig())
   return data
 }
 
 export async function getGPUProcesses(): Promise<{ processes: GPUProcess[]; count: number }> {
-  const { data } = await client.get<{ processes: GPUProcess[]; count: number }>('/gpu/processes')
+  const { data } = await client.get<{ processes: GPUProcess[]; count: number }>(
+    '/gpu/processes',
+    silentRequestConfig()
+  )
   return data
 }
 
 export async function getVLLMMetrics(): Promise<VLLMMetricsData> {
-  const { data } = await client.get<VLLMMetricsData>('/vllm/metrics')
+  const { data } = await client.get<VLLMMetricsData>('/vllm/metrics', silentRequestConfig())
   return data
 }
 
 export async function getModelsStatus(): Promise<ModelStatus> {
-  const { data } = await client.get<ModelStatus>('/models')
+  const { data } = await client.get<ModelStatus>('/models', silentRequestConfig())
   return data
 }
 
@@ -237,30 +246,36 @@ export async function getTestHistory(): Promise<TestHistoryEntry[]> {
 }
 
 export async function getTokenStats(): Promise<TokenStats> {
-  const { data } = await client.get<TokenStats>('/token/stats')
+  const { data } = await client.get<TokenStats>('/token/stats', silentRequestConfig())
   return data
 }
 
 export async function getTokenHistory(count: number = 60): Promise<TokenHistoryResponse> {
-  const { data } = await client.get<TokenHistoryResponse>('/token/history', { params: { count } })
+  const { data } = await client.get<TokenHistoryResponse>(
+    '/token/history',
+    silentRequestConfig({ params: { count } })
+  )
   return data
 }
 
 export async function getGPUHistory(
   count: number = 60
 ): Promise<{ history: GPUHistoryEntry[]; count: number; enabled: boolean; max_days: number }> {
-  const { data } = await client.get('/gpu/history', { params: { count } })
+  const { data } = await client.get('/gpu/history', silentRequestConfig({ params: { count } }))
   return data
 }
 
 export async function healthCheck(): Promise<{ status: string }> {
   const serverStore = useServerStore()
-  const { data } = await axios.get<{ status: string }>(serverStore.healthUrl)
+  const { data } = await axios.get<{ status: string }>(serverStore.inferenceHealthUrl)
   return data
 }
 
 export async function getDefaultModel(): Promise<{ default_model: string | null }> {
-  const { data } = await client.get<{ default_model: string | null }>('/default-model')
+  const { data } = await client.get<{ default_model: string | null }>(
+    '/default-model',
+    silentRequestConfig()
+  )
   return data
 }
 
@@ -278,24 +293,30 @@ export async function getSystemStatus(
   includeHistory = false,
   historyCount = 60
 ): Promise<SystemStatus & { history?: SystemHistoryResponse['history'] }> {
-  const { data } = await client.get<SystemStatus & { history?: SystemHistoryResponse['history'] }>('/system/status', {
-    params: { include_history: includeHistory, history_count: historyCount },
-  })
+  const { data } = await client.get<SystemStatus & { history?: SystemHistoryResponse['history'] }>(
+    '/system/status',
+    silentRequestConfig({
+      params: { include_history: includeHistory, history_count: historyCount },
+    })
+  )
   return data
 }
 
 export async function getSystemHistory(count: number = 60): Promise<SystemHistoryResponse> {
-  const { data } = await client.get<SystemHistoryResponse>('/system/history', { params: { count } })
+  const { data } = await client.get<SystemHistoryResponse>(
+    '/system/history',
+    silentRequestConfig({ params: { count } })
+  )
   return data
 }
 
 export async function getQueueStatus(): Promise<QueueStatus> {
-  const { data } = await client.get<QueueStatus>('/queue')
+  const { data } = await client.get<QueueStatus>('/queue', silentRequestConfig())
   return data
 }
 
 export async function getHealthAlert(): Promise<HealthAlert> {
-  const { data } = await client.get<HealthAlert>('/health/alert')
+  const { data } = await client.get<HealthAlert>('/health/alert', silentRequestConfig())
   return data
 }
 

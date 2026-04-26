@@ -2,7 +2,18 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 export type BackendType = 'go' | 'python' | 'auto'
-export type ConnectionStatus = 'checking' | 'online' | 'offline'
+export type ConnectionStatus = 'checking' | 'online' | 'degraded' | 'offline'
+
+interface EndpointProbeStatus {
+  ok: boolean
+  status?: number
+  error?: string
+}
+
+interface ConnectionDetails {
+  manage: EndpointProbeStatus
+  inference: EndpointProbeStatus
+}
 
 interface ServerHistoryEntry {
   url: string
@@ -19,8 +30,15 @@ interface StoredServerConfig {
 const CONFIG_STORAGE_KEY = 'server-config'
 const HISTORY_STORAGE_KEY = 'server-history'
 const MAX_HISTORY = 10
+const DEFAULT_PROBE_TIMEOUT_MS = 5000
 
 const normalizeUrl = (url: string) => url.trim().replace(/\/+$/, '')
+
+const formatProbeError = (result: EndpointProbeStatus) => {
+  if (result.error) return result.error
+  if (typeof result.status === 'number') return `HTTP ${result.status}`
+  return '连接失败'
+}
 
 export const useServerStore = defineStore('server', () => {
   const activeUrl = ref('')
@@ -29,11 +47,48 @@ export const useServerStore = defineStore('server', () => {
   const lastCheckedAt = ref<number | null>(null)
   const lastErrorMessage = ref<string | null>(null)
   const history = ref<ServerHistoryEntry[]>([])
+  const connectionDetails = ref<ConnectionDetails>({
+    manage: { ok: false },
+    inference: { ok: false },
+  })
 
   const manageBase = computed(() => (activeUrl.value ? `${activeUrl.value}/manage` : '/api'))
   const v1Base = computed(() => (activeUrl.value ? `${activeUrl.value}/v1` : '/v1'))
   const healthUrl = computed(() => (activeUrl.value ? `${activeUrl.value}/health` : '/health'))
+  const manageHealthUrl = computed(() =>
+    activeUrl.value ? `${activeUrl.value}/manage/models/summary` : '/api/models/summary'
+  )
+  const inferenceHealthUrl = computed(() => (activeUrl.value ? `${activeUrl.value}/health` : '/health'))
   const currentLabel = computed(() => activeUrl.value || '本地代理')
+
+  const probeEndpoint = async (url: string, timeoutMs = DEFAULT_PROBE_TIMEOUT_MS): Promise<EndpointProbeStatus> => {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      })
+
+      if (response.ok) {
+        return { ok: true, status: response.status }
+      }
+
+      return { ok: false, status: response.status, error: `HTTP ${response.status}` }
+    } catch (error) {
+      if (error instanceof Error) {
+        return {
+          ok: false,
+          error: error.name === 'AbortError' ? '连接超时' : error.message || '连接失败',
+        }
+      }
+      return { ok: false, error: '连接失败' }
+    } finally {
+      window.clearTimeout(timeout)
+    }
+  }
 
   const saveConfig = () => {
     const payload: StoredServerConfig = {
@@ -85,33 +140,35 @@ export const useServerStore = defineStore('server', () => {
     lastErrorMessage.value = null
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const controller = new AbortController()
-      const timeout = window.setTimeout(() => controller.abort(), 5000)
+      const [manageResult, inferenceResult] = await Promise.all([
+        probeEndpoint(manageHealthUrl.value),
+        probeEndpoint(inferenceHealthUrl.value),
+      ])
 
-      try {
-        const response = await fetch(healthUrl.value, {
-          signal: controller.signal,
-          cache: 'no-store',
-          headers: { Accept: 'application/json' },
-        })
-
-        if (response.ok) {
-          connectionStatus.value = 'online'
-          lastCheckedAt.value = Date.now()
-          return true
-        }
-
-        lastErrorMessage.value = `HTTP ${response.status}`
-      } catch (error) {
-        if (error instanceof Error) {
-          lastErrorMessage.value =
-            error.name === 'AbortError' ? '连接超时' : error.message || '连接失败'
-        } else {
-          lastErrorMessage.value = '连接失败'
-        }
-      } finally {
-        window.clearTimeout(timeout)
+      connectionDetails.value = {
+        manage: manageResult,
+        inference: inferenceResult,
       }
+
+      if (manageResult.ok && inferenceResult.ok) {
+        connectionStatus.value = 'online'
+        lastCheckedAt.value = Date.now()
+        lastErrorMessage.value = null
+        return true
+      }
+
+      if (manageResult.ok || inferenceResult.ok) {
+        connectionStatus.value = 'degraded'
+        lastCheckedAt.value = Date.now()
+        if (!manageResult.ok) {
+          lastErrorMessage.value = `管理接口异常: ${formatProbeError(manageResult)}`
+        } else {
+          lastErrorMessage.value = `推理接口异常: ${formatProbeError(inferenceResult)}`
+        }
+        return false
+      }
+
+      lastErrorMessage.value = `管理接口异常: ${formatProbeError(manageResult)}；推理接口异常: ${formatProbeError(inferenceResult)}`
 
       if (attempt < maxAttempts) {
         await new Promise((resolve) => window.setTimeout(resolve, attempt * 300))
@@ -162,9 +219,12 @@ export const useServerStore = defineStore('server', () => {
     lastCheckedAt,
     lastErrorMessage,
     history,
+    connectionDetails,
     manageBase,
     v1Base,
     healthUrl,
+    manageHealthUrl,
+    inferenceHealthUrl,
     currentLabel,
     switchServer,
     removeHistory,

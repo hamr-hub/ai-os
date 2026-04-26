@@ -13,6 +13,7 @@ class TimeoutHandlerMiddleware:
     """
 
     STREAMING_PATH_PREFIXES = ("/v1/chat/completions", "/v1/completions")
+    LONG_RUNNING_PATH_PREFIXES = ("/manage/models/",)
 
     def __init__(self, timeout_seconds: int = 60):
         self.timeout_seconds = timeout_seconds
@@ -20,6 +21,10 @@ class TimeoutHandlerMiddleware:
     async def __call__(self, request: Request, call_next):
         # Skip timeout for streaming endpoints — they hold the connection open
         if any(request.url.path.startswith(p) for p in self.STREAMING_PATH_PREFIXES):
+            return await call_next(request)
+
+        # Skip timeout for long-running operations (model switch/start/stop)
+        if any(request.url.path.startswith(p) for p in self.LONG_RUNNING_PATH_PREFIXES):
             return await call_next(request)
 
         try:

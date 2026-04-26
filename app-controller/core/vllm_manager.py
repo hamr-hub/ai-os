@@ -43,8 +43,8 @@ def _load_vllm_config() -> Dict[str, Any]:
 VLLM_CONFIG = _load_vllm_config()
 
 MODEL_BASE_PATH = VLLM_CONFIG.get('model_base_path', '/mnt/pve_models')
-VLLM_SERVICE_NAME = VLLM_CONFIG.get('service_name', 'vllm')
-VLLM_START_SCRIPT = VLLM_CONFIG.get('start_script', '/root/ai-suite/start_vllm.sh')
+VLLM_SERVICE_NAME = VLLM_CONFIG.get('service_name', 'vllm-aiclient')
+VLLM_START_SCRIPT = VLLM_CONFIG.get('start_script', '/root/ai-suite/start_vllm_aiclient.sh')
 VLLM_DEFAULT_PORT = VLLM_CONFIG.get('default_port', 8000)
 
 # 模型显存估算配置（基于模型参数和量化类型）
@@ -180,48 +180,52 @@ def _get_model_size(model_path: str) -> int:
 def get_current_model_info() -> Optional[Dict[str, Any]]:
     """
     获取当前运行的 vLLM 模型信息（返回配置文件中的模型名称）
+    优先级：systemd 环境变量 > 启动脚本解析
     """
     try:
-        # 读取启动脚本获取当前运行的模型路径
-        if not os.path.exists(VLLM_START_SCRIPT):
-            return None
-
-        with open(VLLM_START_SCRIPT, 'r') as f:
-            content = f.read()
-
-        # 解析模型路径
+        import re
+        
+        # 优先从 systemd 服务环境变量读取
+        service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
         model_path = None
-        for line in content.split('\n'):
-            if 'vllm serve' in line and not line.strip().startswith('#'):
-                # 提取模型路径
-                parts = line.strip().split()
-                for i, part in enumerate(parts):
-                    if part == 'serve' and i + 1 < len(parts):
-                        model_path = parts[i + 1].strip('"').strip("'")
-                        # 处理环境变量（如 $MODEL_PATH 或 ${MODEL_PATH}）
-                        if model_path.startswith('$'):
-                            var_name = model_path.lstrip('$').strip('{}')
-                            model_path = os.environ.get(var_name, '')
-                            # 如果环境变量未设置，使用默认值（脚本中的 :- 语法）
-                            if not model_path:
-                                # 查找脚本中 MODEL_PATH 变量的默认值
-                                for env_line in content.split('\n'):
-                                    if 'MODEL_PATH=' in env_line and ':-' in env_line:
-                                        # 提取默认值，如 ${VLLM_MODEL_PATH:-/mnt/pve_models/Gemma-4-31B-Abliterated}
-                                        import re
-                                        match = re.search(r':-([^}]+)\}', env_line)
-                                        if match:
-                                            model_path = match.group(1).strip('"').strip("'")
-                                            break
+        
+        if os.path.exists(service_file):
+            with open(service_file, 'r') as f:
+                content = f.read()
+            match = re.search(r'Environment="VLLM_MODEL_PATH=([^"]*)"', content)
+            if match:
+                model_path = match.group(1)
+        
+        # 如果 systemd 环境变量未设置，尝试从启动脚本读取
+        if not model_path and os.path.exists(VLLM_START_SCRIPT):
+            with open(VLLM_START_SCRIPT, 'r') as f:
+                content = f.read()
+            
+            for line in content.split('\n'):
+                if 'vllm serve' in line and not line.strip().startswith('#'):
+                    parts = line.strip().split()
+                    for i, part in enumerate(parts):
+                        if part == 'serve' and i + 1 < len(parts):
+                            model_path = parts[i + 1].strip('"').strip("'")
+                            if model_path.startswith('$'):
+                                var_name = model_path.lstrip('$').strip('{}')
+                                model_path = os.environ.get(var_name, '')
+                                if not model_path:
+                                    for env_line in content.split('\n'):
+                                        if 'MODEL_PATH=' in env_line and ':-' in env_line:
+                                            match = re.search(r':-([^}]+)\}', env_line)
+                                            if match:
+                                                model_path = match.group(1).strip('"').strip("'")
+                                                break
+                            break
+                    
+                    if model_path:
                         break
 
         if not model_path:
             return None
 
-        # 获取服务状态
         service_running = _is_service_running()
-
-        # 从配置中查找匹配的模型名称（而不是直接使用路径中的名称）
         config_model_name = _find_model_name_from_path(model_path)
         
         return {
@@ -334,6 +338,7 @@ def get_vllm_service_status() -> Dict[str, Any]:
             "running": active_state == "active"
         }
     except Exception as e:
+        logger.error("Failed to check vLLM service status: %s", e)
         return {"service": VLLM_SERVICE_NAME, "running": False, "error": str(e)}
 
 
@@ -409,20 +414,51 @@ async def switch_vllm_model_with_test(model_name: str, test_enabled: bool = True
     """
     global _switching_in_progress
     
-    # 尝试获取锁，如果正在切换则立即返回
-    if not model_switch_lock.locked():
-        async with model_switch_lock:
-            _switching_in_progress = True
-            try:
-                return await _do_switch_vllm_model(model_name, test_enabled, model_path)
-            finally:
-                _switching_in_progress = False
-    else:
+    # 使用 acquire() 方法尝试获取锁，避免竞态条件
+    try:
+        await asyncio.wait_for(model_switch_lock.acquire(), timeout=0.1)
+    except asyncio.TimeoutError:
+        # 锁已被占用，说明正在切换中
         return {
             "success": False,
             "error": "Model switch is already in progress, please wait for it to complete",
             "model_path": model_path if model_path else os.path.join(MODEL_BASE_PATH, model_name)
         }
+    
+    # 成功获取锁，执行切换
+    _switching_in_progress = True
+    try:
+        return await _do_switch_vllm_model(model_name, test_enabled, model_path)
+    finally:
+        _switching_in_progress = False
+        model_switch_lock.release()
+
+
+async def _wait_for_vllm_ready(max_wait: int = 180, check_interval: int = 5) -> bool:
+    """
+    等待 vLLM 服务就绪（智能等待）
+    :param max_wait: 最大等待时间（秒）
+    :param check_interval: 检查间隔（秒）
+    :return: 是否就绪
+    """
+    health_url = f"http://localhost:{VLLM_DEFAULT_PORT}/health"
+    elapsed = 0
+    
+    while elapsed < max_wait:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get(health_url)
+                if response.status_code == 200:
+                    logger.info("vLLM service ready after %d seconds", elapsed)
+                    return True
+        except Exception:
+            pass
+        
+        await asyncio.sleep(check_interval)
+        elapsed += check_interval
+    
+    logger.warning("vLLM service not ready after %d seconds", max_wait)
+    return False
 
 
 async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, model_path: str = None) -> Dict[str, Any]:
@@ -432,7 +468,6 @@ async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, mode
     if model_path is None:
         model_path = os.path.join(MODEL_BASE_PATH, model_name)
 
-    # 检查模型是否存在
     if not os.path.exists(model_path):
         return {
             "success": False,
@@ -440,7 +475,6 @@ async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, mode
             "model_path": model_path
         }
 
-    # 更新启动脚本
     script_updated = _update_vllm_script(model_path)
     if not script_updated:
         return {
@@ -449,7 +483,6 @@ async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, mode
             "model_path": model_path
         }
 
-    # 重启服务
     service_restarted = restart_vllm_service()
     if not service_restarted:
         return {
@@ -458,8 +491,18 @@ async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, mode
             "model_path": model_path
         }
 
-    # 等待服务启动（至少等待5秒）
-    await asyncio.sleep(5)
+    # 智能等待服务就绪（最多等待 180 秒）
+    service_ready = await _wait_for_vllm_ready(max_wait=180, check_interval=5)
+    
+    if not service_ready:
+        return {
+            "success": False,
+            "error": "vLLM service failed to start within timeout",
+            "model": model_name,
+            "model_path": model_path,
+            "service": VLLM_SERVICE_NAME,
+            "status": "timeout"
+        }
 
     # 执行自测
     test_result = None
@@ -489,17 +532,19 @@ async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, mode
 
 def _update_vllm_script(model_path: str) -> bool:
     """
-    更新 vLLM systemd 服务文件中的模型路径
+    更新 vLLM systemd 服务文件和启动脚本中的模型路径
+    优先级：systemd 服务文件 > 启动脚本
     """
     try:
-        # 尝试更新 systemd 服务文件中的环境变量
+        import re
+        
+        # 优先更新 systemd 服务文件中的环境变量
+        systemd_updated = False
         service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
         if os.path.exists(service_file):
             with open(service_file, 'r') as f:
                 content = f.read()
             
-            # 更新 VLLM_MODEL_PATH 环境变量
-            import re
             new_content = re.sub(
                 r'Environment="VLLM_MODEL_PATH=[^"]*"',
                 f'Environment="VLLM_MODEL_PATH={model_path}"',
@@ -509,33 +554,55 @@ def _update_vllm_script(model_path: str) -> bool:
             if new_content != content:
                 with open(service_file, 'w') as f:
                     f.write(new_content)
-                # 重新加载 systemd 配置
-                subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True)
-                return True
+                subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True, timeout=10)
+                logger.info("Updated systemd service file: %s", model_path)
+                systemd_updated = True
         
-        # 如果没有 systemd 服务文件，尝试更新启动脚本
         if not os.path.exists(VLLM_START_SCRIPT):
-            return False
+            logger.warning("Start script not found: %s", VLLM_START_SCRIPT)
+            return systemd_updated
 
         with open(VLLM_START_SCRIPT, 'r') as f:
             content = f.read()
 
-        # 替换模型路径
         lines = content.split('\n')
         new_lines = []
         replaced = False
 
         for line in lines:
-            if 'VLLM_MODEL_PATH' in line and '=' in line and not line.strip().startswith('#'):
-                # 更新环境变量
-                parts = line.split('=', 1)
-                if len(parts) >= 2:
-                    new_line = f'{parts[0]}="{model_path}"'
+            # 匹配 MODEL_PATH="${VLLM_MODEL_PATH:-...}" 或 MODEL_PATH="..." 格式
+            if 'MODEL_PATH=' in line and '=' in line and not line.strip().startswith('#'):
+                # 处理带默认值的格式：MODEL_PATH="${VLLM_MODEL_PATH:-/path/to/model}"
+                if ':-' in line:
+                    # 只替换默认值部分
+                    new_line = re.sub(
+                        r'(:-)[^}]+\}',
+                        f':-{model_path}"',
+                        line
+                    )
+                    # 如果正则替换失败，使用原始行
+                    if ':-' not in new_line:
+                        new_line = line
                     new_lines.append(new_line)
                     replaced = True
                     continue
-            elif 'vllm serve' in line and not line.strip().startswith('#'):
-                # 替换模型路径
+                # 处理直接赋值的格式：MODEL_PATH="/path/to/model"
+                elif 'VLLM_MODEL_PATH' in line:
+                    parts = line.split('=', 1)
+                    if len(parts) >= 2:
+                        new_line = f'{parts[0]}="{model_path}"'
+                        new_lines.append(new_line)
+                        replaced = True
+                        continue
+            
+            # 匹配 vllm serve 命令（如果存在硬编码路径）
+            if 'vllm serve' in line and not line.strip().startswith('#'):
+                # 检查是否包含变量引用，如果已经是变量引用则不修改
+                if '$MODEL_PATH' in line or '${MODEL_PATH}' in line:
+                    new_lines.append(line)
+                    continue
+                
+                # 替换硬编码的模型路径
                 parts = line.split('vllm serve')
                 if len(parts) >= 2:
                     rest_parts = parts[1].strip().split()
@@ -544,17 +611,21 @@ def _update_vllm_script(model_path: str) -> bool:
                         new_lines.append(new_line)
                         replaced = True
                         continue
+            
             new_lines.append(line)
 
-        if not replaced:
+        if not replaced and not systemd_updated:
+            logger.warning("No model path found in start script to update")
             return False
 
-        # 写回文件
-        with open(VLLM_START_SCRIPT, 'w') as f:
-            f.write('\n'.join(new_lines))
+        if replaced:
+            with open(VLLM_START_SCRIPT, 'w') as f:
+                f.write('\n'.join(new_lines))
+            logger.info("Updated start script: %s", model_path)
 
-        return True
+        return systemd_updated or replaced
     except Exception as e:
+        logger.error("Failed to update vLLM script: %s", e)
         return False
 
 

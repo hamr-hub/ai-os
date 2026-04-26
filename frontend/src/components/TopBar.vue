@@ -30,6 +30,15 @@ const statusConfig = computed(() => {
         textColor: '#f59e0b',
         glowColor: 'rgba(245, 158, 11, 0.3)'
       }
+    case 'degraded':
+      return {
+        class: 'degraded',
+        icon: AlertCircle,
+        bgColor: 'rgba(249, 115, 22, 0.15)',
+        borderColor: 'rgba(249, 115, 22, 0.35)',
+        textColor: '#f97316',
+        glowColor: 'rgba(249, 115, 22, 0.3)'
+      }
     default:
       return {
         class: 'offline',
@@ -77,6 +86,7 @@ const backendConfig = computed(() => {
 const statusText = computed(() => {
   if (serverStore.connectionStatus === 'online') return '在线'
   if (serverStore.connectionStatus === 'checking') return '检测中'
+  if (serverStore.connectionStatus === 'degraded') return '部分可用'
   return '离线'
 })
 

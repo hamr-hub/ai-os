@@ -20,7 +20,10 @@ class ConfigWatcher:
         self._last_error = None
     
     def load_config(self) -> Dict:
+        previous_error = self._last_error
         ok, config = self.load_config_with_status()
+        if ok and previous_error:
+            self._last_error = previous_error
         return config if ok else {}
 
     def load_config_with_status(self) -> Tuple[bool, Dict]:

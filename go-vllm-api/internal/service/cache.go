@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go-vllm-api/internal/repository"
@@ -14,18 +15,21 @@ type cacheEntry struct {
 }
 
 type CacheService struct {
-	redis *repository.RedisRepo
-	local map[string]cacheEntry
-	mu    sync.RWMutex
-	stats CacheStats
+	redis     *repository.RedisRepo
+	local     map[string]cacheEntry
+	mu        sync.RWMutex
+	hits      atomic.Int64
+	misses    atomic.Int64
+	sets      atomic.Int64
+	deletes   atomic.Int64
 }
 
 type CacheStats struct {
-	Hits   int64 `json:"hits"`
-	Misses int64 `json:"misses"`
-	Sets   int64 `json:"sets"`
-	Deletes int64 `json:"deletes"`
-	LocalSize int `json:"local_size"`
+	Hits      int64 `json:"hits"`
+	Misses    int64 `json:"misses"`
+	Sets      int64 `json:"sets"`
+	Deletes   int64 `json:"deletes"`
+	LocalSize int   `json:"local_size"`
 }
 
 func NewCacheService(redis *repository.RedisRepo) *CacheService {
@@ -40,7 +44,7 @@ func (cs *CacheService) Get(key string) interface{} {
 	if entry, ok := cs.local[key]; ok {
 		if time.Now().Before(entry.expiredAt) {
 			cs.mu.RUnlock()
-			cs.stats.Hits++
+			cs.hits.Add(1)
 			return entry.value
 		}
 		cs.mu.RUnlock()
@@ -55,12 +59,12 @@ func (cs *CacheService) Get(key string) interface{} {
 		ctx := context.Background()
 		val, err := cs.redis.GetJSON(ctx, key)
 		if err == nil && val != nil {
-			cs.stats.Hits++
+			cs.hits.Add(1)
 			return val
 		}
 	}
 
-	cs.stats.Misses++
+	cs.misses.Add(1)
 	return nil
 }
 
@@ -71,13 +75,12 @@ func (cs *CacheService) Set(key string, value interface{}, ttlSeconds int) {
 		expiredAt: time.Now().Add(time.Duration(ttlSeconds) * time.Second),
 	}
 	cs.mu.Unlock()
-	cs.stats.Sets++
+	cs.sets.Add(1)
 
 	if cs.redis != nil && cs.redis.IsConnected() {
 		ctx := context.Background()
 		ttl := time.Duration(ttlSeconds) * time.Second
-		if err := cs.redis.SetJSON(ctx, key, value, ttl); err != nil {
-		}
+		cs.redis.SetJSON(ctx, key, value, ttl)
 	}
 }
 
@@ -85,7 +88,7 @@ func (cs *CacheService) Delete(key string) {
 	cs.mu.Lock()
 	delete(cs.local, key)
 	cs.mu.Unlock()
-	cs.stats.Deletes++
+	cs.deletes.Add(1)
 
 	if cs.redis != nil && cs.redis.IsConnected() {
 		ctx := context.Background()
@@ -101,7 +104,13 @@ func (cs *CacheService) FlushAll() {
 
 func (cs *CacheService) GetStats() CacheStats {
 	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-	cs.stats.LocalSize = len(cs.local)
-	return cs.stats
+	localSize := len(cs.local)
+	cs.mu.RUnlock()
+	return CacheStats{
+		Hits:      cs.hits.Load(),
+		Misses:    cs.misses.Load(),
+		Sets:      cs.sets.Load(),
+		Deletes:   cs.deletes.Load(),
+		LocalSize: localSize,
+	}
 }

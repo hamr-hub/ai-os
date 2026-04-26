@@ -52,6 +52,7 @@ class Scheduler:
         self.preloaded_models: Set[str] = set()
         self.model_last_used: Dict[str, datetime] = {}
         self._model_lock = threading.Lock()
+        self._switching_in_progress = False
         self._init_preloaded_models()
         self._default_model = None
         self._register_llama_cpp_models()
@@ -722,24 +723,29 @@ class Scheduler:
             return True
 
         logger.info(f"Switching to model {target_model_name} (priority={priority})")
-        
-        success = await self._free_up_memory(target_model_name, priority)
-        if not success:
-            # Last ditch effort: force memory cleanup
-            logger.warning(f"Standard memory freeing failed, trying forced cleanup")
-            await self.gpu_monitor.force_memory_cleanup()
-            gpu_status = await self.gpu_monitor.refresh_cache()
-            
-            target_config = self.get_model_config(target_model_name)
-            target_required = _parse_memory_size(target_config.get('required_memory', 0)) if target_config else 0
-            if not gpu_status or gpu_status.get('available_memory', 0) < target_required:
-                logger.error(f"Insufficient memory to start {target_model_name} even after forced cleanup")
-                return False
+        own_switching_flag = not self._switching_in_progress
+        if own_switching_flag:
+            self._switching_in_progress = True
+        try:
+            success = await self._free_up_memory(target_model_name, priority)
+            if not success:
+                logger.warning(f"Standard memory freeing failed, trying forced cleanup")
+                await self.gpu_monitor.force_memory_cleanup()
+                gpu_status = await self.gpu_monitor.refresh_cache()
+                
+                target_config = self.get_model_config(target_model_name)
+                target_required = _parse_memory_size(target_config.get('required_memory', 0)) if target_config else 0
+                if not gpu_status or gpu_status.get('available_memory', 0) < target_required:
+                    logger.error(f"Insufficient memory to start {target_model_name} even after forced cleanup")
+                    return False
 
-        success = await self.start_model(target_model_name)
-        if success:
-            self.mark_model_selected(target_model_name)
-        return success
+            success = await self.start_model(target_model_name)
+            if success:
+                self.mark_model_selected(target_model_name)
+            return success
+        finally:
+            if own_switching_flag:
+                self._switching_in_progress = False
 
     async def switch_model_with_fallback(self, target_model_name: str, fallback_model: str = None) -> bool:
         """带降级策略的模型切换"""
@@ -793,6 +799,11 @@ class Scheduler:
         """后台监控模型状态，自动重启异常退出的预加载模型，并清理已停止模型的追踪状态"""
         while True:
             try:
+                # Skip health checks during model switch to avoid race conditions
+                if self._switching_in_progress:
+                    await asyncio.sleep(30)
+                    continue
+
                 # 1. Check preloaded models that should be kept alive
                 for model_name in self.preloaded_models:
                     config = self.get_model_config(model_name)
