@@ -373,3 +373,61 @@ func (mtf *ModelTestingFramework) testToolIntegration(ctx context.Context, model
 		ErrorMessage: errMsg,
 	}
 }
+
+type ComparativeAnalysisRequest struct {
+	ModelNames []string `json:"model_names"`
+}
+
+type ComparativeAnalysisResult struct {
+	Models       []string                   `json:"models"`
+	Timestamp    string                     `json:"timestamp"`
+	Results      map[string]*ModelTestReport `json:"results"`
+	Comparison   map[string]any             `json:"comparison"`
+	BestModel    string                     `json:"best_model"`
+}
+
+func (mtf *ModelTestingFramework) RunComparativeAnalysis(ctx context.Context, modelNames []string, getModelInfo func(string) (string, int, bool)) *ComparativeAnalysisResult {
+	result := &ComparativeAnalysisResult{
+		Models:    modelNames,
+		Timestamp: time.Now().Format(time.RFC3339),
+		Results:   make(map[string]*ModelTestReport),
+	}
+
+	for _, modelName := range modelNames {
+		modelPath, port, supportsImages := getModelInfo(modelName)
+		if port == 0 {
+			mtf.logger.Warn("skip model in comparative analysis", zap.String("model", modelName))
+			continue
+		}
+		report := mtf.RunAllTests(ctx, modelName, modelPath, port, supportsImages)
+		result.Results[modelName] = report
+	}
+
+	comparison := make(map[string]any)
+	bestTPS := 0.0
+	bestModel := ""
+
+	modelComparisons := make([]map[string]any, 0)
+	for name, report := range result.Results {
+		modelComp := map[string]any{
+			"model":      name,
+			"pass_rate":  report.PassRate,
+			"overall_tps": report.OverallTPS,
+			"total_tests": report.TotalTests,
+			"total_passed": report.TotalPassed,
+		}
+		modelComparisons = append(modelComparisons, modelComp)
+
+		if report.OverallTPS > bestTPS {
+			bestTPS = report.OverallTPS
+			bestModel = name
+		}
+	}
+
+	comparison["models"] = modelComparisons
+	comparison["best_tps"] = bestTPS
+	result.Comparison = comparison
+	result.BestModel = bestModel
+
+	return result
+}

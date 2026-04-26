@@ -67,11 +67,13 @@ kill -9 <PID>      # 释放端口
 
 ## aiclient2api 配置
 
-`aiclient2api/configs/provider_pools.json` 中 `OPENAI_BASE_URL` 指向 Go 后端：
+`aiclient2api/configs/provider_pools.json` 中 `OPENAI_BASE_URL` 指向 Go 后端（注意包含 `/v1` 路径）：
 
 ```json
-"OPENAI_BASE_URL": "http://localhost:35001"
+"OPENAI_BASE_URL": "http://192.168.7.103:35001/v1"
 ```
+
+> **注意**: 开发环境使用 `http://localhost:35001/v1`，生产环境使用实际服务器 IP 或 Docker 服务名。
 
 ---
 

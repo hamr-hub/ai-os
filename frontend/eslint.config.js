@@ -6,7 +6,7 @@ import prettier from 'eslint-config-prettier/flat'
 
 export default [
   {
-    ignores: ['node_modules/**', 'dist/**', 'dist-ssr/**', '*.local.ts', 'e2e-manual-test.cjs'],
+    ignores: ['node_modules/**', 'dist/**', 'dist_30000/**', 'dist-ssr/**', '*.local.ts', 'e2e-manual-test.cjs'],
   },
   ...vue.configs['flat/recommended'],
   {

@@ -13,7 +13,7 @@ class TimeoutHandlerMiddleware:
     """
 
     STREAMING_PATH_PREFIXES = ("/v1/chat/completions", "/v1/completions")
-    LONG_RUNNING_PATH_PREFIXES = ("/manage/models/",)
+    LONG_RUNNING_PATH_PREFIXES = ("/manage/models/", "/manage/agent")
 
     def __init__(self, timeout_seconds: int = 60):
         self.timeout_seconds = timeout_seconds

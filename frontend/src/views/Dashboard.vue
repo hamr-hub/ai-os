@@ -120,12 +120,8 @@ const handleScale = (cardId: string, delta: number) => {
         </div>
       </div>
 
-<div v-else class="dashboard-layout">
-        <div class="dashboard-row top-row">
-          <div
-            class="card system-card card-glow-primary scale-in stagger-1"
-            :style="{ transform: `scale(${cardScale.system})`, transformOrigin: 'top left' }"
-          >
+<div v-else class="dashboard-grid">
+          <div class="card system-card card-glow-primary scale-in stagger-1">
             <div class="scale-controls">
               <button class="scale-btn" @click="handleScale('system', 0.1)">+</button>
               <button class="scale-btn" @click="handleScale('system', -0.1)">−</button>
@@ -133,10 +129,7 @@ const handleScale = (cardId: string, delta: number) => {
             <SystemStatusCard :system-status="systemStatus" :system-history="systemHistory" />
           </div>
 
-          <div
-            class="card vllm-card card-glow-purple scale-in stagger-2"
-            :style="{ transform: `scale(${cardScale.vllm})`, transformOrigin: 'top center' }"
-          >
+          <div class="card vllm-card card-glow-purple scale-in stagger-2">
             <div class="scale-controls">
               <button class="scale-btn" @click="handleScale('vllm', 0.1)">+</button>
               <button class="scale-btn" @click="handleScale('vllm', -0.1)">−</button>
@@ -144,10 +137,7 @@ const handleScale = (cardId: string, delta: number) => {
             <VLLMMetricsCard />
           </div>
 
-          <div
-            class="card token-card card-glow-purple scale-in stagger-3"
-            :style="{ transform: `scale(${cardScale.token})`, transformOrigin: 'top right' }"
-          >
+          <div class="card token-card card-glow-purple scale-in stagger-3">
             <div class="scale-controls">
               <button class="scale-btn" @click="handleScale('token', 0.1)">+</button>
               <button class="scale-btn" @click="handleScale('token', -0.1)">−</button>
@@ -161,13 +151,16 @@ const handleScale = (cardId: string, delta: number) => {
               :format-tokens="formatTokens"
             />
           </div>
-        </div>
 
-        <div
-          class="dashboard-row gpu-row"
-          :style="{ transform: `scale(${cardScale.gpu})`, transformOrigin: 'top left' }"
-        >
-          <div class="card gpu-card card-glow-cyan scale-in stagger-2 full-width">
+          <div class="card health-card card-glow-green scale-in stagger-4">
+            <div class="scale-controls">
+              <button class="scale-btn" @click="handleScale('health', 0.1)">+</button>
+              <button class="scale-btn" @click="handleScale('health', -0.1)">−</button>
+            </div>
+            <HealthAlertCard :health-alert="healthAlert" />
+          </div>
+
+          <div class="card gpu-card card-glow-cyan scale-in stagger-5 span-2">
             <div class="scale-controls">
               <button class="scale-btn" @click="handleScale('gpu', 0.1)">+</button>
               <button class="scale-btn" @click="handleScale('gpu', -0.1)">−</button>
@@ -291,46 +284,29 @@ const handleScale = (cardId: string, delta: number) => {
             </div>
           </div>
 
-          <div class="gpu-side-cards">
-            <div class="card health-card card-glow-green scale-in stagger-5"
-              :style="{ transform: `scale(${cardScale.health})`, transformOrigin: 'top left' }"
-            >
-              <div class="scale-controls">
-                <button class="scale-btn" @click="handleScale('health', 0.1)">+</button>
-                <button class="scale-btn" @click="handleScale('health', -0.1)">−</button>
-              </div>
-              <HealthAlertCard :health-alert="healthAlert" />
+          <div class="card running-card card-glow-green scale-in stagger-6 span-2">
+            <div class="scale-controls">
+              <button class="scale-btn" @click="handleScale('models', 0.1)">+</button>
+              <button class="scale-btn" @click="handleScale('models', -0.1)">−</button>
             </div>
-
-            <div
-              class="card running-card card-glow-green scale-in stagger-6"
-              :style="{ transform: `scale(${cardScale.models})`, transformOrigin: 'top right' }"
-            >
-              <div class="scale-controls">
-                <button class="scale-btn" @click="handleScale('models', 0.1)">+</button>
-                <button class="scale-btn" @click="handleScale('models', -0.1)">−</button>
-              </div>
-              <RunningModelsCard
-                :model-list="modelList"
-                :default-model="defaultModel"
-                :action-loading="actionLoading"
-                :switching-model="switchingModel"
-                :handle-start-model="handleStartModel"
-                :handle-stop-model="handleStopModel"
-                :handle-switch-and-set-default="handleSwitchAndSetDefault"
-              />
-            </div>
+            <RunningModelsCard
+              :model-list="modelList"
+              :default-model="defaultModel"
+              :action-loading="actionLoading"
+              :switching-model="switchingModel"
+              :handle-start-model="handleStartModel"
+              :handle-stop-model="handleStopModel"
+              :handle-switch-and-set-default="handleSwitchAndSetDefault"
+            />
           </div>
         </div>
-      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
 .dashboard {
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
@@ -345,6 +321,9 @@ const handleScale = (cardId: string, delta: number) => {
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .header-title {
@@ -382,121 +361,33 @@ const handleScale = (cardId: string, delta: number) => {
 
 .content {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  padding: 16px;
 }
 
-.content::-webkit-scrollbar {
-  width: 4px;
-}
-
-.content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.content::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 2px;
-}
-
-.dashboard-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  width: 100%;
-  max-width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-}
-
-.dashboard-row {
+.dashboard-grid {
   display: grid;
-  gap: 12px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.top-row {
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 16px;
+  max-width: 1600px;
+  margin: 0 auto;
 }
 
-.gpu-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 12px;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-}
-
-.gpu-side-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-}
-
-.bottom-row {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-@media (max-width: 1400px) {
-  .top-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 1200px) {
-  .top-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .bottom-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .gpu-full-width {
-    grid-column: 1 / -1;
-  }
-
-  .card-expanded {
-    grid-column: 1 / -1 !important;
-  }
+.span-2 {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 768px) {
-  .dashboard-layout {
-    padding: 8px;
-    gap: 8px;
-  }
-
-  .top-row {
-    grid-template-columns: 1fr;
-  }
-  .bottom-row {
+  .dashboard-grid {
     grid-template-columns: 1fr;
     gap: 12px;
   }
 
-  .gpu-full-width {
+  .span-2 {
     grid-column: 1;
   }
 
-  .card-expanded {
-    grid-column: 1 !important;
-  }
-
-  .card-header {
-    flex-wrap: wrap;
-  }
-
-  .card-title {
-    font-size: 13px;
-  }
-
-  .token-grid {
-    grid-template-columns: 1fr;
+  .content {
+    padding: 8px;
   }
 }
 
@@ -510,7 +401,6 @@ const handleScale = (cardId: string, delta: number) => {
   animation: fade-in 0.4s ease-out;
   position: relative;
   overflow: hidden;
-  width: 100%;
 }
 
 .card:hover {
@@ -518,21 +408,6 @@ const handleScale = (cardId: string, delta: number) => {
   box-shadow:
     var(--shadow-md),
     0 0 12px rgba(99, 102, 241, 0.08);
-  transform: translateY(-1px);
-}
-
-.full-width {
-  width: 100%;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.full-width > div:not(.scale-controls):not(.gpu-card-header) {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 .card-header {
@@ -541,7 +416,6 @@ const handleScale = (cardId: string, delta: number) => {
   gap: 10px;
   margin-bottom: 16px;
 }
-
 
 .icon-wrap {
   width: 32px;
@@ -642,30 +516,6 @@ const handleScale = (cardId: string, delta: number) => {
   border-color: var(--color-primary);
 }
 
-.retry-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  color: var(--color-primary-light);
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.retry-btn:hover {
-  background: rgba(99, 102, 241, 0.15);
-  color: var(--color-primary);
-}
-
-.retry-icon {
-  width: 12px;
-  height: 12px;
-}
-
 .skeleton-card {
   display: flex;
   flex-direction: column;
@@ -702,21 +552,6 @@ const handleScale = (cardId: string, delta: number) => {
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   margin-top: 12px;
-  flex: 1;
-  min-height: 0;
-  align-content: start;
-}
-
-@media (max-width: 1600px) {
-  .gpu-charts-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 1200px) {
-  .gpu-charts-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (max-width: 768px) {
@@ -729,7 +564,6 @@ const handleScale = (cardId: string, delta: number) => {
   background: var(--bg-secondary);
   border-radius: 12px;
   padding: 12px;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -747,29 +581,12 @@ const handleScale = (cardId: string, delta: number) => {
   height: 16px;
 }
 
-.chart-icon.purple {
-  color: #8b5cf6;
-}
-
-.chart-icon.orange {
-  color: #f59e0b;
-}
-
-.chart-icon.cyan {
-  color: #06b6d4;
-}
-
-.chart-icon.red {
-  color: #ef4444;
-}
-
-.chart-icon.green {
-  color: #22c55e;
-}
-
-.chart-icon.yellow {
-  color: #f59e0b;
-}
+.chart-icon.purple { color: #8b5cf6; }
+.chart-icon.orange { color: #f59e0b; }
+.chart-icon.cyan { color: #06b6d4; }
+.chart-icon.red { color: #ef4444; }
+.chart-icon.green { color: #22c55e; }
+.chart-icon.yellow { color: #f59e0b; }
 
 .chart-title {
   font-size: 13px;

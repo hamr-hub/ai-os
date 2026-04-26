@@ -35,6 +35,9 @@ cd aiclient2api && docker compose up -d              # http://localhost:3000
 
 # 全栈 Docker
 docker compose up -d
+
+# Nginx 30000 (systemd 服务)
+sudo systemctl enable --now nginx-30000.service      # http://localhost:30000
 ```
 
 ---
@@ -47,6 +50,7 @@ docker compose up -d
 | 编码约定 | [.codeflicker/rules.md](./.codeflicker/rules.md) + [docs/agent/conventions.md](./docs/agent/conventions.md) |
 | 开发命令 | [docs/agent/development_commands.md](./docs/agent/development_commands.md) |
 | 部署指南 | [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md) |
+| Nginx 30000 部署 | [docs/deployment/nginx-30000-deployment.md](./docs/deployment/nginx-30000-deployment.md) |
 | 端口参考 | [docs/deployment/port-reference.md](./docs/deployment/port-reference.md) |
 | API 文档 | [app-controller/API.md](./app-controller/API.md) |
 | 研发资产 | [docs/research/rd-assets.md](./docs/research/rd-assets.md) |

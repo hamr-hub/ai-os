@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { useGPU } from '@/composables/useGPU'
 
 vi.mock('@/api/client', () => ({
@@ -24,6 +25,7 @@ vi.mock('@/api/client', () => ({
 describe('useGPU', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    setActivePinia(createPinia())
   })
 
   it('初始状态gpuSummary为null', () => {

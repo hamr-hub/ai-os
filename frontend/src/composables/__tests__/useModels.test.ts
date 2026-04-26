@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { useModels } from '@/composables/useModels'
 import { startModel, stopModel } from '@/api/client'
 
@@ -56,6 +57,7 @@ vi.mock('vue', async () => {
 describe('useModels', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    setActivePinia(createPinia())
   })
 
   it('初始状态defaultModel为null', () => {

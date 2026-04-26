@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go-vllm-api/internal/config"
+	"go-vllm-api/internal/handler/agent"
 	"go-vllm-api/internal/handler/health"
 	"go-vllm-api/internal/handler/manage"
 	v1handler "go-vllm-api/internal/handler/v1"
@@ -23,6 +24,7 @@ import (
 	"go-vllm-api/internal/proxy"
 	"go-vllm-api/internal/repository"
 	"go-vllm-api/internal/service"
+	"go-vllm-api/internal/tools"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -109,6 +111,10 @@ func main() {
 
 	modelTesting := service.NewModelTestingFramework(zapLogger)
 
+	toolRegistry := tools.GetRegistry()
+	toolExecutor := tools.NewToolExecutor(toolRegistry, scheduler, gpuMonitor, vllmManager, sysCtl, llamaCppMgr, zapLogger)
+	agentHandler := agent.NewAgentHandler(scheduler, gpuMonitor, toolExecutor, toolRegistry, zapLogger)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -160,6 +166,7 @@ func main() {
 	manageHandler.RegisterRoutes(r.Group(""))
 	healthHandler.RegisterRoutes(r.Group(""))
 	wsHandler.RegisterRoutes(r.Group(""))
+	agentHandler.RegisterRoutes(r.Group(""))
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", *port),

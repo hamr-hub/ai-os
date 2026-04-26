@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, type Component } from 'vue'
 import { useModels } from '@/composables/useModels'
-import { runModelTest, getTestResults, getTestHistory } from '@/api/client'
-import type { TestResponse, TestHistoryEntry, TestReport } from '@/types'
+import { runModelTest, getTestResults, getTestHistory, getGPUSummary } from '@/api/client'
+import type { TestResponse, TestHistoryEntry, TestReport, GPUSummary } from '@/types'
 import {
   RefreshCw,
   Activity,
@@ -56,8 +56,40 @@ const expandedReport = ref<string | null>(null)
 const cachedResults = ref<Record<string, TestResponse>>({})
 const modelCapabilities = ref<Record<string, TestReport['feature_support']>>({})
 
+const gpuInfo = ref<GPUSummary | null>(null)
+
+async function fetchGPUInfo() {
+  try {
+    gpuInfo.value = await getGPUSummary()
+  } catch {
+    gpuInfo.value = null
+  }
+}
+
+function formatMemory(bytes: number): string {
+  if (bytes >= 1024 ** 3) {
+    return `${(bytes / (1024 ** 3)).toFixed(1)}GB`
+  }
+  return `${(bytes / (1024 ** 2)).toFixed(0)}MB`
+}
+
+function getModelMemoryWarning(modelName: string): string | null {
+  if (!gpuInfo.value?.current) return null
+  const model = modelList.value.find((m) => m.name === modelName)
+  if (!model?.required_memory) return null
+
+  const requiredGB = parseFloat(model.required_memory)
+  const availableGB = gpuInfo.value.current.available_memory / (1024 ** 3)
+
+  if (requiredGB > availableGB) {
+    return `所需 ${model.required_memory} > 可用 ${formatMemory(gpuInfo.value.current.available_memory)}`
+  }
+  return null
+}
+
 onMounted(() => {
   fetchHistory()
+  fetchGPUInfo()
 })
 
 async function fetchCapabilities(modelNames: string[] = runningModels.value.map((model) => model.name)) {
@@ -365,6 +397,10 @@ watch(
                   <span v-if="model.required_memory" class="mem-req"
                     >显存 {{ model.required_memory }}</span
                   >
+                </span>
+                <span v-if="getModelMemoryWarning(model.name)" class="mem-warning">
+                  <AlertTriangle class="w-3 h-3" />
+                  {{ getModelMemoryWarning(model.name) }}
                 </span>
               </div>
               <div class="item-actions">
@@ -884,6 +920,18 @@ watch(
 .mem-req {
   color: var(--color-primary-light);
   font-weight: 500;
+}
+.mem-warning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #ef4444;
 }
 .status-dot {
   width: 6px;

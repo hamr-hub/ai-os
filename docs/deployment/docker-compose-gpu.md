@@ -8,8 +8,7 @@ GPU 环境在标准生产部署基础上增加 NVIDIA GPU 支持，用于 vLLM �
 用户 → Nginx (30000) → aiclient2api (3000) → app-controller (35000) / go-vllm-api (35001)
                                                   ↓
                                               vLLM (8000, GPU)
-                                                  ↓
-                                              Redis (6379)
+     Redis (6379) ← 独立缓存服务
 ```
 
 ## 前置条件

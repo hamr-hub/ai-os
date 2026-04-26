@@ -16,19 +16,20 @@ import (
 )
 
 type Scheduler struct {
-	logger        *zap.Logger
-	gpuMonitor    *GPUMonitor
-	sysCtl        *SystemController
-	redis         *repository.RedisRepo
-	cfg           *config.AppConfig
-	llamaCppMgr   *LlamaCppManager
-	vllmManager   *VLLMManager
-	runningModels map[string]time.Time
-	preloaded     map[string]bool
-	modelLastUsed map[string]time.Time
-	defaultModel  string
-	mu            sync.RWMutex
-	rateLimiter   *RateLimiter
+	logger              *zap.Logger
+	gpuMonitor          *GPUMonitor
+	sysCtl              *SystemController
+	redis               *repository.RedisRepo
+	cfg                 *config.AppConfig
+	llamaCppMgr         *LlamaCppManager
+	vllmManager         *VLLMManager
+	runningModels       map[string]time.Time
+	preloaded           map[string]bool
+	modelLastUsed       map[string]time.Time
+	defaultModel        string
+	mu                  sync.RWMutex
+	rateLimiter         *RateLimiter
+	switchingInProgress bool
 }
 
 func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig, llamaCppMgr *LlamaCppManager, vllmManager *VLLMManager) *Scheduler {
@@ -728,4 +729,23 @@ func (s *Scheduler) SwitchModelWithFallback(ctx context.Context, target string, 
 		return s.SwitchModel(ctx, fallback)
 	}
 	return false
+}
+
+func (s *Scheduler) FlushCache() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rateLimiter.Flush()
+	s.logger.Info("scheduler cache flushed")
+}
+
+func (s *Scheduler) SetSwitchingInProgress(val bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.switchingInProgress = val
+}
+
+func (s *Scheduler) IsSwitchingInProgress() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.switchingInProgress
 }

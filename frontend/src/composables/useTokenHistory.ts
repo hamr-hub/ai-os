@@ -19,7 +19,7 @@ export function useTokenHistory(intervalMs = 30000, initialCount: MaybeRefOrGett
 
       tokenStats.value = stats
 
-      tokenHistory.value = historyData.history.map((entry: any) => ({
+      tokenHistory.value = historyData.history.map((entry) => ({
         timestamp: entry.timestamp,
         total: entry.total_tokens,
         prompt: entry.prompt_tokens,

@@ -123,3 +123,11 @@ func (rl *RateLimiter) WaitForSlot(ctx context.Context, model string, maxConcurr
 	}
 	return false
 }
+
+func (rl *RateLimiter) Flush() {
+	if rl.redis == nil || !rl.redis.IsConnected() {
+		return
+	}
+	ctx := context.Background()
+	rl.redis.Delete(ctx, rl.prefix+"active_requests:*")
+}

@@ -134,6 +134,10 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		v1.GET("/test/reports", h.GetTestHistory)
 		v1.GET("/test/results/:model_name", h.GetTestResults)
 		v1.GET("/test/report/:model_name", h.GetTestResults)
+		v1.POST("/test/comparative", h.RunComparativeAnalysis)
+		v1.GET("/test/status", h.GetTestStatus)
+		v1.DELETE("/test/reports", h.ClearTestReports)
+		v1.POST("/test/model/:model_name/switch-and-test", h.SwitchAndTestModel)
 	}
 
 	api := rg.Group("/api/v1")
@@ -1191,4 +1195,161 @@ func (h *ManageHandler) GetLlamaCppModelStatus(c *gin.Context) {
 func (h *ManageHandler) GetMemoryOptimization(c *gin.Context) {
 	status := h.gpuMonitor.GetMemoryOptimizationStatus()
 	c.JSON(http.StatusOK, status)
+}
+
+func (h *ManageHandler) RunComparativeAnalysis(c *gin.Context) {
+	var req struct {
+		ModelNames []string `json:"model_names"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if len(req.ModelNames) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model_names is required"})
+		return
+	}
+
+	getModelInfo := func(modelName string) (string, int, bool) {
+		mc := h.scheduler.GetModelConfig(modelName)
+		if mc == nil {
+			return "", 0, false
+		}
+		return mc.ModelPath, mc.Port, mc.SupportsImages
+	}
+
+	analysis := h.modelTesting.RunComparativeAnalysis(c.Request.Context(), req.ModelNames, getModelInfo)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "completed",
+		"message": "Comparative analysis completed",
+		"analysis": analysis,
+	})
+}
+
+func (h *ManageHandler) GetTestStatus(c *gin.Context) {
+	if h.redis == nil || !h.redis.IsConnected() {
+		c.JSON(http.StatusOK, gin.H{
+			"status":            "ready",
+			"models_tested_count": 0,
+			"models_tested":     []string{},
+			"timestamp":         time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	ctx := context.Background()
+	items, err := h.redis.LRange(ctx, "model_test:history", 0, -1)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"status":            "ready",
+			"models_tested_count": 0,
+			"models_tested":     []string{},
+			"timestamp":         time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	modelsTested := make(map[string]bool)
+	for _, item := range items {
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(item), &entry); err == nil {
+			if modelName, ok := entry["model_name"].(string); ok {
+				modelsTested[modelName] = true
+			}
+		}
+	}
+
+	modelList := make([]string, 0, len(modelsTested))
+	for m := range modelsTested {
+		modelList = append(modelList, m)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":            "ready",
+		"models_tested_count": len(modelList),
+		"models_tested":     modelList,
+		"timestamp":         time.Now().Format(time.RFC3339),
+	})
+}
+
+func (h *ManageHandler) ClearTestReports(c *gin.Context) {
+	if h.redis == nil || !h.redis.IsConnected() {
+		c.JSON(http.StatusOK, gin.H{"status": "success", "message": "No reports to clear"})
+		return
+	}
+
+	ctx := context.Background()
+	h.redis.Delete(ctx, "model_test:history")
+	h.redis.Delete(ctx, "model_test:report:*")
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "All test reports cleared"})
+}
+
+func (h *ManageHandler) SwitchAndTestModel(c *gin.Context) {
+	modelName := c.Param("model_name")
+	if !h.scheduler.IsModelAvailable(modelName) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
+		return
+	}
+
+	h.scheduler.SetSwitchingInProgress(true)
+	defer h.scheduler.SetSwitchingInProgress(false)
+
+	ok, err := h.scheduler.StartModel(c.Request.Context(), modelName)
+	if !ok {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "failed",
+			"message": fmt.Sprintf("Failed to switch to model %s", modelName),
+			"report":  nil,
+		})
+		return
+	}
+	_ = err
+
+	h.scheduler.MarkModelSelected(modelName)
+
+	if err := h.waitForModelReady(c.Request.Context(), modelName); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "failed",
+			"message": fmt.Sprintf("Model switch successful but readiness check failed: %v", err),
+			"report":  nil,
+		})
+		return
+	}
+
+	mc := h.scheduler.GetModelConfig(modelName)
+	port := h.scheduler.GetModelPort(modelName)
+	modelPath := h.scheduler.GetModelPath(modelName)
+
+	report := h.modelTesting.RunAllTests(c.Request.Context(), modelName, modelPath, port, mc.SupportsImages)
+
+	if h.redis != nil && h.redis.IsConnected() {
+		ctx := context.Background()
+		reportKey := fmt.Sprintf("model_test:report:%s", modelName)
+		h.redis.SetJSON(ctx, reportKey, report, 0)
+
+		historyKey := "model_test:history"
+		historyEntry := gin.H{
+			"model_name": modelName,
+			"timestamp":  report.Timestamp,
+			"status": func() string {
+				if report.PassRate >= 1.0 {
+					return "passed"
+				}
+				return "partial"
+			}(),
+			"pass_rate": report.PassRate,
+		}
+		data, _ := json.Marshal(historyEntry)
+		h.redis.LPush(ctx, historyKey, string(data))
+		h.redis.LTrim(ctx, historyKey, 0, 99)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "completed",
+		"message": fmt.Sprintf("Successfully switched to %s and completed tests", modelName),
+		"report":  report,
+	})
 }

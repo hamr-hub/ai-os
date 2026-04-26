@@ -832,6 +832,13 @@ class GPUMonitor:
                 for k in ["ecc_errors", "throttle_reasons"]:
                     if k in primary:
                         history_entry[k] = primary[k]
+            
+            vllm_metrics = self.get_vllm_metrics()
+            if vllm_metrics and vllm_metrics.get("vllm_available"):
+                history_entry["vllm_running_requests"] = int(vllm_metrics.get("running_requests", 0))
+                history_entry["vllm_waiting_requests"] = int(vllm_metrics.get("waiting_requests", 0))
+                history_entry["vllm_gpu_cache_usage"] = float(vllm_metrics.get("gpu_cache_usage", 0))
+            
             self._redis_client.lpush("gpu:history", json.dumps(history_entry))
             self._redis_client.ltrim("gpu:history", 0, max_points - 1)
             ttl_30_days = 30 * 24 * 60 * 60
