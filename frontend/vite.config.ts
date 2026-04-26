@@ -10,10 +10,9 @@ const resolvePort = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-const manageBackend = normalizeTarget(
-  process.env.VITE_MANAGE_BACKEND || process.env.VITE_BACKEND || 'http://localhost:35000',
+const unifiedBackend = normalizeTarget(
+  process.env.VITE_BACKEND || 'http://localhost:80',
 )
-const v1Backend = normalizeTarget(process.env.VITE_V1_BACKEND || 'http://localhost:35001')
 const devServerPort = resolvePort(process.env.VITE_PORT || process.env.PORT, 30001)
 
 export default defineConfig({
@@ -52,34 +51,31 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/manage': {
-        target: manageBackend,
+        target: unifiedBackend,
         changeOrigin: true,
       },
       '/api/health/detailed': {
-        target: v1Backend,
+        target: unifiedBackend,
         changeOrigin: true,
-        rewrite: () => '/health/detailed',
       },
       '/api/health': {
-        target: v1Backend,
+        target: unifiedBackend,
         changeOrigin: true,
-        rewrite: () => '/health',
       },
       '/api': {
-        target: manageBackend,
+        target: unifiedBackend,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '/manage'),
       },
       '/v1': {
-        target: v1Backend,
+        target: unifiedBackend,
         changeOrigin: true,
       },
       '/health': {
-        target: v1Backend,
+        target: unifiedBackend,
         changeOrigin: true,
       },
       '/ws': {
-        target: manageBackend,
+        target: unifiedBackend,
         changeOrigin: true,
         ws: true,
       },

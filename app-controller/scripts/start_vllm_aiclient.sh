@@ -62,7 +62,10 @@ LOG_DIR="${VLLM_LOG_DIR:-${PROJECT_ROOT}/logs/vllm-aiclient}"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/vllm_aiclient_$(date +%Y%m%d_%H%M%S).log"
 
-# ===== 7. 等待模型目录就绪 =====
+# ===== 7. vLLM 服务端口 (默认 8000) =====
+VLLM_PORT="${VLLM_PORT:-8000}"
+
+# ===== 8. 等待模型目录就绪 =====
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 等待模型目录就绪: $MODEL_PATH" | tee -a "$LOG_FILE"
 sleep 10
 while [ ! -d "$MODEL_PATH" ]; do
@@ -71,18 +74,19 @@ while [ ! -d "$MODEL_PATH" ]; do
 done
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 模型目录已就绪" | tee -a "$LOG_FILE"
 
-# ===== 8. 记录 GPU 状态 =====
+# ===== 9. 记录 GPU 状态 =====
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] GPU 状态:" | tee -a "$LOG_FILE"
 nvidia-smi --query-gpu=index,name,memory.total,memory.free --format=csv | tee -a "$LOG_FILE"
 
-# ===== 9. 启动 vLLM =====
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 启动 vLLM 服务，模型: $MODEL_PATH" | tee -a "$LOG_FILE"
+# ===== 10. 启动 vLLM =====
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 启动 vLLM 服务，模型: $MODEL_PATH, 端口: $VLLM_PORT" | tee -a "$LOG_FILE"
 
 exec vllm serve "$MODEL_PATH" \
   --trust-remote-code \
   --gpu-memory-utilization 0.92 \
   --max-model-len 32768 \
   --host 0.0.0.0 \
+  --port "$VLLM_PORT" \
   --kv-cache-dtype fp8 \
   --enable-chunked-prefill \
   --max-num-batched-tokens 16384 \

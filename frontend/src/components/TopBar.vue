@@ -315,9 +315,9 @@ onUnmounted(() => {
 
 <style scoped>
 .topbar {
-  --topbar-bg-start: rgba(11, 15, 28, 0.98);
-  --topbar-bg-end: rgba(11, 15, 28, 0.95);
-  --topbar-border: rgba(99, 102, 241, 0.1);
+  --topbar-bg-start: rgba(10, 14, 26, 0.98);
+  --topbar-bg-end: rgba(10, 14, 26, 0.95);
+  --topbar-border: var(--border-primary);
   --topbar-line-start: rgba(99, 102, 241, 0.3);
   --topbar-line-mid: rgba(6, 182, 212, 0.4);
   --panel-color-scheme: dark;
@@ -405,9 +405,9 @@ onUnmounted(() => {
 }
 
 :global([data-theme='light']) .topbar {
-  --topbar-bg-start: rgba(255, 255, 255, 0.96);
+  --topbar-bg-start: rgba(248, 250, 252, 0.96);
   --topbar-bg-end: rgba(248, 250, 252, 0.92);
-  --topbar-border: rgba(99, 102, 241, 0.08);
+  --topbar-border: var(--border-primary);
   --topbar-line-start: rgba(99, 102, 241, 0.18);
   --topbar-line-mid: rgba(6, 182, 212, 0.22);
   --panel-color-scheme: light;

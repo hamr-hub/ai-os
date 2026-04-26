@@ -11,7 +11,6 @@ import GpuMetricsCard from '@/components/cards/GpuMetricsCard.vue'
 import VLLMMetricsCard from '@/components/cards/VLLMMetricsCard.vue'
 import SystemStatusCard from '@/components/cards/SystemStatusCard.vue'
 import TokenUsageCard from '@/components/cards/TokenUsageCard.vue'
-import RequestQueueCard from '@/components/cards/RequestQueueCard.vue'
 import HealthAlertCard from '@/components/cards/HealthAlertCard.vue'
 import RunningModelsCard from '@/components/cards/RunningModelsCard.vue'
 import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server } from 'lucide-vue-next'
@@ -56,7 +55,6 @@ const {
 } = useTokenStats()
 const {
   systemStatus,
-  queueStatus,
   healthAlert,
   systemHistory,
   refresh: refreshSystem,
@@ -122,8 +120,7 @@ const handleScale = (cardId: string, delta: number) => {
         </div>
       </div>
 
-      <div v-else class="grid">
-        <div class="dashboard-layout">
+<div v-else class="dashboard-layout">
         <div class="dashboard-row top-row">
           <div
             class="card system-card card-glow-primary scale-in stagger-1"
@@ -188,8 +185,6 @@ const handleScale = (cardId: string, delta: number) => {
               :gpu-history="gpuHistory"
               :gpu-status="gpuStatus"
               :error="gpuHistoryError"
-              :running-models-count="modelList.filter((model) => model.running).length"
-              :total-models-count="modelList.length"
             />
             <template v-if="gpuHistory.length > 0">
               <div class="gpu-charts-grid">
@@ -295,19 +290,6 @@ const handleScale = (cardId: string, delta: number) => {
               <span class="chart-empty-hint">历史数据将在后端运行后自动采集</span>
             </div>
           </div>
-        </div>
-
-        <div class="dashboard-row bottom-row">
-          <div
-            class="card queue-card card-glow-primary scale-in stagger-4"
-            :style="{ transform: `scale(${cardScale.queue})`, transformOrigin: 'top left' }"
-          >
-            <div class="scale-controls">
-              <button class="scale-btn" @click="handleScale('queue', 0.1)">+</button>
-              <button class="scale-btn" @click="handleScale('queue', -0.1)">−</button>
-            </div>
-            <RequestQueueCard :queue-status="queueStatus" :default-model="defaultModel" />
-          </div>
 
           <div
             class="card health-card card-glow-green scale-in stagger-5"
@@ -339,7 +321,6 @@ const handleScale = (cardId: string, delta: number) => {
             />
           </div>
         </div>
-      </div>
       </div>
     </div>
   </div>
@@ -417,40 +398,46 @@ const handleScale = (cardId: string, delta: number) => {
   border-radius: 2px;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .dashboard-layout {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 20px 24px;
+  gap: 12px;
+  padding: 12px;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
 }
 
 .dashboard-row {
   display: grid;
-  gap: 20px;
+  gap: 12px;
+  width: 100%;
 }
 
 .top-row {
   grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
 }
 
 .gpu-row {
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
 }
 
 .bottom-row {
   grid-template-columns: repeat(3, 1fr);
 }
 
-@media (max-width: 1200px) {
-  .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 1400px) {
+  .top-row {
+    grid-template-columns: repeat(3, 1fr);
   }
+}
 
+@media (max-width: 1200px) {
   .top-row {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -467,9 +454,10 @@ const handleScale = (cardId: string, delta: number) => {
   }
 }
 
-@media (max-width: 640px) {
-  .grid {
-    grid-template-columns: 1fr;
+@media (max-width: 768px) {
+  .dashboard-layout {
+    padding: 12px;
+    gap: 12px;
   }
 
   .top-row {
@@ -478,7 +466,6 @@ const handleScale = (cardId: string, delta: number) => {
   .bottom-row {
     grid-template-columns: 1fr;
     gap: 12px;
-    padding: 12px 16px;
   }
 
   .gpu-full-width {
@@ -506,12 +493,13 @@ const handleScale = (cardId: string, delta: number) => {
   background: var(--bg-card);
   border-radius: 16px;
   border: 1px solid var(--border-card);
-  padding: 20px;
+  padding: 16px;
   box-shadow: var(--shadow);
   transition: all 0.3s ease;
   animation: fade-in 0.4s ease-out;
   position: relative;
   overflow: hidden;
+  width: 100%;
 }
 
 .card:hover {
@@ -524,6 +512,16 @@ const handleScale = (cardId: string, delta: number) => {
 
 .full-width {
   width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.full-width > div:not(.scale-controls):not(.gpu-card-header) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .card-header {
@@ -690,12 +688,27 @@ const handleScale = (cardId: string, delta: number) => {
 
 .gpu-charts-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-top: 16px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+  flex: 1;
+  min-height: 0;
+  align-content: start;
+}
+
+@media (max-width: 1600px) {
+  .gpu-charts-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 @media (max-width: 1200px) {
+  .gpu-charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
   .gpu-charts-grid {
     grid-template-columns: 1fr;
   }
@@ -704,14 +717,18 @@ const handleScale = (cardId: string, delta: number) => {
 .chart-card {
   background: var(--bg-secondary);
   border-radius: 12px;
-  padding: 16px;
+  padding: 12px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .chart-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .chart-icon {

@@ -29,37 +29,46 @@ http {
     gzip_min_length 1024;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
-    upstream api_gateway {
+    upstream aiclient_gateway {
         server localhost:3000;
     }
 
-    upstream manage_frontend {
+    upstream frontend_manage {
         server localhost:30000;
     }
 
+    upstream python_backend {
+        server localhost:35000;
+    }
+
+    upstream go_backend {
+        server localhost:35001;
+    }
+
     server {
-        listen 30000;
+        listen 80;
         server_name localhost;
-        root /usr/share/nginx/html;
-        index index.html;
 
         location / {
-            try_files $uri $uri/ /index.html;
+            proxy_pass http://aiclient_gateway;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_http_version 1.1;
         }
 
-        location /assets/ {
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-
-        location = /index.html {
-            add_header Cache-Control "no-cache, no-store, must-revalidate";
-            add_header X-Frame-Options "SAMEORIGIN";
-            add_header X-Content-Type-Options "nosniff";
+        location /manage/ {
+            proxy_pass http://frontend_manage;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_http_version 1.1;
         }
 
         location /api/manage/ {
-            proxy_pass http://api_gateway/manage/;
+            proxy_pass http://go_backend/manage/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -70,7 +79,7 @@ http {
         }
 
         location = /api/health {
-            proxy_pass http://api_gateway/health;
+            proxy_pass http://go_backend/health;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -78,7 +87,7 @@ http {
         }
 
         location = /api/health/detailed {
-            proxy_pass http://api_gateway/health/detailed;
+            proxy_pass http://go_backend/health/detailed;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -86,7 +95,7 @@ http {
         }
 
         location /api/ {
-            proxy_pass http://api_gateway/manage/;
+            proxy_pass http://go_backend/manage/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -94,21 +103,18 @@ http {
             proxy_buffering off;
             proxy_cache off;
             chunked_transfer_encoding on;
+        }
+
+        location /v1/test/ {
+            proxy_pass http://go_backend/v1/test/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
 
         location /v1/ {
-            proxy_pass http://api_gateway/v1/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_buffering off;
-            proxy_cache off;
-            chunked_transfer_encoding on;
-        }
-
-        location /manage/ {
-            proxy_pass http://api_gateway/manage/;
+            proxy_pass http://go_backend/v1/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -119,7 +125,7 @@ http {
         }
 
         location /ws/ {
-            proxy_pass http://api_gateway/ws/;
+            proxy_pass http://go_backend/ws/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -132,7 +138,7 @@ http {
         }
 
         location /health {
-            proxy_pass http://api_gateway/health;
+            proxy_pass http://go_backend/health;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

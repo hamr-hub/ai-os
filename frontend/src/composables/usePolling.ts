@@ -7,8 +7,11 @@ export function usePolling(fetchFn: (signal: AbortSignal) => Promise<void>, inte
   const error = ref<string | null>(null)
   let timer: number | null = null
   let activeController: AbortController | null = null
+  let isMounted = false
 
   const fetch = async (manualRefresh = false) => {
+    if (!isMounted && !manualRefresh) return
+
     if (activeController) {
       if (!manualRefresh) return
       activeController.abort()
@@ -42,6 +45,9 @@ export function usePolling(fetchFn: (signal: AbortSignal) => Promise<void>, inte
 
   const startPolling = () => {
     if (timer) return
+    if (!isMounted) {
+      fetch()
+    }
     timer = window.setInterval(() => fetch(), intervalMs)
   }
 
@@ -57,11 +63,13 @@ export function usePolling(fetchFn: (signal: AbortSignal) => Promise<void>, inte
   }
 
   onMounted(() => {
+    isMounted = true
     fetch()
-    startPolling()
+    timer = window.setInterval(() => fetch(), intervalMs)
   })
 
   onUnmounted(() => {
+    isMounted = false
     stopPolling()
   })
 

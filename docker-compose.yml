@@ -104,10 +104,12 @@ services:
       - PORT=3000
     volumes:
       - ./aiclient2api/data:/app/data
-      - ./aiclient2api/configs:/configs
+      - ./aiclient2api/configs:/app/configs
     depends_on:
       ai-controller:
         condition: service_healthy
+      go-vllm-api:
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
@@ -127,9 +129,9 @@ services:
       dockerfile: Dockerfile
     container_name: ai-os-frontend
     ports:
-      - "30000:80"
+      - "30000:30000"
     depends_on:
-      ai-controller:
+      aiclient:
         condition: service_healthy
     restart: unless-stopped
     logging:
