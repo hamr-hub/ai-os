@@ -1,31 +1,6 @@
 {
   "openai-custom": [
     {
-      "customName": "go-vllm-api",
-      "checkModelName": "",
-      "checkHealth": true,
-      "concurrencyLimit": 32,
-      "queueLimit": 100,
-      "OPENAI_API_KEY": "123456",
-      "OPENAI_BASE_URL": "http://localhost:35001",
-      "uuid": "36babfc8-934a-404d-826a-3dd25bef139a",
-      "isHealthy": true,
-      "lastUsed": "2026-04-26T14:41:44.865Z",
-      "usageCount": 0,
-      "errorCount": 1,
-      "lastErrorTime": "2026-04-26T14:41:44.865Z",
-      "supportedModels": [],
-      "notSupportedModels": [],
-      "isDisabled": false,
-      "needsRefresh": false,
-      "refreshCount": 0,
-      "lastHealthCheckTime": "2026-04-26T14:41:44.865Z",
-      "lastHealthCheckModel": "gpt-4o-mini",
-      "lastErrorMessage": "All health check attempts failed",
-      "lastRefreshTime": null,
-      "_lastSelectionSeq": 0
-    },
-    {
       "customName": "app-controller",
       "checkModelName": "",
       "checkHealth": true,

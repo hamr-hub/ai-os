@@ -49,10 +49,10 @@ export OMP_NUM_THREADS=16
 
 # ===== 5. 模型路径（从环境变量读取，提供默认值）=====
 MODEL_STATE_FILE="${VLLM_MODEL_STATE_FILE:-$SCRIPT_DIR/.vllm_model_path}"
-if [ -f "$MODEL_STATE_FILE" ]; then
+if [ -n "${VLLM_MODEL_PATH:-}" ]; then
+    MODEL_PATH="$VLLM_MODEL_PATH"
+elif [ -f "$MODEL_STATE_FILE" ]; then
     MODEL_PATH="$(tr -d '\r\n' < "$MODEL_STATE_FILE")"
-elif [ -n "${VLLM_MODEL_PATH:-}" ]; then
-    MODEL_PATH="/mnt/pve_models/Gemma-4-31B-Abliterated"
 else
     MODEL_PATH="/mnt/pve_models/Gemma-4-31B-Abliterated"
 fi

@@ -418,7 +418,7 @@ const handleScale = (cardId: string, delta: number) => {
 }
 
 .top-row {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
 
@@ -444,7 +444,7 @@ const handleScale = (cardId: string, delta: number) => {
 
 @media (max-width: 1400px) {
   .top-row {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -699,7 +699,7 @@ const handleScale = (cardId: string, delta: number) => {
 
 .gpu-charts-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   margin-top: 12px;
   flex: 1;
@@ -709,7 +709,7 @@ const handleScale = (cardId: string, delta: number) => {
 
 @media (max-width: 1600px) {
   .gpu-charts-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
