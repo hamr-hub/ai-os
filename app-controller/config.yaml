@@ -14,7 +14,7 @@ models:
   Qwen3-235B-A22B-Instruct-2507-AWQ:
     service: vllm-aiclient
     port: 8000
-    required_memory: 120GB
+    required_memory: 48GB
     preload: false
     keep_alive: false
     model_path: /mnt/pve_models/Qwen3-235B-A22B-Instruct-2507-AWQ

@@ -707,19 +707,14 @@ class Scheduler:
                     continue
                 
                 config = self.get_model_config(model_name)
-                # If model is critical/high and target is lower, don't stop it
-                if config:
-                    model_priority = priority_order.get(config.get('priority', 'normal'), 2)
-                    if model_priority < target_priority and config.get('keep_alive', False):
-                        continue
-                
                 last_used = self.model_last_used.get(model_name, datetime.min)
                 model_priority_val = priority_order.get(config.get('priority', 'normal'), 2) if config else 2
                 models_to_stop.append({
                     "name": model_name,
                     "priority": model_priority_val,
                     "last_used": last_used,
-                    "memory": _parse_memory_size(config.get('required_memory', 0)) if config else 0
+                    "memory": _parse_memory_size(config.get('required_memory', 0)) if config else 0,
+                    "keep_alive": config.get('keep_alive', False) if config else False
                 })
         
         # Sort by: 1. Priority (lower first) 2. Last used (older first) 3. Memory size (larger first)

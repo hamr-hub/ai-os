@@ -6,3 +6,5 @@ go-vllm-api/server
 frontend/playwright-report/
 frontend/test-results/
 logs/
+aiclient2api/configs/
+aiclient2api/data/
