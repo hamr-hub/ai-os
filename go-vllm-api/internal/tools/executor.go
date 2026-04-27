@@ -581,7 +581,9 @@ func (e *ToolExecutor) handleSearchConversations(arguments map[string]any) (map[
 	}
 
 	port := e.scheduler.GetModelPort(currentModel)
-	if port == 0 {
+	if port == 0 && e.scheduler.GetVLLMManager() != nil {
+		port = e.scheduler.GetVLLMManager().DiscoverVLLMPort()
+	} else if port == 0 {
 		port = 8000
 	}
 
@@ -644,7 +646,9 @@ func (e *ToolExecutor) handleWebSearch(arguments map[string]any) (map[string]any
 	}
 
 	port := e.scheduler.GetModelPort(currentModel)
-	if port == 0 {
+	if port == 0 && e.scheduler.GetVLLMManager() != nil {
+		port = e.scheduler.GetVLLMManager().DiscoverVLLMPort()
+	} else if port == 0 {
 		port = 8000
 	}
 

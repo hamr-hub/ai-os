@@ -42,8 +42,11 @@ export TERM=xterm-256color
 
 # ===== 4. 核心稳定参数 =====
 export VLLM_ATTENTION_BACKEND=TRITON_ATTN
-export VLLM_USE_V1=0
+export VLLM_USE_V1=1
 export NCCL_P2P_DISABLE=1
+export NCCL_SOCKET_REUSEPORT=1
+export NCCL_ASYNC_ERROR_HANDLING=1
+export NCCL_IB_DISABLE=1
 export CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
 export OMP_NUM_THREADS=16
 export VLLM_NO_FLASHINFER=1
@@ -52,7 +55,7 @@ export FLASHINFER_DISABLE=1
 # ===== 5. 模型路径（从环境变量读取，提供默认值）=====
 MODEL_STATE_FILE="${VLLM_MODEL_STATE_FILE:-$SCRIPT_DIR/.vllm_model_path}"
 if [ -n "${VLLM_MODEL_PATH:-}" ]; then
-    MODEL_PATH="$VLLM_MODEL_PATH"
+    MODEL_PATH="/mnt/pve_models/Gemma-4-31B-Abliterated"
 elif [ -f "$MODEL_STATE_FILE" ]; then
     MODEL_PATH="$(tr -d '\r\n' < "$MODEL_STATE_FILE")"
 else
@@ -91,7 +94,7 @@ wait_for_port_release() {
             if command -v fuser >/dev/null 2>&1; then
                 fuser -k "${port}/tcp" || true
             else
-                pkill -f "vllm serve .* --port ${port}" || true
+                pkill -f "vllm serve "/mnt/pve_models/Gemma-4-31B-Abliterated" --port ${port}" || true
             fi
             sleep 2
         fi

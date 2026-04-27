@@ -18,11 +18,16 @@ type VLLMProxy struct {
 	logger        *zap.Logger
 	requestClient *http.Client
 	streamClient  *http.Client
+	vllmHost      string
 }
 
-func NewVLLMProxy(logger *zap.Logger) *VLLMProxy {
+func NewVLLMProxy(logger *zap.Logger, vllmHost string) *VLLMProxy {
+	if vllmHost == "" {
+		vllmHost = "localhost"
+	}
 	return &VLLMProxy{
-		logger: logger,
+		logger:   logger,
+		vllmHost: vllmHost,
 		requestClient: &http.Client{
 			Timeout: 60 * time.Second,
 			Transport: &http.Transport{
@@ -57,7 +62,7 @@ func readErrorBody(resp *http.Response) string {
 }
 
 func (p *VLLMProxy) ChatCompletion(ctx context.Context, port int, payload interface{}) (interface{}, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1/chat/completions", port)
+	url := fmt.Sprintf("http://%s:%d/v1/chat/completions", p.vllmHost, port)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -90,7 +95,7 @@ func (p *VLLMProxy) ChatCompletion(ctx context.Context, port int, payload interf
 }
 
 func (p *VLLMProxy) StreamChatCompletion(ctx context.Context, port int, payload interface{}) (<-chan StreamEvent, error) {
-	url := fmt.Sprintf("http://localhost:%d/v1/chat/completions", port)
+	url := fmt.Sprintf("http://%s:%d/v1/chat/completions", p.vllmHost, port)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err

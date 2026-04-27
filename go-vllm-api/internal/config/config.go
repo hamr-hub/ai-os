@@ -90,6 +90,7 @@ type VLLMConfig struct {
 	DefaultPort                int     `yaml:"default_port"`
 	DefaultGPUMemoryUtilization float64 `yaml:"default_gpu_memory_utilization"`
 	DefaultMaxModelLen         int     `yaml:"default_max_model_len"`
+	VLLMHost                   string  `yaml:"vllm_host"`
 }
 
 type LlamaCppConfig struct {
@@ -205,6 +206,9 @@ func Load(path string) (*AppConfig, error) {
 	}
 	if c.LlamaCpp.ModelsBasePath == "" {
 		c.LlamaCpp.ModelsBasePath = c.VLLM.ModelBasePath
+	}
+	if c.VLLM.VLLMHost == "" {
+		c.VLLM.VLLMHost = "localhost"
 	}
 
 	cfg = &c

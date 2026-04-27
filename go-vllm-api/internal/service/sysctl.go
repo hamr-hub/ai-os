@@ -17,14 +17,18 @@ type SystemController struct {
 	needsSudo          bool
 	systemctlPath      string
 	systemctlAvailable bool
+	vllmPort           int
 	mu                 sync.Mutex
 }
 
 func NewSystemController(logger *zap.Logger) *SystemController {
-	sc := &SystemController{logger: logger}
-	sc.needsSudo = sc.checkSudo()
-	sc.systemctlPath, sc.systemctlAvailable = sc.detectSystemctl()
-	return sc
+	return &SystemController{logger: logger, vllmPort: 8000}
+}
+
+func (sc *SystemController) SetVLLMPort(port int) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.vllmPort = port
 }
 
 func (sc *SystemController) checkSudo() bool {
@@ -142,15 +146,39 @@ func (sc *SystemController) getServiceStatusLocked(name string) string {
 }
 
 func (sc *SystemController) IsServiceRunning(name string) bool {
-	cmd := sc.command("systemctl", "is-active", name)
-	if cmd == nil {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	if sc.systemctlAvailable {
+		cmd := sc.command("systemctl", "is-active", name)
+		if cmd == nil {
+			return false
+		}
+		output, err := cmd.Output()
+		if err != nil {
+			return false
+		}
+		return strings.TrimSpace(string(output)) == "active"
+	}
+
+	vllmPort := sc.vllmPort
+	if name != "vllm-aiclient" {
 		return false
 	}
-	output, err := cmd.Output()
-	if err != nil {
-		return false
+
+	addrs := []string{
+		fmt.Sprintf("127.0.0.1:%d", vllmPort),
+		fmt.Sprintf("localhost:%d", vllmPort),
 	}
-	return strings.TrimSpace(string(output)) == "active"
+	for _, addr := range addrs {
+		conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
+		if err == nil {
+			conn.Close()
+			sc.logger.Debug("service status via port check", zap.String("service", name), zap.String("addr", addr))
+			return true
+		}
+	}
+	return false
 }
 
 func (sc *SystemController) GetServiceStatus(name string) string {

@@ -70,6 +70,92 @@ VLLM_MODEL_STATE_FILE = VLLM_CONFIG.get(
     os.path.join(os.path.dirname(VLLM_START_SCRIPT), '.vllm_model_path'),
 )
 
+_cached_vllm_port = None
+_port_discovery_time = None
+
+def discover_vllm_port() -> int:
+    global _cached_vllm_port, _port_discovery_time
+    
+    if _cached_vllm_port is not None:
+        logger.debug("Using cached vLLM port: %d", _cached_vllm_port)
+        return _cached_vllm_port
+    
+    import re
+    
+    def check_port(port, timeout=2):
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            result = sock.connect_ex(('localhost', port))
+            sock.close()
+            return result == 0
+        except Exception:
+            return False
+    
+    try:
+        with open(VLLM_START_SCRIPT, 'r') as f:
+            script_content = f.read()
+        
+        port_match = re.search(r'--port\s+(\d+)', script_content)
+        if port_match:
+            port = int(port_match.group(1))
+            if check_port(port):
+                logger.info("Discovered vLLM port from start script: %d", port)
+                _cached_vllm_port = port
+                _port_discovery_time = datetime.now()
+                return port
+    except Exception as exc:
+        logger.debug("Failed to parse port from start script: %s", exc)
+    
+    try:
+        service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
+        if os.path.exists(service_file):
+            with open(service_file, 'r') as f:
+                service_content = f.read()
+            
+            exec_start_match = re.search(r'^ExecStart=(.+)$', service_content, re.MULTILINE)
+            if exec_start_match:
+                exec_start_line = exec_start_match.group(1)
+                port_match = re.search(r'--port\s+(\d+)', exec_start_line)
+                if port_match:
+                    port = int(port_match.group(1))
+                    if check_port(port):
+                        logger.info("Discovered vLLM port from systemd service: %d", port)
+                        _cached_vllm_port = port
+                        _port_discovery_time = datetime.now()
+                        return port
+    except Exception as exc:
+        logger.debug("Failed to parse port from systemd service: %s", exc)
+    
+    scan_ports = [8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010]
+    for port in scan_ports:
+        if check_port(port):
+            health_url = f"http://localhost:{port}/health"
+            try:
+                import httpx
+                with httpx.Client(timeout=2) as client:
+                    response = client.get(health_url)
+                    if response.status_code == 200:
+                        logger.info("Discovered vLLM port by scanning: %d", port)
+                        _cached_vllm_port = port
+                        _port_discovery_time = datetime.now()
+                        return port
+            except Exception:
+                continue
+    
+    logger.warning("Failed to discover vLLM port, using default: %d", VLLM_DEFAULT_PORT)
+    _cached_vllm_port = VLLM_DEFAULT_PORT
+    _port_discovery_time = datetime.now()
+    return VLLM_DEFAULT_PORT
+
+def refresh_vllm_port_cache():
+    global _cached_vllm_port, _port_discovery_time
+    _cached_vllm_port = None
+    _port_discovery_time = None
+    logger.info("vLLM port cache refreshed")
+    discover_vllm_port()
+
 # 模型显存估算配置（基于模型参数和量化类型）
 # 格式：{"pattern": {"vram_gb": 数值, "multimodal": 布尔值}}
 MODEL_MEMORY_ESTIMATES = {
@@ -273,12 +359,13 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
 
         service_running = _is_service_running()
         config_model_name = _find_model_name_from_path(model_path)
+        vllm_port = discover_vllm_port()
         
         return {
             "name": config_model_name or os.path.basename(model_path),
             "path": model_path,
             "service": VLLM_SERVICE_NAME,
-            "port": VLLM_DEFAULT_PORT,
+            "port": vllm_port,
             "running": service_running,
             "status": "running" if service_running else "stopped"
         }
@@ -487,7 +574,8 @@ async def _wait_for_vllm_ready(max_wait: int = 180, check_interval: int = 5) -> 
     :param check_interval: 检查间隔（秒）
     :return: 是否就绪
     """
-    health_url = f"http://localhost:{VLLM_DEFAULT_PORT}/health"
+    vllm_port = discover_vllm_port()
+    health_url = f"http://localhost:{vllm_port}/health"
     elapsed = 0
     
     while elapsed < max_wait:
@@ -776,7 +864,8 @@ async def _test_vllm_model(model_name: str, max_retries: int = 5, retry_delay: i
     :param retry_delay: 重试间隔（秒）
     :return: 自测结果字典
     """
-    vllm_url = f"http://localhost:{VLLM_DEFAULT_PORT}/v1/chat/completions"
+    vllm_port = discover_vllm_port()
+    vllm_url = f"http://localhost:{vllm_port}/v1/chat/completions"
     
     test_payload = {
         "model": model_name,

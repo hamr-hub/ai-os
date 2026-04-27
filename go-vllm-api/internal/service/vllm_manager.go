@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +27,10 @@ type VLLMManager struct {
 	sysCtl        *SystemController
 	switchLock    sync.Mutex
 	requestClient *http.Client
+	
+	cachedPort     int
+	portCachedAt   time.Time
+	portMu         sync.RWMutex
 }
 
 type ModelScanResult struct {
@@ -52,6 +58,132 @@ func NewVLLMManager(cfg *config.VLLMConfig, logger *zap.Logger, sysCtl *SystemCo
 
 func (vm *VLLMManager) SetConfig(cfg *config.VLLMConfig) {
 	vm.cfg = cfg
+}
+
+func (vm *VLLMManager) checkPort(port int, timeout time.Duration) bool {
+	address := fmt.Sprintf("localhost:%d", port)
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+func (vm *VLLMManager) DiscoverVLLMPort() int {
+	vm.portMu.RLock()
+	if vm.cachedPort != 0 && time.Since(vm.portCachedAt) < 5*time.Minute {
+		port := vm.cachedPort
+		vm.portMu.RUnlock()
+		vm.logger.Debug("Using cached vLLM port", zap.Int("port", port))
+		return port
+	}
+	vm.portMu.RUnlock()
+
+	defaultPort := vm.cfg.DefaultPort
+	if defaultPort == 0 {
+		defaultPort = 8000
+	}
+
+	scriptPath := vm.cfg.StartScript
+	if scriptPath == "" {
+		scriptPath = "/root/ai-suite/start_vllm.sh"
+	}
+	serviceName := vm.cfg.ServiceName
+	if serviceName == "" {
+		serviceName = "vllm-aiclient"
+	}
+
+	content, err := os.ReadFile(scriptPath)
+	if err == nil {
+		lines := strings.Split(string(content), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "--port") {
+				parts := strings.Fields(line)
+				for i, part := range parts {
+					if part == "--port" && i+1 < len(parts) {
+						if port, err := strconv.Atoi(parts[i+1]); err == nil {
+							if vm.checkPort(port, 2*time.Second) {
+								vm.logger.Info("Discovered vLLM port from start script", zap.Int("port", port))
+								vm.portMu.Lock()
+								vm.cachedPort = port
+								vm.portCachedAt = time.Now()
+								vm.portMu.Unlock()
+								return port
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	serviceFile := fmt.Sprintf("/etc/systemd/system/%s.service", serviceName)
+	if content, err := os.ReadFile(serviceFile); err == nil {
+		lines := strings.Split(string(content), "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "ExecStart=") {
+				execLine := strings.TrimPrefix(line, "ExecStart=")
+				if strings.Contains(execLine, "--port") {
+					parts := strings.Fields(execLine)
+					for i, part := range parts {
+						if part == "--port" && i+1 < len(parts) {
+							if port, err := strconv.Atoi(parts[i+1]); err == nil {
+								if vm.checkPort(port, 2*time.Second) {
+									vm.logger.Info("Discovered vLLM port from systemd service", zap.Int("port", port))
+									vm.portMu.Lock()
+									vm.cachedPort = port
+									vm.portCachedAt = time.Now()
+									vm.portMu.Unlock()
+									return port
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	scanPorts := []int{8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010}
+	for _, port := range scanPorts {
+		if vm.checkPort(port, 2*time.Second) {
+			healthURL := fmt.Sprintf("http://localhost:%d/health", port)
+			req, err := http.NewRequest("GET", healthURL, nil)
+			if err == nil {
+				client := &http.Client{Timeout: 2 * time.Second}
+				resp, err := client.Do(req)
+				if err == nil {
+					if resp.StatusCode == http.StatusOK {
+						resp.Body.Close()
+						vm.logger.Info("Discovered vLLM port by scanning", zap.Int("port", port))
+						vm.portMu.Lock()
+						vm.cachedPort = port
+						vm.portCachedAt = time.Now()
+						vm.portMu.Unlock()
+						return port
+					}
+					resp.Body.Close()
+				}
+			}
+		}
+	}
+
+	vm.logger.Warn("Failed to discover vLLM port, using default", zap.Int("default_port", defaultPort))
+	vm.portMu.Lock()
+	vm.cachedPort = defaultPort
+	vm.portCachedAt = time.Now()
+	vm.portMu.Unlock()
+	return defaultPort
+}
+
+func (vm *VLLMManager) RefreshVLLMPortCache() {
+	vm.portMu.Lock()
+	vm.cachedPort = 0
+	vm.portCachedAt = time.Time{}
+	vm.portMu.Unlock()
+	vm.logger.Info("vLLM port cache refreshed")
+	vm.DiscoverVLLMPort()
 }
 
 func (vm *VLLMManager) ScanModels() []ModelScanResult {

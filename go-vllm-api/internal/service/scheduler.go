@@ -56,6 +56,10 @@ func (s *Scheduler) GetRateLimiter() *RateLimiter {
 	return s.rateLimiter
 }
 
+func (s *Scheduler) GetVLLMManager() *VLLMManager {
+	return s.vllmManager
+}
+
 func (s *Scheduler) initPreloaded() {
 	for name, mc := range s.cfg.Models {
 		if mc.Preload {
@@ -261,9 +265,13 @@ func (s *Scheduler) getCurrentVLLMModelPath() string {
 }
 
 func (s *Scheduler) detectCurrentVLLMModel() string {
-	port := 8000
-	if s.cfg != nil && s.cfg.VLLM.DefaultPort > 0 {
+	var port int
+	if s.vllmManager != nil {
+		port = s.vllmManager.DiscoverVLLMPort()
+	} else if s.cfg != nil && s.cfg.VLLM.DefaultPort > 0 {
 		port = s.cfg.VLLM.DefaultPort
+	} else {
+		port = 8000
 	}
 
 	url := fmt.Sprintf("http://localhost:%d/v1/models", port)
