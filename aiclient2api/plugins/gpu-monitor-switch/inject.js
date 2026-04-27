@@ -8,6 +8,7 @@
     var gpuHistory = [];
     var autoRefreshTimer = null;
     var isAutoRefreshing = false;
+    var activeModelAction = null;
 
     var sectionHTML = `
 <div id="gpu-monitor" class="section" data-section="gpu-monitor" style="display: none;">
@@ -170,6 +171,67 @@
 
     function getColor(v) { if (v < 60) return '#10b981'; if (v < 80) return '#f59e0b'; return '#ef4444'; }
 
+    function setActionButtonsDisabled(disabled) {
+        document.querySelectorAll('#modelSwitchContent .model-actions .btn').forEach(function(btn) {
+            btn.disabled = disabled;
+        });
+    }
+
+    function showModelMessage(type, text) {
+        var el = document.getElementById('modelSwitchContent');
+        var old = document.getElementById('gpu-model-message');
+        if (old) old.remove();
+        if (!el || !text) return;
+        var div = document.createElement('div');
+        div.id = 'gpu-model-message';
+        div.className = type === 'error' ? 'empty-state error' : 'empty-state';
+        div.style.marginBottom = '12px';
+        div.innerHTML = '<p>' + text + '</p>';
+        el.parentNode.insertBefore(div, el);
+        if (type !== 'error') {
+            setTimeout(function() {
+                if (div && div.parentNode) div.parentNode.removeChild(div);
+            }, 4000);
+        }
+    }
+
+    async function executeModelAction(action, name, successText) {
+        if (activeModelAction) return;
+        activeModelAction = action + ':' + name;
+        setActionButtonsDisabled(true);
+        showModelMessage('info', action === 'switch' ? '正在切换并预热模型：' + name : '处理中：' + name);
+        try {
+            var r = await fetch('/api/model-switch/' + action, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelName: name })
+            });
+            var result = await r.json();
+            if (!result.success) {
+                showModelMessage('error', (action === 'switch' ? '切换失败: ' : '操作失败: ') + result.error);
+                return;
+            }
+            await renderModels();
+            if (action === 'switch') {
+                var warmup = result.data && result.data.warmup;
+                if (warmup && warmup.success) {
+                    showModelMessage('info', successText + '，预热完成');
+                } else if (warmup) {
+                    showModelMessage('info', successText + '，但预热未成功');
+                } else {
+                    showModelMessage('info', successText);
+                }
+            } else {
+                showModelMessage('info', successText);
+            }
+        } catch (e) {
+            showModelMessage('error', (action === 'switch' ? '切换失败: ' : '操作失败: ') + e.message);
+        } finally {
+            activeModelAction = null;
+            setActionButtonsDisabled(false);
+        }
+    }
+
     async function loadGPUData() {
         var el = document.getElementById('gpuStatusContent');
         if (!el) return;
@@ -242,7 +304,7 @@
                 html += '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (model.port || '--') + '</span></div></div>';
                 html += '<div class="model-actions">';
                 if (model.running) {
-                    html += '<button class="btn btn-sm btn-primary" onclick="window.switchModel(\'' + model.name + '\')"><i class="fas fa-exchange-alt"></i> 切换</button>';
+                    html += '<button class="btn btn-sm btn-primary" onclick="window.switchModel(\'' + model.name + '\')"><i class="fas fa-exchange-alt"></i> 切换并预热</button>';
                     html += '<button class="btn btn-sm btn-danger" onclick="window.stopModel(\'' + model.name + '\')"><i class="fas fa-stop"></i> 停止</button>';
                 } else {
                     html += '<button class="btn btn-sm btn-success" onclick="window.startModel(\'' + model.name + '\')"><i class="fas fa-play"></i> 启动</button>';
@@ -257,30 +319,15 @@
     }
 
     window.switchModel = async function(name) {
-        try {
-            var r = await fetch('/api/model-switch/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelName: name }) });
-            var result = await r.json();
-            if (result.success) { alert('切换成功: ' + name); renderModels(); }
-            else alert('切换失败: ' + result.error);
-        } catch (e) { alert('切换失败: ' + e.message); }
+        await executeModelAction('switch', name, '切换成功: ' + name);
     };
 
     window.startModel = async function(name) {
-        try {
-            var r = await fetch('/api/model-switch/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelName: name }) });
-            var result = await r.json();
-            if (result.success) { alert('启动成功: ' + name); renderModels(); }
-            else alert('启动失败: ' + result.error);
-        } catch (e) { alert('启动失败: ' + e.message); }
+        await executeModelAction('start', name, '启动成功: ' + name);
     };
 
     window.stopModel = async function(name) {
-        try {
-            var r = await fetch('/api/model-switch/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelName: name }) });
-            var result = await r.json();
-            if (result.success) { alert('已停止: ' + name); renderModels(); }
-            else alert('停止失败: ' + result.error);
-        } catch (e) { alert('停止失败: ' + e.message); }
+        await executeModelAction('stop', name, '已停止: ' + name);
     };
 
     function injectMenuItem() {

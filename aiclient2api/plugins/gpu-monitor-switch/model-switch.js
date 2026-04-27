@@ -38,6 +38,38 @@ class ModelSwitchService {
         }
     }
 
+    async warmupModel(modelName) {
+        try {
+            const response = await fetch(`${backendClient.getBaseUrl()}/v1/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: modelName,
+                    messages: [{ role: 'user', content: 'hi' }],
+                    max_tokens: 8,
+                    temperature: 0
+                }),
+                signal: AbortSignal.timeout(45000)
+            });
+            const text = await response.text();
+            let data = null;
+            try {
+                data = text ? JSON.parse(text) : null;
+            } catch {
+                data = null;
+            }
+            return {
+                success: response.ok,
+                status: response.status,
+                data,
+                raw: text.slice(0, 500)
+            };
+        } catch (error) {
+            logger.error('[Model Switch Service] Error warming model:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
     async getModelsList() {
         const models = await this.fetchModelsFromBackend();
         const modelArray = Object.entries(models).map(function(entry) {
@@ -64,8 +96,18 @@ class ModelSwitchService {
                 {}
             );
             const result = await response.json();
+            const warmup = await this.warmupModel(modelName);
             await this.fetchModelsFromBackend();
-            return { success: true, data: { modelName: modelName, result: result }, timestamp: new Date().toISOString(), backendStatus: backendClient.getStatus() };
+            return {
+                success: true,
+                data: {
+                    modelName: modelName,
+                    result: result,
+                    warmup
+                },
+                timestamp: new Date().toISOString(),
+                backendStatus: backendClient.getStatus()
+            };
         } catch (error) {
             logger.error('[Model Switch Service] Error switching model:', error.message);
             return { success: false, error: error.message, backendStatus: backendClient.getStatus() };
