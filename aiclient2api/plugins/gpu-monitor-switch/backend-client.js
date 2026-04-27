@@ -5,7 +5,7 @@ const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://192.168.7.1
 
 class BackendClient {
     constructor() {
-        this.activeBackend = 'python';
+        this.activeBackend = 'go';
         this.goAvailable = false;
         this.pythonAvailable = true;
         this.lastGoCheck = 0;
@@ -15,11 +15,11 @@ class BackendClient {
     }
 
     _startHealthChecks() {
-        this._checkPythonHealth();
         this._checkGoHealth();
+        this._checkPythonHealth();
         setInterval(() => {
-            this._checkPythonHealth();
             this._checkGoHealth();
+            this._checkPythonHealth();
         }, this.healthCheckInterval);
     }
 
@@ -27,21 +27,23 @@ class BackendClient {
         try {
             const response = await fetch(`${GO_BACKEND_URL}/manage/gpu/summary`, { signal: AbortSignal.timeout(5000) });
             if (response.ok) {
-                const data = await response.json();
-                this.goAvailable = data.status === 'available' && data.current != null;
+                this.goAvailable = true;
             } else {
                 this.goAvailable = false;
             }
             this.lastGoCheck = Date.now();
-            if (this.goAvailable && this.activeBackend !== 'go') {
-                logger.info('[BackendClient] Go backend GPU available, switching to Go');
+            if (!this.goAvailable && this.activeBackend === 'go') {
+                logger.warn('[BackendClient] Go backend GPU unavailable, falling back to Python');
+                this.activeBackend = 'python';
+            } else if (this.goAvailable && this.activeBackend !== 'go') {
+                logger.info('[BackendClient] Go backend available, switching to Go');
                 this.activeBackend = 'go';
             }
         } catch (e) {
             this.goAvailable = false;
             this.lastGoCheck = Date.now();
             if (this.activeBackend === 'go') {
-                logger.warn('[BackendClient] Go backend GPU unavailable, falling back to Python');
+                logger.warn('[BackendClient] Go backend unreachable, falling back to Python');
                 this.activeBackend = 'python';
             }
         }
@@ -49,23 +51,23 @@ class BackendClient {
 
     async _checkPythonHealth() {
         try {
-            const response = await fetch(`${PYTHON_BACKEND_URL}/health`, { signal: AbortSignal.timeout(5000) });
+            const response = await fetch(`${PYTHON_BACKEND_URL}/manage/gpu/summary`, { signal: AbortSignal.timeout(5000) });
             this.pythonAvailable = response.ok;
             this.lastPythonCheck = Date.now();
         } catch (e) {
             this.pythonAvailable = false;
             this.lastPythonCheck = Date.now();
             if (this.activeBackend === 'python') {
-                logger.warn('[BackendClient] Python backend unavailable');
+                logger.warn('[BackendClient] Python backend unreachable');
             }
         }
     }
 
     getBaseUrl() {
-        if (this.activeBackend === 'python') {
-            return PYTHON_BACKEND_URL;
+        if (this.activeBackend === 'go' && this.goAvailable) {
+            return GO_BACKEND_URL;
         }
-        return GO_BACKEND_URL;
+        return PYTHON_BACKEND_URL;
     }
 
     getManagePrefix() {
@@ -81,21 +83,62 @@ class BackendClient {
     }
 
     async fetchWithFallback(path, options = {}) {
-        const pythonUrl = `${PYTHON_BACKEND_URL}${path}`;
-        const goUrl = `${GO_BACKEND_URL}${path}`;
-        const defaultTimeout = options.method === 'POST' ? 60000 : 10000;
+        const isModelSwitch = path.includes('/switch');
+        const isModelStart = path.includes('/start');
+        const isModelStop = path.includes('/stop');
+        const isLongOperation = isModelSwitch || isModelStart || isModelStop;
+
+        const defaultTimeout = isLongOperation ? 180000 : (options.method === 'POST' ? 60000 : 10000);
         const timeoutSignal = options.signal || AbortSignal.timeout(defaultTimeout);
 
-        if (this.activeBackend === 'python' && this.pythonAvailable) {
+        const goUrl = `${GO_BACKEND_URL}${path}`;
+        const pythonUrl = `${PYTHON_BACKEND_URL}${path}`;
+
+        if (isLongOperation) {
+            if (this.goAvailable) {
+                try {
+                    logger.info(`[BackendClient] Long operation (${isModelSwitch ? 'switch' : isModelStart ? 'start' : 'stop'}) -> Go backend`);
+                    const response = await fetch(goUrl, { ...options, signal: timeoutSignal });
+                    if (response.ok) return response;
+                    logger.warn('[BackendClient] Go backend returned error for long operation, trying Python');
+                } catch (error) {
+                    logger.warn('[BackendClient] Go backend failed for long operation:', error.message);
+                }
+            }
+            if (this.pythonAvailable) {
+                try {
+                    logger.info(`[BackendClient] Long operation (${isModelSwitch ? 'switch' : isModelStart ? 'start' : 'stop'}) -> Python backend`);
+                    const pythonTimeoutSignal = options.signal || AbortSignal.timeout(180000);
+                    const response = await fetch(pythonUrl, { ...options, signal: pythonTimeoutSignal });
+                    if (response.ok) return response;
+                    logger.warn('[BackendClient] Python backend returned error for long operation');
+                } catch (error) {
+                    logger.warn('[BackendClient] Python backend failed for long operation:', error.message);
+                }
+            }
+            throw new Error(`Both backends failed for long operation: ${path}`);
+        }
+
+        if (this.activeBackend === 'go' && this.goAvailable) {
+            try {
+                const response = await fetch(goUrl, { ...options, signal: timeoutSignal });
+                if (response.ok) return response;
+                logger.warn('[BackendClient] Go backend returned error, trying Python fallback');
+            } catch (error) {
+                logger.warn('[BackendClient] Go backend request failed:', error.message);
+                if (!this.pythonAvailable) {
+                    throw error;
+                }
+            }
+        }
+
+        if (this.pythonAvailable) {
+            this.activeBackend = 'python';
             try {
                 const response = await fetch(pythonUrl, { ...options, signal: timeoutSignal });
                 if (response.ok) return response;
-                logger.warn('[BackendClient] Python backend returned error, trying Go fallback');
             } catch (error) {
                 logger.warn('[BackendClient] Python backend request failed:', error.message);
-                if (!this.goAvailable) {
-                    throw error;
-                }
             }
         }
 
@@ -105,18 +148,19 @@ class BackendClient {
                 const response = await fetch(goUrl, { ...options, signal: timeoutSignal });
                 if (response.ok) return response;
             } catch (error) {
-                logger.warn('[BackendClient] Go backend request failed:', error.message);
+                logger.warn('[BackendClient] Go backend fallback failed:', error.message);
             }
         }
 
         throw new Error(`Both backends failed for path: ${path}`);
     }
 
-    async postWithFallback(path, body) {
+    async postWithFallback(path, body, options = {}) {
         return this.fetchWithFallback(path, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
+            ...options
         });
     }
 

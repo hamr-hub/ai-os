@@ -119,14 +119,35 @@ class ModelSwitchService {
 
     async switchModel(modelName) {
         try {
+            logger.info(`[Model Switch Service] Starting model switch to: ${modelName}`);
             const response = await backendClient.postWithFallback(
                 `/manage/models/${encodeURIComponent(modelName)}/switch`,
                 {}
             );
-            const result = await response.json();
+            let result;
+            try {
+                result = await response.json();
+            } catch (e) {
+                logger.warn('[Model Switch Service] Failed to parse switch result:', e.message);
+                result = { status: 'unknown', raw: await response.text().catch(() => '') };
+            }
+
+            if (!response.ok) {
+                logger.error('[Model Switch Service] Model switch returned error:', result);
+                return {
+                    success: false,
+                    error: result.error || result.message || `Switch failed with status ${response.status}`,
+                    backendStatus: backendClient.getStatus()
+                };
+            }
+
+            logger.info(`[Model Switch Service] Model switch completed for: ${modelName}, warming up...`);
             const warmup = await this.warmupModel(modelName);
+
             const providerUpdate = await this.updateProviderCheckModel(modelName);
+
             await this.fetchModelsFromBackend();
+
             return {
                 success: true,
                 data: {

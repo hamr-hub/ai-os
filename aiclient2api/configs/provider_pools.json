@@ -10,8 +10,8 @@
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "36babfc8-934a-404d-826a-3dd25bef139b",
       "isHealthy": true,
-      "lastUsed": "2026-04-27T11:00:41.918Z",
-      "usageCount": 15,
+      "lastUsed": "2026-04-27T11:21:18.342Z",
+      "usageCount": 1,
       "errorCount": 0,
       "lastErrorTime": null,
       "supportedModels": [],
@@ -19,11 +19,11 @@
       "isDisabled": false,
       "needsRefresh": false,
       "refreshCount": 0,
-      "lastHealthCheckTime": "2026-04-26T16:15:39.792Z",
-      "lastHealthCheckModel": "gpt-4o-mini",
+      "lastHealthCheckTime": "2026-04-27T11:20:39.050Z",
+      "lastHealthCheckModel": "Gemma-4-31B-Abliterated",
       "lastErrorMessage": null,
-      "lastRefreshTime": 1777287641918,
-      "_lastSelectionSeq": 0,
+      "lastRefreshTime": 1777288839050,
+      "_lastSelectionSeq": 2,
       "lastModelSwitchTime": "2026-04-27T01:40:45.556Z"
     }
   ]

@@ -31,9 +31,18 @@ const EXEMPT_PATHS = [
     '/favicon.ico',
     '/index.html',
     '/login.html',
+    '/v1/models',
+    '/v1/chat/completions',
+    '/v1/completions',
+    '/v1/embeddings',
 ];
 
 const API_PATHS = ['/v1/', '/openai/'];
+const PROTECTED_API_PATHS = [
+    '/v1/chat/completions',
+    '/v1/completions',
+    '/v1/embeddings',
+];
 
 async function ensureInjectedStaticIndex() {
     try {
@@ -121,6 +130,18 @@ const gpuMonitorSwitchPlugin = {
             if (pathname === apiPath || pathname.startsWith(apiPath + '/')) {
                 return { handled: false, authorized: true };
             }
+        }
+        
+        let isProtectedPath = false;
+        for (const apiPath of PROTECTED_API_PATHS) {
+            if (pathname === apiPath || pathname.startsWith(apiPath + '/')) {
+                isProtectedPath = true;
+                break;
+            }
+        }
+        
+        if (!isProtectedPath) {
+            return { handled: false, authorized: null };
         }
         
         for (const apiPath of API_PATHS) {
