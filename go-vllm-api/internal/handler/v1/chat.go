@@ -39,7 +39,10 @@ func NewV1Handler(scheduler *service.Scheduler, gpuMonitor *service.GPUMonitor, 
 
 func (h *V1Handler) ensureModelReady(c *gin.Context, modelName string) error {
 	if h.scheduler.IsModelRunning(modelName) {
-		return nil
+		port := h.scheduler.GetModelPort(modelName)
+		if err := h.proxy.WaitUntilReady(c.Request.Context(), port, 180*time.Second, 2*time.Second); err == nil {
+			return nil
+		}
 	}
 
 	ok, err := h.scheduler.StartModel(c.Request.Context(), modelName)
@@ -48,7 +51,8 @@ func (h *V1Handler) ensureModelReady(c *gin.Context, modelName string) error {
 	}
 
 	port := h.scheduler.GetModelPort(modelName)
-	if err := h.proxy.WaitUntilReady(c.Request.Context(), port, 90*time.Second, time.Second); err != nil {
+	time.Sleep(8 * time.Second)
+	if err := h.proxy.WaitUntilReady(c.Request.Context(), port, 300*time.Second, 3*time.Second); err != nil {
 		return fmt.Errorf("model started but readiness probe failed: %w", err)
 	}
 

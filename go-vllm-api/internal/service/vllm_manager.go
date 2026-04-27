@@ -197,7 +197,8 @@ func (vm *VLLMManager) SwitchModelWithTest(ctx context.Context, modelPath string
 	}
 	vm.logger.Info("vllm service restarted", zap.String("model", modelName), zap.String("service", serviceName))
 
-	if err := vm.WaitUntilReady(ctx, port, 90*time.Second, time.Second); err != nil {
+	time.Sleep(8 * time.Second)
+	if err := vm.WaitUntilReady(ctx, port, 300*time.Second, 3*time.Second); err != nil {
 		return fmt.Errorf("wait for vllm readiness: %w", err)
 	}
 
