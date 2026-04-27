@@ -421,7 +421,7 @@ func (lm *LlamaCppManager) TestModel(ctx context.Context, port int, modelName st
 		}
 
 		lm.logger.Warn("llama_cpp model test attempt failed",
-			zap.Int("attempt", attempt), zap.Error(fmt.Errorf(result.Message)))
+			zap.Int("attempt", attempt), zap.String("message", result.Message))
 		if attempt < maxRetries {
 			time.Sleep(5 * time.Second)
 		}
