@@ -1,0 +1,34 @@
+[Unit]
+Description=Go vLLM API Service
+Documentation=https://github.com/ai-os/go-vllm-api
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/go-vllm-api --config /root/ai-os/go-vllm-api/configs/config.yaml --port 35001
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitInterval=60s
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=go-vllm-api
+
+# 资源限制
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# 工作目录
+WorkingDirectory=/root/ai-os/go-vllm-api
+
+# 环境变量
+Environment=GIN_MODE=release
+Environment=REDIS_URL=redis://127.0.0.1:6379/0
+
+[Install]
+WantedBy=multi-user.target

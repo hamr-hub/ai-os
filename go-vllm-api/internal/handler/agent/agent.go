@@ -178,14 +178,15 @@ func (h *AgentHandler) ExecuteTools(c *gin.Context) {
 }
 
 func (h *AgentHandler) ExecuteSingleTool(c *gin.Context) {
-	toolName := c.Param("tool_name")
+	_ = c.Param("tool_name")
 	var req ToolCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	result := h.toolExecutor.Execute(c.Request.Context(), req.Name, req.Arguments, req.AutoConfirm)
+	autoConfirm := false
+	result := h.toolExecutor.Execute(c.Request.Context(), req.Name, req.Arguments, autoConfirm)
 
 	c.JSON(http.StatusOK, gin.H{
 		"tool_name":      result.ToolName,
@@ -358,7 +359,6 @@ func (h *AgentHandler) agentCompletion(ctx context.Context, backendURL, modelNam
 			}
 			name, _ := funcInfo["name"].(string)
 			argsStr, _ := funcInfo["arguments"].(string)
-			id, _ := toolCall["id"].(string)
 
 			var args map[string]any
 			if argsStr != "" {

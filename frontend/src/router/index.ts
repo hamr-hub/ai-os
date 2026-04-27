@@ -38,6 +38,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/DocsView.vue'),
   },
   {
+    path: '/gpumanage',
+    name: 'gpumanage',
+    component: () => import('@/views/GPUManage.vue'),
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/Dashboard.vue'),

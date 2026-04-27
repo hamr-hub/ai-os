@@ -39,6 +39,7 @@ const groups = [
     title: '数据监控',
     items: [
       { name: 'monitor', label: '实时性能', icon: Activity },
+      { name: 'gpumanage', label: 'GPU 管理', icon: Cpu },
       { name: 'docs', label: '系统文档', icon: BookOpen },
     ],
   },

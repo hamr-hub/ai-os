@@ -1,37 +1,4 @@
 {
-  "_comment": "============================================",
-  "_description": "provider_pools.json - API 网关提供商连接池配置",
-  "_purpose": "定义多个后端服务提供商的连接池，网关可以在多个后端之间切换或负载均衡",
-  "_structure": {
-    "顶层键": "提供商类型（如 'openai-custom' 表示兼容 OpenAI 协议的自定义后端）",
-    "数组元素": "每个提供商实例的配置和状态"
-  },
-  "_fields": {
-    "customName": "提供商自定义名称，用于日志和界面显示",
-    "checkModelName": "健康检查时使用的测试模型名称",
-    "checkHealth": "是否启用自动健康检查",
-    "concurrencyLimit": "最大并发请求数",
-    "queueLimit": "请求队列最大长度",
-    "OPENAI_API_KEY": "API 密钥（用于认证）",
-    "OPENAI_BASE_URL": "后端服务的基础 URL",
-    "uuid": "提供商唯一标识符",
-    "isHealthy": "当前健康状态（由网关自动更新）",
-    "lastUsed": "最后使用时间（ISO 8601 格式）",
-    "usageCount": "累计使用次数",
-    "errorCount": "累计错误次数",
-    "lastErrorTime": "最后错误时间",
-    "supportedModels": "支持的模型列表（自动检测）",
-    "notSupportedModels": "不支持的模型列表（自动检测）",
-    "isDisabled": "是否被手动禁用",
-    "needsRefresh": "是否需要刷新模型列表",
-    "refreshCount": "刷新次数",
-    "lastHealthCheckTime": "最后健康检查时间",
-    "lastHealthCheckModel": "最后健康检查使用的模型",
-    "lastErrorMessage": "最后错误信息",
-    "lastRefreshTime": "最后刷新时间",
-    "_lastSelectionSeq": "最后选择的序列号（用于负载均衡）"
-  },
-  "============================================": "",
   "openai-custom": [
     {
       "customName": "app-controller",
@@ -43,20 +10,21 @@
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "36babfc8-934a-404d-826a-3dd25bef139b",
       "isHealthy": true,
-      "lastUsed": "2026-04-26T17:08:51.993Z",
+      "lastUsed": null,
       "usageCount": 0,
-      "errorCount": 1,
-      "lastErrorTime": "2026-04-26T17:08:51.993Z",
+      "errorCount": 0,
+      "lastErrorTime": null,
       "supportedModels": [],
       "notSupportedModels": [],
       "isDisabled": false,
-      "needsRefresh": false,
+      "needsRefresh": true,
       "refreshCount": 0,
       "lastHealthCheckTime": "2026-04-26T16:15:39.792Z",
       "lastHealthCheckModel": "gpt-4o-mini",
-      "lastErrorMessage": "Request failed with status code 503",
+      "lastErrorMessage": null,
       "lastRefreshTime": null,
-      "_lastSelectionSeq": 13
+      "_lastSelectionSeq": 13,
+      "lastModelSwitchTime": "2026-04-27T01:40:45.556Z"
     }
   ]
 }
