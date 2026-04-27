@@ -50,11 +50,13 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 	gpuStatus := h.gpuMonitor.GetStatus()
 	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
 	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
+	currentModel := h.scheduler.GetCurrentModelName()
 	result := gin.H{
-		"status":       healthInfo["status"],
-		"timestamp":    time.Now().Format(time.RFC3339),
-		"health_score": healthInfo["overall"],
-		"details":      healthInfo,
+		"status":         healthInfo["status"],
+		"timestamp":      time.Now().Format(time.RFC3339),
+		"health_score":   healthInfo["overall"],
+		"current_model":  currentModel,
+		"details":        healthInfo,
 	}
 	h.cache.Set(cacheKey, result, 5)
 	c.JSON(http.StatusOK, result)

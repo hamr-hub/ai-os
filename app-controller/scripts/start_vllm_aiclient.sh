@@ -41,13 +41,11 @@ source "$VLLM_ENV_DIR/bin/activate"
 export TERM=xterm-256color
 
 # ===== 4. 核心稳定参数 =====
-export VLLM_ATTENTION_BACKEND=FLEX_ATTENTION
+export VLLM_ATTENTION_BACKEND=TRITON_ATTN
 export VLLM_USE_V1=0
 export NCCL_P2P_DISABLE=1
 export CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
 export OMP_NUM_THREADS=16
-export FLASHINFER_JIT_TARGET_SM=120
-export FLASHINFER_JIT_USE_CUTLASS=1
 
 # ===== 5. 模型路径（从环境变量读取，提供默认值）=====
 MODEL_STATE_FILE="${VLLM_MODEL_STATE_FILE:-$SCRIPT_DIR/.vllm_model_path}"

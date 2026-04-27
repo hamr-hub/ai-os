@@ -7,7 +7,17 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - GO_BACKEND_URL=http://go-vllm-api-go-vllm-api-1:35001
+    networks:
+      - default
+      - go-vllm-api_default
     volumes:
       - ./data:/app/data
       - ./configs:/app/configs
       - ./plugins:/app/src/plugins
+
+networks:
+  default:
+    driver: bridge
+  go-vllm-api_default:
+    external: true

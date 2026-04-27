@@ -258,6 +258,48 @@ func (s *Scheduler) getCurrentVLLMModelPath() string {
 	return strings.TrimSpace(string(data))
 }
 
+func (s *Scheduler) detectCurrentVLLMModel() string {
+	port := 8000
+	if s.cfg != nil && s.cfg.VLLM.DefaultPort > 0 {
+		port = s.cfg.VLLM.DefaultPort
+	}
+
+	url := fmt.Sprintf("http://localhost:%d/v1/models", port)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		s.logger.Debug("failed to query vllm /v1/models", zap.Error(err))
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		s.logger.Debug("failed to decode vllm models response", zap.Error(err))
+		return ""
+	}
+
+	if len(result.Data) == 0 {
+		return ""
+	}
+
+	modelID := result.Data[0].ID
+	for name, mc := range s.cfg.Models {
+		if mc.ModelPath == modelID || name == modelID || strings.Contains(modelID, name) || strings.Contains(name, modelID) {
+			return name
+		}
+	}
+	return modelID
+}
+
 func (s *Scheduler) shouldSkipKeepAlivePreload(name string) bool {
 	if s.GetModelBackendType(name) != "vllm" {
 		return false
@@ -342,36 +384,32 @@ func (s *Scheduler) GetPreloadedModels() []string {
 }
 
 func (s *Scheduler) GetCurrentModelName() string {
-	models := s.GetAvailableModels()
-	var running []string
-	for _, name := range models {
-		if s.IsModelRunning(name) {
-			running = append(running, name)
-		}
-	}
-	if len(running) == 0 {
-		return ""
-	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var (
-		latestModel string
-		latestTime  time.Time
-		found       bool
-	)
-	for _, m := range running {
-		if t, ok := s.modelLastUsed[m]; ok {
-			if !found || t.After(latestTime) {
-				latestModel = m
-				latestTime = t
-				found = true
-			}
+
+	// 首先尝试通过 vllm API 动态检测
+	if s.cfg != nil && s.cfg.VLLM.StartScript != "" {
+		modelName := s.detectCurrentVLLMModel()
+		if modelName != "" {
+			return modelName
 		}
 	}
-	if found {
-		return latestModel
+
+	// 回退到状态文件检测
+	if s.cfg != nil && s.cfg.VLLM.StartScript != "" {
+		stateFile := filepath.Join(filepath.Dir(s.cfg.VLLM.StartScript), ".vllm_model_path")
+		data, err := os.ReadFile(stateFile)
+		if err == nil {
+			modelPath := strings.TrimSpace(string(data))
+			for name, mc := range s.cfg.Models {
+				if mc.ModelPath == modelPath {
+					return name
+				}
+			}
+			return modelPath
+		}
 	}
-	return running[0]
+	return ""
 }
 
 func (s *Scheduler) GetDefaultModel() string {

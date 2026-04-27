@@ -1,239 +1,112 @@
-import fs from 'fs/promises';
-import { existsSync } from 'fs';
-import path from 'path';
 import logger from '../../utils/logger.js';
 
-const POOLS_CONFIG_FILE = path.join(process.cwd(), 'configs', 'provider_pools.json');
+const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://localhost:35001';
 
 class ModelSwitchService {
     constructor() {
-        this.poolsConfig = null;
-        this.currentModels = new Map();
+        this.modelsCache = {};
+        this.lastFetchTime = null;
     }
 
     async init() {
-        logger.info('[Model Switch Service] Initializing model switch service...');
-        await this.loadPoolsConfig();
+        logger.info('[Model Switch Service] Initializing model switch service (Go backend)...');
+        await this.fetchModelsFromBackend();
     }
 
     async destroy() {
         logger.info('[Model Switch Service] Model switch service destroyed');
     }
 
-    async loadPoolsConfig() {
+    async fetchModelsFromBackend() {
         try {
-            if (!existsSync(POOLS_CONFIG_FILE)) {
-                logger.warn('[Model Switch Service] Provider pools config file not found');
-                this.poolsConfig = {};
-                return;
-            }
-            
-            const content = await fs.readFile(POOLS_CONFIG_FILE, 'utf8');
-            this.poolsConfig = JSON.parse(content);
-            logger.info('[Model Switch Service] Loaded provider pools config');
+            const response = await fetch(`${GO_BACKEND_URL}/manage/models`);
+            if (!response.ok) throw new Error(`Go backend returned ${response.status}`);
+            this.modelsCache = await response.json();
+            this.lastFetchTime = new Date().toISOString();
+            return this.modelsCache;
         } catch (error) {
-            logger.error('[Model Switch Service] Failed to load provider pools config:', error.message);
-            this.poolsConfig = {};
+            logger.error('[Model Switch Service] Error fetching models:', error.message);
+            return {};
         }
     }
 
-    async savePoolsConfig() {
+    async getStatusFromBackend() {
         try {
-            const dir = path.dirname(POOLS_CONFIG_FILE);
-            if (!existsSync(dir)) {
-                await fs.mkdir(dir, { recursive: true });
-            }
-            await fs.writeFile(POOLS_CONFIG_FILE, JSON.stringify(this.poolsConfig, null, 2), 'utf8');
-            logger.info('[Model Switch Service] Saved provider pools config');
+            const response = await fetch(`${GO_BACKEND_URL}/manage/status`);
+            if (!response.ok) throw new Error(`Go backend returned ${response.status}`);
+            return await response.json();
         } catch (error) {
-            logger.error('[Model Switch Service] Failed to save provider pools config:', error.message);
-            throw error;
+            logger.error('[Model Switch Service] Error fetching status:', error.message);
+            return null;
         }
     }
 
-    getProviderPools() {
-        const providers = [];
-        
-        for (const [providerName, pools] of Object.entries(this.poolsConfig)) {
-            if (!Array.isArray(pools)) continue;
-            
-            pools.forEach(pool => {
-                providers.push({
-                    providerName,
-                    customName: pool.customName || pool.OPENAI_BASE_URL || 'Unknown',
-                    uuid: pool.uuid,
-                    baseUrl: pool.OPENAI_BASE_URL,
-                    currentModel: pool.checkModelName,
-                    isHealthy: pool.isHealthy,
-                    isDisabled: pool.isDisabled,
-                    lastHealthCheck: pool.lastHealthCheckTime,
-                    usageCount: pool.usageCount || 0,
-                    errorCount: pool.errorCount || 0,
-                    supportedModels: pool.supportedModels || [],
-                    notSupportedModels: pool.notSupportedModels || []
-                });
-            });
-        }
-        
+    async getModelsList() {
+        const models = await this.fetchModelsFromBackend();
+        const modelArray = Object.entries(models).map(([name, info]) => ({
+            name,
+            running: info.running || false,
+            backendType: info.backend_type || 'vllm',
+            port: info.port || null,
+            contextLength: info.context_length || null,
+            description: info.description || '',
+            activeRequests: info.active_requests || 0,
+            preloaded: info.preloaded || false,
+            status: info.running ? 'running' : 'stopped'
+        }));
         return {
             success: true,
-            data: providers,
-            timestamp: new Date().toISOString()
+            data: modelArray,
+            timestamp: this.lastFetchTime
         };
     }
 
-    async switchModel(providerName, customName, newModel) {
+    async switchModel(modelName) {
         try {
-            if (!this.poolsConfig[providerName]) {
-                return {
-                    success: false,
-                    error: `Provider "${providerName}" not found`
-                };
-            }
-            
-            const pools = this.poolsConfig[providerName];
-            let targetPool = null;
-            let targetIndex = -1;
-            
-            for (let i = 0; i < pools.length; i++) {
-                if (customName) {
-                    if (pools[i].customName === customName || pools[i].uuid === customName) {
-                        targetPool = pools[i];
-                        targetIndex = i;
-                        break;
-                    }
-                }
-            }
-            
-            if (!targetPool) {
-                return {
-                    success: false,
-                    error: `Provider instance "${customName}" not found`
-                };
-            }
-            
-            const oldModel = targetPool.checkModelName;
-            targetPool.checkModelName = newModel;
-            targetPool.needsRefresh = true;
-            targetPool.lastModelSwitchTime = new Date().toISOString();
-            
-            await this.savePoolsConfig();
-            
-            logger.info(`[Model Switch Service] Switched model for ${customName}: ${oldModel} -> ${newModel}`);
-            
-            return {
-                success: true,
-                data: {
-                    providerName,
-                    customName,
-                    oldModel,
-                    newModel,
-                    timestamp: new Date().toISOString()
-                }
-            };
+            const response = await fetch(`${GO_BACKEND_URL}/manage/models`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: modelName, action: 'switch' })
+            });
+            if (!response.ok) throw new Error(`Go backend returned ${response.status}`);
+            const result = await response.json();
+            await this.fetchModelsFromBackend();
+            return { success: true, data: { modelName, result }, timestamp: new Date().toISOString() };
         } catch (error) {
-            logger.error('[Model Switch Service] Failed to switch model:', error.message);
-            return {
-                success: false,
-                error: error.message
-            };
+            logger.error('[Model Switch Service] Error switching model:', error.message);
+            return { success: false, error: error.message };
         }
     }
 
-    async getAvailableModels(providerName, customName) {
+    async startModel(modelName) {
         try {
-            if (!this.poolsConfig[providerName]) {
-                return {
-                    success: false,
-                    error: `Provider "${providerName}" not found`
-                };
-            }
-            
-            const pools = this.poolsConfig[providerName];
-            let targetPool = null;
-            
-            for (const pool of pools) {
-                if (customName) {
-                    if (pool.customName === customName || pool.uuid === customName) {
-                        targetPool = pool;
-                        break;
-                    }
-                }
-            }
-            
-            if (!targetPool) {
-                return {
-                    success: false,
-                    error: `Provider instance "${customName}" not found`
-                };
-            }
-            
-            return {
-                success: true,
-                data: {
-                    currentModel: targetPool.checkModelName,
-                    supportedModels: targetPool.supportedModels || [],
-                    notSupportedModels: targetPool.notSupportedModels || []
-                }
-            };
+            const response = await fetch(`${GO_BACKEND_URL}/manage/models/${encodeURIComponent(modelName)}/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            if (!response.ok) throw new Error(`Go backend returned ${response.status}`);
+            const result = await response.json();
+            await this.fetchModelsFromBackend();
+            return { success: true, data: { modelName, action: 'start' }, timestamp: new Date().toISOString() };
         } catch (error) {
-            logger.error('[Model Switch Service] Failed to get available models:', error.message);
-            return {
-                success: false,
-                error: error.message
-            };
+            logger.error('[Model Switch Service] Error starting model:', error.message);
+            return { success: false, error: error.message };
         }
     }
 
-    async refreshProvider(providerName, customName) {
+    async stopModel(modelName) {
         try {
-            if (!this.poolsConfig[providerName]) {
-                return {
-                    success: false,
-                    error: `Provider "${providerName}" not found`
-                };
-            }
-            
-            const pools = this.poolsConfig[providerName];
-            let targetPool = null;
-            
-            for (const pool of pools) {
-                if (customName) {
-                    if (pool.customName === customName || pool.uuid === customName) {
-                        targetPool = pool;
-                        break;
-                    }
-                }
-            }
-            
-            if (!targetPool) {
-                return {
-                    success: false,
-                    error: `Provider instance "${customName}" not found`
-                };
-            }
-            
-            targetPool.needsRefresh = true;
-            targetPool.lastRefreshTime = new Date().toISOString();
-            
-            await this.savePoolsConfig();
-            
-            logger.info(`[Model Switch Service] Refreshed provider: ${customName}`);
-            
-            return {
-                success: true,
-                data: {
-                    providerName,
-                    customName,
-                    timestamp: new Date().toISOString()
-                }
-            };
+            const response = await fetch(`${GO_BACKEND_URL}/manage/models/${encodeURIComponent(modelName)}/stop`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            if (!response.ok) throw new Error(`Go backend returned ${response.status}`);
+            const result = await response.json();
+            await this.fetchModelsFromBackend();
+            return { success: true, data: { modelName, action: 'stop' }, timestamp: new Date().toISOString() };
         } catch (error) {
-            logger.error('[Model Switch Service] Failed to refresh provider:', error.message);
-            return {
-                success: false,
-                error: error.message
-            };
+            logger.error('[Model Switch Service] Error stopping model:', error.message);
+            return { success: false, error: error.message };
         }
     }
 }
