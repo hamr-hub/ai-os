@@ -1,35 +1,57 @@
 [Unit]
 Description=Go vLLM API Service
+Documentation=https://github.com/ai-os/go-vllm-api
 After=network.target redis-server.service
 Wants=redis-server.service
 StartLimitIntervalSec=60
-StartLimitBurst=3
+StartLimitBurst=5
 
 [Service]
 Type=simple
 User=root
+Group=root
 WorkingDirectory=/root/ai-os/go-vllm-api
 Environment=PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin
 Environment=CUDA_VISIBLE_DEVICES=0
-Environment=REDIS_URL=redis://localhost:6379
+Environment=REDIS_URL=redis://127.0.0.1:6379/0
+Environment=GIN_MODE=release
+EnvironmentFile=-/root/ai-os/go-vllm-api/.env
 ExecStart=/root/ai-os/go-vllm-api/bin/go-vllm-api --config configs/config.yaml --port 35001 --log-dir /root/ai-os/go-vllm-api/logs
 ExecReload=/bin/kill -HUP $MAINPID
-Restart=always
-RestartSec=10
+Restart=on-failure
+RestartSec=5
 RestartPreventExitStatus=98
 KillMode=mixed
 KillSignal=SIGINT
+TimeoutStartSec=30
 TimeoutStopSec=30
+WatchdogSec=60
+
+# 日志
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=go-vllm-api
+
+# 资源限制
 LimitNOFILE=65536
 LimitNPROC=4096
+LimitCORE=infinity
+LimitMEMLOCK=infinity
+
+# 安全选项
 PrivateTmp=true
 ProtectSystem=strict
+ProtectHome=false
 ReadWritePaths=/root/ai-os/go-vllm-api
 ReadWritePaths=/root/ai-os/go-vllm-api/logs
+ReadWritePaths=/tmp
+ReadWritePaths=/mnt/pve_models
+
+# 性能优化
 Nice=-5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=2
+CPUSchedulingPolicy=other
 
 [Install]
 WantedBy=multi-user.target
