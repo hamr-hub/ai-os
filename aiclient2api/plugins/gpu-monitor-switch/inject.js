@@ -183,7 +183,7 @@
     }
 
     // 渲染模型切换
-    async function renderModelSwitch() {
+    async function renderModels() {
         const contentEl = document.getElementById('modelSwitchContent');
         if (!contentEl) return;
 
@@ -279,7 +279,7 @@
             
             if (result.success) {
                 alert(`模型切换成功: ${result.data.oldModel} -> ${result.data.newModel}`);
-                renderModelSwitch();
+                renderModels();
             } else {
                 alert(`切换失败: ${result.error}`);
             }
@@ -307,7 +307,7 @@
         navItem.className = 'nav-item';
         navItem.id = menuConfig.id;
         navItem.dataset.section = menuConfig.section;
-        navItem.innerHTML = `<i class="${menuConfig.icon}" aria-hidden="true"></i> <span>${menuConfig.label.zh}</span>`;
+        navItem.innerHTML = `<i class="${menuConfig.icon}" aria-hidden="true"></i> <span>${menuConfig.label}</span>`;
 
         if (insertAfter) {
             insertAfter.after(navItem);
@@ -361,7 +361,7 @@
 
             // 加载数据
             loadGPUData();
-            renderModelSwitch();
+            renderModels();
         });
     }
 
@@ -369,7 +369,10 @@
     function bindEvents() {
         const refreshBtn = document.getElementById('gpuRefreshBtn');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', loadGPUData);
+            refreshBtn.addEventListener('click', () => {
+                loadGPUData();
+                renderModels();
+            });
         }
     }
 

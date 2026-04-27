@@ -12,6 +12,53 @@ import { modelSwitchService } from './model-switch.js';
 import logger from '../../utils/logger.js';
 import fs from 'fs/promises';
 import pathModule from 'path';
+import http from 'http';
+
+const GO_SERVER_HOST = process.env.GO_VLLM_API_HOST || 'localhost';
+const GO_SERVER_PORT = process.env.GO_VLLM_API_PORT || 35001;
+
+/**
+ * 代理请求到 Go 服务器
+ */
+function proxyToGoServer(method, path, req) {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: GO_SERVER_HOST,
+            port: GO_SERVER_PORT,
+            path: path,
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        };
+
+        const proxyReq = http.request(options, (proxyRes) => {
+            let data = '';
+            proxyRes.on('data', (chunk) => {
+                data += chunk;
+            });
+            proxyRes.on('end', () => {
+                try {
+                    resolve({
+                        statusCode: proxyRes.statusCode,
+                        data: JSON.parse(data),
+                    });
+                } catch (e) {
+                    resolve({
+                        statusCode: proxyRes.statusCode,
+                        data: data,
+                    });
+                }
+            });
+        });
+
+        proxyReq.on('error', (error) => {
+            reject(error);
+        });
+
+        proxyReq.end();
+    });
+}
 
 /**
  * 解析 JSON 请求体
@@ -191,17 +238,62 @@ export async function handlePluginStyles(method, urlPath, req, res, config) {
  */
 export async function handleGPUMonitorApiRoutes(method, path, req, res, config) {
     try {
-        // 获取实时 GPU 信息
+        // 获取实时 GPU 信息 - 从 Go 服务器获取
         if (path === '/api/gpu-monitor/info' && method === 'GET') {
-            const result = await gpuMonitorService.getGPUInfoSync();
-            sendJSONResponse(res, 200, result);
+            try {
+                const result = await proxyToGoServer('GET', '/manage/gpu', req);
+                sendJSONResponse(res, result.statusCode, {
+                    success: true,
+                    data: result.data,
+                });
+            } catch (error) {
+                logger.warn('[GPU Monitor API] Go server unavailable, using fallback:', error.message);
+                const result = await gpuMonitorService.getGPUInfoSync();
+                sendJSONResponse(res, 200, result);
+            }
             return true;
         }
 
-        // 获取缓存的 GPU 数据
+        // 获取 GPU 状态 - 从 Go 服务器获取
         if (path === '/api/gpu-monitor' && method === 'GET') {
-            const result = gpuMonitorService.getLatestGPUData();
-            sendJSONResponse(res, 200, result);
+            try {
+                const result = await proxyToGoServer('GET', '/manage/gpu/summary', req);
+                
+                // 转换 Go 服务器数据格式为前端期望的格式
+                if (result.data && result.data.status === 'available') {
+                    const gpuData = result.data.current;
+                    const history = result.data.history || [];
+                    const healthScore = result.data.health_score || 0;
+                    
+                    const formattedData = [{
+                        index: 0,
+                        name: gpuData.name || 'GPU',
+                        gpuUtilization: gpuData.utilization || 0,
+                        memoryUsed: gpuData.used_memory || 0,
+                        memoryTotal: gpuData.total_memory || 0,
+                        memoryUsagePercent: gpuData.memory_utilization || 0,
+                        temperature: gpuData.temperature || 0,
+                        powerDraw: gpuData.power_draw || 0,
+                        powerLimit: gpuData.power_limit || 0,
+                        healthScore: healthScore,
+                        history: history,
+                    }];
+                    
+                    sendJSONResponse(res, 200, {
+                        success: true,
+                        data: formattedData,
+                    });
+                } else {
+                    sendJSONResponse(res, 200, {
+                        success: true,
+                        data: [],
+                    });
+                }
+            } catch (error) {
+                logger.warn('[GPU Monitor API] Go server unavailable, using fallback:', error.message);
+                const result = gpuMonitorService.getLatestGPUData();
+                sendJSONResponse(res, 200, result);
+            }
             return true;
         }
 
@@ -259,8 +351,54 @@ export async function handleModelSwitchApiRoutes(method, path, req, res, config)
     try {
         // 获取所有 provider pools
         if (path === '/api/model-switch/providers' && method === 'GET') {
-            const result = modelSwitchService.getProviderPools();
-            sendJSONResponse(res, 200, result);
+            try {
+                // 从 Go 服务器获取模型状态
+                const result = await proxyToGoServer('GET', '/manage/models', req);
+                sendJSONResponse(res, 200, {
+                    success: true,
+                    data: result.data,
+                });
+            } catch (error) {
+                logger.warn('[Model Switch API] Go server unavailable, using fallback:', error.message);
+                const result = modelSwitchService.getProviderPools();
+                sendJSONResponse(res, 200, result);
+            }
+            return true;
+        }
+
+        // 获取模型摘要 - 新增端点
+        if (path === '/api/model-switch/summary' && method === 'GET') {
+            try {
+                const result = await proxyToGoServer('GET', '/manage/models/summary', req);
+                sendJSONResponse(res, 200, {
+                    success: true,
+                    data: result.data,
+                });
+            } catch (error) {
+                logger.warn('[Model Switch API] Go server unavailable, using fallback:', error.message);
+                sendJSONResponse(res, 200, {
+                    success: false,
+                    data: {},
+                });
+            }
+            return true;
+        }
+
+        // 获取 VLLM 模型列表
+        if (path === '/api/model-switch/vllm-models' && method === 'GET') {
+            try {
+                const result = await proxyToGoServer('GET', '/manage/vllm/models', req);
+                sendJSONResponse(res, 200, {
+                    success: true,
+                    data: result.data,
+                });
+            } catch (error) {
+                logger.warn('[Model Switch API] Go server unavailable:', error.message);
+                sendJSONResponse(res, 200, {
+                    success: false,
+                    data: [],
+                });
+            }
             return true;
         }
 

@@ -14,31 +14,31 @@ import logger from '../../utils/logger.js';
 
 import { handleGPUMonitorApiRoutes, handleModelSwitchApiRoutes, handleGPUMonitorUIRoute, handleInjectScript, handlePluginStyles, handlePanelRoute, handleGetPanelHTML } from './api-handler.js';
 
-// 认证的 GPU 监控 API 路径（这些路径不需要 API Key 认证）
-const GPU_MONITOR_API_PATHS = [
+const EXEMPT_PATHS = [
     '/api/gpu-monitor',
     '/api/model-switch',
     '/plugins/gpu-monitor-switch/inject.js',
+    '/plugins/gpu-monitor-switch/styles.css',
+    '/gpu-admin',
+    '/__panel_html__',
+    '/gpu-monitor.html',
+    '/health',
+    '/favicon.ico',
+    '/index.html',
+    '/login.html',
 ];
 
-/**
- * 插件定义
- */
+const API_PATHS = ['/v1/', '/openai/'];
+
 const gpuMonitorSwitchPlugin = {
     name: 'gpu-monitor-switch',
     version: '1.0.0',
     description: 'GPU 监控与模型切换插件 - 实时监控 GPU 状态并支持模型切换',
     
-    // 插件类型：认证插件，参与认证流程
     type: 'auth',
     
-    // 优先级：数字越小越先执行
     _priority: 50,
 
-    /**
-     * 初始化钩子
-     * @param {Object} config - 服务器配置
-     */
     async init(config) {
         logger.info('[GPU Monitor Switch Plugin] Initializing...');
         await gpuMonitorService.init();
@@ -46,9 +46,6 @@ const gpuMonitorSwitchPlugin = {
         logger.info('[GPU Monitor Switch Plugin] Initialized successfully');
     },
 
-    /**
-     * 销毁钩子
-     */
     async destroy() {
         logger.info('[GPU Monitor Switch Plugin] Destroying...');
         await gpuMonitorService.destroy();
@@ -56,14 +53,8 @@ const gpuMonitorSwitchPlugin = {
         logger.info('[GPU Monitor Switch Plugin] Destroyed successfully');
     },
 
-    /**
-     * 静态文件路径
-     */
     staticPaths: [],
 
-    /**
-     * 路由定义
-     */
     routes: [
         {
             method: 'GET',
@@ -102,45 +93,50 @@ const gpuMonitorSwitchPlugin = {
         }
     ],
 
-    /**
-     * 认证方法 - 允许 GPU 监控 API 路径绕过认证
-     * @param {http.IncomingMessage} req - HTTP 请求
-     * @param {http.ServerResponse} res - HTTP 响应
-     * @param {URL} requestUrl - 解析后的 URL
-     * @param {Object} config - 服务器配置
-     * @returns {Promise<{handled: boolean, authorized: boolean|null}>}
-     */
     async authenticate(req, res, requestUrl, config) {
         const pathname = requestUrl.pathname;
         
-        // 对于 GPU 监控相关的 API 路径，直接授权
-        for (const apiPath of GPU_MONITOR_API_PATHS) {
+        for (const apiPath of EXEMPT_PATHS) {
             if (pathname === apiPath || pathname.startsWith(apiPath + '/')) {
                 return { handled: false, authorized: true };
             }
         }
         
-        // 其他路径不处理，继续下一个认证插件
+        for (const apiPath of API_PATHS) {
+            if (pathname.startsWith(apiPath)) {
+                const authHeader = req.headers['authorization'] || '';
+                const apiKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+                
+                const expectedApiKey = config.REQUIRED_API_KEY || '123456';
+                
+                if (apiKey && apiKey === expectedApiKey) {
+                    logger.info('[GPU Monitor Switch Plugin] API key authenticated for:', pathname);
+                    return { handled: false, authorized: true };
+                } else {
+                    logger.warn('[GPU Monitor Switch Plugin] Invalid API key for:', pathname);
+                    res.writeHead(401, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        error: {
+                            message: 'Unauthorized: API key is invalid or missing.',
+                            type: 'authentication_error',
+                            code: 'authentication_error'
+                        }
+                    }));
+                    return { handled: true, authorized: false };
+                }
+            }
+        }
+        
         return { handled: false, authorized: null };
     },
 
-    /**
-     * 中间件方法 - 用于注入菜单脚本到原版管理面板
-     * @param {http.IncomingMessage} req - HTTP 请求
-     * @param {http.ServerResponse} res - HTTP 响应
-     * @param {URL} requestUrl - 解析后的 URL
-     * @param {Object} config - 服务器配置
-     * @returns {Promise<{handled: boolean}>}
-     */
     async middleware(req, res, requestUrl, config) {
         const pathname = requestUrl.pathname;
         
-        // 只对管理面板主页进行注入
         if (pathname !== '/' && pathname !== '/app' && pathname !== '/app/') {
             return { handled: false };
         }
 
-        // 拦截响应，在 </body> 前注入脚本
         const originalWriteHead = res.writeHead.bind(res);
         const originalEnd = res.end.bind(res);
         const chunks = [];
@@ -180,9 +176,6 @@ const gpuMonitorSwitchPlugin = {
         return { handled: false };
     },
 
-    /**
-     * 导出内部函数供外部使用
-     */
     exports: {
         gpuMonitorService,
         modelSwitchService
