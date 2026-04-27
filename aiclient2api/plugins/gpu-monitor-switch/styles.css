@@ -198,6 +198,60 @@
     animation: spin 1s linear infinite;
 }
 
+/* GPU Charts Grid */
+.gpu-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.chart-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 12px;
+}
+
+.chart-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin-bottom: 6px;
+}
+
+.chart-card canvas {
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+}
+
+/* Header Actions */
+.header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.btn-default {
+    background: #e5e7eb;
+    color: #1f2937;
+    border: none;
+}
+
+.btn-default:hover {
+    background: #d1d5db;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: #fff;
+    border: none;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}
+
 @keyframes spin {
     to {
         transform: rotate(360deg);
