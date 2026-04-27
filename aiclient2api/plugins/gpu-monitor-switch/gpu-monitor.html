@@ -5,6 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPU 监控与模型切换</title>
     <style>
+        :root {
+            --color-primary: #6366f1;
+            --color-primary-hover: #4f46e5;
+            --color-primary-light: #818cf8;
+            --color-primary-dark: #4338ca;
+            --color-primary-rgb: 99, 102, 241;
+            --color-secondary: #06b6d4;
+            --color-success: #22c55e;
+            --color-danger: #ef4444;
+            --color-warning: #f59e0b;
+            --color-info: #3b82f6;
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-tertiary: #1e293b;
+            --bg-card: #1a2238;
+            --bg-input: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-tertiary: #64748b;
+            --border-primary: rgba(99, 102, 241, 0.12);
+            --border-card: rgba(99, 102, 241, 0.18);
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.25);
+            --status-online: #22c55e;
+            --status-warning: #f59e0b;
+            --status-error: #ef4444;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,10 +42,29 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
             min-height: 100vh;
             padding: 20px;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--color-primary-dark);
         }
 
         .container {
@@ -24,21 +73,27 @@
         }
 
         .header {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
             padding: 25px 30px;
             margin-bottom: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--shadow);
         }
 
         .header h1 {
-            color: #2d3748;
+            color: var(--text-primary);
             font-size: 2em;
             margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .header .subtitle {
-            color: #718096;
+            color: var(--text-secondary);
             font-size: 0.95em;
         }
 
@@ -51,25 +106,28 @@
         .tab-btn {
             flex: 1;
             padding: 15px 25px;
-            border: none;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #2d3748;
+            border: 1px solid var(--border-card);
+            border-radius: 12px;
+            background: var(--bg-card);
+            color: var(--text-secondary);
             font-size: 1.1em;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow);
         }
 
         .tab-btn:hover {
-            background: rgba(255, 255, 255, 1);
-            transform: translateY(-2px);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-color: var(--color-primary);
         }
 
         .tab-btn.active {
-            background: #667eea;
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             color: white;
+            border-color: var(--color-primary);
+            box-shadow: var(--shadow), var(--shadow-glow);
         }
 
         .tab-content {
@@ -78,6 +136,68 @@
 
         .tab-content.active {
             display: block;
+            animation: fade-in 0.25s ease-out;
+        }
+
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .status-bar {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .status-indicator.online {
+            background: var(--status-online);
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        .status-indicator.offline {
+            background: var(--status-error);
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.2); }
+        }
+
+        .refresh-interval {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .refresh-interval label {
+            color: var(--text-secondary);
+            font-size: 0.9em;
         }
 
         .gpu-grid {
@@ -87,99 +207,111 @@
         }
 
         .gpu-card {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
             padding: 25px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease;
+            box-shadow: var(--shadow);
+            transition: all 0.2s ease;
         }
 
         .gpu-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--color-primary-light);
         }
 
         .gpu-card h3 {
-            color: #2d3748;
+            color: var(--text-primary);
             font-size: 1.3em;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
 
         .gpu-card .gpu-index {
-            background: #667eea;
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             color: white;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 0.9em;
+            font-weight: 700;
+            box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
         }
 
         .metric {
-            margin-bottom: 15px;
+            margin-bottom: 18px;
+        }
+
+        .metric:last-child {
+            margin-bottom: 0;
         }
 
         .metric-label {
-            color: #718096;
+            color: var(--text-secondary);
             font-size: 0.9em;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
         }
 
         .metric-value {
-            color: #2d3748;
+            color: var(--text-primary);
             font-size: 1.2em;
             font-weight: 600;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
         }
 
-        .progress-bar {
+        .progress-track {
             width: 100%;
-            height: 8px;
-            background: #e2e8f0;
-            border-radius: 10px;
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
             overflow: hidden;
-            margin-top: 5px;
+            margin-top: 8px;
         }
 
         .progress-fill {
             height: 100%;
-            border-radius: 10px;
+            border-radius: 3px;
             transition: width 0.5s ease;
         }
 
         .progress-fill.green {
-            background: linear-gradient(90deg, #48bb78, #38a169);
+            background: linear-gradient(90deg, var(--color-success) 0%, #16a34a 100%);
         }
 
         .progress-fill.yellow {
-            background: linear-gradient(90deg, #ecc94b, #d69e2e);
+            background: linear-gradient(90deg, var(--color-warning) 0%, #ea580c 100%);
         }
 
         .progress-fill.red {
-            background: linear-gradient(90deg, #f56565, #e53e3e);
+            background: linear-gradient(90deg, var(--color-danger) 0%, #dc2626 100%);
         }
 
         .provider-list {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
         .provider-item {
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
             padding: 20px;
-            margin-bottom: 15px;
-            background: white;
-            transition: all 0.3s ease;
+            box-shadow: var(--shadow);
+            transition: all 0.2s ease;
         }
 
         .provider-item:hover {
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--shadow-md);
+            border-color: var(--color-primary);
         }
 
         .provider-header {
@@ -192,29 +324,32 @@
         .provider-name {
             font-size: 1.1em;
             font-weight: 600;
-            color: #2d3748;
+            color: var(--text-primary);
         }
 
         .provider-status {
             padding: 5px 12px;
-            border-radius: 20px;
+            border-radius: 9999px;
             font-size: 0.85em;
             font-weight: 600;
         }
 
         .status-healthy {
-            background: #c6f6d5;
-            color: #22543d;
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--color-success);
+            border: 1px solid rgba(34, 197, 94, 0.3);
         }
 
         .status-unhealthy {
-            background: #fed7d7;
-            color: #742a2a;
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--color-danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
         .status-disabled {
-            background: #e2e8f0;
-            color: #4a5568;
+            background: rgba(100, 116, 139, 0.15);
+            color: var(--text-tertiary);
+            border: 1px solid rgba(100, 116, 139, 0.3);
         }
 
         .provider-details {
@@ -230,14 +365,15 @@
         }
 
         .detail-label {
-            color: #718096;
+            color: var(--text-secondary);
             font-size: 0.85em;
-            margin-bottom: 3px;
+            margin-bottom: 5px;
         }
 
         .detail-value {
-            color: #2d3748;
+            color: var(--text-primary);
             font-weight: 600;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
         }
 
         .model-switch-form {
@@ -251,14 +387,22 @@
             flex: 1;
             min-width: 200px;
             padding: 10px 15px;
-            border: 2px solid #e2e8f0;
+            background: var(--bg-input);
+            border: 1px solid var(--border-primary);
             border-radius: 8px;
+            color: var(--text-primary);
             font-size: 1em;
+            transition: all 0.2s ease;
         }
 
         .model-switch-form input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .model-switch-form input::placeholder {
+            color: var(--text-tertiary);
         }
 
         .btn {
@@ -268,124 +412,126 @@
             font-size: 0.95em;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
 
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
         }
 
         .btn-primary {
-            background: #667eea;
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             color: white;
+            box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.3);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.4);
         }
 
         .btn-success {
-            background: #48bb78;
+            background: linear-gradient(135deg, var(--color-success) 0%, #16a34a 100%);
             color: white;
+            box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-success:hover {
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
         }
 
         .btn-warning {
-            background: #ecc94b;
-            color: #744210;
+            background: linear-gradient(135deg, var(--color-warning) 0%, #ea580c 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
         }
 
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+        .btn-warning:hover {
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
         }
 
-        .status-bar {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 10px;
-            padding: 15px 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .status-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-
-        .status-indicator.online {
-            background: #48bb78;
-        }
-
-        .status-indicator.offline {
-            background: #f56565;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .refresh-interval {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .refresh-interval input {
-            width: 100px;
-            padding: 8px 12px;
-            border: 2px solid #e2e8f0;
+        input[type="number"] {
+            background: var(--bg-input);
+            border: 1px solid var(--border-primary);
             border-radius: 6px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
 
         .loading {
             text-align: center;
             padding: 50px;
-            color: white;
+            color: var(--text-secondary);
             font-size: 1.2em;
         }
 
+        .loading::before {
+            content: '';
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--border-card);
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         .error {
-            background: #fed7d7;
-            color: #742a2a;
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--color-danger);
             padding: 15px 20px;
-            border-radius: 10px;
+            border-radius: 12px;
             margin-bottom: 20px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            animation: fade-in 0.3s ease;
         }
 
         .success-message {
-            background: #c6f6d5;
-            color: #22543d;
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--color-success);
             padding: 15px 20px;
-            border-radius: 10px;
+            border-radius: 12px;
             margin-bottom: 20px;
-            animation: slideDown 0.3s ease;
-        }
-
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            animation: fade-in 0.3s ease;
         }
 
         .timestamp {
-            color: #718096;
+            color: var(--text-secondary);
             font-size: 0.85em;
-            margin-top: 10px;
+            margin-top: 15px;
+            text-align: right;
+        }
+
+        @media (max-width: 768px) {
+            .gpu-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-bar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .header h1 {
+                font-size: 1.5em;
+            }
         }
     </style>
 </head>
@@ -438,14 +584,11 @@
     </div>
 
     <script>
-        // Tab 切换
         function switchTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
             event.target.classList.add('active');
             document.getElementById(`tab-${tab}`).classList.add('active');
-            
             if (tab === 'gpu') {
                 loadGPUData();
             } else {
@@ -453,113 +596,91 @@
             }
         }
 
-        // 获取进度条颜色
         function getProgressColor(value) {
             if (value < 60) return 'green';
             if (value < 80) return 'yellow';
             return 'red';
         }
 
-        // 格式化时间
         function formatTimestamp(timestamp) {
             const date = new Date(timestamp);
             return date.toLocaleString('zh-CN');
         }
 
-        // 加载 GPU 数据
         async function loadGPUData() {
             try {
                 const response = await fetch('/api/gpu-monitor');
                 const result = await response.json();
-                
                 if (!result.success) {
-                    document.getElementById('gpu-error').innerHTML = 
-                        `<div class="error">加载失败: ${result.error}</div>`;
+                    document.getElementById('gpu-error').innerHTML = `<div class="error">加载失败: ${result.error}</div>`;
                     return;
                 }
-
                 document.getElementById('gpu-error').innerHTML = '';
-                
                 const grid = document.getElementById('gpu-grid');
                 if (result.data.length === 0) {
                     grid.innerHTML = '<div class="loading">未检测到 GPU 设备</div>';
                     return;
                 }
-
                 grid.innerHTML = result.data.map(gpu => `
                     <div class="gpu-card">
                         <h3>
                             <span class="gpu-index">${gpu.index}</span>
                             ${gpu.name}
                         </h3>
-                        
                         <div class="metric">
                             <div class="metric-label">GPU 使用率</div>
                             <div class="metric-value">${gpu.gpuUtilization !== null ? gpu.gpuUtilization.toFixed(1) + '%' : 'N/A'}</div>
                             ${gpu.gpuUtilization !== null ? `
-                                <div class="progress-bar">
-                                    <div class="progress-fill ${getProgressColor(gpu.gpuUtilization)}" 
-                                         style="width: ${gpu.gpuUtilization}%"></div>
+                                <div class="progress-track">
+                                    <div class="progress-fill ${getProgressColor(gpu.gpuUtilization)}" style="width: ${gpu.gpuUtilization}%"></div>
                                 </div>
                             ` : ''}
                         </div>
-
                         <div class="metric">
                             <div class="metric-label">显存使用</div>
                             <div class="metric-value">
                                 ${gpu.memoryUsed !== null ? (gpu.memoryUsed / 1024).toFixed(1) + ' GB / ' + (gpu.memoryTotal / 1024).toFixed(1) + ' GB' : 'N/A'}
                             </div>
                             ${gpu.memoryUsagePercent !== null ? `
-                                <div class="progress-bar">
-                                    <div class="progress-fill ${getProgressColor(parseFloat(gpu.memoryUsagePercent))}" 
-                                         style="width: ${gpu.memoryUsagePercent}%"></div>
+                                <div class="progress-track">
+                                    <div class="progress-fill ${getProgressColor(parseFloat(gpu.memoryUsagePercent))}" style="width: ${gpu.memoryUsagePercent}%"></div>
                                 </div>
                             ` : ''}
                         </div>
-
                         <div class="metric">
                             <div class="metric-label">温度</div>
                             <div class="metric-value">${gpu.temperature !== null ? gpu.temperature + '°C' : 'N/A'}</div>
                             ${gpu.temperature !== null ? `
-                                <div class="progress-bar">
-                                    <div class="progress-fill ${getProgressColor(gpu.temperature)}" 
-                                         style="width: ${Math.min(gpu.temperature, 100)}%"></div>
+                                <div class="progress-track">
+                                    <div class="progress-fill ${getProgressColor(gpu.temperature)}" style="width: ${Math.min(gpu.temperature, 100)}%"></div>
                                 </div>
                             ` : ''}
                         </div>
-
                         <div class="metric">
                             <div class="metric-label">功耗</div>
                             <div class="metric-value">
                                 ${gpu.powerDraw !== null ? gpu.powerDraw.toFixed(1) + 'W / ' + gpu.powerLimit.toFixed(1) + 'W' : 'N/A'}
                             </div>
                             ${gpu.powerDraw !== null ? `
-                                <div class="progress-bar">
-                                    <div class="progress-fill ${getProgressColor((gpu.powerDraw / gpu.powerLimit) * 100)}" 
-                                         style="width: ${(gpu.powerDraw / gpu.powerLimit) * 100}%"></div>
+                                <div class="progress-track">
+                                    <div class="progress-fill ${getProgressColor((gpu.powerDraw / gpu.powerLimit) * 100)}" style="width: ${(gpu.powerDraw / gpu.powerLimit) * 100}%"></div>
                                 </div>
                             ` : ''}
                         </div>
-
                         <div class="metric">
                             <div class="metric-label">显存带宽使用率</div>
                             <div class="metric-value">${gpu.memoryUtilization !== null ? gpu.memoryUtilization.toFixed(1) + '%' : 'N/A'}</div>
                         </div>
                     </div>
                 `).join('');
-
-                document.getElementById('gpu-timestamp').textContent = 
-                    '最后更新: ' + formatTimestamp(result.timestamp);
+                document.getElementById('gpu-timestamp').textContent = '最后更新: ' + formatTimestamp(result.timestamp);
             } catch (error) {
-                document.getElementById('gpu-error').innerHTML = 
-                    `<div class="error">加载失败: ${error.message}</div>`;
+                document.getElementById('gpu-error').innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
             }
         }
 
-        // 更新监控间隔
         async function updateInterval() {
             const interval = parseInt(document.getElementById('refresh-interval').value);
-            
             try {
                 const response = await fetch('/api/gpu-monitor/interval', {
                     method: 'POST',
@@ -567,7 +688,6 @@
                     body: JSON.stringify({ interval })
                 });
                 const result = await response.json();
-                
                 if (result.success) {
                     alert('刷新间隔已更新为 ' + interval + 'ms');
                 } else {
@@ -578,11 +698,9 @@
             }
         }
 
-        // 切换监控状态
         async function toggleMonitoring() {
             const status = await fetch('/api/gpu-monitor/status').then(r => r.json());
             const isMonitoring = status.isMonitoring;
-            
             try {
                 const endpoint = isMonitoring ? '/api/gpu-monitor/stop' : '/api/gpu-monitor/start';
                 await fetch(endpoint, { method: 'POST' });
@@ -592,39 +710,29 @@
             }
         }
 
-        // 加载 Provider 数据
         async function loadProviderData() {
             try {
                 const response = await fetch('/api/model-switch/providers');
                 const result = await response.json();
-                
                 if (!result.success) {
-                    document.getElementById('model-error').innerHTML = 
-                        `<div class="error">加载失败: ${result.error}</div>`;
+                    document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${result.error}</div>`;
                     return;
                 }
-
                 document.getElementById('model-error').innerHTML = '';
-                
                 const list = document.getElementById('provider-list');
                 if (result.data.length === 0) {
                     list.innerHTML = '<div class="loading">未找到 Provider 配置</div>';
                     return;
                 }
-
                 list.innerHTML = result.data.map(provider => {
-                    const statusClass = provider.isDisabled ? 'status-disabled' : 
-                                       (provider.isHealthy ? 'status-healthy' : 'status-unhealthy');
-                    const statusText = provider.isDisabled ? '已禁用' : 
-                                      (provider.isHealthy ? '健康' : '不健康');
-                    
+                    const statusClass = provider.isDisabled ? 'status-disabled' : (provider.isHealthy ? 'status-healthy' : 'status-unhealthy');
+                    const statusText = provider.isDisabled ? '已禁用' : (provider.isHealthy ? '健康' : '不健康');
                     return `
                         <div class="provider-item">
                             <div class="provider-header">
                                 <div class="provider-name">${provider.customName}</div>
                                 <div class="provider-status ${statusClass}">${statusText}</div>
                             </div>
-                            
                             <div class="provider-details">
                                 <div class="detail-item">
                                     <div class="detail-label">Base URL</div>
@@ -651,68 +759,47 @@
                                     <div class="detail-value">${provider.uuid}</div>
                                 </div>
                             </div>
-
                             <div class="model-switch-form">
-                                <input type="text" 
-                                       id="model-input-${provider.uuid}" 
-                                       placeholder="输入新模型名称"
-                                       value="${provider.currentModel}">
-                                <button class="btn btn-primary" onclick="switchModel('${provider.providerName}', '${provider.uuid}')">
-                                    切换模型
-                                </button>
-                                <button class="btn btn-warning" onclick="refreshProvider('${provider.providerName}', '${provider.uuid}')">
-                                    刷新
-                                </button>
+                                <input type="text" id="model-input-${provider.uuid}" placeholder="输入新模型名称" value="${provider.currentModel}">
+                                <button class="btn btn-primary" onclick="switchModel('${provider.providerName}', '${provider.uuid}')">切换模型</button>
+                                <button class="btn btn-warning" onclick="refreshProvider('${provider.providerName}', '${provider.uuid}')">刷新</button>
                             </div>
                         </div>
                     `;
                 }).join('');
             } catch (error) {
-                document.getElementById('model-error').innerHTML = 
-                    `<div class="error">加载失败: ${error.message}</div>`;
+                document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
             }
         }
 
-        // 切换模型
         async function switchModel(provider, customName) {
             const input = document.getElementById(`model-input-${customName}`);
             const newModel = input.value.trim();
-            
             if (!newModel) {
                 alert('请输入模型名称');
                 return;
             }
-
             try {
                 const response = await fetch('/api/model-switch/switch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        provider,
-                        customName,
-                        newModel
-                    })
+                    body: JSON.stringify({ provider, customName, newModel })
                 });
                 const result = await response.json();
-                
                 if (result.success) {
-                    document.getElementById('model-success').innerHTML = 
-                        `<div class="success-message">模型切换成功: ${result.data.oldModel} -> ${result.data.newModel}</div>`;
+                    document.getElementById('model-success').innerHTML = `<div class="success-message">模型切换成功: ${result.data.oldModel} -> ${result.data.newModel}</div>`;
                     setTimeout(() => {
                         document.getElementById('model-success').innerHTML = '';
                     }, 3000);
                     loadProviderData();
                 } else {
-                    document.getElementById('model-error').innerHTML = 
-                        `<div class="error">切换失败: ${result.error}</div>`;
+                    document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${result.error}</div>`;
                 }
             } catch (error) {
-                document.getElementById('model-error').innerHTML = 
-                    `<div class="error">切换失败: ${error.message}</div>`;
+                document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${error.message}</div>`;
             }
         }
 
-        // 刷新 Provider
         async function refreshProvider(provider, customName) {
             try {
                 const response = await fetch('/api/model-switch/refresh', {
@@ -721,7 +808,6 @@
                     body: JSON.stringify({ provider, customName })
                 });
                 const result = await response.json();
-                
                 if (result.success) {
                     alert('Provider 刷新成功');
                     loadProviderData();
@@ -733,7 +819,6 @@
             }
         }
 
-        // 初始化
         let gpuInterval;
         async function init() {
             await loadGPUData();

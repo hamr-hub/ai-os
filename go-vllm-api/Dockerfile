@@ -22,10 +22,13 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/go-vllm-api ./cmd/server
 
-FROM alpine:3.20
+FROM ubuntu:22.04
 
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
-    && apk add --no-cache ca-certificates tzdata libstdc++
+RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list \
+    && sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /bin/go-vllm-api /usr/local/bin/go-vllm-api
 COPY configs/config.yaml /app/configs/config.yaml

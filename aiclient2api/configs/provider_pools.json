@@ -17,7 +17,7 @@
       "supportedModels": [],
       "notSupportedModels": [],
       "isDisabled": false,
-      "needsRefresh": true,
+      "needsRefresh": false,
       "refreshCount": 0,
       "lastHealthCheckTime": "2026-04-26T16:15:39.792Z",
       "lastHealthCheckModel": "gpt-4o-mini",

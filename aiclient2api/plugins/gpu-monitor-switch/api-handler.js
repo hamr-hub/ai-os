@@ -78,6 +78,115 @@ export async function handleGPUMonitorUIRoute(method, urlPath, req, res, config)
 }
 
 /**
+ * 获取原版面板 HTML（内部 API）
+ */
+export async function handleGetPanelHTML(method, urlPath, req, res, config) {
+    if (method !== 'GET' || urlPath !== '/__panel_html__') return false;
+    
+    try {
+        const fs = await import('fs/promises');
+        const pathModule = await import('path');
+        const basePath = pathModule.default.join(process.cwd(), 'static');
+        const indexPath = pathModule.default.join(basePath, 'index.html');
+        const html = await fs.default.readFile(indexPath, 'utf8');
+        
+        res.writeHead(200, { 
+            'Content-Type': 'text/html; charset=utf-8',
+        });
+        res.end(html);
+        return true;
+    } catch (error) {
+        logger.error('[Panel HTML] Failed to read index.html:', error.message);
+        res.writeHead(404);
+        res.end('Panel not found');
+        return true;
+    }
+}
+
+/**
+ * 管理面板入口路由 - 包含原版面板内容 + 注入脚本
+ */
+export async function handlePanelRoute(method, urlPath, req, res, config) {
+    if (method !== 'GET' || urlPath !== '/gpu-admin') return false;
+    
+    try {
+        const fs = await import('fs/promises');
+        const pathModule = await import('path');
+        const basePath = pathModule.default.join(process.cwd(), 'static');
+        const indexPath = pathModule.default.join(basePath, 'index.html');
+        let html = await fs.default.readFile(indexPath, 'utf8');
+        
+        // 注入插件脚本
+        const injectScript = `<script src="/plugins/gpu-monitor-switch/inject.js" defer></script>`;
+        if (html.includes('</body>')) {
+            html = html.replace('</body>', injectScript + '</body>');
+        } else {
+            html += injectScript;
+        }
+        
+        res.writeHead(200, { 
+            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Length': Buffer.byteLength(html),
+        });
+        res.end(html);
+        return true;
+    } catch (error) {
+        logger.error('[GPU Admin Panel] Failed to load panel:', error.message);
+        res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<h1>Panel Error</h1><p>${error.message}</p>`);
+        return true;
+    }
+}
+
+/**
+ * 注入脚本路由处理
+ */
+export async function handleInjectScript(method, urlPath, req, res, config) {
+    if (method !== 'GET' || urlPath !== '/plugins/gpu-monitor-switch/inject.js') return false;
+    
+    try {
+        const pluginDir = pathModule.join(process.cwd(), 'src', 'plugins', 'gpu-monitor-switch');
+        const jsPath = pathModule.join(pluginDir, 'inject.js');
+        const content = await fs.readFile(jsPath, 'utf8');
+        res.writeHead(200, { 
+            'Content-Type': 'application/javascript; charset=utf-8',
+            'Cache-Control': 'no-cache',
+        });
+        res.end(content);
+        return true;
+    } catch (error) {
+        logger.error('[GPU Monitor Inject] Failed to load script:', error.message);
+        res.writeHead(500, { 'Content-Type': 'application/javascript' });
+        res.end('console.error("Failed to load GPU monitor inject script");');
+        return true;
+    }
+}
+
+/**
+ * 注入样式路由处理
+ */
+export async function handlePluginStyles(method, urlPath, req, res, config) {
+    if (method !== 'GET' || urlPath !== '/plugins/gpu-monitor-switch/styles.css') return false;
+    
+    try {
+        const pluginDir = pathModule.join(process.cwd(), 'src', 'plugins', 'gpu-monitor-switch');
+        const cssPath = pathModule.join(pluginDir, 'styles.css');
+        const content = await fs.readFile(cssPath, 'utf8');
+        res.writeHead(200, { 
+            'Content-Type': 'text/css; charset=utf-8',
+            'Cache-Control': 'no-cache',
+        });
+        res.end(content);
+        return true;
+    } catch (error) {
+        logger.error('[GPU Monitor Styles] Failed to load CSS:', error.message);
+        res.writeHead(500, { 'Content-Type': 'text/css' });
+        res.end('');
+        return true;
+    }
+}
+
+/**
  * GPU 监控 API 路由处理
  */
 export async function handleGPUMonitorApiRoutes(method, path, req, res, config) {
