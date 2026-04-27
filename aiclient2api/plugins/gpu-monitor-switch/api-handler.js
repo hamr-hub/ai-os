@@ -4,6 +4,12 @@ import { backendClient } from './backend-client.js';
 import logger from '../../utils/logger.js';
 import fs from 'fs/promises';
 import pathModule from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = pathModule.dirname(__filename);
+const pluginDir = __dirname;
+const staticDir = pathModule.resolve(process.cwd(), 'static');
 
 function parseRequestBody(req) {
     return new Promise((resolve, reject) => {
@@ -30,7 +36,6 @@ function sendHTMLResponse(res, html) {
 export async function handleGPUMonitorUIRoute(method, urlPath, req, res, config) {
     if (method !== 'GET' || urlPath !== '/gpu-monitor.html') return false;
     try {
-        const pluginDir = pathModule.join(process.cwd(), 'src', 'plugins', 'gpu-monitor-switch');
         const html = await fs.readFile(pathModule.join(pluginDir, 'gpu-monitor.html'), 'utf8');
         sendHTMLResponse(res, html);
         return true;
@@ -44,8 +49,7 @@ export async function handleGPUMonitorUIRoute(method, urlPath, req, res, config)
 export async function handleGetPanelHTML(method, urlPath, req, res, config) {
     if (method !== 'GET' || urlPath !== '/__panel_html__') return false;
     try {
-        const basePath = pathModule.join(process.cwd(), 'static');
-        const html = await fs.readFile(pathModule.join(basePath, 'index.html'), 'utf8');
+        const html = await fs.readFile(pathModule.join(staticDir, 'index.html'), 'utf8');
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(html);
         return true;
@@ -57,8 +61,7 @@ export async function handleGetPanelHTML(method, urlPath, req, res, config) {
 export async function handlePanelRoute(method, urlPath, req, res, config) {
     if (method !== 'GET' || urlPath !== '/gpu-admin') return false;
     try {
-        const basePath = pathModule.join(process.cwd(), 'static');
-        let html = await fs.readFile(pathModule.join(basePath, 'index.html'), 'utf8');
+        let html = await fs.readFile(pathModule.join(staticDir, 'index.html'), 'utf8');
         const injectScript = '<script src="/plugins/gpu-monitor-switch/inject.js" defer></script>';
         if (html.includes('</body>')) html = html.replace('</body>', injectScript + '</body>');
         else html += injectScript;
@@ -75,11 +78,12 @@ export async function handlePanelRoute(method, urlPath, req, res, config) {
 export async function handleInjectScript(method, urlPath, req, res, config) {
     if (method !== 'GET' || urlPath !== '/plugins/gpu-monitor-switch/inject.js') return false;
     try {
-        const content = await fs.readFile(pathModule.join(process.cwd(), 'src', 'plugins', 'gpu-monitor-switch', 'inject.js'), 'utf8');
+        const content = await fs.readFile(pathModule.join(pluginDir, 'inject.js'), 'utf8');
         res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
         res.end(content);
         return true;
     } catch (error) {
+        logger.error('[GPU Monitor Inject]', error.message);
         res.writeHead(500, { 'Content-Type': 'application/javascript' });
         res.end('console.error("Failed to load inject.js");');
         return true;
@@ -89,11 +93,12 @@ export async function handleInjectScript(method, urlPath, req, res, config) {
 export async function handlePluginStyles(method, urlPath, req, res, config) {
     if (method !== 'GET' || urlPath !== '/plugins/gpu-monitor-switch/styles.css') return false;
     try {
-        const content = await fs.readFile(pathModule.join(process.cwd(), 'src', 'plugins', 'gpu-monitor-switch', 'styles.css'), 'utf8');
+        const content = await fs.readFile(pathModule.join(pluginDir, 'styles.css'), 'utf8');
         res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-cache' });
         res.end(content);
         return true;
     } catch (error) {
+        logger.error('[GPU Monitor Styles]', error.message);
         res.writeHead(500, { 'Content-Type': 'text/css' });
         res.end('');
         return true;
