@@ -601,11 +601,35 @@ func (h *ManageHandler) GetCacheStats(c *gin.Context) {
 }
 
 func (h *ManageHandler) GetConfig(c *gin.Context) {
-	cfg := h.scheduler.GetModelConfig("")
-	_ = cfg
+	cfg := config.Get()
+	if cfg == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"models":  h.scheduler.GetAvailableModels(),
+			"message": "Config not loaded",
+		})
+		return
+	}
+	modelDetails := make(map[string]interface{})
+	for name, mc := range cfg.Models {
+		modelDetails[name] = gin.H{
+			"service":                   mc.Service,
+			"port":                      mc.Port,
+			"required_memory":           mc.RequiredMemory,
+			"preload":                   mc.Preload,
+			"keep_alive":                mc.KeepAlive,
+			"model_path":                mc.ModelPath,
+			"supports_images":           mc.SupportsImages,
+			"supports_tool_calling":     mc.SupportsToolCalling,
+			"supports_image_generation": mc.SupportsImageGeneration,
+			"description":               mc.Description,
+			"concurrency_limit":         mc.ConcurrencyLimit,
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"models":  h.scheduler.GetAvailableModels(),
-		"message": "Use PUT /manage/config to update config",
+		"models":    modelDetails,
+		"settings":  cfg.Settings,
+		"vllm":      cfg.VLLM,
+		"llama_cpp": cfg.LlamaCpp,
 	})
 }
 
@@ -830,7 +854,16 @@ func (h *ManageHandler) RedisKeys(c *gin.Context) {
 	if pattern == "" {
 		pattern = "ai_controller:*"
 	}
-	c.JSON(http.StatusOK, gin.H{"pattern": pattern, "message": "Key listing requires SCAN support"})
+	ctx := context.Background()
+	keys, err := h.redis.Keys(ctx, pattern)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(keys) > 1000 {
+		keys = keys[:1000]
+	}
+	c.JSON(http.StatusOK, gin.H{"keys": keys, "count": len(keys), "pattern": pattern})
 }
 
 func (h *ManageHandler) RedisFlush(c *gin.Context) {
@@ -839,7 +872,11 @@ func (h *ManageHandler) RedisFlush(c *gin.Context) {
 		return
 	}
 	ctx := context.Background()
-	h.redis.Delete(ctx, "ai_controller:*")
+	err := h.redis.FlushDB(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"status": "flushed"})
 }
 

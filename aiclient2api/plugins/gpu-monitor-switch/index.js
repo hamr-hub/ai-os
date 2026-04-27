@@ -10,6 +10,7 @@
 
 import { gpuMonitorService } from './gpu-monitor.js';
 import { modelSwitchService } from './model-switch.js';
+import { backendClient } from './backend-client.js';
 import logger from '../../utils/logger.js';
 
 import { handleGPUMonitorApiRoutes, handleModelSwitchApiRoutes, handleGPUMonitorUIRoute, handleInjectScript, handlePluginStyles, handlePanelRoute, handleGetPanelHTML } from './api-handler.js';
@@ -178,7 +179,8 @@ const gpuMonitorSwitchPlugin = {
 
     exports: {
         gpuMonitorService,
-        modelSwitchService
+        modelSwitchService,
+        backendClient
     }
 };
 

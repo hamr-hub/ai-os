@@ -1,6 +1,5 @@
 import logger from '../../utils/logger.js';
-
-const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://localhost:35001';
+import { backendClient, GO_BACKEND_URL, PYTHON_BACKEND_URL } from './backend-client.js';
 
 class GPUMonitorService {
     constructor() {
@@ -13,7 +12,7 @@ class GPUMonitorService {
     }
 
     async init() {
-        logger.info('[GPU Monitor Service] Initializing GPU monitor (Go backend)...');
+        logger.info('[GPU Monitor Service] Initializing GPU monitor (with Go/Python fallback)...');
         this.startMonitoring();
     }
 
@@ -27,7 +26,7 @@ class GPUMonitorService {
         this.isMonitoring = true;
         this.updateGPUData();
         this.monitoringInterval = setInterval(() => { this.updateGPUData(); }, this.refreshInterval);
-        logger.info(`[GPU Monitor Service] Started monitoring (interval: ${this.refreshInterval}ms)`);
+        logger.info(`[GPU Monitor Service] Started monitoring (interval: ${this.refreshInterval}ms, backend: ${backendClient.activeBackend})`);
     }
 
     stopMonitoring() {
@@ -42,10 +41,10 @@ class GPUMonitorService {
 
     async updateGPUData() {
         try {
-            const response = await fetch(`${GO_BACKEND_URL}/manage/gpu/summary`);
+            const response = await backendClient.fetchWithFallback('/manage/gpu/summary');
             if (!response.ok) return;
             const result = await response.json();
-            
+
             if (result.status === 'unavailable' || !result.current) {
                 this.gpuData = [];
                 return;
@@ -56,10 +55,10 @@ class GPUMonitorService {
                 index: 0,
                 name: gpu.name || 'Unknown GPU',
                 temperature: gpu.temperature ?? null,
-                gpuUtilization: gpu.gpu_utilization ?? gpu.utilization?.percent ?? null,
-                memoryUsed: gpu.memory_used ?? null,
-                memoryTotal: gpu.memory_total ?? null,
-                memoryFree: gpu.memory_free ?? null,
+                gpuUtilization: gpu.gpu_utilization ?? gpu.utilization?.percent ?? gpu.utilization ?? null,
+                memoryUsed: gpu.memory_used ?? gpu.used_memory ?? null,
+                memoryTotal: gpu.memory_total ?? gpu.total_memory ?? null,
+                memoryFree: gpu.memory_free ?? gpu.available_memory ?? null,
                 memoryUsagePercent: gpu.memory_usage_percent ?? gpu.memory_utilization?.percent ?? null,
                 memoryUtilization: gpu.memory_utilization?.percent ?? null,
                 powerDraw: gpu.power_draw ?? null,
@@ -101,7 +100,8 @@ class GPUMonitorService {
             data: this.gpuData,
             history: this.gpuHistory,
             timestamp: new Date().toISOString(),
-            isMonitoring: this.isMonitoring
+            isMonitoring: this.isMonitoring,
+            backendStatus: backendClient.getStatus()
         };
     }
 
@@ -120,7 +120,8 @@ class GPUMonitorService {
             isMonitoring: this.isMonitoring,
             interval: this.refreshInterval,
             gpuCount: this.gpuData.length,
-            historyLength: this.gpuHistory.length
+            historyLength: this.gpuHistory.length,
+            backendStatus: backendClient.getStatus()
         };
     }
 }

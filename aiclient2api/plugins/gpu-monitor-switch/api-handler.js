@@ -1,10 +1,9 @@
 import { gpuMonitorService } from './gpu-monitor.js';
 import { modelSwitchService } from './model-switch.js';
+import { backendClient } from './backend-client.js';
 import logger from '../../utils/logger.js';
 import fs from 'fs/promises';
 import pathModule from 'path';
-
-const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://go-vllm-api-go-vllm-api-1:35001';
 
 function parseRequestBody(req) {
     return new Promise((resolve, reject) => {
@@ -102,8 +101,12 @@ export async function handlePluginStyles(method, urlPath, req, res, config) {
 }
 
 export async function handleGPUMonitorApiRoutes(method, path, req, res, config) {
-    if (path !== '/api/gpu-monitor' && path !== '/api/gpu-monitor/info' && path !== '/api/gpu-monitor/status' && path !== '/api/gpu-monitor/interval' && path !== '/api/gpu-monitor/start' && path !== '/api/gpu-monitor/stop') return false;
+    if (path !== '/api/gpu-monitor' && path !== '/api/gpu-monitor/info' && path !== '/api/gpu-monitor/status' && path !== '/api/gpu-monitor/interval' && path !== '/api/gpu-monitor/start' && path !== '/api/gpu-monitor/stop' && path !== '/api/gpu-monitor/backend-status') return false;
     try {
+        if (path === '/api/gpu-monitor/backend-status' && method === 'GET') {
+            sendJSONResponse(res, 200, { success: true, data: backendClient.getStatus() });
+            return true;
+        }
         if (path === '/api/gpu-monitor/info' && method === 'GET') {
             await gpuMonitorService.updateGPUData();
             sendJSONResponse(res, 200, { success: true, data: gpuMonitorService.gpuData, timestamp: new Date().toISOString() });

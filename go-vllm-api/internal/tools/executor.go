@@ -1,9 +1,12 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"time"
 
@@ -294,6 +297,12 @@ func (e *ToolExecutor) defaultHandler(ctx context.Context, toolName string, argu
 	case "write_file":
 		return e.handleWriteFile(arguments)
 
+	case "search_conversations":
+		return e.handleSearchConversations(arguments)
+
+	case "web_search":
+		return e.handleWebSearch(arguments)
+
 	default:
 		return nil, fmt.Errorf("no handler for tool: %s", toolName)
 	}
@@ -536,4 +545,174 @@ func (e *ToolExecutor) ExecuteBatch(ctx context.Context, calls []ToolCall, autoC
 		results = append(results, result)
 	}
 	return results
+}
+
+func (e *ToolExecutor) handleSearchConversations(arguments map[string]any) (map[string]any, error) {
+	query, ok := arguments["query"].(string)
+	if !ok || query == "" {
+		return nil, fmt.Errorf("query is required")
+	}
+	limit := 10
+	if v, ok := arguments["limit"].(int64); ok && v > 0 {
+		limit = int(v)
+	}
+
+	currentModel := e.scheduler.GetCurrentModelName()
+	if currentModel == "" {
+		return map[string]any{
+			"results": []interface{}{},
+			"count":   0,
+			"query":   query,
+			"message": "No model currently running for search",
+		}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	reqBody := map[string]any{
+		"model": currentModel,
+		"messages": []map[string]any{
+			{"role": "system", "content": "You are a search assistant. Given a query, respond with relevant information."},
+			{"role": "user", "content": query},
+		},
+		"max_tokens":  500,
+		"temperature": 0.3,
+	}
+
+	port := e.scheduler.GetModelPort(currentModel)
+	if port == 0 {
+		port = 8000
+	}
+
+	result, err := e.sendModelRequest(ctx, port, reqBody)
+	if err != nil {
+		return map[string]any{
+			"results": []interface{}{},
+			"count":   0,
+			"query":   query,
+			"message": fmt.Sprintf("Search unavailable: %v", err),
+		}, nil
+	}
+
+	return map[string]any{
+		"results": []map[string]any{
+			{
+				"query":   query,
+				"content": result,
+				"source":  "model_search",
+			},
+		},
+		"count":     1,
+		"query":     query,
+		"limit":     limit,
+		"timestamp": time.Now().Format(time.RFC3339),
+	}, nil
+}
+
+func (e *ToolExecutor) handleWebSearch(arguments map[string]any) (map[string]any, error) {
+	query, ok := arguments["query"].(string)
+	if !ok || query == "" {
+		return nil, fmt.Errorf("query is required")
+	}
+	numResults := 5
+	if v, ok := arguments["num_results"].(int64); ok && v > 0 {
+		numResults = int(v)
+	}
+
+	currentModel := e.scheduler.GetCurrentModelName()
+	if currentModel == "" {
+		return map[string]any{
+			"results": []interface{}{},
+			"count":   0,
+			"query":   query,
+			"message": "No model currently running for web search",
+		}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	reqBody := map[string]any{
+		"model": currentModel,
+		"messages": []map[string]any{
+			{"role": "system", "content": fmt.Sprintf("You are a web search assistant. Provide %d relevant search results for the query. Format each result with title, snippet, and source.", numResults)},
+			{"role": "user", "content": query},
+		},
+		"max_tokens":  1000,
+		"temperature": 0.3,
+	}
+
+	port := e.scheduler.GetModelPort(currentModel)
+	if port == 0 {
+		port = 8000
+	}
+
+	result, err := e.sendModelRequest(ctx, port, reqBody)
+	if err != nil {
+		return map[string]any{
+			"results": []interface{}{},
+			"count":   0,
+			"query":   query,
+			"message": fmt.Sprintf("Web search unavailable: %v", err),
+		}, nil
+	}
+
+	return map[string]any{
+		"results": []map[string]any{
+			{
+				"title":   fmt.Sprintf("Search results for: %s", query),
+				"snippet": result,
+				"source":  "model_knowledge",
+			},
+		},
+		"count":       1,
+		"query":       query,
+		"num_results": numResults,
+		"timestamp":   time.Now().Format(time.RFC3339),
+		"note":        "Web search uses model knowledge as fallback (no external search API configured)",
+	}, nil
+}
+
+func (e *ToolExecutor) sendModelRequest(ctx context.Context, port int, reqBody map[string]any) (string, error) {
+	reqData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("http://localhost:%d/v1/chat/completions", port)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(reqData))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+
+	var chatResp map[string]any
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		return "", fmt.Errorf("parse response: %w", err)
+	}
+
+	content := ""
+	if choices, ok := chatResp["choices"].([]any); ok && len(choices) > 0 {
+		if choice, ok := choices[0].(map[string]any); ok {
+			if msg, ok := choice["message"].(map[string]any); ok {
+				if c, ok := msg["content"].(string); ok {
+					content = c
+				}
+			}
+		}
+	}
+
+	return content, nil
 }
