@@ -124,5 +124,5 @@ exec vllm serve "$MODEL_PATH" \
   --max-num-seqs 32 \
   --enforce-eager \
   --enable-auto-tool-choice \
-  --tool-call-parser gemma3 \
+  --tool-call-parser gemma4 \
   2>&1 | tee -a "$LOG_FILE"
