@@ -46,6 +46,8 @@ export VLLM_USE_V1=0
 export NCCL_P2P_DISABLE=1
 export CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
 export OMP_NUM_THREADS=16
+export VLLM_NO_FLASHINFER=1
+export FLASHINFER_DISABLE=1
 
 # ===== 5. 模型路径（从环境变量读取，提供默认值）=====
 MODEL_STATE_FILE="${VLLM_MODEL_STATE_FILE:-$SCRIPT_DIR/.vllm_model_path}"
@@ -87,8 +89,9 @@ exec vllm serve "$MODEL_PATH" \
   --max-model-len 32768 \
   --host 0.0.0.0 \
   --port "$VLLM_PORT" \
-  --kv-cache-dtype fp8 \
+  --kv-cache-dtype auto \
   --enable-chunked-prefill \
   --max-num-batched-tokens 16384 \
   --max-num-seqs 32 \
+  --enforce-eager \
   2>&1 | tee -a "$LOG_FILE"
