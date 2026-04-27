@@ -17,6 +17,7 @@ ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10
 RestartPreventExitStatus=98
+KillMode=mixed
 KillSignal=SIGINT
 TimeoutStopSec=30
 StandardOutput=journal
@@ -28,6 +29,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/root/ai-os/go-vllm-api
 ReadWritePaths=/root/ai-os/go-vllm-api/logs
+Nice=-5
 
 [Install]
 WantedBy=multi-user.target

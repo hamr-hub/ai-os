@@ -562,10 +562,10 @@ func (s *Scheduler) StartModel(ctx context.Context, name string) (bool, error) {
 		s.runningModels[matched] = time.Now()
 		s.mu.Unlock()
 		s.logger.Info("model started", zap.String("model", matched))
-	} else {
-		s.logger.Error("failed to start model", zap.String("model", matched))
+		return true, nil
 	}
-	return success, nil
+	s.logger.Error("failed to start model", zap.String("model", matched))
+	return false, fmt.Errorf("failed to start service %s for model %s", mc.Service, matched)
 }
 
 func (s *Scheduler) StopModel(ctx context.Context, name string) bool {

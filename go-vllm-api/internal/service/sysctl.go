@@ -96,7 +96,27 @@ func (sc *SystemController) StopService(name string) bool {
 func (sc *SystemController) RestartService(name string) bool {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	cmd := sc.command("systemctl", "restart", name)
+
+	cmd := sc.command("systemctl", "stop", name)
+	if cmd == nil {
+		sc.logger.Error("restart service", zap.String("service", name), zap.String("reason", "systemctl unavailable"))
+		return false
+	}
+	if err := cmd.Run(); err != nil {
+		sc.logger.Error("stop service before restart", zap.String("service", name), zap.Error(err))
+		return false
+	}
+
+	waited := 0
+	for waited < 30 {
+		if sc.getServiceStatusLocked(name) != "active" {
+			break
+		}
+		time.Sleep(1 * time.Second)
+		waited++
+	}
+
+	cmd = sc.command("systemctl", "start", name)
 	if cmd == nil {
 		sc.logger.Error("restart service", zap.String("service", name), zap.String("reason", "systemctl unavailable"))
 		return false
@@ -107,6 +127,18 @@ func (sc *SystemController) RestartService(name string) bool {
 	}
 	sc.logger.Info("service restarted", zap.String("service", name))
 	return true
+}
+
+func (sc *SystemController) getServiceStatusLocked(name string) string {
+	cmd := sc.command("systemctl", "is-active", name)
+	if cmd == nil {
+		return "unavailable"
+	}
+	output, err := cmd.Output()
+	if err != nil {
+		return "inactive"
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func (sc *SystemController) IsServiceRunning(name string) bool {
