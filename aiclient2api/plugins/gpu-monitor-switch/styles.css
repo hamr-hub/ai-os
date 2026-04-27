@@ -271,23 +271,15 @@
     border: 1px solid #e5e7eb;
     border-radius: 10px;
     padding: 14px;
-    pointer-events: auto;
 }
 
 .model-current {
     border: 2px solid #22c55e;
     background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);
-    pointer-events: auto;
 }
 
 .model-switchable {
     border: 1px solid #e5e7eb;
-    pointer-events: auto;
-}
-
-.model-switchable:hover {
-    border-color: #6366f1;
-    background: #f8fafc;
 }
 
 .model-header {
@@ -347,6 +339,11 @@
     gap: 8px;
     padding-top: 8px;
     border-top: 1px solid #f1f5f9;
+    margin-top: 0;
+}
+
+.model-actions .btn {
+    flex-shrink: 0;
 }
 
 .btn {
@@ -460,6 +457,55 @@
     font-size: 13px;
     color: #6b7280;
     margin-bottom: 8px;
+}
+
+.switching-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+    text-align: left;
+}
+
+.switching-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #9ca3af;
+    transition: color 0.3s ease;
+}
+
+.switching-step.active {
+    color: #6366f1;
+    font-weight: 500;
+}
+
+.switching-step.done {
+    color: #22c55e;
+}
+
+.step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #d1d5db;
+    flex-shrink: 0;
+    transition: background 0.3s ease;
+}
+
+.switching-step.active .step-dot {
+    background: #6366f1;
+    animation: pulse-dot 1.5s ease infinite;
+}
+
+.switching-step.done .step-dot {
+    background: #22c55e;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.7; }
 }
 
 .switching-hint {

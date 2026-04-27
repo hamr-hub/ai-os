@@ -22,7 +22,21 @@ type SystemController struct {
 }
 
 func NewSystemController(logger *zap.Logger) *SystemController {
-	return &SystemController{logger: logger, vllmPort: 8000}
+	sc := &SystemController{
+		logger:   logger,
+		vllmPort: 8000,
+	}
+	
+	sc.systemctlPath, sc.systemctlAvailable = sc.detectSystemctl()
+	sc.needsSudo = sc.checkSudo()
+	
+	if sc.systemctlAvailable {
+		logger.Info("systemctl detected", zap.String("path", sc.systemctlPath), zap.Bool("needs_sudo", sc.needsSudo))
+	} else {
+		logger.Warn("systemctl not available, service operations will fail")
+	}
+	
+	return sc
 }
 
 func (sc *SystemController) SetVLLMPort(port int) {

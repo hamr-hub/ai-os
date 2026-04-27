@@ -221,7 +221,14 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 
 	if err := h.ensureModelReady(c, modelName); err != nil {
 		statusCode = 503
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		if h.scheduler.IsSwitchingInProgress() {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "Model switch in progress, please wait",
+				"retry_after": 5,
+			})
+		} else {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		}
 		return
 	}
 

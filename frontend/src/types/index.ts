@@ -441,3 +441,70 @@ export interface SystemHistoryResponse {
   history: SystemHistoryEntry[]
   count: number
 }
+
+export interface VLLMParams {
+  max_num_seqs: number
+  gpu_memory_utilization: number
+  max_model_len: number
+  [key: string]: number | string | boolean | undefined
+}
+
+export interface ModelVariant {
+  name: string
+  path: string
+  required_memory_gb: number
+  multimodal: boolean
+  size_mb: number
+  running: boolean
+  status: string
+  port: number | null
+  preloaded: boolean
+  active_requests: number
+  supports_images: boolean
+  supports_tool_calling: boolean
+  supports_image_generation: boolean
+  description: string
+  required_memory: string
+  backend_type: string
+  vllm_config: VLLMConfig
+  is_current: boolean
+}
+
+export interface ModelGroup {
+  base_name: string
+  variant_count: number
+  total_size_mb: number
+  variants: ModelVariant[]
+}
+
+export interface AggregatedModelsResponse {
+  groups: ModelGroup[]
+  total_groups: number
+  total_variants: number
+  current_model: string | null
+}
+
+export interface VLLMConfig {
+  gpu_memory_utilization: number | null
+  max_model_len: number | null
+  max_num_seqs: number | null
+  max_num_batched_tokens: number | null
+  tensor_parallel_size: number | null
+  has_custom_config: boolean
+}
+
+export interface VLLMDefaultConfig {
+  gpu_memory_utilization: number
+  max_model_len: number
+  max_num_seqs: number
+  max_num_batched_tokens: number
+  tensor_parallel_size: number
+}
+
+export interface VLLMConfigUpdateRequest {
+  gpu_memory_utilization?: number
+  max_model_len?: number
+  max_num_seqs?: number
+  max_num_batched_tokens?: number
+  tensor_parallel_size?: number
+}

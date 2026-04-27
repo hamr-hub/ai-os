@@ -177,7 +177,7 @@ def get_available_models() -> List[Dict[str, Any]]:
     cached = cache_service.get("ai_controller:cache:model_list")
     if cached is not None:
         return cached
-    
+
     models = []
     if not os.path.exists(MODEL_BASE_PATH):
         return models
@@ -186,15 +186,12 @@ def get_available_models() -> List[Dict[str, Any]]:
         model_path = os.path.join(MODEL_BASE_PATH, model_name)
         if not os.path.isdir(model_path):
             continue
-        
-        # 跳过非模型目录
+
         if model_name in ['hf_cache', 'trans_pkg', 'venv']:
             continue
-        
-        # 估算显存需求
+
         memory_info = _estimate_memory(model_name)
-        
-        # 获取模型详情
+
         model_info = {
             "name": model_name,
             "path": model_path,
@@ -204,11 +201,254 @@ def get_available_models() -> List[Dict[str, Any]]:
             "running": False,
             "status": "stopped"
         }
-        
+
         models.append(model_info)
-    
+
     cache_service.set("ai_controller:cache:model_list", models, ttl_seconds=60)
     return models
+
+
+def extract_base_model_name(model_name: str) -> str:
+    """
+    从模型名称中提取基础模型名称，用于聚合
+    例如: Qwen3.6-35B-A3B-NVFP4 -> Qwen3.6-35B
+    """
+    import re
+
+    base_patterns = [
+        r'^(Gemma-4-31B)',
+        r'^(Qwen3-235B)',
+        r'^(Qwen3\.6-35B)',
+        r'^(Qwen2\.5-72B)',
+        r'^(deepseek-coder-v2)',
+        r'^(deepseek-r1-70b)',
+        r'^(deepseek-r1)',
+        r'^(llama-3\.3-70b)',
+        r'^(llama-3-8b)',
+        r'^(llama-3\.1-70b)',
+        r'^(midnight-miqu-103b)',
+        r'^(mistral-7b)',
+        r'^(mixtral-8x7b)',
+    ]
+
+    for pattern in base_patterns:
+        match = re.match(pattern, model_name, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+    if '-' in model_name:
+        parts = model_name.split('-')
+        if len(parts) >= 2:
+            return parts[0]
+    return model_name
+
+
+def get_aggregated_models() -> List[Dict[str, Any]]:
+    """
+    获取聚合后的模型列表，按基础模型名称分组，每组内按文件大小排序
+    包含每个模型的 vLLM 配置参数
+    """
+    cached = cache_service.get("ai_controller:cache:model_list:aggregated")
+    if cached is not None:
+        return cached
+
+    try:
+        import yaml
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        models_config = {}
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            models_config = config.get('models', {})
+    except Exception as exc:
+        logger.warning("Failed to load models config: %s", exc)
+        models_config = {}
+
+    models = get_available_models()
+
+    aggregated = {}
+    for model in models:
+        base_name = extract_base_model_name(model["name"])
+        if base_name not in aggregated:
+            aggregated[base_name] = {
+                "base_name": base_name,
+                "variants": []
+            }
+        
+        model_name = model["name"]
+        config = models_config.get(model_name, {})
+        vllm_params = config.get('vllm_params', {})
+        
+        if not vllm_params:
+            vllm_params = _recommend_vllm_params(model_name, model.get("required_memory_gb", 40))
+        
+        variant = {
+            **model,
+            "backend_type": config.get('service', 'vllm').replace('-aiclient', '') if config.get('service') else 'vllm',
+            "vllm_params": vllm_params,
+            "port": config.get('port'),
+            "description": config.get('description', ''),
+            "required_memory": config.get('required_memory', ''),
+            "supports_images": config.get('supports_images', False),
+            "supports_tool_calling": config.get('supports_tool_calling', False),
+            "supports_image_generation": config.get('supports_image_generation', False),
+            "preloaded": config.get('preload', False),
+        }
+        
+        aggregated[base_name]["variants"].append(variant)
+
+    result = []
+    for base_name, group in sorted(aggregated.items()):
+        variants = sorted(group["variants"], key=lambda x: x.get("size_mb", 0))
+        total_size_mb = sum(v.get("size_mb", 0) for v in variants)
+        result.append({
+            "base_name": base_name,
+            "variant_count": len(variants),
+            "total_size_mb": total_size_mb,
+            "variants": variants
+        })
+
+    result.sort(key=lambda x: x["base_name"].lower())
+
+    cache_service.set("ai_controller:cache:model_list:aggregated", result, ttl_seconds=60)
+    return result
+
+
+def _recommend_vllm_params(model_name: str, required_memory_gb: int, gpu_memory_gb: int = 96) -> Dict[str, Any]:
+    """
+    根据模型显存需求和GPU显存大小推荐 vLLM 启动参数
+    
+    :param model_name: 模型名称
+    :param required_memory_gb: 模型所需显存（GB）
+    :param gpu_memory_gb: GPU总显存（GB），默认96G
+    :return: vLLM参数配置字典
+    """
+    available_memory_gb = gpu_memory_gb - required_memory_gb
+    
+    available_ratio = available_memory_gb / gpu_memory_gb
+    
+    if available_ratio < 0.15:
+        params = {
+            "max_num_seqs": 32,
+            "gpu_memory_utilization": 0.80,
+            "max_model_len": 8192,
+            "max_num_batched_tokens": 4096,
+            "enable_chunked_prefill": True,
+        }
+    elif available_ratio < 0.25:
+        params = {
+            "max_num_seqs": 64,
+            "gpu_memory_utilization": 0.85,
+            "max_model_len": 16384,
+            "max_num_batched_tokens": 8192,
+            "enable_chunked_prefill": True,
+        }
+    elif available_ratio < 0.40:
+        params = {
+            "max_num_seqs": 128,
+            "gpu_memory_utilization": 0.88,
+            "max_model_len": 32768,
+            "max_num_batched_tokens": 16384,
+            "enable_chunked_prefill": True,
+        }
+    elif available_ratio < 0.60:
+        params = {
+            "max_num_seqs": 256,
+            "gpu_memory_utilization": 0.90,
+            "max_model_len": 40960,
+            "max_num_batched_tokens": 16384,
+            "enable_chunked_prefill": True,
+        }
+    else:
+        params = {
+            "max_num_seqs": 512,
+            "gpu_memory_utilization": 0.92,
+            "max_model_len": 65536,
+            "max_num_batched_tokens": 32768,
+            "enable_chunked_prefill": True,
+        }
+    
+    if "31b" in model_name.lower() or "35b" in model_name.lower():
+        params["max_num_seqs"] = min(params["max_num_seqs"], 256)
+        params["max_model_len"] = min(params["max_model_len"], 40960)
+    elif "70b" in model_name.lower() or "72b" in model_name.lower():
+        params["max_num_seqs"] = min(params["max_num_seqs"], 64)
+        params["gpu_memory_utilization"] = min(params["gpu_memory_utilization"], 0.85)
+        params["max_model_len"] = min(params["max_model_len"], 16384)
+    elif "103b" in model_name.lower():
+        params["max_num_seqs"] = min(params["max_num_seqs"], 32)
+        params["gpu_memory_utilization"] = min(params["gpu_memory_utilization"], 0.80)
+        params["max_model_len"] = min(params["max_model_len"], 8192)
+    elif "235b" in model_name.lower():
+        params["max_num_seqs"] = min(params["max_num_seqs"], 32)
+        params["gpu_memory_utilization"] = min(params["gpu_memory_utilization"], 0.75)
+        params["max_model_len"] = min(params["max_model_len"], 8192)
+    
+    return params
+
+
+def save_model_vllm_params(model_name: str, vllm_params: Dict[str, Any]) -> bool:
+    """
+    保存模型的 vLLM 参数配置到 config.yaml
+    """
+    try:
+        import yaml
+        
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        if not os.path.exists(config_path):
+            return False
+        
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        if 'models' not in config:
+            config['models'] = {}
+        
+        if model_name not in config['models']:
+            config['models'][model_name] = {}
+        
+        config['models'][model_name]['vllm_params'] = vllm_params
+        
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+        
+        cache_service.delete("ai_controller:cache:model_list:aggregated")
+        logger.info("Saved vLLM params for model %s", model_name)
+        return True
+    except Exception as exc:
+        logger.error("Failed to save vLLM params for %s: %s", model_name, exc)
+        return False
+
+
+def get_model_vllm_params(model_name: str) -> Dict[str, Any]:
+    """
+    获取模型的 vLLM 参数配置
+    """
+    try:
+        import yaml
+        
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        if not os.path.exists(config_path):
+            return {}
+        
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        model_config = config.get('models', {}).get(model_name, {})
+        vllm_params = model_config.get('vllm_params', {})
+        
+        if not vllm_params:
+            required_memory_gb = 40
+            for pattern, info in MODEL_MEMORY_ESTIMATES.items():
+                if pattern.lower() in model_name.lower():
+                    required_memory_gb = info["vram_gb"]
+                    break
+            vllm_params = _recommend_vllm_params(model_name, required_memory_gb)
+        
+        return vllm_params
+    except Exception as exc:
+        logger.error("Failed to get vLLM params for %s: %s", model_name, exc)
+        return {}
 
 
 def _find_model_name_from_path(model_path: str) -> Optional[str]:
@@ -505,7 +745,7 @@ def switch_vllm_model(model_name: str) -> Dict[str, Any]:
             }
 
         # 更新启动脚本
-        script_updated = _update_vllm_script(model_path)
+        script_updated = _update_vllm_script(model_path, model_name)
         if not script_updated:
             return {
                 "success": False,
@@ -569,29 +809,31 @@ async def switch_vllm_model_with_test(model_name: str, test_enabled: bool = True
 
 async def _wait_for_vllm_ready(max_wait: int = 180, check_interval: int = 5) -> bool:
     """
-    等待 vLLM 服务就绪（智能等待）
+    等待 vLLM 服务就绪（动态端口发现 + 健康检查）
     :param max_wait: 最大等待时间（秒）
     :param check_interval: 检查间隔（秒）
     :return: 是否就绪
     """
-    vllm_port = discover_vllm_port()
-    health_url = f"http://localhost:{vllm_port}/health"
-    elapsed = 0
-    
-    while elapsed < max_wait:
+    start_time = time.time()
+    while (time.time() - start_time) < max_wait:
+        # 每次循环都动态发现端口（因为端口可能会变化）
+        vllm_port = discover_vllm_port()
+        health_url = f"http://localhost:{vllm_port}/health"
+        
         try:
             async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.get(health_url)
                 if response.status_code == 200:
-                    logger.info("vLLM service ready after %d seconds", elapsed)
+                    elapsed = int(time.time() - start_time)
+                    logger.info("vLLM service ready after %d seconds (port=%d)", elapsed, vllm_port)
                     return True
         except Exception:
             pass
         
         await asyncio.sleep(check_interval)
-        elapsed += check_interval
     
-    logger.warning("vLLM service not ready after %d seconds", max_wait)
+    elapsed = int(time.time() - start_time)
+    logger.warning("vLLM service not ready after %d seconds", elapsed)
     return False
 
 
@@ -609,7 +851,7 @@ async def _do_switch_vllm_model(model_name: str, test_enabled: bool = True, mode
             "model_path": model_path
         }
 
-    script_updated = _update_vllm_script(model_path)
+    script_updated = _update_vllm_script(model_path, model_name)
     if not script_updated:
         return {
             "success": False,
@@ -749,13 +991,57 @@ def _write_model_state_file(model_path: str) -> bool:
         return False
 
 
-def _update_vllm_script(model_path: str) -> bool:
+def _write_vllm_params_file(model_name: str) -> bool:
+    """
+    根据模型名称从 config.yaml 读取 vLLM 参数并写入参数文件
+    供启动脚本读取使用
+    """
+    try:
+        params_file = os.path.join(os.path.dirname(VLLM_START_SCRIPT), '.vllm_model_params.json')
+        
+        vllm_params = get_model_vllm_params(model_name)
+        
+        if not vllm_params:
+            required_memory_gb = 40
+            for pattern, info in MODEL_MEMORY_ESTIMATES.items():
+                if pattern.lower() in model_name.lower():
+                    required_memory_gb = info["vram_gb"]
+                    break
+            vllm_params = _recommend_vllm_params(model_name, required_memory_gb)
+        
+        import json
+        params_dir = os.path.dirname(params_file)
+        if params_dir:
+            os.makedirs(params_dir, exist_ok=True)
+        
+        with open(params_file, 'w') as f:
+            json.dump(vllm_params, f, indent=2)
+        
+        logger.info("Wrote vLLM params file for model %s: %s", model_name, params_file)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to write vLLM params file for %s: %s", model_name, exc)
+        return False
+
+
+def _update_vllm_script(model_path: str, model_name: str = None) -> bool:
     """
     更新 vLLM systemd 服务文件和启动脚本中的模型路径
     优先级：systemd 服务文件 > 启动脚本
     """
     try:
         import re
+
+        # 如果未提供模型名称，尝试从路径中推断
+        if not model_name:
+            model_name = _find_model_name_from_path(model_path)
+            if not model_name:
+                model_name = os.path.basename(model_path)
+        
+        # 写入 vLLM 参数文件
+        params_written = _write_vllm_params_file(model_name)
+        if params_written:
+            logger.info("Wrote vLLM params for model: %s", model_name)
 
         state_updated = _write_model_state_file(model_path)
 

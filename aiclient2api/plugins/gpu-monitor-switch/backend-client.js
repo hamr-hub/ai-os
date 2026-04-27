@@ -94,10 +94,24 @@ class BackendClient {
         const goUrl = `${GO_BACKEND_URL}${path}`;
         const pythonUrl = `${PYTHON_BACKEND_URL}${path}`;
 
+        if (isModelSwitch) {
+            if (this.goAvailable) {
+                try {
+                    logger.info(`[BackendClient] Model switch -> Go backend (no fallback)`);
+                    const response = await fetch(goUrl, { ...options, signal: timeoutSignal });
+                    return response;
+                } catch (error) {
+                    logger.error('[BackendClient] Go backend failed for model switch:', error.message);
+                    throw new Error(`Go backend failed for model switch: ${error.message}`);
+                }
+            }
+            throw new Error('Go backend unavailable for model switch');
+        }
+
         if (isLongOperation) {
             if (this.goAvailable) {
                 try {
-                    logger.info(`[BackendClient] Long operation (${isModelSwitch ? 'switch' : isModelStart ? 'start' : 'stop'}) -> Go backend`);
+                    logger.info(`[BackendClient] Long operation (${isModelStart ? 'start' : 'stop'}) -> Go backend`);
                     const response = await fetch(goUrl, { ...options, signal: timeoutSignal });
                     if (response.ok) return response;
                     logger.warn('[BackendClient] Go backend returned error for long operation, trying Python');
@@ -107,7 +121,7 @@ class BackendClient {
             }
             if (this.pythonAvailable) {
                 try {
-                    logger.info(`[BackendClient] Long operation (${isModelSwitch ? 'switch' : isModelStart ? 'start' : 'stop'}) -> Python backend`);
+                    logger.info(`[BackendClient] Long operation (${isModelStart ? 'start' : 'stop'}) -> Python backend`);
                     const pythonTimeoutSignal = options.signal || AbortSignal.timeout(180000);
                     const response = await fetch(pythonUrl, { ...options, signal: pythonTimeoutSignal });
                     if (response.ok) return response;

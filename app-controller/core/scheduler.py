@@ -526,7 +526,7 @@ class Scheduler:
             # Apply the new model target before touching the currently running service.
             if model_path:
                 logger.info(f"Updating vLLM script to model path: {model_path}")
-                if not _update_vllm_script(model_path):
+                if not _update_vllm_script(model_path, model_name):
                     logger.error(f"Failed to update vLLM script for {model_name}")
                     return False
 
@@ -567,12 +567,21 @@ class Scheduler:
 
         success = self.sys_controller.start_service(service_name)
         if success:
-            with self._model_lock:
-                self.running_models[model_name] = datetime.now()
-
             if backend_type == 'vllm':
-                # vLLM 大模型加载时间长，接口层返回“starting”后由前端/状态轮询继续观察。
-                return True
+                # vLLM 大模型加载时间长，需要等待模型真正就绪
+                preload_timeout = self.config.get('settings', {}).get('preload_timeout', 240)
+                ready = await self._wait_for_model_ready(model_name, self.get_model_port(model_name), timeout=preload_timeout)
+                
+                if ready:
+                    with self._model_lock:
+                        self.running_models[model_name] = datetime.now()
+                    logger.info(f"vLLM model {model_name} is ready")
+                    return True
+                else:
+                    logger.error(f"vLLM model {model_name} failed to become ready within {preload_timeout}s")
+                    self.sys_controller.stop_service(service_name)
+                    self._mark_model_stopped(model_name)
+                    return False
 
             # Poll for readiness instead of arbitrary sleep
             preload_timeout = self.config.get('settings', {}).get('preload_timeout', 120)

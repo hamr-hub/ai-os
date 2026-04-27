@@ -23,6 +23,10 @@ import type {
   AgentMessage,
   AgentRequest,
   ToolResult,
+  AggregatedModelsResponse,
+  VLLMDefaultConfig,
+  VLLMConfig,
+  VLLMConfigUpdateRequest,
 } from '@/types'
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
@@ -302,6 +306,41 @@ export async function setDefaultModel(modelName: string): Promise<ActionResponse
 
 export async function clearDefaultModel(): Promise<ActionResponse> {
   const { data } = await client.delete<ActionResponse>('/default-model')
+  return data
+}
+
+export async function getAggregatedModels(
+  config: AxiosRequestConfig = {}
+): Promise<AggregatedModelsResponse> {
+  const { data } = await client.get<AggregatedModelsResponse>(
+    '/models/aggregated',
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function getModelVLLMConfig(
+  modelName: string
+): Promise<VLLMConfig> {
+  const { data } = await client.get<VLLMConfig>(`/models/${modelName}/vllm-config`)
+  return data
+}
+
+export async function updateModelVLLMConfig(
+  modelName: string,
+  config: VLLMConfigUpdateRequest
+): Promise<VLLMConfig> {
+  const { data } = await client.put<VLLMConfig>(`/models/${modelName}/vllm-config`, config)
+  return data
+}
+
+export async function getVLLMDefaultConfig(
+  config: AxiosRequestConfig = {}
+): Promise<VLLMDefaultConfig> {
+  const { data } = await client.get<VLLMDefaultConfig>(
+    '/vllm/default-config',
+    silentRequestConfig(config)
+  )
   return data
 }
 

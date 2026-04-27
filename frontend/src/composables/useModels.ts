@@ -7,13 +7,16 @@ import {
   getDefaultModel,
   setDefaultModel,
   clearDefaultModel,
+  getAggregatedModels,
+  updateModelVLLMConfig,
 } from '@/api/client'
-import type { ModelStatus } from '@/types'
+import type { ModelStatus, AggregatedModelsResponse, VLLMConfigUpdateRequest } from '@/types'
 import { isAbortError } from '@/utils/request'
 import { useAppStore } from '@/stores/app'
 
 export function useModels() {
   const modelStatus = ref<ModelStatus | null>(null)
+  const aggregatedModels = ref<AggregatedModelsResponse | null>(null)
   const defaultModel = ref<string | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -59,6 +62,57 @@ export function useModels() {
         loading.value = false
         isRefreshing.value = false
       }
+    }
+  }
+
+  const fetchAggregatedModels = async (manualRefresh = false) => {
+    if (fetchController) {
+      if (!manualRefresh) return
+      fetchController.abort()
+    }
+
+    const controller = new AbortController()
+    fetchController = controller
+
+    if (manualRefresh) {
+      isRefreshing.value = true
+    } else {
+      loading.value = true
+    }
+    error.value = null
+    try {
+      const [aggregated, defaultModelResult] = await Promise.all([
+        getAggregatedModels(),
+        getDefaultModel({ signal: controller.signal }),
+      ])
+      aggregatedModels.value = aggregated
+      defaultModel.value = defaultModelResult.default_model
+    } catch (err) {
+      if (isAbortError(err)) return
+      error.value = err instanceof Error ? err.message : 'Failed to fetch aggregated models'
+      if (manualRefresh) {
+        console.error('Failed to fetch aggregated models:', err)
+      }
+    } finally {
+      if (fetchController === controller) {
+        fetchController = null
+        loading.value = false
+        isRefreshing.value = false
+      }
+    }
+  }
+
+  const saveVLLMParams = async (modelName: string, config: VLLMConfigUpdateRequest) => {
+    actionLoading.value = modelName
+    error.value = null
+    try {
+      await updateModelVLLMConfig(modelName, config)
+      await fetchAggregatedModels(true)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : `Failed to save vLLM params for ${modelName}`
+      console.error('Failed to save vLLM params:', err)
+    } finally {
+      actionLoading.value = null
     }
   }
 
@@ -266,6 +320,7 @@ export function useModels() {
 
   return {
     modelStatus,
+    aggregatedModels,
     modelList,
     defaultModel,
     loading,
@@ -275,6 +330,8 @@ export function useModels() {
     isRefreshing,
     isAutoRefreshEnabled,
     fetchModelStatus,
+    fetchAggregatedModels,
+    saveVLLMParams,
     refresh,
     startAutoRefresh,
     stopAutoRefresh,

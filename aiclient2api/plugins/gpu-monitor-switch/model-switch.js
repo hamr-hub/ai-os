@@ -20,8 +20,9 @@ class ModelSwitchService {
 
     async fetchModelsFromBackend() {
         try {
-            const response = await backendClient.fetchWithFallback('/manage/models');
-            this.modelsCache = await response.json();
+            const response = await backendClient.fetchWithFallback('/manage/models/aggregated');
+            const result = await response.json();
+            this.modelsCache = result;
             this.lastFetchTime = new Date().toISOString();
             return this.modelsCache;
         } catch (error) {
@@ -90,8 +91,12 @@ class ModelSwitchService {
                     provider.checkModelName = modelName;
                     provider.lastHealthCheckModel = modelName;
                     provider.lastModelSwitchTime = new Date().toISOString();
+                    provider.isHealthy = true;
+                    provider.errorCount = 0;
+                    provider.lastErrorTime = null;
+                    provider.lastErrorMessage = null;
                     updated = true;
-                    logger.info(`[Model Switch Service] Updated checkModelName: ${oldModel} -> ${modelName}`);
+                    logger.info(`[Model Switch Service] Updated checkModelName: ${oldModel} -> ${modelName}, reset health status`);
                 }
             }
             if (!updated) {
@@ -107,11 +112,14 @@ class ModelSwitchService {
             const verifyProvider = verifyConfig['openai-custom'].find(p => p.customName === 'app-controller');
             if (verifyProvider && verifyProvider.checkModelName === modelName) {
                 logger.info(`[Model Switch Service] Verification: checkModelName=${verifyProvider.checkModelName} - OK`);
-                return { success: true, modelName };
             } else {
                 logger.error('[Model Switch Service] Verification failed after write');
                 return { success: false, error: 'verification failed' };
             }
+
+            await this._updateInMemoryProviderStatus(modelName);
+
+            return { success: true, modelName };
         } catch (error) {
             logger.error('[Model Switch Service] Error updating provider check model:', error.message);
             logger.error('[Model Switch Service] Stack:', error.stack);
@@ -119,23 +127,156 @@ class ModelSwitchService {
         }
     }
 
+    async _updateInMemoryProviderStatus(modelName) {
+        try {
+            const { getProviderPoolManager } = await import('../../services/service-manager.js');
+            const poolManager = getProviderPoolManager();
+            if (!poolManager || !poolManager.providerStatus) {
+                logger.warn('[Model Switch Service] ProviderPoolManager not available, skipping in-memory update');
+                return;
+            }
+
+            const providerType = 'openai-custom';
+            const providers = poolManager.providerStatus[providerType];
+            if (!Array.isArray(providers)) {
+                logger.warn(`[Model Switch Service] No providerStatus for ${providerType}`);
+                return;
+            }
+
+            for (const provider of providers) {
+                if (provider.config && provider.config.customName === 'app-controller') {
+                    const oldModel = provider.config.checkModelName;
+                    provider.config.checkModelName = modelName;
+                    provider.config.lastHealthCheckModel = modelName;
+                    provider.config.lastModelSwitchTime = new Date().toISOString();
+                    provider.config.isHealthy = true;
+                    provider.config.errorCount = 0;
+                    provider.config.lastErrorTime = null;
+                    provider.config.lastErrorMessage = null;
+                    if (provider.healthState) {
+                        provider.healthState.isHealthy = true;
+                        provider.healthState.errorCount = 0;
+                        provider.healthState.lastErrorTime = null;
+                        provider.healthState.lastErrorMessage = null;
+                    }
+                    logger.info(`[Model Switch Service] Updated in-memory checkModelName: ${oldModel} -> ${modelName}, reset health status`);
+                }
+            }
+
+            if (poolManager.providerPools && Array.isArray(poolManager.providerPools[providerType])) {
+                for (const provider of poolManager.providerPools[providerType]) {
+                    if (provider.customName === 'app-controller') {
+                        provider.checkModelName = modelName;
+                        provider.lastHealthCheckModel = modelName;
+                        provider.lastModelSwitchTime = new Date().toISOString();
+                        provider.isHealthy = true;
+                        provider.errorCount = 0;
+                        provider.lastErrorTime = null;
+                        provider.lastErrorMessage = null;
+                        logger.info(`[Model Switch Service] Updated in-memory providerPools checkModelName -> ${modelName}, reset health status`);
+                    }
+                }
+            }
+
+            logger.info('[Model Switch Service] In-memory provider status updated successfully');
+        } catch (error) {
+            logger.warn('[Model Switch Service] Failed to update in-memory provider status:', error.message);
+        }
+    }
+
     async getModelsList() {
-        const models = await this.fetchModelsFromBackend();
-        const modelArray = Object.entries(models).map(function(entry) {
-            var name = entry[0];
-            var info = entry[1];
-            return {
-                name: name,
-                running: info.running || false,
-                backendType: info.backend_type || info.service || 'vllm',
-                port: info.port || null,
-                description: info.description || '',
-                activeRequests: info.active_requests || 0,
-                preloaded: info.preloaded || false,
-                status: info.running ? 'running' : 'stopped'
-            };
-        });
-        return { success: true, data: modelArray, timestamp: this.lastFetchTime, backendStatus: backendClient.getStatus() };
+        const result = await this.fetchModelsFromBackend();
+        const modelArray = [];
+
+        if (result.groups) {
+            for (const group of result.groups) {
+                for (const variant of group.variants) {
+                    modelArray.push({
+                        name: variant.name,
+                        baseName: group.base_name,
+                        running: variant.running || false,
+                        backendType: variant.backend_type || variant.service || 'vllm',
+                        port: variant.port || null,
+                        description: variant.description || '',
+                        requiredMemory: variant.required_memory || '',
+                        memoryGB: variant.required_memory_gb || 0,
+                        sizeMB: variant.size_mb || 0,
+                        multimodal: variant.multimodal || false,
+                        vllmConfig: variant.vllm_config || null,
+                        isCurrent: variant.is_current || false,
+                        status: variant.running ? 'running' : 'stopped',
+                        variantCount: group.variant_count,
+                        groupSizeMB: group.total_size_mb
+                    });
+                }
+            }
+        } else {
+            const models = result.data || result;
+            for (const [name, info] of Object.entries(models)) {
+                modelArray.push({
+                    name: name,
+                    running: info.running || false,
+                    backendType: info.backend_type || info.service || 'vllm',
+                    port: info.port || null,
+                    description: info.description || '',
+                    status: info.running ? 'running' : 'stopped'
+                });
+            }
+        }
+
+        return {
+            success: true,
+            data: modelArray,
+            groups: result.groups || [],
+            totalGroups: result.total_groups || 0,
+            totalVariants: result.total_variants || modelArray.length,
+            currentModel: result.current_model || null,
+            timestamp: this.lastFetchTime,
+            backendStatus: backendClient.getStatus()
+        };
+    }
+
+    async getAggregatedModels(refresh = false) {
+        try {
+            const response = await backendClient.fetchWithFallback(`/manage/models/aggregated${refresh ? '?refresh=true' : ''}`);
+            const data = await response.json();
+            return { success: true, data: data, timestamp: new Date().toISOString() };
+        } catch (error) {
+            logger.error('[Model Switch Service] Error fetching aggregated models:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async getModelVLLMParams(modelName) {
+        try {
+            const response = await backendClient.fetchWithFallback(`/manage/models/${encodeURIComponent(modelName)}/vllm-params`);
+            const data = await response.json();
+            return { success: true, data: data, timestamp: new Date().toISOString() };
+        } catch (error) {
+            logger.error('[Model Switch Service] Error fetching vLLM params for', modelName, ':', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async updateModelVLLMParams(modelName, vllmParams) {
+        try {
+            const baseUrl = backendClient.getBaseUrl();
+            const url = `${baseUrl}/manage/models/${encodeURIComponent(modelName)}/vllm-params`;
+            const response = await fetch(url, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ vllm_params: vllmParams }),
+                signal: AbortSignal.timeout(30000)
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                return { success: false, error: data.error || data.message || `Update failed with status ${response.status}` };
+            }
+            return { success: true, data: data, timestamp: new Date().toISOString() };
+        } catch (error) {
+            logger.error('[Model Switch Service] Error updating vLLM params for', modelName, ':', error.message);
+            return { success: false, error: error.message };
+        }
     }
 
     async switchModel(modelName) {
@@ -155,14 +296,9 @@ class ModelSwitchService {
 
             if (!response.ok) {
                 logger.error('[Model Switch Service] Model switch returned error:', result);
-                
-                const providerUpdate = await this.updateProviderCheckModel(modelName);
-                logger.info('[Model Switch Service] Config update after failed switch:', JSON.stringify(providerUpdate));
-                
                 return {
                     success: false,
                     error: result.error || result.message || `Switch failed with status ${response.status}`,
-                    providerUpdate,
                     backendStatus: backendClient.getStatus()
                 };
             }
@@ -187,11 +323,7 @@ class ModelSwitchService {
             };
         } catch (error) {
             logger.error('[Model Switch Service] Error switching model:', error.message);
-            
-            const providerUpdate = await this.updateProviderCheckModel(modelName);
-            logger.info('[Model Switch Service] Config update after exception:', JSON.stringify(providerUpdate));
-            
-            return { success: false, error: error.message, providerUpdate, backendStatus: backendClient.getStatus() };
+            return { success: false, error: error.message, backendStatus: backendClient.getStatus() };
         }
     }
 

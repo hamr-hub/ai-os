@@ -6,33 +6,25 @@
     <title>GPU 监控与模型切换</title>
     <style>
         :root {
+            --bg-primary: #0f1419;
+            --bg-secondary: #1a1f26;
+            --bg-tertiary: #242a33;
+            --bg-card: #1c2128;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --border-primary: #30363d;
+            --border-card: #21262d;
             --color-primary: #6366f1;
-            --color-primary-hover: #4f46e5;
-            --color-primary-light: #818cf8;
-            --color-primary-dark: #4338ca;
-            --color-primary-rgb: 99, 102, 241;
-            --color-secondary: #06b6d4;
+            --color-primary-dark: #4f46e5;
             --color-success: #22c55e;
-            --color-danger: #ef4444;
             --color-warning: #f59e0b;
-            --color-info: #3b82f6;
-            --bg-primary: #0a0e1a;
-            --bg-secondary: #111827;
-            --bg-tertiary: #1e293b;
-            --bg-card: #1a2238;
-            --bg-input: #1e293b;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --text-tertiary: #64748b;
-            --border-primary: rgba(99, 102, 241, 0.12);
-            --border-card: rgba(99, 102, 241, 0.18);
-            --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
-            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
-            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.25);
-            --status-online: #22c55e;
-            --status-warning: #f59e0b;
-            --status-error: #ef4444;
+            --color-danger: #ef4444;
+            --color-secondary: #06b6d4;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+            --scrollbar-thumb: #484f58;
         }
 
         * {
@@ -546,6 +538,157 @@
                 font-size: 1.5em;
             }
         }
+
+        .model-summary {
+            display: flex;
+            gap: 15px;
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
+
+        .model-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .model-group {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .model-group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: rgba(99, 102, 241, 0.08);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .model-group-header:hover {
+            background: rgba(99, 102, 241, 0.15);
+        }
+
+        .model-group-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .model-group-name {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .model-group-meta {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+        }
+
+        .model-group-toggle {
+            color: var(--text-secondary);
+            transition: transform 0.2s ease;
+        }
+
+        .model-group-toggle.expanded {
+            transform: rotate(90deg);
+        }
+
+        .model-variants {
+            display: none;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        .model-variants.expanded {
+            display: block;
+        }
+
+        .model-variant {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border-primary);
+            transition: background 0.2s ease;
+        }
+
+        .model-variant:last-child {
+            border-bottom: none;
+        }
+
+        .model-variant:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .model-variant.running {
+            border-left: 3px solid var(--color-success);
+        }
+
+        .model-variant.current {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .model-variant-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .model-variant-name {
+            font-size: 0.95em;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .model-variant-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.8em;
+            color: var(--text-secondary);
+        }
+
+        .model-variant-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .model-variant-badge {
+            font-size: 0.7em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .badge-running {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--color-success);
+        }
+
+        .badge-current {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--color-primary);
+        }
+
+        .badge-configured {
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--color-secondary);
+        }
+
+        .model-variant-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .model-variant-actions .btn {
+            padding: 6px 12px;
+            font-size: 0.85em;
+        }
     </style>
 </head>
 <body>
@@ -560,7 +703,7 @@
                 GPU 监控
             </button>
             <button class="tab-btn" onclick="switchTab('model')">
-                模型切换
+                模型列表
             </button>
         </div>
 
@@ -588,9 +731,19 @@
         </div>
 
         <div id="tab-model" class="tab-content">
+            <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-indicator" id="model-status"></div>
+                    <span id="model-status-text">已加载模型数据</span>
+                </div>
+                <div class="model-summary">
+                    <span id="model-total-groups">0 组</span>
+                    <span id="model-total-variants">0 个模型</span>
+                </div>
+            </div>
             <div id="model-error"></div>
             <div id="model-success"></div>
-            <div id="provider-list" class="provider-list">
+            <div id="model-list" class="model-list">
                 <div class="loading">加载中...</div>
             </div>
         </div>
@@ -612,6 +765,8 @@
             document.getElementById(`tab-${tab}`).classList.add('active');
             if (tab === 'gpu') {
                 loadGPUData();
+            } else if (tab === 'model') {
+                loadModelData();
             } else {
                 loadProviderData();
             }
@@ -885,6 +1040,123 @@
                 loadGPUData();
             } catch (error) {
                 alert('操作失败: ' + error.message);
+            }
+        }
+
+        async function loadModelData() {
+            try {
+                const response = await fetch('/api/model-switch/models');
+                const result = await response.json();
+                if (!result.success) {
+                    document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${result.error}</div>`;
+                    return;
+                }
+                document.getElementById('model-error').innerHTML = '';
+                const list = document.getElementById('model-list');
+
+                document.getElementById('model-total-groups').textContent = `${result.totalGroups || 0} 组`;
+                document.getElementById('model-total-variants').textContent = `${result.totalVariants || 0} 个模型`;
+                document.getElementById('model-status-text').textContent = result.currentModel ? `当前模型: ${result.currentModel}` : '已加载模型数据';
+
+                if (!result.groups || result.groups.length === 0) {
+                    list.innerHTML = '<div class="loading">未找到模型</div>';
+                    return;
+                }
+
+                list.innerHTML = result.groups.map(group => {
+                    const variants = group.variants || [];
+                    const variantsHtml = variants.map(variant => {
+                        const statusClass = variant.running ? 'running' : '';
+                        const currentClass = variant.isCurrent ? 'current' : '';
+                        const sizeStr = formatMemorySize(variant.sizeMB);
+                        const memStr = variant.requiredMemory || (variant.memoryGB ? `${variant.memoryGB}GB` : '');
+                        return `
+                            <div class="model-variant ${statusClass} ${currentClass}">
+                                <div class="model-variant-info">
+                                    <div class="model-variant-name">${variant.name}</div>
+                                    <div class="model-variant-meta">
+                                        <span>📦 ${sizeStr}</span>
+                                        ${memStr ? `<span>💾 ${memStr}</span>` : ''}
+                                        ${variant.multimodal ? '<span>🖼️ 多模态</span>' : ''}
+                                        ${variant.vllmConfig && variant.vllmConfig.has_custom_config ? '<span>⚙️ 已配置</span>' : ''}
+                                    </div>
+                                </div>
+                                <div class="model-variant-actions">
+                                    ${variant.isCurrent ? '<span class="model-variant-badge badge-current">当前</span>' : ''}
+                                    ${variant.running ? '<span class="model-variant-badge badge-running">运行中</span>' : ''}
+                                    ${!variant.running ? `<button class="btn btn-primary" onclick="switchToModel('${variant.name}')">切换</button>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    return `
+                        <div class="model-group" data-group="${group.base_name}">
+                            <div class="model-group-header" onclick="toggleModelGroup('${group.base_name}')">
+                                <div class="model-group-info">
+                                    <span class="model-group-name">${group.base_name}</span>
+                                    <span class="model-group-meta">${group.variant_count} 个变体 · ${formatMemorySize(group.total_size_mb)}</span>
+                                </div>
+                                <span class="model-group-toggle">▶</span>
+                            </div>
+                            <div class="model-variants" id="group-${group.base_name}">
+                                ${variantsHtml}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                if (result.groups.length === 1) {
+                    toggleModelGroup(result.groups[0].base_name);
+                }
+            } catch (error) {
+                document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
+            }
+        }
+
+        function formatMemorySize(sizeMB) {
+            if (!sizeMB || sizeMB <= 0) return 'N/A';
+            if (sizeMB >= 1024) {
+                return (sizeMB / 1024).toFixed(1) + ' GB';
+            }
+            return sizeMB.toFixed(0) + ' MB';
+        }
+
+        function toggleModelGroup(baseName) {
+            const variantsEl = document.getElementById(`group-${baseName}`);
+            const groupEl = document.querySelector(`[data-group="${baseName}"]`);
+            const toggleEl = groupEl.querySelector('.model-group-toggle');
+
+            if (variantsEl.classList.contains('expanded')) {
+                variantsEl.classList.remove('expanded');
+                toggleEl.classList.remove('expanded');
+                toggleEl.textContent = '▶';
+            } else {
+                variantsEl.classList.add('expanded');
+                toggleEl.classList.add('expanded');
+                toggleEl.textContent = '▼';
+            }
+        }
+
+        async function switchToModel(modelName) {
+            try {
+                const response = await fetch('/api/model-switch/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ modelName })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('model-success').innerHTML = `<div class="success-message">模型切换成功: ${modelName}</div>`;
+                    setTimeout(() => {
+                        document.getElementById('model-success').innerHTML = '';
+                    }, 3000);
+                    loadModelData();
+                } else {
+                    document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${result.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${error.message}</div>`;
             }
         }
 

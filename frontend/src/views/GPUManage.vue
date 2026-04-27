@@ -158,7 +158,7 @@ onUnmounted(() => {
           <Activity class="w-4 h-4" />
           {{ polling ? '轮询中' : '开启轮询' }}
         </button>
-        <button class="btn btn-primary" @click="refreshAll" :disabled="gpuLoading">
+        <button class="btn btn-primary" :disabled="gpuLoading" @click="refreshAll">
           <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': gpuLoading }" />
           刷新
         </button>

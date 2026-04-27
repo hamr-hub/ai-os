@@ -364,6 +364,9 @@ func (h *ManageHandler) SwitchModel(c *gin.Context) {
 		return
 	}
 
+	h.scheduler.SetSwitchingInProgress(true)
+	defer h.scheduler.SetSwitchingInProgress(false)
+
 	mc := h.scheduler.GetModelConfig(modelName)
 	if mc != nil && mc.Service == "vllm" {
 		err := h.vllmManager.SwitchModelWithTest(c.Request.Context(), mc.ModelPath, modelName, mc.Port)

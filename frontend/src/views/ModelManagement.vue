@@ -1,8 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, type Component } from 'vue'
 import { useModels } from '@/composables/useModels'
-import { runModelTest, getTestResults, getTestHistory, getGPUSummary } from '@/api/client'
-import type { TestResponse, TestHistoryEntry, TestReport, GPUSummary } from '@/types'
+import {
+  runModelTest,
+  getTestResults,
+  getTestHistory,
+  getGPUSummary,
+} from '@/api/client'
+import type {
+  TestResponse,
+  TestHistoryEntry,
+  TestReport,
+  GPUSummary,
+  ModelVariant,
+  VLLMConfig,
+} from '@/types'
 import {
   RefreshCw,
   Activity,
@@ -26,14 +38,22 @@ import {
   MemoryStick,
   Cpu,
   Server,
+  HardDrive,
+  Settings,
+  X,
+  Save,
 } from 'lucide-vue-next'
 
 const {
+  aggregatedModels,
   modelList,
   defaultModel,
+  loading,
   actionLoading,
   switchingModel,
   isRefreshing,
+  fetchAggregatedModels,
+  saveVLLMParams,
   refresh,
   handleStartModel,
   handleStopModel,
@@ -57,6 +77,217 @@ const cachedResults = ref<Record<string, TestResponse>>({})
 const modelCapabilities = ref<Record<string, TestReport['feature_support']>>({})
 
 const gpuInfo = ref<GPUSummary | null>(null)
+
+const expandedGroups = ref<Set<string>>(new Set())
+const selectedModelForConfig = ref<ModelVariant | null>(null)
+const vllmConfigModal = ref(false)
+const vllmConfig = ref<VLLMConfig | null>(null)
+const configSaving = ref(false)
+const viewMode = ref<'list' | 'grouped'>('grouped')
+
+const recommendedConfig = computed(() => {
+  if (!selectedModelForConfig.value) return null
+  return getModelRecommendations(
+    selectedModelForConfig.value.name,
+    selectedModelForConfig.value.required_memory_gb
+  )
+})
+
+function formatSizeMB(sizeMB: number): string {
+  if (sizeMB >= 1024) {
+    return `${(sizeMB / 1024).toFixed(1)} GB`
+  }
+  return `${sizeMB.toFixed(0)} MB`
+}
+
+function toggleGroup(baseName: string) {
+  if (expandedGroups.value.has(baseName)) {
+    expandedGroups.value.delete(baseName)
+  } else {
+    expandedGroups.value.add(baseName)
+  }
+}
+
+function openVLLMConfig(model: ModelVariant) {
+  selectedModelForConfig.value = model
+  const recommended = getModelRecommendations(model.name, model.required_memory_gb)
+  if (model.vllm_config && model.vllm_config.has_custom_config) {
+    vllmConfig.value = { ...model.vllm_config }
+  } else {
+    vllmConfig.value = {
+      gpu_memory_utilization: recommended.gpu_memory_utilization,
+      max_model_len: recommended.max_model_len,
+      max_num_seqs: recommended.max_num_seqs,
+      max_num_batched_tokens: 16384,
+      tensor_parallel_size: 1,
+      has_custom_config: false,
+    }
+  }
+  vllmConfigModal.value = true
+}
+
+function closeVLLMConfig() {
+  vllmConfigModal.value = false
+  selectedModelForConfig.value = null
+  vllmConfig.value = null
+}
+
+async function saveVLLMConfig() {
+  if (!selectedModelForConfig.value || !vllmConfig.value) return
+
+  configSaving.value = true
+  try {
+    const params = {
+      max_num_seqs: vllmConfig.value.max_num_seqs ?? 256,
+      gpu_memory_utilization: vllmConfig.value.gpu_memory_utilization ?? 0.90,
+      max_model_len: vllmConfig.value.max_model_len ?? 32768,
+      max_num_batched_tokens: vllmConfig.value.max_num_batched_tokens ?? 16384,
+      tensor_parallel_size: vllmConfig.value.tensor_parallel_size ?? 1,
+    }
+
+    await saveVLLMParams(selectedModelForConfig.value.name, params)
+    closeVLLMConfig()
+  } catch (e) {
+    console.error('Failed to save vLLM config:', e)
+  } finally {
+    configSaving.value = false
+  }
+}
+
+function getModelRecommendations(modelName: string, vramGB: number) {
+  const upperName = modelName.toUpperCase()
+
+  if (upperName.includes('GEMMA-4-31B')) {
+    return {
+      max_num_seqs: 256,
+      gpu_memory_utilization: 0.90,
+      max_model_len: 40960,
+      max_num_batched_tokens: 16384,
+      desc: '30-40GB模型: 可大并发,支持长上下文'
+    }
+  }
+  if (upperName.includes('QWEN3.6-35B')) {
+    return {
+      max_num_seqs: 256,
+      gpu_memory_utilization: 0.90,
+      max_model_len: 40960,
+      max_num_batched_tokens: 16384,
+      desc: '30-40GB模型: 可大并发,支持长上下文'
+    }
+  }
+  if (upperName.includes('QWEN3-235B')) {
+    return {
+      max_num_seqs: 32,
+      gpu_memory_utilization: 0.75,
+      max_model_len: 8192,
+      max_num_batched_tokens: 4096,
+      desc: 'MoE架构: 显存波动大,需保守配置'
+    }
+  }
+  if (upperName.includes('LLAMA-3.3-70B') || upperName.includes('LLAMA-3.3-70B')) {
+    return {
+      max_num_seqs: 64,
+      gpu_memory_utilization: 0.85,
+      max_model_len: 16384,
+      max_num_batched_tokens: 8192,
+      desc: '70-80GB模型: 保守配置,中等并发'
+    }
+  }
+  if (upperName.includes('QWEN2.5-72B')) {
+    return {
+      max_num_seqs: 64,
+      gpu_memory_utilization: 0.85,
+      max_model_len: 16384,
+      max_num_batched_tokens: 8192,
+      desc: '70-80GB模型: 保守配置,中等并发'
+    }
+  }
+  if (upperName.includes('MIDNIGHT-MIQU') || upperName.includes('MIQU-103B')) {
+    return {
+      max_num_seqs: 32,
+      gpu_memory_utilization: 0.80,
+      max_model_len: 8192,
+      max_num_batched_tokens: 4096,
+      desc: '>90GB模型: 严格限制,最低并发'
+    }
+  }
+  if (upperName.includes('DEEPSEEK-R1-70B')) {
+    return {
+      max_num_seqs: 64,
+      gpu_memory_utilization: 0.85,
+      max_model_len: 16384,
+      max_num_batched_tokens: 8192,
+      desc: '70-80GB模型: 保守配置,中等并发'
+    }
+  }
+  if (upperName.includes('LLAMA-3.1-70B') || upperName.includes('LLAMA-3-8B')) {
+    return {
+      max_num_seqs: 64,
+      gpu_memory_utilization: 0.85,
+      max_model_len: 16384,
+      max_num_batched_tokens: 8192,
+      desc: '70-80GB模型: 保守配置,中等并发'
+    }
+  }
+
+  if (vramGB >= 90) {
+    return {
+      max_num_seqs: 32,
+      gpu_memory_utilization: 0.80,
+      max_model_len: 8192,
+      max_num_batched_tokens: 4096,
+      desc: '>90GB模型: 严格限制,最低并发'
+    }
+  }
+  if (vramGB >= 70) {
+    return {
+      max_num_seqs: 64,
+      gpu_memory_utilization: 0.85,
+      max_model_len: 16384,
+      max_num_batched_tokens: 8192,
+      desc: '70-80GB模型: 保守配置,中等并发'
+    }
+  }
+  if (vramGB >= 45) {
+    return {
+      max_num_seqs: 32,
+      gpu_memory_utilization: 0.75,
+      max_model_len: 8192,
+      max_num_batched_tokens: 4096,
+      desc: '45-70GB模型: MoE架构需保守配置'
+    }
+  }
+  if (vramGB >= 30) {
+    return {
+      max_num_seqs: 256,
+      gpu_memory_utilization: 0.90,
+      max_model_len: 40960,
+      max_num_batched_tokens: 16384,
+      desc: '30-40GB模型: 可大并发,支持长上下文'
+    }
+  }
+  return {
+    max_num_seqs: 256,
+    gpu_memory_utilization: 0.90,
+    max_model_len: 40960,
+    max_num_batched_tokens: 16384,
+    desc: '<30GB模型: 可大并发,支持超长上下文'
+  }
+}
+
+function getRecommendedGPUUtil(vramGB: number): string {
+  if (vramGB < 45) return '0.90'
+  if (vramGB < 70) return '0.75-0.80'
+  if (vramGB < 90) return '0.85'
+  return '0.80'
+}
+
+function getRecommendedMaxSeqs(vramGB: number): string {
+  if (vramGB < 45) return '256'
+  if (vramGB < 70) return '32'
+  if (vramGB < 90) return '64'
+  return '32'
+}
 
 async function fetchGPUInfo() {
   try {
@@ -90,6 +321,7 @@ function getModelMemoryWarning(modelName: string): string | null {
 onMounted(() => {
   fetchHistory()
   fetchGPUInfo()
+  fetchAggregatedModels()
 })
 
 async function fetchCapabilities(modelNames: string[] = runningModels.value.map((model) => model.name)) {
@@ -300,9 +532,27 @@ watch(
         <h1 class="header-title">模型管理</h1>
         <span class="count-badge">{{ runningModels.length }} / {{ modelList.length }} 运行中</span>
       </div>
-      <button class="icon-btn" :disabled="isRefreshing" @click="refresh">
-        <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isRefreshing }" />
-      </button>
+      <div class="header-actions">
+        <div class="view-toggle">
+          <button
+            class="toggle-btn"
+            :class="{ active: viewMode === 'grouped' }"
+            @click="viewMode = 'grouped'"
+          >
+            分组
+          </button>
+          <button
+            class="toggle-btn"
+            :class="{ active: viewMode === 'list' }"
+            @click="viewMode = 'list'"
+          >
+            列表
+          </button>
+        </div>
+        <button class="icon-btn" :disabled="isRefreshing" @click="refresh">
+          <RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isRefreshing }" />
+        </button>
+      </div>
     </header>
 
     <div v-if="switchingModel" class="switch-banner">
@@ -313,7 +563,97 @@ watch(
 
     <div class="content">
       <div class="left-col">
-        <section v-if="runningModels.length" class="card">
+        <section v-if="viewMode === 'grouped' && aggregatedModels?.groups?.length" class="card">
+          <div class="card-header">
+            <HardDrive class="card-icon" />
+            <span class="card-title">模型列表</span>
+            <span class="section-count">
+              {{ aggregatedModels.total_variants }} 个模型 / {{ aggregatedModels.groups.length }} 组
+            </span>
+          </div>
+          <div v-if="loading" class="loading-state">
+            <Loader2 class="w-5 h-5 animate-spin" />
+            <span>加载中...</span>
+          </div>
+          <div v-else class="model-groups">
+            <div
+              v-for="group in aggregatedModels.groups"
+              :key="group.base_name"
+              class="model-group"
+            >
+              <div class="group-header" @click="toggleGroup(group.base_name)">
+                <component
+                  :is="expandedGroups.has(group.base_name) ? ChevronDown : ChevronRight"
+                  class="w-4 h-4"
+                />
+                <span class="group-name">{{ group.base_name }}</span>
+                <span class="group-count">{{ group.variant_count }} 个变体</span>
+                <span class="group-size">{{ formatSizeMB(group.total_size_mb) }}</span>
+              </div>
+              <div v-if="expandedGroups.has(group.base_name)" class="group-variants">
+                <div
+                  v-for="variant in group.variants"
+                  :key="variant.name"
+                  class="variant-item"
+                  :class="{ running: variant.running, current: variant.is_current }"
+                >
+                  <div class="variant-info">
+                    <div class="variant-header">
+                      <span class="variant-name">{{ variant.name }}</span>
+                      <div class="variant-badges">
+                        <span v-if="variant.running" class="status-badge running">运行中</span>
+                        <span v-if="variant.is_current" class="status-badge current">当前</span>
+                        <span class="backend-badge">{{ variant.backend_type }}</span>
+                      </div>
+                    </div>
+                    <div class="variant-meta">
+                      <span class="meta-item">
+                        <HardDrive class="w-3 h-3" />
+                        {{ formatSizeMB(variant.size_mb) }}
+                      </span>
+                      <span v-if="variant.required_memory" class="meta-item">
+                        <MemoryStick class="w-3 h-3" />
+                        {{ variant.required_memory }}
+                      </span>
+                      <span v-if="variant.vllm_config?.has_custom_config" class="meta-item config">
+                        <Settings class="w-3 h-3" />
+                        已配置
+                      </span>
+                    </div>
+                    <p v-if="variant.description" class="variant-desc">{{ variant.description }}</p>
+                  </div>
+                  <div class="variant-actions">
+                    <button
+                      class="action-btn small"
+                      title="vLLM 配置"
+                      @click.stop="openVLLMConfig(variant)"
+                    >
+                      <Settings class="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      v-if="!variant.running"
+                      class="action-btn primary small"
+                      :disabled="!!actionLoading || !!switchingModel"
+                      @click.stop="handleSwitchAndSetDefault(variant.name)"
+                    >
+                      <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
+                    </button>
+                    <button
+                      v-if="variant.running"
+                      class="action-btn danger small"
+                      :disabled="!!actionLoading || !!switchingModel"
+                      @click.stop="handleStopModel(variant.name)"
+                    >
+                      <Square class="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="viewMode === 'list' && runningModels.length" class="card">
           <div class="card-header">
             <span class="card-title">运行中的模型</span>
             <span class="section-count">{{ runningModels.length }}</span>
@@ -379,7 +719,7 @@ watch(
           </div>
         </section>
 
-        <section v-if="stoppedModels.length" class="card">
+        <section v-if="viewMode === 'list' && stoppedModels.length" class="card">
           <div class="card-header">
             <span class="card-title">已停止</span>
             <span class="section-count">{{ stoppedModels.length }}</span>
@@ -423,7 +763,7 @@ watch(
           </div>
         </section>
 
-        <div v-if="!modelList.length" class="card empty-card">暂无可用模型</div>
+        <div v-if="viewMode === 'list' && !modelList.length" class="card empty-card">暂无可用模型</div>
       </div>
 
       <div class="right-col">
@@ -707,6 +1047,143 @@ watch(
           </div>
           <div v-else class="empty-state">暂无检测记录</div>
         </section>
+      </div>
+    </div>
+
+    <div v-if="vllmConfigModal" class="modal-overlay" @click.self="closeVLLMConfig">
+      <div class="modal-content vllm-config-modal">
+        <div class="modal-header">
+          <div class="modal-title">
+            <Settings class="w-5 h-5" />
+            <span>vLLM 启动参数配置</span>
+          </div>
+          <button class="modal-close" @click="closeVLLMConfig">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+        <div v-if="selectedModelForConfig && vllmConfig" class="modal-body">
+          <div class="config-model-info">
+            <span class="config-model-name">{{ selectedModelForConfig.name }}</span>
+            <span v-if="selectedModelForConfig.required_memory" class="config-model-mem">
+              {{ selectedModelForConfig.required_memory }}
+            </span>
+          </div>
+
+          <div v-if="gpuInfo?.current" class="gpu-recommend">
+            <AlertTriangle class="w-4 h-4" />
+            <span>当前可用显存: {{ formatMemory(gpuInfo.current.available_memory) }}</span>
+            <span class="recommend-text">
+              推荐配置: gpu_memory_utilization={{ getRecommendedGPUUtil(selectedModelForConfig.required_memory_gb) }},
+              max_num_seqs={{ getRecommendedMaxSeqs(selectedModelForConfig.required_memory_gb) }}
+            </span>
+          </div>
+
+          <div class="config-form">
+            <div class="config-row">
+              <label class="config-label">
+                <span class="label-text">gpu_memory_utilization</span>
+                <span class="label-desc">GPU 显存利用率 (0.1-0.99)</span>
+              </label>
+              <div class="config-input-wrap">
+                <input
+                  v-model.number="vllmConfig.gpu_memory_utilization"
+                  type="number"
+                  step="0.01"
+                  min="0.1"
+                  max="0.99"
+                  class="config-input"
+                  :placeholder="recommendedConfig?.gpu_memory_utilization?.toString() || '0.90'"
+                />
+                <span class="input-suffix">推荐: {{ recommendedConfig?.gpu_memory_utilization || 0.90 }}</span>
+              </div>
+            </div>
+
+            <div class="config-row">
+              <label class="config-label">
+                <span class="label-text">max_model_len</span>
+                <span class="label-desc">最大模型上下文长度</span>
+              </label>
+              <div class="config-input-wrap">
+                <input
+                  v-model.number="vllmConfig.max_model_len"
+                  type="number"
+                  step="1024"
+                  min="512"
+                  class="config-input"
+                  :placeholder="recommendedConfig?.max_model_len?.toString() || '32768'"
+                />
+                <span class="input-suffix">推荐: {{ recommendedConfig?.max_model_len || 32768 }}</span>
+              </div>
+            </div>
+
+            <div class="config-row">
+              <label class="config-label">
+                <span class="label-text">max_num_seqs</span>
+                <span class="label-desc">最大并发序列数</span>
+              </label>
+              <div class="config-input-wrap">
+                <input
+                  v-model.number="vllmConfig.max_num_seqs"
+                  type="number"
+                  step="1"
+                  min="1"
+                  class="config-input"
+                  :placeholder="recommendedConfig?.max_num_seqs?.toString() || '64'"
+                />
+                <span class="input-suffix">推荐: {{ recommendedConfig?.max_num_seqs || 64 }}</span>
+              </div>
+            </div>
+
+            <div class="config-row">
+              <label class="config-label">
+                <span class="label-text">max_num_batched_tokens</span>
+                <span class="label-desc">最大批处理 token 数</span>
+              </label>
+              <div class="config-input-wrap">
+                <input
+                  v-model.number="vllmConfig.max_num_batched_tokens"
+                  type="number"
+                  step="1024"
+                  min="1"
+                  class="config-input"
+                  placeholder="16384"
+                />
+                <span class="input-suffix">默认: 16384</span>
+              </div>
+            </div>
+
+            <div class="config-row">
+              <label class="config-label">
+                <span class="label-text">tensor_parallel_size</span>
+                <span class="label-desc">Tensor 并行大小 (多 GPU)</span>
+              </label>
+              <div class="config-input-wrap">
+                <input
+                  v-model.number="vllmConfig.tensor_parallel_size"
+                  type="number"
+                  step="1"
+                  min="1"
+                  class="config-input"
+                  placeholder="1"
+                />
+                <span class="input-suffix">默认: 1</span>
+              </div>
+            </div>
+
+            <div v-if="recommendedConfig" class="config-recommend-hint">
+              <span class="hint-label">配置说明:</span>
+              <span class="hint-text">{{ recommendedConfig.desc }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn secondary" @click="closeVLLMConfig">取消</button>
+          <button class="btn primary" :disabled="configSaving" @click="saveVLLMConfig">
+            <Loader2 v-if="configSaving" class="w-4 h-4 animate-spin" />
+            <Save v-else class="w-4 h-4" />
+            {{ configSaving ? '保存中...' : '保存配置' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1466,5 +1943,450 @@ watch(
 .right-col::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 2px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-toggle {
+  display: flex;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 2px;
+  border: 1px solid var(--border-primary);
+}
+
+.toggle-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+.toggle-btn.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.model-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-group {
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.group-header:hover {
+  background: var(--bg-tertiary);
+}
+
+.group-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.group-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.group-size {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.group-variants {
+  border-top: 1px solid var(--border-primary);
+}
+
+.variant-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-primary);
+  transition: background 0.2s;
+}
+
+.variant-item:last-child {
+  border-bottom: none;
+}
+
+.variant-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.variant-item.running {
+  border-left: 3px solid #22c55e;
+}
+
+.variant-item.current {
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.variant-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.variant-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.variant-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.variant-badges {
+  display: flex;
+  gap: 4px;
+}
+
+.status-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.status-badge.running {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.status-badge.current {
+  color: var(--color-primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.backend-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.variant-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.meta-item.config {
+  color: var(--color-primary);
+}
+
+.variant-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+
+.variant-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 12px;
+}
+
+.action-btn.small {
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: var(--bg-card);
+  border-radius: 16px;
+  border: 1px solid var(--border-card);
+  box-shadow: var(--shadow-lg);
+  max-width: 520px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-title .w-5 {
+  width: 20px;
+  height: 20px;
+  color: var(--color-primary);
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.config-model-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.config-model-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.config-model-mem {
+  font-size: 12px;
+  color: var(--color-primary);
+  background: rgba(99, 102, 241, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.gpu-recommend {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: #f59e0b;
+}
+
+.gpu-recommend .w-4 {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.recommend-text {
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.label-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.label-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.config-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.config-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.input-suffix {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn.primary {
+  background: var(--color-primary);
+  color: white;
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn.secondary {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.btn.secondary:hover {
+  background: var(--bg-tertiary);
+}
+
+.config-recommend-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.hint-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.hint-text {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 </style>

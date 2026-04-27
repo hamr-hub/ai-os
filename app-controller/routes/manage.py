@@ -5,6 +5,7 @@ import asyncio
 import copy
 
 from schemas.service import ServiceControlRequest
+from schemas.vllm_config import VLLMConfigResponse, VLLMConfigUpdateRequest
 from core.deps import (
     scheduler as _scheduler, gpu_monitor as _gpu_monitor, sys_controller as _sys_controller,
     ws_manager as _ws_manager, metrics as _metrics, prometheus as _prometheus,
@@ -25,7 +26,7 @@ structured_logger = _structured_logger
 config_watcher = _config_watcher
 logger = _logger
 redis_client = _redis_client
-from core.vllm_manager import wait_for_vllm_model_ready_and_test
+from core.vllm_manager import wait_for_vllm_model_ready_and_test, get_aggregated_models, save_model_vllm_params, get_model_vllm_params
 from core.llama_cpp_manager import llama_cpp_manager, test_llama_cpp_model
 from middleware.error_handler import ModelNotFoundException
 
@@ -308,6 +309,162 @@ async def set_default_model(model_name: str):
 async def clear_default_model():
     scheduler.clear_default_model()
     return {"status": "success", "message": "Default model cleared"}
+
+
+@manage_router.get("/models/aggregated")
+async def get_aggregated_models():
+    cache_key = "api:manage:models:aggregated"
+
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+
+    from core.vllm_manager import get_aggregated_models as _get_aggregated_models
+
+    aggregated = _get_aggregated_models()
+
+    for group in aggregated:
+        for variant in group.get("variants", []):
+            model_name = variant["name"]
+            variant["running"] = scheduler.is_model_running(model_name)
+            variant["port"] = scheduler.get_model_port(model_name)
+            variant["preloaded"] = scheduler.is_model_preloaded(model_name)
+            variant["active_requests"] = scheduler.get_active_requests(model_name)
+            variant["supports_images"] = scheduler.get_model_supports_images(model_name)
+            variant["supports_tool_calling"] = scheduler.get_model_supports_tool_calling(model_name)
+            variant["supports_image_generation"] = scheduler.get_model_supports_image_generation(model_name)
+            config = scheduler.get_model_config(model_name)
+            variant["description"] = config.get("description", "") if config else ""
+            variant["required_memory"] = config.get("required_memory", "") if config else ""
+            variant["backend_type"] = scheduler.get_model_backend_type(model_name)
+
+            vllm_config = _get_model_vllm_config(model_name)
+            variant["vllm_config"] = vllm_config
+
+    current_model = scheduler.get_current_model_name()
+    for group in aggregated:
+        for variant in group.get("variants", []):
+            variant["is_current"] = variant["name"] == current_model
+
+    result = {
+        "groups": aggregated,
+        "total_groups": len(aggregated),
+        "total_variants": sum(g["variant_count"] for g in aggregated),
+        "current_model": current_model
+    }
+
+    cache_service.set(cache_key, result, ttl_seconds=10)
+    return result
+
+
+def _get_model_vllm_config(model_name: str) -> Dict[str, Any]:
+    config = scheduler.get_model_config(model_name)
+    if not config:
+        return {
+            "gpu_memory_utilization": None,
+            "max_model_len": None,
+            "max_num_seqs": None,
+            "max_num_batched_tokens": None,
+            "tensor_parallel_size": None,
+            "has_custom_config": False
+        }
+
+    vllm_params = config.get("vllm_params", {})
+    has_custom = bool(vllm_params)
+
+    return {
+        "gpu_memory_utilization": vllm_params.get("gpu_memory_utilization"),
+        "max_model_len": vllm_params.get("max_model_len"),
+        "max_num_seqs": vllm_params.get("max_num_seqs"),
+        "max_num_batched_tokens": vllm_params.get("max_num_batched_tokens"),
+        "tensor_parallel_size": vllm_params.get("tensor_parallel_size"),
+        "has_custom_config": has_custom
+    }
+
+
+@manage_router.get("/models/{model_name}/vllm-config", response_model=VLLMConfigResponse)
+async def get_model_vllm_config(model_name: str):
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+
+    config = _get_model_vllm_config(model_name)
+    return VLLMConfigResponse(
+        model_name=model_name,
+        gpu_memory_utilization=config.get("gpu_memory_utilization"),
+        max_model_len=config.get("max_model_len"),
+        max_num_seqs=config.get("max_num_seqs"),
+        max_num_batched_tokens=config.get("max_num_batched_tokens"),
+        tensor_parallel_size=config.get("tensor_parallel_size"),
+        has_custom_config=config.get("has_custom_config", False)
+    )
+
+
+@manage_router.put("/models/{model_name}/vllm-config", response_model=VLLMConfigResponse)
+async def update_model_vllm_config(model_name: str, request: VLLMConfigUpdateRequest):
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+
+    current_config = config_watcher.get_config()
+    if "models" not in current_config:
+        current_config["models"] = {}
+    if model_name not in current_config["models"]:
+        current_config["models"][model_name] = {}
+
+    vllm_params = {}
+    if request.gpu_memory_utilization is not None:
+        vllm_params["gpu_memory_utilization"] = request.gpu_memory_utilization
+    if request.max_model_len is not None:
+        vllm_params["max_model_len"] = request.max_model_len
+    if request.max_num_seqs is not None:
+        vllm_params["max_num_seqs"] = request.max_num_seqs
+    if request.max_num_batched_tokens is not None:
+        vllm_params["max_num_batched_tokens"] = request.max_num_batched_tokens
+    if request.tensor_parallel_size is not None:
+        vllm_params["tensor_parallel_size"] = request.tensor_parallel_size
+
+    if vllm_params:
+        current_config["models"][model_name]["vllm_params"] = vllm_params
+
+    success = config_watcher.save_config(current_config)
+    if success:
+        from core.deps import _on_config_changed
+        persisted_config = config_watcher.get_config()
+        _on_config_changed(persisted_config)
+        cache_service.delete("api:manage:models:aggregated")
+    else:
+        raise HTTPException(status_code=400, detail="Failed to save vLLM configuration")
+
+    return VLLMConfigResponse(
+        model_name=model_name,
+        gpu_memory_utilization=vllm_params.get("gpu_memory_utilization"),
+        max_model_len=vllm_params.get("max_model_len"),
+        max_num_seqs=vllm_params.get("max_num_seqs"),
+        max_num_batched_tokens=vllm_params.get("max_num_batched_tokens"),
+        tensor_parallel_size=vllm_params.get("tensor_parallel_size"),
+        has_custom_config=bool(vllm_params)
+    )
+
+
+@manage_router.get("/vllm/default-config")
+async def get_vllm_default_config():
+    cache_key = "api:manage:vllm:default_config"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+
+    current_config = config_watcher.get_config()
+    vllm_config = current_config.get("vllm", {})
+
+    result = {
+        "gpu_memory_utilization": vllm_config.get("default_gpu_memory_utilization", 0.92),
+        "max_model_len": vllm_config.get("default_max_model_len", 32768),
+        "max_num_seqs": vllm_config.get("default_max_num_seqs", 32),
+        "max_num_batched_tokens": vllm_config.get("default_max_num_batched_tokens", 16384),
+        "tensor_parallel_size": vllm_config.get("default_tensor_parallel_size", 1)
+    }
+
+    cache_service.set(cache_key, result, ttl_seconds=60)
+    return result
 
 
 @manage_router.get("/queue")
@@ -950,3 +1107,81 @@ async def llama_cpp_status():
     for model_name in llama_models:
         status[model_name] = llama_cpp_manager.get_server_status(model_name)
     return {"models": status, "total": len(llama_models)}
+
+
+@manage_router.get("/models/aggregated")
+async def get_models_aggregated(refresh: Optional[bool] = False):
+    cache_key = "api:manage:models:aggregated"
+
+    if not refresh:
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+
+    aggregated = get_aggregated_models()
+    
+    models_status = {}
+    if not refresh:
+        cached_status = cache_service.get("api:manage:models:status")
+        if cached_status is not None:
+            models_status = cached_status
+    
+    if not models_status:
+        all_models = scheduler.get_available_models()
+        for model in all_models:
+            models_status[model] = {
+                "running": scheduler.is_model_running(model),
+                "port": scheduler.get_model_port(model),
+                "active_requests": scheduler.get_active_requests(model),
+                "preloaded": scheduler.is_model_preloaded(model),
+            }
+    
+    for group in aggregated:
+        for variant in group["variants"]:
+            model_name = variant["name"]
+            if model_name in models_status:
+                variant["running"] = models_status[model_name]["running"]
+                variant["port"] = models_status[model_name].get("port", variant.get("port"))
+                variant["active_requests"] = models_status[model_name].get("active_requests", 0)
+                variant["preloaded"] = models_status[model_name].get("preloaded", variant.get("preloaded", False))
+    
+    cache_service.set(cache_key, aggregated, ttl_seconds=10)
+    return aggregated
+
+
+@manage_router.get("/models/{model_name}/vllm-params")
+async def get_model_vllm_params_route(model_name: str):
+    params = get_model_vllm_params(model_name)
+    return {"model_name": model_name, "vllm_params": params}
+
+
+@manage_router.put("/models/{model_name}/vllm-params")
+async def update_model_vllm_params(model_name: str, request: Request):
+    try:
+        body = await request.json()
+        vllm_params = body.get("vllm_params", {})
+        
+        required_keys = ["max_num_seqs", "gpu_memory_utilization", "max_model_len"]
+        for key in required_keys:
+            if key not in vllm_params:
+                raise HTTPException(status_code=400, detail=f"Missing required parameter: {key}")
+        
+        if not (0 < vllm_params["gpu_memory_utilization"] <= 1.0):
+            raise HTTPException(status_code=400, detail="gpu_memory_utilization must be between 0 and 1")
+        
+        if vllm_params["max_num_seqs"] < 1 or vllm_params["max_num_seqs"] > 1024:
+            raise HTTPException(status_code=400, detail="max_num_seqs must be between 1 and 1024")
+        
+        if vllm_params["max_model_len"] < 1024 or vllm_params["max_model_len"] > 131072:
+            raise HTTPException(status_code=400, detail="max_model_len must be between 1024 and 131072")
+        
+        success = save_model_vllm_params(model_name, vllm_params)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to save vLLM parameters")
+        
+        cache_service.delete("api:manage:models:aggregated")
+        return {"status": "success", "model_name": model_name, "vllm_params": vllm_params}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update vLLM parameters: {str(e)}")

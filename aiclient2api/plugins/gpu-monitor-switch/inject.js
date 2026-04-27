@@ -11,6 +11,8 @@
     var activeModelAction = null;
     var switchPollingInterval = null;
     var switchPollingController = null;
+    var switchStatusInterval = null;
+    var SWITCH_POLL_TIMEOUT = 180000;
 
     var sectionHTML = `
 <div id="gpu-monitor" class="section" data-section="gpu-monitor" style="display: none;">
@@ -208,7 +210,12 @@
             '<div class="switching-spinner"></div>' +
             '<div class="switching-title">正在切换模型</div>' +
             '<div class="switching-model">' + escapeHtml(modelName) + '</div>' +
-            '<div class="switching-status">后端正在加载模型，预计需要 1-2 分钟</div>' +
+            '<div class="switching-steps">' +
+            '<div class="switching-step active" id="switch-step-1"><span class="step-dot"></span><span class="step-text">发送切换请求</span></div>' +
+            '<div class="switching-step" id="switch-step-2"><span class="step-dot"></span><span class="step-text">后端加载模型</span></div>' +
+            '<div class="switching-step" id="switch-step-3"><span class="step-dot"></span><span class="step-text">验证模型就绪</span></div>' +
+            '</div>' +
+            '<div class="switching-status" id="switch-elapsed">准备中...</div>' +
             '<div class="switching-hint">请勿关闭页面或重复操作</div>' +
             '</div></div>';
         document.body.appendChild(overlay);
@@ -226,49 +233,89 @@
     }
 
     function updateSwitchingStatus(elapsed) {
-        var status = document.querySelector('.switching-status');
+        var status = document.getElementById('switch-elapsed');
         if (status) {
             var seconds = Math.floor(elapsed / 1000);
-            status.textContent = '已等待 ' + seconds + ' 秒，后端正在加载模型...';
+            status.textContent = '已等待 ' + seconds + ' 秒...';
         }
     }
 
-    function startSwitchPolling(modelName) {
+    function updateSwitchingStep(step) {
+        for (var i = 1; i <= 3; i++) {
+            var el = document.getElementById('switch-step-' + i);
+            if (!el) continue;
+            el.classList.remove('active', 'done');
+            if (i < step) el.classList.add('done');
+            else if (i === step) el.classList.add('active');
+        }
+        var statusTexts = {
+            1: '正在发送切换请求...',
+            2: '后端正在加载模型，预计需要 1-2 分钟...',
+            3: '正在验证模型是否就绪...'
+        };
+        var status = document.getElementById('switch-elapsed');
+        if (status && statusTexts[step]) {
+            status.textContent = statusTexts[step];
+        }
+    }
+
+    function stopSwitchPolling() {
         if (switchPollingInterval) {
             clearInterval(switchPollingInterval);
             switchPollingInterval = null;
+        }
+        if (switchStatusInterval) {
+            clearInterval(switchStatusInterval);
+            switchStatusInterval = null;
         }
         if (switchPollingController) {
             switchPollingController.abort();
             switchPollingController = null;
         }
+    }
+
+    function startSwitchPolling(modelName) {
+        stopSwitchPolling();
 
         var startTime = Date.now();
         var pollingController = new AbortController();
         switchPollingController = pollingController;
 
-        var statusInterval = setInterval(function() {
+        updateSwitchingStep(3);
+
+        switchStatusInterval = setInterval(function() {
+            if (pollingController.signal.aborted) return;
             updateSwitchingStatus(Date.now() - startTime);
         }, 1000);
 
+        var pollCount = 0;
         switchPollingInterval = setInterval(function() {
             if (pollingController.signal.aborted) {
-                clearInterval(statusInterval);
+                stopSwitchPolling();
                 return;
             }
 
+            if (Date.now() - startTime > SWITCH_POLL_TIMEOUT) {
+                stopSwitchPolling();
+                hideSwitchingOverlay();
+                showModelMessage('error', '切换超时：模型 ' + modelName + ' 在 ' + Math.floor(SWITCH_POLL_TIMEOUT / 1000) + ' 秒内未就绪，请手动刷新检查状态');
+                setActionButtonsDisabled(false);
+                activeModelAction = null;
+                return;
+            }
+
+            pollCount++;
             fetch('/api/model-switch/models', { signal: pollingController.signal })
                 .then(function(r) { return r.json(); })
                 .then(function(result) {
                     if (result.success && result.data) {
                         var targetModel = result.data.find(function(m) { return m.name === modelName; });
                         if (targetModel && targetModel.running) {
-                            clearInterval(switchPollingInterval);
-                            switchPollingInterval = null;
-                            clearInterval(statusInterval);
-                            switchPollingController = null;
-
+                            stopSwitchPolling();
+                            hideSwitchingOverlay();
                             showModelMessage('info', '切换成功: ' + modelName + '，模型已就绪');
+                            activeModelAction = null;
+                            setActionButtonsDisabled(false);
                             renderModels();
                             loadGPUData();
                             updateCharts();
@@ -293,6 +340,7 @@
 
         if (action === 'switch') {
             showSwitchingOverlay(name);
+            updateSwitchingStep(1);
         }
 
         try {
@@ -304,38 +352,39 @@
             var result = await r.json();
             if (!result.success) {
                 hideSwitchingOverlay();
+                stopSwitchPolling();
                 showModelMessage('error', (action === 'switch' ? '切换失败: ' : '操作失败: ') + result.error);
+                activeModelAction = null;
+                setActionButtonsDisabled(false);
                 return;
             }
 
             if (action === 'switch') {
+                updateSwitchingStep(2);
                 var warmup = result.data && result.data.warmup;
                 var providerUpdate = result.data && result.data.providerUpdate;
 
                 if (warmup && warmup.success && providerUpdate && providerUpdate.success) {
-                    hideSwitchingOverlay();
-                    showModelMessage('info', successText + '，预热完成，检测模型已同步');
+                    updateSwitchingStep(3);
+                    startSwitchPolling(name);
                 } else if (warmup && warmup.success) {
-                    hideSwitchingOverlay();
-                    showModelMessage('info', successText + '，预热完成，但检测模型同步失败');
-                } else if (warmup) {
-                    hideSwitchingOverlay();
-                    showModelMessage('info', successText + '，但预热未成功');
+                    updateSwitchingStep(3);
+                    startSwitchPolling(name);
                 } else {
-                    hideSwitchingOverlay();
-                    showModelMessage('info', successText);
+                    updateSwitchingStep(3);
+                    startSwitchPolling(name);
                 }
-
-                startSwitchPolling(name);
             } else {
                 hideSwitchingOverlay();
+                activeModelAction = null;
+                setActionButtonsDisabled(false);
                 await renderModels();
                 showModelMessage('info', successText);
             }
         } catch (e) {
             hideSwitchingOverlay();
+            stopSwitchPolling();
             showModelMessage('error', (action === 'switch' ? '切换失败: ' : '操作失败: ') + e.message);
-        } finally {
             activeModelAction = null;
             setActionButtonsDisabled(false);
         }

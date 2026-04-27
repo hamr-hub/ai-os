@@ -10,6 +10,12 @@ models:
     supports_tool_calling: false
     supports_image_generation: false
     description: "Gemma 4 31B 模型（去审查版）"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 40960
+      max_num_batched_tokens: 16384
+      enable_chunked_prefill: true
   
   Qwen3-235B-A22B-Instruct-2507-AWQ:
     service: vllm-aiclient
@@ -20,6 +26,12 @@ models:
     model_path: /mnt/pve_models/Qwen3-235B-A22B-Instruct-2507-AWQ
     supports_images: false
     description: "Qwen3 235B AWQ 量化模型"
+    vllm_params:
+      max_num_seqs: 32
+      gpu_memory_utilization: 0.75
+      max_model_len: 8192
+      max_num_batched_tokens: 4096
+      enable_chunked_prefill: true
   
   Qwen3.6-35B-A3B:
     service: vllm-aiclient
@@ -30,6 +42,12 @@ models:
     model_path: /mnt/pve_models/Qwen3.6-35B-A3B
     supports_images: false
     description: "Qwen3.6 35B 稀疏激活模型"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 40960
+      max_num_batched_tokens: 16384
+      enable_chunked_prefill: true
   
   Qwen3.6-35B-A3B-NVFP4:
     service: vllm-aiclient
@@ -40,6 +58,12 @@ models:
     model_path: /mnt/pve_models/Qwen3.6-35B-A3B-NVFP4
     supports_images: false
     description: "Qwen3.6 35B NVFP4 量化模型"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 40960
+      max_num_batched_tokens: 16384
+      enable_chunked_prefill: true
   
   Qwen3.6-35B-A3B-Uncensored:
     service: vllm-aiclient
@@ -50,6 +74,12 @@ models:
     model_path: /mnt/pve_models/Qwen3.6-35B-A3B-Uncensored
     supports_images: false
     description: "Qwen3.6 35B 去审查版"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 40960
+      max_num_batched_tokens: 16384
+      enable_chunked_prefill: true
   
   llama-3.3-70b-8.0bpw:
     service: vllm-aiclient
@@ -60,6 +90,12 @@ models:
     model_path: /mnt/pve_models/llama-3.3-70b-8.0bpw
     supports_images: false
     description: "Llama 3.3 70B 8bit 量化模型"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
   
   llama-3.3-70b-abliterated-gguf:
     service: vllm-aiclient
@@ -70,6 +106,12 @@ models:
     model_path: /mnt/pve_models/llama-3.3-70b-abliterated-gguf
     supports_images: false
     description: "Llama 3.3 70B GGUF 去审查版"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
   
   llama-3.3-70b-exl2-6_5:
     service: vllm-aiclient
@@ -80,6 +122,12 @@ models:
     model_path: /mnt/pve_models/llama-3.3-70b-exl2-6_5
     supports_images: false
     description: "Llama 3.3 70B EXL2 6.5bpw 量化"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
   
   llama-3.3-70b-exl2-8_0:
     service: vllm-aiclient
@@ -90,6 +138,12 @@ models:
     model_path: /mnt/pve_models/llama-3.3-70b-exl2-8_0
     supports_images: false
     description: "Llama 3.3 70B EXL2 8.0bpw 量化"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
   
   midnight-miqu-103b-5.0bpw:
     service: vllm-aiclient
@@ -100,6 +154,12 @@ models:
     model_path: /mnt/pve_models/midnight-miqu-103b-5.0bpw
     supports_images: false
     description: "Midnight Miqu 103B 5bpw 量化"
+    vllm_params:
+      max_num_seqs: 32
+      gpu_memory_utilization: 0.80
+      max_model_len: 8192
+      max_num_batched_tokens: 4096
+      enable_chunked_prefill: true
   
   qwen2.5-72b-exl2-8_0:
     service: vllm-aiclient
@@ -110,6 +170,12 @@ models:
     model_path: /mnt/pve_models/qwen2.5-72b-exl2-8_0
     supports_images: false
     description: "Qwen2.5 72B EXL2 8.0bpw 量化"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
 
   Gemma-4-31B-GGUF-Q4:
     service: llama_cpp
