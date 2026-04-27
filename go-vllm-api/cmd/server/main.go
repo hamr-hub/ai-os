@@ -99,7 +99,7 @@ func main() {
 	cacheService := service.NewCacheService(redisRepo)
 	gpuMonitor := service.NewGPUMonitor(zapLogger)
 	sysCtl := service.NewSystemController(zapLogger)
-	vllmManager := service.NewVLLMManager(&cfg.VLLM, zapLogger)
+	vllmManager := service.NewVLLMManager(&cfg.VLLM, zapLogger, sysCtl)
 	llamaCppMgr := service.NewLlamaCppManager(zapLogger, cfg)
 	llamaCppMgr.RegisterModelsFromConfig(cfg)
 	scheduler := service.NewScheduler(zapLogger, gpuMonitor, sysCtl, redisRepo, cfg, llamaCppMgr, vllmManager)

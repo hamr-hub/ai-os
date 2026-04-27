@@ -297,23 +297,28 @@
                 el.innerHTML = '<div class="empty-state"><i class="fas fa-info-circle"></i><p>未找到模型</p></div>';
                 return;
             }
+            var runningModels = result.data.filter(function(m) { return m.running; });
+            var stoppedModels = result.data.filter(function(m) { return !m.running; });
+            var currentModel = runningModels.length > 0 ? runningModels[0] : null;
             var html = '<div class="model-list">';
-            result.data.forEach(function(model) {
-                var sc = model.running ? 'status-healthy' : 'status-disabled';
-                var st = model.running ? '运行中' : '已停止';
-                html += '<div class="model-item"><div class="model-header"><div class="model-name">' + model.name + '</div>';
-                html += '<span class="model-status ' + sc + '">' + st + '</span></div>';
-                html += '<div class="model-details"><div class="detail-item"><span class="detail-label">类型</span><span class="detail-value">' + (model.backendType || 'vllm') + '</span></div>';
-                html += '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (model.port || '--') + '</span></div></div>';
-                html += '<div class="model-actions">';
-                if (model.running) {
-                    html += '<button class="btn btn-sm btn-primary" onclick="window.switchModel(\'' + model.name + '\')"><i class="fas fa-exchange-alt"></i> 切换并预热</button>';
-                    html += '<button class="btn btn-sm btn-danger" onclick="window.stopModel(\'' + model.name + '\')"><i class="fas fa-stop"></i> 停止</button>';
-                } else {
-                    html += '<button class="btn btn-sm btn-success" onclick="window.startModel(\'' + model.name + '\')"><i class="fas fa-play"></i> 启动</button>';
-                }
-                html += '</div></div>';
-            });
+            if (currentModel) {
+                html += '<div class="model-item model-current"><div class="model-header"><div class="model-name"><i class="fas fa-check-circle" style="color:#22c55e;margin-right:6px;"></i>' + currentModel.name + '</div>';
+                html += '<span class="model-status status-healthy">当前运行</span></div>';
+                html += '<div class="model-details"><div class="detail-item"><span class="detail-label">类型</span><span class="detail-value">' + (currentModel.backendType || 'vllm') + '</span></div>';
+                html += '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (currentModel.port || '--') + '</span></div></div>';
+                html += '<div class="model-actions"><button class="btn btn-sm btn-danger" onclick="window.stopModel(\'' + currentModel.name + '\')"><i class="fas fa-stop"></i> 停止</button></div></div>';
+            }
+            if (stoppedModels.length > 0) {
+                html += '<div class="model-section-label" style="color:#94a3b8;font-size:0.9em;margin:16px 0 8px;padding-left:4px;">可切换的模型</div>';
+                stoppedModels.forEach(function(model) {
+                    html += '<div class="model-item model-switchable"><div class="model-header"><div class="model-name">' + model.name + '</div>';
+                    html += '<span class="model-status status-disabled">未运行</span></div>';
+                    html += '<div class="model-details"><div class="detail-item"><span class="detail-label">类型</span><span class="detail-value">' + (model.backendType || 'vllm') + '</span></div>';
+                    html += '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (model.port || '--') + '</span></div></div>';
+                    html += '<div class="model-actions"><button class="btn btn-sm btn-primary" onclick="window.switchModel(\'' + model.name + '\')"><i class="fas fa-exchange-alt"></i> 切换到此模型</button>';
+                    html += '<button class="btn btn-sm btn-success" onclick="window.startModel(\'' + model.name + '\')"><i class="fas fa-play"></i> 仅启动</button></div></div>';
+                });
+            }
             html += '</div>';
             el.innerHTML = html;
         } catch (e) {

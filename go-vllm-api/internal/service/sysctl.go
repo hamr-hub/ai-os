@@ -13,14 +13,17 @@ import (
 )
 
 type SystemController struct {
-	logger     *zap.Logger
-	needsSudo  bool
-	mu         sync.Mutex
+	logger             *zap.Logger
+	needsSudo          bool
+	systemctlPath      string
+	systemctlAvailable bool
+	mu                 sync.Mutex
 }
 
 func NewSystemController(logger *zap.Logger) *SystemController {
 	sc := &SystemController{logger: logger}
 	sc.needsSudo = sc.checkSudo()
+	sc.systemctlPath, sc.systemctlAvailable = sc.detectSystemctl()
 	return sc
 }
 
@@ -32,7 +35,25 @@ func (sc *SystemController) checkSudo() bool {
 	return true
 }
 
+func (sc *SystemController) detectSystemctl() (string, bool) {
+	path, err := exec.LookPath("systemctl")
+	if err != nil {
+		sc.logger.Warn("systemctl not found in PATH", zap.Error(err))
+		return "", false
+	}
+	return path, true
+}
+
 func (sc *SystemController) command(args ...string) *exec.Cmd {
+	if len(args) == 0 {
+		return nil
+	}
+	if args[0] == "systemctl" {
+		if !sc.systemctlAvailable {
+			return nil
+		}
+		args = append([]string{sc.systemctlPath}, args[1:]...)
+	}
 	if sc.needsSudo {
 		allArgs := append([]string{"sudo"}, args...)
 		return exec.Command(allArgs[0], allArgs[1:]...)
@@ -44,6 +65,10 @@ func (sc *SystemController) StartService(name string) bool {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	cmd := sc.command("systemctl", "start", name)
+	if cmd == nil {
+		sc.logger.Error("start service", zap.String("service", name), zap.String("reason", "systemctl unavailable"))
+		return false
+	}
 	if err := cmd.Run(); err != nil {
 		sc.logger.Error("start service", zap.String("service", name), zap.Error(err))
 		return false
@@ -56,6 +81,10 @@ func (sc *SystemController) StopService(name string) bool {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	cmd := sc.command("systemctl", "stop", name)
+	if cmd == nil {
+		sc.logger.Error("stop service", zap.String("service", name), zap.String("reason", "systemctl unavailable"))
+		return false
+	}
 	if err := cmd.Run(); err != nil {
 		sc.logger.Error("stop service", zap.String("service", name), zap.Error(err))
 		return false
@@ -68,6 +97,10 @@ func (sc *SystemController) RestartService(name string) bool {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	cmd := sc.command("systemctl", "restart", name)
+	if cmd == nil {
+		sc.logger.Error("restart service", zap.String("service", name), zap.String("reason", "systemctl unavailable"))
+		return false
+	}
 	if err := cmd.Run(); err != nil {
 		sc.logger.Error("restart service", zap.String("service", name), zap.Error(err))
 		return false
@@ -78,6 +111,9 @@ func (sc *SystemController) RestartService(name string) bool {
 
 func (sc *SystemController) IsServiceRunning(name string) bool {
 	cmd := sc.command("systemctl", "is-active", name)
+	if cmd == nil {
+		return false
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -87,6 +123,9 @@ func (sc *SystemController) IsServiceRunning(name string) bool {
 
 func (sc *SystemController) GetServiceStatus(name string) string {
 	cmd := sc.command("systemctl", "is-active", name)
+	if cmd == nil {
+		return "unavailable"
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		return "unknown"
@@ -96,6 +135,9 @@ func (sc *SystemController) GetServiceStatus(name string) string {
 
 func (sc *SystemController) GetServiceInfo(name string) map[string]string {
 	cmd := sc.command("systemctl", "show", name, "--property=ActiveState,SubState,MainPID,MemoryCurrent")
+	if cmd == nil {
+		return map[string]string{"error": "systemctl unavailable"}
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		return map[string]string{"error": err.Error()}

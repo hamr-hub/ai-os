@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -23,6 +22,7 @@ import (
 type VLLMManager struct {
 	logger        *zap.Logger
 	cfg           *config.VLLMConfig
+	sysCtl        *SystemController
 	switchLock    sync.Mutex
 	requestClient *http.Client
 }
@@ -34,10 +34,11 @@ type ModelScanResult struct {
 	SizeBytes     int64  `json:"size_bytes"`
 }
 
-func NewVLLMManager(cfg *config.VLLMConfig, logger *zap.Logger) *VLLMManager {
+func NewVLLMManager(cfg *config.VLLMConfig, logger *zap.Logger, sysCtl *SystemController) *VLLMManager {
 	return &VLLMManager{
 		logger: logger,
 		cfg:    cfg,
+		sysCtl: sysCtl,
 		requestClient: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -191,11 +192,10 @@ func (vm *VLLMManager) SwitchModelWithTest(ctx context.Context, modelPath string
 	if serviceName == "" {
 		serviceName = "vllm"
 	}
-	cmd := exec.Command("systemctl", "restart", serviceName)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("restart vllm service: %w", err)
+	if vm.sysCtl == nil || !vm.sysCtl.RestartService(serviceName) {
+		return fmt.Errorf("restart vllm service %s failed", serviceName)
 	}
-	vm.logger.Info("vllm service restarted", zap.String("model", modelName))
+	vm.logger.Info("vllm service restarted", zap.String("model", modelName), zap.String("service", serviceName))
 
 	if err := vm.WaitUntilReady(ctx, port, 90*time.Second, time.Second); err != nil {
 		return fmt.Errorf("wait for vllm readiness: %w", err)
@@ -337,15 +337,16 @@ func (vm *VLLMManager) GetVLLMServiceStatus() map[string]interface{} {
 	if serviceName == "" {
 		serviceName = "vllm"
 	}
-	cmd := exec.Command("systemctl", "is-active", serviceName)
-	output, err := cmd.Output()
 	status := "unknown"
-	if err == nil {
-		status = strings.TrimSpace(string(output))
+	info := map[string]string{}
+	if vm.sysCtl != nil {
+		status = vm.sysCtl.GetServiceStatus(serviceName)
+		info = vm.sysCtl.GetServiceInfo(serviceName)
 	}
 	return map[string]interface{}{
 		"service_name": serviceName,
 		"status":       status,
+		"info":         info,
 	}
 }
 

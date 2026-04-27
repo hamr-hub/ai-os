@@ -252,6 +252,25 @@
     background: #b91c1c;
 }
 
+.model-current {
+    border: 2px solid #22c55e;
+    background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);
+}
+
+.model-switchable {
+    border: 1px solid #e5e7eb;
+}
+
+.model-switchable:hover {
+    border-color: #6366f1;
+    background: #f8fafc;
+}
+
+.model-actions {
+    display: flex;
+    gap: 8px;
+}
+
 @keyframes spin {
     to {
         transform: rotate(360deg);
