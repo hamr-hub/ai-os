@@ -2,7 +2,7 @@
   "openai-custom": [
     {
       "customName": "app-controller",
-      "checkModelName": "Gemma-4-31B-Abliterated",
+      "checkModelName": "Qwen3.6-35B-A3B-NVFP4",
       "checkHealth": true,
       "concurrencyLimit": 32,
       "queueLimit": 100,
@@ -10,21 +10,21 @@
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "97c731f8-8290-4959-8c4f-960fb4b3184c",
       "isHealthy": true,
-      "lastUsed": "2026-04-27T15:09:31.742Z",
-      "usageCount": 1,
-      "errorCount": 1,
-      "lastErrorTime": "2026-04-27T15:09:31.742Z",
+      "lastUsed": "2026-04-27T16:42:28.203Z",
+      "usageCount": 2,
+      "errorCount": 0,
+      "lastErrorTime": null,
       "supportedModels": [],
       "notSupportedModels": [],
       "isDisabled": false,
       "needsRefresh": false,
       "refreshCount": 0,
-      "lastHealthCheckTime": "2026-04-27T13:44:57.747Z",
-      "lastHealthCheckModel": "Gemma-4-31B-Abliterated",
-      "lastErrorMessage": "Request failed with status code 503",
-      "lastRefreshTime": 1777300081830,
-      "_lastSelectionSeq": 67,
-      "lastModelSwitchTime": "2026-04-27T13:44:28.175Z"
+      "lastHealthCheckTime": "2026-04-27T15:44:03.629Z",
+      "lastHealthCheckModel": "Qwen3.6-35B-A3B-NVFP4",
+      "lastErrorMessage": null,
+      "lastRefreshTime": 1777308148203,
+      "_lastSelectionSeq": 0,
+      "lastModelSwitchTime": "2026-04-27T15:41:09.526Z"
     }
   ]
 }

@@ -55,7 +55,7 @@ export FLASHINFER_DISABLE=1
 # ===== 5. 模型路径（从环境变量读取，提供默认值）=====
 MODEL_STATE_FILE="${VLLM_MODEL_STATE_FILE:-$SCRIPT_DIR/.vllm_model_path}"
 if [ -n "${VLLM_MODEL_PATH:-}" ]; then
-    MODEL_PATH="/mnt/pve_models/Gemma-4-31B-Abliterated"
+    MODEL_PATH="$VLLM_MODEL_PATH"
 elif [ -f "$MODEL_STATE_FILE" ]; then
     MODEL_PATH="$(tr -d '\r\n' < "$MODEL_STATE_FILE")"
 else
@@ -118,7 +118,7 @@ wait_for_port_release() {
             if command -v fuser >/dev/null 2>&1; then
                 fuser -k "${port}/tcp" || true
             else
-                pkill -f "vllm serve "/mnt/pve_models/Gemma-4-31B-Abliterated" --port ${port}" || true
+                pkill -f "vllm serve "/mnt/pve_models/Qwen3.6-35B-A3B-NVFP4" --port ${port}" || true
             fi
             sleep 2
         fi
