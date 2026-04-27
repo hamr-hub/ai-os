@@ -123,4 +123,6 @@ exec vllm serve "$MODEL_PATH" \
   --max-num-batched-tokens 16384 \
   --max-num-seqs 32 \
   --enforce-eager \
+  --enable-auto-tool-choice \
+  --tool-call-parser gemma3 \
   2>&1 | tee -a "$LOG_FILE"

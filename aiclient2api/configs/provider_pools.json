@@ -10,10 +10,10 @@
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "36babfc8-934a-404d-826a-3dd25bef139b",
       "isHealthy": true,
-      "lastUsed": "2026-04-27T10:31:09.116Z",
-      "usageCount": 0,
-      "errorCount": 1,
-      "lastErrorTime": "2026-04-27T10:31:09.116Z",
+      "lastUsed": "2026-04-27T10:44:03.470Z",
+      "usageCount": 12,
+      "errorCount": 0,
+      "lastErrorTime": null,
       "supportedModels": [],
       "notSupportedModels": [],
       "isDisabled": false,
@@ -21,9 +21,9 @@
       "refreshCount": 0,
       "lastHealthCheckTime": "2026-04-26T16:15:39.792Z",
       "lastHealthCheckModel": "gpt-4o-mini",
-      "lastErrorMessage": "Request failed with status code 503",
-      "lastRefreshTime": null,
-      "_lastSelectionSeq": 84,
+      "lastErrorMessage": null,
+      "lastRefreshTime": 1777286643470,
+      "_lastSelectionSeq": 0,
       "lastModelSwitchTime": "2026-04-27T01:40:45.556Z"
     }
   ]
