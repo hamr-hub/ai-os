@@ -9,6 +9,8 @@
     var autoRefreshTimer = null;
     var isAutoRefreshing = false;
     var activeModelAction = null;
+    var switchPollingInterval = null;
+    var switchPollingController = null;
 
     var sectionHTML = `
 <div id="gpu-monitor" class="section" data-section="gpu-monitor" style="display: none;">
@@ -195,11 +197,104 @@
         }
     }
 
+    function showSwitchingOverlay(modelName) {
+        var old = document.getElementById('gpu-switching-overlay');
+        if (old) old.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id = 'gpu-switching-overlay';
+        overlay.innerHTML = '<div class="switching-overlay">' +
+            '<div class="switching-card">' +
+            '<div class="switching-spinner"></div>' +
+            '<div class="switching-title">正在切换模型</div>' +
+            '<div class="switching-model">' + escapeHtml(modelName) + '</div>' +
+            '<div class="switching-status">后端正在加载模型，预计需要 1-2 分钟</div>' +
+            '<div class="switching-hint">请勿关闭页面或重复操作</div>' +
+            '</div></div>';
+        document.body.appendChild(overlay);
+    }
+
+    function hideSwitchingOverlay() {
+        var old = document.getElementById('gpu-switching-overlay');
+        if (old) old.remove();
+    }
+
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function updateSwitchingStatus(elapsed) {
+        var status = document.querySelector('.switching-status');
+        if (status) {
+            var seconds = Math.floor(elapsed / 1000);
+            status.textContent = '已等待 ' + seconds + ' 秒，后端正在加载模型...';
+        }
+    }
+
+    function startSwitchPolling(modelName) {
+        if (switchPollingInterval) {
+            clearInterval(switchPollingInterval);
+            switchPollingInterval = null;
+        }
+        if (switchPollingController) {
+            switchPollingController.abort();
+            switchPollingController = null;
+        }
+
+        var startTime = Date.now();
+        var pollingController = new AbortController();
+        switchPollingController = pollingController;
+
+        var statusInterval = setInterval(function() {
+            updateSwitchingStatus(Date.now() - startTime);
+        }, 1000);
+
+        switchPollingInterval = setInterval(function() {
+            if (pollingController.signal.aborted) {
+                clearInterval(statusInterval);
+                return;
+            }
+
+            fetch('/api/model-switch/models', { signal: pollingController.signal })
+                .then(function(r) { return r.json(); })
+                .then(function(result) {
+                    if (result.success && result.data) {
+                        var targetModel = result.data.find(function(m) { return m.name === modelName; });
+                        if (targetModel && targetModel.running) {
+                            clearInterval(switchPollingInterval);
+                            switchPollingInterval = null;
+                            clearInterval(statusInterval);
+                            switchPollingController = null;
+
+                            showModelMessage('info', '切换成功: ' + modelName + '，模型已就绪');
+                            renderModels();
+                            loadGPUData();
+                            updateCharts();
+                        }
+                    }
+                })
+                .catch(function(e) {
+                    if (e.name !== 'AbortError') {
+                        console.error('[Polling] Error:', e);
+                    }
+                });
+        }, 5000);
+    }
+
     async function executeModelAction(action, name, successText) {
         if (activeModelAction) return;
         activeModelAction = action + ':' + name;
         setActionButtonsDisabled(true);
-        showModelMessage('info', action === 'switch' ? '正在切换并预热模型：' + name : '处理中：' + name);
+
+        var actionLabel = action === 'switch' ? '切换' : action === 'start' ? '启动' : '停止';
+        showModelMessage('info', '正在' + actionLabel + '模型：' + name + '...');
+
+        if (action === 'switch') {
+            showSwitchingOverlay(name);
+        }
+
         try {
             var r = await fetch('/api/model-switch/' + action, {
                 method: 'POST',
@@ -208,26 +303,37 @@
             });
             var result = await r.json();
             if (!result.success) {
+                hideSwitchingOverlay();
                 showModelMessage('error', (action === 'switch' ? '切换失败: ' : '操作失败: ') + result.error);
                 return;
             }
-            await renderModels();
+
             if (action === 'switch') {
                 var warmup = result.data && result.data.warmup;
                 var providerUpdate = result.data && result.data.providerUpdate;
+
                 if (warmup && warmup.success && providerUpdate && providerUpdate.success) {
+                    hideSwitchingOverlay();
                     showModelMessage('info', successText + '，预热完成，检测模型已同步');
                 } else if (warmup && warmup.success) {
+                    hideSwitchingOverlay();
                     showModelMessage('info', successText + '，预热完成，但检测模型同步失败');
                 } else if (warmup) {
+                    hideSwitchingOverlay();
                     showModelMessage('info', successText + '，但预热未成功');
                 } else {
+                    hideSwitchingOverlay();
                     showModelMessage('info', successText);
                 }
+
+                startSwitchPolling(name);
             } else {
+                hideSwitchingOverlay();
+                await renderModels();
                 showModelMessage('info', successText);
             }
         } catch (e) {
+            hideSwitchingOverlay();
             showModelMessage('error', (action === 'switch' ? '切换失败: ' : '操作失败: ') + e.message);
         } finally {
             activeModelAction = null;
@@ -266,7 +372,7 @@
         if (autoRefreshTimer) return;
         isAutoRefreshing = true;
         loadGPUData();
-        autoRefreshTimer = setInterval(function() { loadGPUData(); }, REFRESH_INTERVAL);
+        autoRefreshTimer = setInterval(function() { loadGPUData(); renderModels(); }, REFRESH_INTERVAL);
         var btn = document.getElementById('gpuAutoRefreshBtn');
         if (btn) {
             btn.innerHTML = '<i class="fas fa-pause"></i> <span>停止刷新</span>';
@@ -289,6 +395,18 @@
     async function renderModels() {
         var el = document.getElementById('modelSwitchContent');
         if (!el) return;
+
+        if (activeModelAction) {
+            var actionParts = activeModelAction.split(':');
+            var actionType = actionParts[0];
+            var actionModel = actionParts.slice(1).join(':');
+            el.innerHTML = '<div class="loading-spinner">' +
+                '<i class="fas fa-spinner fa-spin"></i>' +
+                '<span>正在' + (actionType === 'switch' ? '切换' : actionType === 'start' ? '启动' : '停止') + '模型：' + escapeHtml(actionModel) + '...</span>' +
+                '</div>';
+            return;
+        }
+
         el.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i><span>加载中...</span></div>';
         try {
             var r = await fetch('/api/model-switch/models');
@@ -302,21 +420,35 @@
             var currentModel = runningModels.length > 0 ? runningModels[0] : null;
             var html = '<div class="model-list">';
             if (currentModel) {
-                html += '<div class="model-item model-current"><div class="model-header"><div class="model-name"><i class="fas fa-check-circle" style="color:#22c55e;margin-right:6px;"></i>' + currentModel.name + '</div>';
-                html += '<span class="model-status status-healthy">当前运行</span></div>';
-                html += '<div class="model-details"><div class="detail-item"><span class="detail-label">类型</span><span class="detail-value">' + (currentModel.backendType || 'vllm') + '</span></div>';
-                html += '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (currentModel.port || '--') + '</span></div></div>';
-                html += '<div class="model-actions"><button class="btn btn-sm btn-danger" onclick="window.stopModel(\'' + currentModel.name + '\')"><i class="fas fa-stop"></i> 停止</button></div></div>';
+                html += '<div class="model-item model-current">' +
+                    '<div class="model-header">' +
+                    '<div class="model-name">' +
+                    '<i class="fas fa-check-circle" style="color:#22c55e;margin-right:6px;"></i>' +
+                    escapeHtml(currentModel.name) +
+                    '</div>' +
+                    '<span class="model-status status-healthy">当前运行</span></div>';
+                html += '<div class="model-details">' +
+                    '<div class="detail-item"><span class="detail-label">类型</span><span class="detail-value">' + escapeHtml(currentModel.backendType || 'vllm') + '</span></div>' +
+                    '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (currentModel.port || '--') + '</span></div></div>';
+                html += '<div class="model-actions">' +
+                    '<button class="btn btn-sm btn-danger" onclick="window.stopModel(\'' + escapeHtml(currentModel.name) + '\')">' +
+                    '<i class="fas fa-stop"></i> 停止</button></div></div>';
             }
             if (stoppedModels.length > 0) {
                 html += '<div class="model-section-label" style="color:#94a3b8;font-size:0.9em;margin:16px 0 8px;padding-left:4px;">可切换的模型</div>';
                 stoppedModels.forEach(function(model) {
-                    html += '<div class="model-item model-switchable"><div class="model-header"><div class="model-name">' + model.name + '</div>';
-                    html += '<span class="model-status status-disabled">未运行</span></div>';
-                    html += '<div class="model-details"><div class="detail-item"><span class="detail-label">类型</span><span class="detail-value">' + (model.backendType || 'vllm') + '</span></div>';
-                    html += '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (model.port || '--') + '</span></div></div>';
-                    html += '<div class="model-actions"><button class="btn btn-sm btn-primary" onclick="window.switchModel(\'' + model.name + '\')"><i class="fas fa-exchange-alt"></i> 切换到此模型</button>';
-                    html += '<button class="btn btn-sm btn-success" onclick="window.startModel(\'' + model.name + '\')"><i class="fas fa-play"></i> 仅启动</button></div></div>';
+                    html += '<div class="model-item model-switchable">' +
+                        '<div class="model-header">' +
+                        '<div class="model-name">' + escapeHtml(model.name) + '</div>' +
+                        '<span class="model-status status-disabled">未运行</span></div>';
+                    html += '<div class="model-details">' +
+                        '<div class="detail-item"><span class="detail-label">类型</span><span class="detail-value">' + escapeHtml(model.backendType || 'vllm') + '</span></div>' +
+                        '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (model.port || '--') + '</span></div></div>';
+                    html += '<div class="model-actions">' +
+                        '<button class="btn btn-sm btn-primary" onclick="window.switchModel(\'' + escapeHtml(model.name) + '\')">' +
+                        '<i class="fas fa-exchange-alt"></i> 切换</button>' +
+                        '<button class="btn btn-sm btn-success" onclick="window.startModel(\'' + escapeHtml(model.name) + '\')">' +
+                        '<i class="fas fa-play"></i> 启动</button></div></div>';
                 });
             }
             html += '</div>';

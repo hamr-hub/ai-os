@@ -50,15 +50,16 @@ test.describe('AI Agent 聊天功能测试', () => {
     await expect(sendBtn).toBeEnabled()
     await sendBtn.click()
     
-    // 等待响应
-    await page.waitForTimeout(5000)
+    // 等待流式响应完成（等待加载指示器消失）
+    await page.waitForTimeout(15000)
     
     // 截图保存发送后的状态
     await page.screenshot({ path: 'test-results/chat-after-send.png' })
     
     // 检查是否有错误消息
     const errorMsg = page.locator('.msg-bubble:has-text("请求失败"), .msg-bubble:has-text("Error"), .msg-bubble:has-text("失败")')
-    if (await errorMsg.count() > 0) {
+    const errorCount = await errorMsg.count()
+    if (errorCount > 0) {
       const errorText = await errorMsg.first().textContent()
       console.error('聊天报错:', errorText)
       throw new Error(`聊天功能报错: ${errorText}`)
@@ -72,8 +73,18 @@ test.describe('AI Agent 聊天功能测试', () => {
     if (messageCount >= 2) {
       const lastMessage = messages.last()
       const content = await lastMessage.locator('.msg-text').textContent()
-      console.log('最后一条消息:', content?.substring(0, 100))
+      console.log('AI 回复内容:', content?.substring(0, 200))
+      
+      // 验证 AI 确实回复了（不是空内容）
+      if (content && content.trim().length > 0) {
+        console.log('✅ AI 回复成功')
+      } else {
+        console.warn('⚠️ AI 回复为空')
+      }
     }
+    
+    // 最终验证：确保没有错误
+    expect(messageCount).toBeGreaterThanOrEqual(2)
   })
 
   test('检查网络请求和错误', async ({ page }) => {

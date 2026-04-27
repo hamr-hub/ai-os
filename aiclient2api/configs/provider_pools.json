@@ -9,9 +9,9 @@
       "OPENAI_API_KEY": "123456",
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "36babfc8-934a-404d-826a-3dd25bef139b",
-      "isHealthy": true,
-      "lastUsed": "2026-04-27T11:21:18.342Z",
-      "usageCount": 1,
+      "isHealthy": false,
+      "lastUsed": null,
+      "usageCount": 0,
       "errorCount": 0,
       "lastErrorTime": null,
       "supportedModels": [],
@@ -19,12 +19,12 @@
       "isDisabled": false,
       "needsRefresh": false,
       "refreshCount": 0,
-      "lastHealthCheckTime": "2026-04-27T11:20:39.050Z",
+      "lastHealthCheckTime": "2026-04-27T11:31:15.193Z",
       "lastHealthCheckModel": "Gemma-4-31B-Abliterated",
       "lastErrorMessage": null,
       "lastRefreshTime": 1777288839050,
-      "_lastSelectionSeq": 2,
-      "lastModelSwitchTime": "2026-04-27T01:40:45.556Z"
+      "_lastSelectionSeq": 15,
+      "lastModelSwitchTime": "2026-04-27T11:43:57.674Z"
     }
   ]
 }

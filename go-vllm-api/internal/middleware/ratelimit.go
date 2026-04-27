@@ -14,6 +14,7 @@ type RateLimiterMiddleware struct {
 	window      time.Duration
 	limiter     *service.RateLimiter
 	exemptIPs   map[string]bool
+	rateLimitedPaths []string
 }
 
 func NewRateLimitMiddleware(maxRequests int, windowSeconds int) *RateLimiterMiddleware {
@@ -24,6 +25,12 @@ func NewRateLimitMiddleware(maxRequests int, windowSeconds int) *RateLimiterMidd
 			"127.0.0.1": true,
 			"localhost": true,
 			"::1":       true,
+		},
+		rateLimitedPaths: []string{
+			"/v1/chat/completions",
+			"/v1/completions",
+			"/v1/embeddings",
+			"/v1/images/generations",
 		},
 	}
 }
@@ -38,11 +45,31 @@ func NewRateLimitMiddlewareWithLimiter(maxRequests int, windowSeconds int, limit
 			"localhost": true,
 			"::1":       true,
 		},
+		rateLimitedPaths: []string{
+			"/v1/chat/completions",
+			"/v1/completions",
+			"/v1/embeddings",
+			"/v1/images/generations",
+		},
 	}
+}
+
+func (rl *RateLimiterMiddleware) isRateLimitedPath(path string) bool {
+	for _, limitedPath := range rl.rateLimitedPaths {
+		if path == limitedPath {
+			return true
+		}
+	}
+	return false
 }
 
 func (rl *RateLimiterMiddleware) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !rl.isRateLimitedPath(c.Request.URL.Path) {
+			c.Next()
+			return
+		}
+
 		ip := c.ClientIP()
 		if rl.exemptIPs[ip] {
 			c.Next()

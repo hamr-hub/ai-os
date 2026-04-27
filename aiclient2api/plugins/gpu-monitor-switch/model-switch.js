@@ -74,26 +74,47 @@ class ModelSwitchService {
 
     async updateProviderCheckModel(modelName) {
         const configPath = pathModule.resolve(process.cwd(), 'configs', 'provider_pools.json');
+        logger.info(`[Model Switch Service] updateProviderCheckModel: configPath=${configPath}, modelName=${modelName}`);
+        logger.info(`[Model Switch Service] process.cwd()=${process.cwd()}`);
         try {
             const raw = await fs.readFile(configPath, 'utf8');
+            logger.info(`[Model Switch Service] Read config, length=${raw.length}`);
             const config = JSON.parse(raw);
             const providers = Array.isArray(config['openai-custom']) ? config['openai-custom'] : [];
+            logger.info(`[Model Switch Service] Found ${providers.length} providers in config`);
             let updated = false;
-            providers.forEach((provider) => {
+            for (const provider of providers) {
+                logger.info(`[Model Switch Service] Checking provider: customName=${provider?.customName}`);
                 if (provider && provider.customName === 'app-controller') {
+                    const oldModel = provider.checkModelName;
                     provider.checkModelName = modelName;
                     provider.lastHealthCheckModel = modelName;
                     provider.lastModelSwitchTime = new Date().toISOString();
                     updated = true;
+                    logger.info(`[Model Switch Service] Updated checkModelName: ${oldModel} -> ${modelName}`);
                 }
-            });
+            }
             if (!updated) {
+                logger.error('[Model Switch Service] app-controller provider not found in provider_pools.json');
                 return { success: false, error: 'app-controller provider not found' };
             }
-            await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
-            return { success: true, modelName };
+            const writeData = JSON.stringify(config, null, 2);
+            await fs.writeFile(configPath, writeData, 'utf8');
+            logger.info(`[Model Switch Service] Successfully wrote config to ${configPath}`);
+
+            const verifyRaw = await fs.readFile(configPath, 'utf8');
+            const verifyConfig = JSON.parse(verifyRaw);
+            const verifyProvider = verifyConfig['openai-custom'].find(p => p.customName === 'app-controller');
+            if (verifyProvider && verifyProvider.checkModelName === modelName) {
+                logger.info(`[Model Switch Service] Verification: checkModelName=${verifyProvider.checkModelName} - OK`);
+                return { success: true, modelName };
+            } else {
+                logger.error('[Model Switch Service] Verification failed after write');
+                return { success: false, error: 'verification failed' };
+            }
         } catch (error) {
             logger.error('[Model Switch Service] Error updating provider check model:', error.message);
+            logger.error('[Model Switch Service] Stack:', error.stack);
             return { success: false, error: error.message };
         }
     }
@@ -134,9 +155,14 @@ class ModelSwitchService {
 
             if (!response.ok) {
                 logger.error('[Model Switch Service] Model switch returned error:', result);
+                
+                const providerUpdate = await this.updateProviderCheckModel(modelName);
+                logger.info('[Model Switch Service] Config update after failed switch:', JSON.stringify(providerUpdate));
+                
                 return {
                     success: false,
                     error: result.error || result.message || `Switch failed with status ${response.status}`,
+                    providerUpdate,
                     backendStatus: backendClient.getStatus()
                 };
             }
@@ -161,7 +187,11 @@ class ModelSwitchService {
             };
         } catch (error) {
             logger.error('[Model Switch Service] Error switching model:', error.message);
-            return { success: false, error: error.message, backendStatus: backendClient.getStatus() };
+            
+            const providerUpdate = await this.updateProviderCheckModel(modelName);
+            logger.info('[Model Switch Service] Config update after exception:', JSON.stringify(providerUpdate));
+            
+            return { success: false, error: error.message, providerUpdate, backendStatus: backendClient.getStatus() };
         }
     }
 

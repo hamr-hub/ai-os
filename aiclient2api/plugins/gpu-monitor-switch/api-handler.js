@@ -149,7 +149,7 @@ export async function handleGPUMonitorApiRoutes(method, path, req, res, config) 
 }
 
 export async function handleModelSwitchApiRoutes(method, path, req, res, config) {
-    if (path !== '/api/model-switch/models' && path !== '/api/model-switch/status' && path !== '/api/model-switch/switch' && path !== '/api/model-switch/start' && path !== '/api/model-switch/stop') return false;
+    if (path !== '/api/model-switch/models' && path !== '/api/model-switch/status' && path !== '/api/model-switch/switch' && path !== '/api/model-switch/start' && path !== '/api/model-switch/stop' && path !== '/api/model-switch/update-check-model') return false;
     try {
         if (path === '/api/model-switch/models' && method === 'GET') {
             sendJSONResponse(res, 200, await modelSwitchService.getModelsList());
@@ -176,6 +176,12 @@ export async function handleModelSwitchApiRoutes(method, path, req, res, config)
             const body = await parseRequestBody(req);
             if (!body.modelName) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelName' }); return true; }
             sendJSONResponse(res, 200, await modelSwitchService.stopModel(body.modelName));
+            return true;
+        }
+        if (path === '/api/model-switch/update-check-model' && method === 'POST') {
+            const body = await parseRequestBody(req);
+            if (!body.modelName) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelName' }); return true; }
+            sendJSONResponse(res, 200, await modelSwitchService.updateProviderCheckModel(body.modelName));
             return true;
         }
         return false;
