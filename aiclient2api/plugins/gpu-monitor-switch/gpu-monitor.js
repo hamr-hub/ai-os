@@ -45,14 +45,17 @@ class GPUMonitorService {
             if (!response.ok) return;
             const result = await response.json();
 
-            if (result.status === 'unavailable' || !result.current) {
+            if (result.status === 'unavailable') {
                 this.gpuData = [];
                 return;
             }
 
-            const g = result.current || result.primary || result;
-            
-            // 处理Python后端的扁平数据格式
+            const g = result.current || result.primary || (result.all_gpus && result.all_gpus[0]) || result;
+            if (!g || !g.name) {
+                this.gpuData = [];
+                return;
+            }
+
             const gpuUtil = typeof g.utilization === 'number' ? g.utilization : (g.utilization?.percent ?? g.utilization ?? null);
             const memUtil = typeof g.memory_utilization === 'number' ? g.memory_utilization : (g.memory_utilization?.percent ?? null);
             const memUsed = typeof g.used_memory === 'number' ? g.used_memory : (g.memory_used ?? null);
@@ -60,7 +63,7 @@ class GPUMonitorService {
             const memFree = typeof g.available_memory === 'number' ? g.available_memory : (g.memory_free ?? null);
 
             const gpuItem = {
-                index: 0,
+                index: g.index ?? 0,
                 name: g.name || 'Unknown GPU',
                 temperature: g.temperature ?? null,
                 gpuUtilization: gpuUtil,
@@ -74,7 +77,7 @@ class GPUMonitorService {
                 powerPercent: g.power_percent ?? null,
                 fanSpeed: g.fan_speed ?? null,
                 processes: g.processes || result.processes || [],
-                gpuCount: 1,
+                gpuCount: result.gpu_count || 1,
                 timestamp: new Date().toISOString()
             };
 

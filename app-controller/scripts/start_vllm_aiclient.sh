@@ -94,7 +94,7 @@ wait_for_port_release() {
             if command -v fuser >/dev/null 2>&1; then
                 fuser -k "${port}/tcp" || true
             else
-                pkill -f "vllm serve "/mnt/pve_models/Qwen3-235B-A22B-Instruct-2507-AWQ" --port ${port}" || true
+                pkill -f "vllm serve "/mnt/pve_models/Gemma-4-31B-Abliterated" --port ${port}" || true
             fi
             sleep 2
         fi
