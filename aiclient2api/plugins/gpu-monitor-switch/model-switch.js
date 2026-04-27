@@ -1,5 +1,7 @@
 import logger from '../../utils/logger.js';
 import { backendClient, GO_BACKEND_URL, PYTHON_BACKEND_URL } from './backend-client.js';
+import fs from 'fs/promises';
+import pathModule from 'path';
 
 class ModelSwitchService {
     constructor() {
@@ -70,6 +72,32 @@ class ModelSwitchService {
         }
     }
 
+    async updateProviderCheckModel(modelName) {
+        const configPath = pathModule.resolve(process.cwd(), 'configs', 'provider_pools.json');
+        try {
+            const raw = await fs.readFile(configPath, 'utf8');
+            const config = JSON.parse(raw);
+            const providers = Array.isArray(config['openai-custom']) ? config['openai-custom'] : [];
+            let updated = false;
+            providers.forEach((provider) => {
+                if (provider && provider.customName === 'app-controller') {
+                    provider.checkModelName = modelName;
+                    provider.lastHealthCheckModel = modelName;
+                    provider.lastModelSwitchTime = new Date().toISOString();
+                    updated = true;
+                }
+            });
+            if (!updated) {
+                return { success: false, error: 'app-controller provider not found' };
+            }
+            await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+            return { success: true, modelName };
+        } catch (error) {
+            logger.error('[Model Switch Service] Error updating provider check model:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
     async getModelsList() {
         const models = await this.fetchModelsFromBackend();
         const modelArray = Object.entries(models).map(function(entry) {
@@ -97,13 +125,15 @@ class ModelSwitchService {
             );
             const result = await response.json();
             const warmup = await this.warmupModel(modelName);
+            const providerUpdate = await this.updateProviderCheckModel(modelName);
             await this.fetchModelsFromBackend();
             return {
                 success: true,
                 data: {
                     modelName: modelName,
                     result: result,
-                    warmup
+                    warmup,
+                    providerUpdate
                 },
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()

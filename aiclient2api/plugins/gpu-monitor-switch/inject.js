@@ -214,8 +214,11 @@
             await renderModels();
             if (action === 'switch') {
                 var warmup = result.data && result.data.warmup;
-                if (warmup && warmup.success) {
-                    showModelMessage('info', successText + '，预热完成');
+                var providerUpdate = result.data && result.data.providerUpdate;
+                if (warmup && warmup.success && providerUpdate && providerUpdate.success) {
+                    showModelMessage('info', successText + '，预热完成，检测模型已同步');
+                } else if (warmup && warmup.success) {
+                    showModelMessage('info', successText + '，预热完成，但检测模型同步失败');
                 } else if (warmup) {
                     showModelMessage('info', successText + '，但预热未成功');
                 } else {
