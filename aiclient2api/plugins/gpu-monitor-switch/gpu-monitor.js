@@ -50,21 +50,22 @@ class GPUMonitorService {
                 return;
             }
 
-            const gpu = result.current;
+            const g = result.current || result.primary || result;
             const gpuItem = {
                 index: 0,
-                name: gpu.name || 'Unknown GPU',
-                temperature: gpu.temperature ?? null,
-                gpuUtilization: gpu.gpu_utilization ?? gpu.utilization?.percent ?? gpu.utilization ?? null,
-                memoryUsed: gpu.memory_used ?? gpu.used_memory ?? null,
-                memoryTotal: gpu.memory_total ?? gpu.total_memory ?? null,
-                memoryFree: gpu.memory_free ?? gpu.available_memory ?? null,
-                memoryUsagePercent: gpu.memory_usage_percent ?? gpu.memory_utilization?.percent ?? null,
-                memoryUtilization: gpu.memory_utilization?.percent ?? null,
-                powerDraw: gpu.power_draw ?? null,
-                powerLimit: gpu.power_limit ?? null,
-                powerPercent: gpu.power_percent ?? null,
-                fanSpeed: gpu.fan_speed ?? null,
+                name: g.name || 'Unknown GPU',
+                temperature: g.temperature ?? null,
+                gpuUtilization: g.gpu_utilization ?? g.utilization?.percent ?? g.utilization ?? null,
+                memoryUsed: g.memory_used ?? g.used_memory ?? null,
+                memoryTotal: g.memory_total ?? g.total_memory ?? null,
+                memoryFree: g.memory_free ?? g.available_memory ?? null,
+                memoryUsagePercent: g.memory_usage_percent ?? g.memory_utilization?.percent ?? null,
+                memoryUtilization: g.memory_utilization?.percent ?? null,
+                powerDraw: g.power_draw ?? null,
+                powerLimit: g.power_limit ?? null,
+                powerPercent: g.power_percent ?? null,
+                fanSpeed: g.fan_speed ?? null,
+                processes: g.processes || result.processes || [],
                 gpuCount: 1,
                 timestamp: new Date().toISOString()
             };
@@ -88,7 +89,7 @@ class GPUMonitorService {
     async getGPUInfoSync() {
         try {
             await this.updateGPUData();
-            return { success: true, data: this.gpuData, timestamp: new Date().toISOString() };
+            return { success: true, data: this.gpuData, history: this.gpuHistory, timestamp: new Date().toISOString() };
         } catch (error) {
             return { success: false, error: error.message, timestamp: new Date().toISOString() };
         }
@@ -110,7 +111,7 @@ class GPUMonitorService {
         if (isNaN(newInterval) || newInterval < 1000) return { success: false, error: 'Interval must be at least 1000ms' };
         this.refreshInterval = newInterval;
         if (this.isMonitoring) { this.stopMonitoring(); this.startMonitoring(); }
-        logger.info(`[GPU Monitor Service] Updated monitoring interval to ${newInterval}ms`);
+        logger.info(`[GPU Monitor Service] Updated interval to ${newInterval}ms`);
         return { success: true, interval: newInterval };
     }
 
