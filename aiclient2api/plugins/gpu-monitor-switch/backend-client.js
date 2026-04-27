@@ -83,10 +83,12 @@ class BackendClient {
     async fetchWithFallback(path, options = {}) {
         const pythonUrl = `${PYTHON_BACKEND_URL}${path}`;
         const goUrl = `${GO_BACKEND_URL}${path}`;
+        const defaultTimeout = options.method === 'POST' ? 60000 : 10000;
+        const timeoutSignal = options.signal || AbortSignal.timeout(defaultTimeout);
 
         if (this.activeBackend === 'python' && this.pythonAvailable) {
             try {
-                const response = await fetch(pythonUrl, { ...options, signal: options.signal || AbortSignal.timeout(10000) });
+                const response = await fetch(pythonUrl, { ...options, signal: timeoutSignal });
                 if (response.ok) return response;
                 logger.warn('[BackendClient] Python backend returned error, trying Go fallback');
             } catch (error) {
@@ -100,7 +102,7 @@ class BackendClient {
         if (this.goAvailable) {
             this.activeBackend = 'go';
             try {
-                const response = await fetch(goUrl, { ...options, signal: options.signal || AbortSignal.timeout(10000) });
+                const response = await fetch(goUrl, { ...options, signal: timeoutSignal });
                 if (response.ok) return response;
             } catch (error) {
                 logger.warn('[BackendClient] Go backend request failed:', error.message);
