@@ -39,57 +39,6 @@ class GPUMonitorService {
         logger.info('[GPU Monitor Service] Stopped monitoring');
     }
 
-    normalizeNumber(value) {
-        if (value === null || value === undefined || value === '') return null;
-        const num = Number(value);
-        return Number.isFinite(num) ? num : null;
-    }
-
-    normalizePercentage(value) {
-        const num = this.normalizeNumber(value);
-        if (num === null) return null;
-        if (num <= 1) return num * 100;
-        return num;
-    }
-
-    normalizeMemoryValue(value) {
-        const num = this.normalizeNumber(value);
-        if (num === null) return null;
-        if (num > 1024 * 1024 * 16) return num;
-        return num * 1024 * 1024;
-    }
-
-    buildGPUItem(source, index = 0, fallbackProcesses = []) {
-        const totalMemory = this.normalizeMemoryValue(source.memory_total ?? source.total_memory);
-        const usedMemory = this.normalizeMemoryValue(source.memory_used ?? source.used_memory);
-        const freeMemory = this.normalizeMemoryValue(source.memory_free ?? source.available_memory ?? source.free_memory);
-        const memoryUsagePercent = this.normalizePercentage(
-            source.memory_usage_percent
-            ?? source.memory_utilization?.percent
-            ?? source.memory_utilization
-            ?? (usedMemory !== null && totalMemory ? (usedMemory / totalMemory) * 100 : null)
-        );
-
-        return {
-            index,
-            name: source.name || `GPU ${index}`,
-            temperature: this.normalizeNumber(source.temperature),
-            gpuUtilization: this.normalizePercentage(source.gpu_utilization ?? source.utilization?.percent ?? source.utilization),
-            memoryUsed: usedMemory,
-            memoryTotal: totalMemory,
-            memoryFree: freeMemory,
-            memoryUsagePercent,
-            memoryUtilization: memoryUsagePercent,
-            powerDraw: this.normalizeNumber(source.power_draw),
-            powerLimit: this.normalizeNumber(source.power_limit),
-            powerPercent: this.normalizePercentage(source.power_percent),
-            fanSpeed: this.normalizeNumber(source.fan_speed),
-            processes: source.processes || fallbackProcesses || [],
-            gpuCount: this.normalizeNumber(source.gpu_count) ?? 1,
-            timestamp: new Date().toISOString()
-        };
-    }
-
     async updateGPUData() {
         try {
             const response = await backendClient.fetchWithFallback('/manage/gpu/summary');
@@ -101,29 +50,41 @@ class GPUMonitorService {
                 return;
             }
 
-            const current = Array.isArray(result.current) ? result.current : [result.current || result.primary || result];
-            const timestamp = new Date().toISOString();
-            const nextGpuData = current
-                .filter(Boolean)
-                .map((gpu, index) => {
-                    const item = this.buildGPUItem(gpu, index, result.processes || []);
-                    item.timestamp = timestamp;
-                    return item;
-                });
+            const g = result.current || result.primary || result;
+            
+            // 处理Python后端的扁平数据格式
+            const gpuUtil = typeof g.utilization === 'number' ? g.utilization : (g.utilization?.percent ?? g.utilization ?? null);
+            const memUtil = typeof g.memory_utilization === 'number' ? g.memory_utilization : (g.memory_utilization?.percent ?? null);
+            const memUsed = typeof g.used_memory === 'number' ? g.used_memory : (g.memory_used ?? null);
+            const memTotal = typeof g.total_memory === 'number' ? g.total_memory : (g.memory_total ?? null);
+            const memFree = typeof g.available_memory === 'number' ? g.available_memory : (g.memory_free ?? null);
 
-            this.gpuData = nextGpuData;
+            const gpuItem = {
+                index: 0,
+                name: g.name || 'Unknown GPU',
+                temperature: g.temperature ?? null,
+                gpuUtilization: gpuUtil,
+                memoryUsed: memUsed,
+                memoryTotal: memTotal,
+                memoryFree: memFree,
+                memoryUsagePercent: memUtil,
+                memoryUtilization: memUtil,
+                powerDraw: g.power_draw ?? null,
+                powerLimit: g.power_limit ?? null,
+                powerPercent: g.power_percent ?? null,
+                fanSpeed: g.fan_speed ?? null,
+                processes: g.processes || result.processes || [],
+                gpuCount: 1,
+                timestamp: new Date().toISOString()
+            };
 
-            const primaryGpu = nextGpuData[0];
-            if (primaryGpu) {
-                this.gpuHistory.push({
-                    timestamp,
-                    utilization: primaryGpu.gpuUtilization,
-                    memory: primaryGpu.memoryUsagePercent,
-                    memoryUsed: primaryGpu.memoryUsed,
-                    memoryTotal: primaryGpu.memoryTotal,
-                    temperature: primaryGpu.temperature
-                });
-            }
+            this.gpuData = [gpuItem];
+            this.gpuHistory.push({
+                timestamp: gpuItem.timestamp,
+                utilization: gpuItem.gpuUtilization,
+                memory: gpuItem.memoryUsagePercent,
+                temperature: gpuItem.temperature
+            });
 
             if (this.gpuHistory.length > this.maxHistory) {
                 this.gpuHistory.shift();

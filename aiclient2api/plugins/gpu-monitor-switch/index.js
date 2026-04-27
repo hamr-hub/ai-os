@@ -158,11 +158,14 @@ const gpuMonitorSwitchPlugin = {
             return { handled: false };
         }
 
+        let handled = false;
         const originalWriteHead = res.writeHead.bind(res);
         const originalEnd = res.end.bind(res);
         const chunks = [];
+        let headersSent = false;
 
         res.writeHead = function(statusCode, statusMessage, headers) {
+            headersSent = true;
             return originalWriteHead(statusCode, statusMessage, headers);
         };
 
@@ -173,13 +176,13 @@ const gpuMonitorSwitchPlugin = {
             return true;
         };
 
-        res.end = function(chunk) {
+        res.end = function(chunk, ...args) {
             if (chunk) {
                 chunks.push(Buffer.from(chunk));
             }
 
             let body = Buffer.concat(chunks).toString('utf8');
-            const injectScript = `<script src="/plugins/gpu-monitor-switch/inject.js" defer></script>`;
+            const injectScript = '<script src="/plugins/gpu-monitor-switch/inject.js" defer></script>';
             
             if (body.includes('</body>')) {
                 body = body.replace('</body>', injectScript + '</body>');
@@ -187,11 +190,14 @@ const gpuMonitorSwitchPlugin = {
                 body += injectScript;
             }
 
-            res.writeHead(res.statusCode, {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Content-Length': Buffer.byteLength(body),
-            });
-            originalEnd(body);
+            if (!headersSent) {
+                res.writeHead(res.statusCode, {
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Content-Length': Buffer.byteLength(body),
+                });
+            }
+            originalEnd(body, ...args);
+            handled = true;
         };
 
         return { handled: false };
