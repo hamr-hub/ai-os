@@ -17,6 +17,8 @@ Environment="VLLM_PORT=8000"
 
 ExecStart=/root/ai-os/app-controller/scripts/start_vllm_aiclient.sh
 
+KillMode=mixed
+TimeoutStopSec=120
 Restart=always
 RestartSec=10
 

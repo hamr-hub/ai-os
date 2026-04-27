@@ -76,6 +76,32 @@ while [ ! -d "$MODEL_PATH" ]; do
 done
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 模型目录已就绪" | tee -a "$LOG_FILE"
 
+# ===== 8.1 等待旧端口彻底释放 =====
+wait_for_port_release() {
+    local port="$1"
+    local max_wait="${2:-60}"
+    local waited=0
+
+    while ss -lntp 2>/dev/null | grep -q ":${port} "; do
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 端口 ${port} 仍被占用，等待释放..." | tee -a "$LOG_FILE"
+        sleep 1
+        waited=$((waited + 1))
+        if [ "$waited" -ge "$max_wait" ]; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 端口 ${port} 长时间未释放，强制清理占用进程" | tee -a "$LOG_FILE"
+            if command -v fuser >/dev/null 2>&1; then
+                fuser -k "${port}/tcp" || true
+            else
+                pkill -f "vllm serve .* --port ${port}" || true
+            fi
+            sleep 2
+        fi
+    done
+
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 端口 ${port} 已释放" | tee -a "$LOG_FILE"
+}
+
+wait_for_port_release "$VLLM_PORT" 90
+
 # ===== 9. 记录 GPU 状态 =====
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] GPU 状态:" | tee -a "$LOG_FILE"
 nvidia-smi --query-gpu=index,name,memory.total,memory.free --format=csv | tee -a "$LOG_FILE"
