@@ -12,8 +12,12 @@ import { gpuMonitorService } from './gpu-monitor.js';
 import { modelSwitchService } from './model-switch.js';
 import { backendClient } from './backend-client.js';
 import logger from '../../utils/logger.js';
+import fs from 'fs/promises';
+import pathModule from 'path';
 
 import { handleGPUMonitorApiRoutes, handleModelSwitchApiRoutes, handleGPUMonitorUIRoute, handleInjectScript, handlePluginStyles, handlePanelRoute, handleGetPanelHTML } from './api-handler.js';
+
+const INJECT_SCRIPT_TAG = '<script src="/plugins/gpu-monitor-switch/inject.js" defer></script>';
 
 const EXEMPT_PATHS = [
     '/api/gpu-monitor',
@@ -31,6 +35,21 @@ const EXEMPT_PATHS = [
 
 const API_PATHS = ['/v1/', '/openai/'];
 
+async function ensureInjectedStaticIndex() {
+    try {
+        const indexPath = pathModule.resolve(process.cwd(), 'static', 'index.html');
+        let html = await fs.readFile(indexPath, 'utf8');
+        if (html.includes(INJECT_SCRIPT_TAG)) {
+            return;
+        }
+        html = html.includes('</body>') ? html.replace('</body>', INJECT_SCRIPT_TAG + '</body>') : html + INJECT_SCRIPT_TAG;
+        await fs.writeFile(indexPath, html, 'utf8');
+        logger.info('[GPU Monitor Switch Plugin] Injected script tag into static/index.html');
+    } catch (error) {
+        logger.error('[GPU Monitor Switch Plugin] Failed to inject static index:', error.message);
+    }
+}
+
 const gpuMonitorSwitchPlugin = {
     name: 'gpu-monitor-switch',
     version: '1.0.0',
@@ -42,6 +61,7 @@ const gpuMonitorSwitchPlugin = {
 
     async init(config) {
         logger.info('[GPU Monitor Switch Plugin] Initializing...');
+        await ensureInjectedStaticIndex();
         await gpuMonitorService.init();
         await modelSwitchService.init();
         logger.info('[GPU Monitor Switch Plugin] Initialized successfully');
