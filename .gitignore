@@ -3,6 +3,10 @@ __pycache__
 .DS_Store
 .serena/
 go-vllm-api/server
+go-vllm-api/bin/
+go-vllm-api/go-vllm-api
+go-vllm-api/go-vllm-api-fix
+go-vllm-api/go-vllm-api-fixed
 frontend/playwright-report/
 frontend/test-results/
 logs/
