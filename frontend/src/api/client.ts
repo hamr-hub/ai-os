@@ -27,6 +27,7 @@ import type {
   VLLMDefaultConfig,
   VLLMConfig,
   VLLMConfigUpdateRequest,
+  SwitchStatusResponse,
 } from '@/types'
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
@@ -201,6 +202,19 @@ export async function stopModel(name: string): Promise<ActionResponse> {
 export async function switchModel(name: string, testEnabled = true): Promise<ActionResponse> {
   const { data } = await client.post<ActionResponse>(`/models/${name}/switch`, null, {
     params: { test_enabled: testEnabled },
+  })
+  return data
+}
+
+export async function atomicSwitchModel(
+  name: string,
+  setAsDefault = false
+): Promise<ActionResponse & { session_id?: string; target_model?: string; previous_model?: string | null }> {
+  const { data } = await client.post<
+    ActionResponse & { session_id?: string; target_model?: string; previous_model?: string | null }
+  >('/switch/atomic', {
+    model_name: name,
+    set_as_default: setAsDefault,
   })
   return data
 }
@@ -471,3 +485,16 @@ export async function agentChatStream(
 
 export { DONE_SENTINEL }
 export type { ChatMessage, ChatCompletionRequest, ChatCompletionResponse, AgentToolCall, AgentMessage, AgentRequest, ToolResult }
+
+export async function getSwitchStatus(): Promise<SwitchStatusResponse> {
+  const { data } = await client.get<SwitchStatusResponse>(
+    '/switch/status',
+    silentRequestConfig()
+  )
+  return data
+}
+
+export async function cancelSwitch(): Promise<{ status: string }> {
+  const { data } = await client.delete<{ status: string }>('/switch/cancel')
+  return data
+}

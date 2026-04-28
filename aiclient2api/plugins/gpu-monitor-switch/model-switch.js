@@ -279,12 +279,68 @@ class ModelSwitchService {
         }
     }
 
+    async getSwitchStatus() {
+        try {
+            const response = await backendClient.fetchWithFallback('/manage/switch/status');
+            return await response.json();
+        } catch (error) {
+            logger.error('[Model Switch Service] Error fetching switch status:', error.message);
+            return {
+                is_switching: false,
+                session: null,
+                error: error.message,
+                timestamp: new Date().toISOString()
+            };
+        }
+    }
+
+    async cancelSwitch() {
+        try {
+            const response = await backendClient.fetchWithFallback('/manage/switch/cancel', {
+                method: 'DELETE'
+            });
+            return await response.json();
+        } catch (error) {
+            logger.error('[Model Switch Service] Error cancelling switch:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async finalizeAtomicSwitch(session) {
+        if (!session || !session.completed_successfully || session.overall_phase !== 'completed') {
+            return {
+                success: false,
+                error: session?.rollback_reason || session?.error || 'switch not completed'
+            };
+        }
+
+        const modelName = session.target_model;
+        const warmup = await this.warmupModel(modelName);
+        const providerUpdate = await this.updateProviderCheckModel(modelName);
+        await this.fetchModelsFromBackend();
+
+        return {
+            success: Boolean(warmup?.success && providerUpdate?.success),
+            data: {
+                modelName,
+                warmup,
+                providerUpdate,
+                session,
+            },
+            timestamp: new Date().toISOString(),
+            backendStatus: backendClient.getStatus()
+        };
+    }
+
     async switchModel(modelName) {
         try {
-            logger.info(`[Model Switch Service] Starting model switch to: ${modelName}`);
+            logger.info(`[Model Switch Service] Starting atomic model switch to: ${modelName}`);
             const response = await backendClient.postWithFallback(
-                `/manage/models/${encodeURIComponent(modelName)}/switch`,
-                {}
+                '/manage/switch/atomic',
+                {
+                    model_name: modelName,
+                    set_as_default: true,
+                }
             );
             let result;
             try {
@@ -298,25 +354,21 @@ class ModelSwitchService {
                 logger.error('[Model Switch Service] Model switch returned error:', result);
                 return {
                     success: false,
-                    error: result.error || result.message || `Switch failed with status ${response.status}`,
+                    error: result.error || result.message || result.detail?.error || `Switch failed with status ${response.status}`,
                     backendStatus: backendClient.getStatus()
                 };
             }
-
-            logger.info(`[Model Switch Service] Model switch completed for: ${modelName}, warming up...`);
-            const warmup = await this.warmupModel(modelName);
-
-            const providerUpdate = await this.updateProviderCheckModel(modelName);
 
             await this.fetchModelsFromBackend();
 
             return {
                 success: true,
                 data: {
-                    modelName: modelName,
-                    result: result,
-                    warmup,
-                    providerUpdate
+                    modelName,
+                    sessionId: result.session_id,
+                    targetModel: result.target_model,
+                    previousModel: result.previous_model,
+                    status: result.status,
                 },
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()

@@ -24,9 +24,7 @@ export function useModels() {
   const switchingModel = ref<string | null>(null)
   const isRefreshing = ref(false)
   let refreshInterval: number | null = null
-  let switchPollingInterval: number | null = null
   let fetchController: AbortController | null = null
-  let switchPollingController: AbortController | null = null
 
   const fetchModelStatus = async (manualRefresh = false) => {
     if (fetchController) {
@@ -151,8 +149,7 @@ export function useModels() {
     error.value = null
     try {
       await startModel(modelName)
-      switchingModel.value = modelName
-      startSwitchPolling(modelName)
+      await fetchModelStatus(true)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : `Failed to start model ${modelName}`
       const axiosErr = err as { response?: { data?: { error?: string; message?: string } } }
@@ -190,16 +187,25 @@ export function useModels() {
     switchingModel.value = modelName
     error.value = null
     try {
-      await switchModel(modelName, false)
+      await switchModel(modelName, true)
       if (setAsDefault) {
         await setDefaultModel(modelName)
         defaultModel.value = modelName
       }
-      startSwitchPolling(modelName)
+      await fetchModelStatus(true)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : `Failed to switch to model ${modelName}`
-      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } }
-      const apiError = axiosErr.response?.data?.error || axiosErr.response?.data?.message
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string; message?: string; detail?: string | { error?: string } } } }
+
+      if (axiosErr.response?.status === 409) {
+        appStore.warning('模型切换正在进行中，请等待完成')
+        return
+      }
+
+      const detail = axiosErr.response?.data?.detail
+      const apiError = typeof detail === 'object'
+        ? detail.error || ''
+        : (typeof detail === 'string' ? detail : '') || axiosErr.response?.data?.error || axiosErr.response?.data?.message
       const fullError = apiError || errMsg
       error.value = fullError
       console.error('Failed to switch model:', err)
@@ -215,43 +221,6 @@ export function useModels() {
       actionLoading.value = null
       switchingModel.value = null
     }
-  }
-
-  const startSwitchPolling = (modelName: string) => {
-    if (switchPollingInterval) clearInterval(switchPollingInterval)
-    if (switchPollingController) {
-      switchPollingController.abort()
-      switchPollingController = null
-    }
-    switchPollingInterval = window.setInterval(async () => {
-      if (switchPollingController) return
-
-      const controller = new AbortController()
-      switchPollingController = controller
-      try {
-        const status = await getModelsStatus({ signal: controller.signal })
-        modelStatus.value = status
-        const modelEntry = status[modelName]
-        if (modelEntry?.running) {
-          actionLoading.value = null
-          switchingModel.value = null
-          if (switchPollingInterval) {
-            clearInterval(switchPollingInterval)
-            switchPollingInterval = null
-          }
-          const defaultModelResult = await getDefaultModel({ signal: controller.signal })
-          defaultModel.value = defaultModelResult.default_model
-        }
-      } catch (err) {
-        if (!isAbortError(err)) {
-          console.error('[useModels] Switch polling error:', err)
-        }
-      } finally {
-        if (switchPollingController === controller) {
-          switchPollingController = null
-        }
-      }
-    }, 5000)
   }
 
   const handleSwitchAndSetDefault = async (modelName: string) => {
@@ -308,14 +277,6 @@ export function useModels() {
 
   onUnmounted(() => {
     stopAutoRefresh()
-    if (switchPollingInterval) {
-      clearInterval(switchPollingInterval)
-      switchPollingInterval = null
-    }
-    if (switchPollingController) {
-      switchPollingController.abort()
-      switchPollingController = null
-    }
   })
 
   return {

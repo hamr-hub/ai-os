@@ -81,6 +81,14 @@ prometheus = PrometheusExporter()                       # Prometheus 指标导�
 model_tester = ModelTestingFramework(scheduler, gpu_monitor)  # 模型测试框架
 cache_updater = CacheUpdater(gpu_monitor, scheduler)    # 缓存更新器（定时刷新缓存）
 
+from core.model_switch_orchestrator import ModelSwitchOrchestrator
+model_switch_orchestrator = ModelSwitchOrchestrator(
+    ws_manager=ws_manager,
+    vllm_service_name=VLLM_SERVICE_NAME,
+    vllm_port=VLLM_DEFAULT_PORT,
+    model_base_path=MODEL_BASE_PATH,
+)
+
 # HTTP 客户端超时配置（用于代理请求到 vLLM）
 VLLM_REQUEST_TIMEOUT = httpx.Timeout(60.0, connect=10.0)          # 普通请求：60 秒总超时，10 秒连接超时
 VLLM_STREAM_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=60.0, pool=60.0)  # 流式请求：120 秒读取超时

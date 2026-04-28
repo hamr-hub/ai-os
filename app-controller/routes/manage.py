@@ -4,6 +4,9 @@ from datetime import datetime
 import asyncio
 import copy
 
+from core.llama_cpp_manager import llama_cpp_manager, scan_gguf_models
+from core.vllm_manager import save_model_vllm_params, get_model_vllm_params
+from middleware.error_handler import ModelNotFoundException
 from schemas.service import ServiceControlRequest
 from schemas.vllm_config import VLLMConfigResponse, VLLMConfigUpdateRequest
 from core.deps import (
@@ -26,12 +29,115 @@ structured_logger = _structured_logger
 config_watcher = _config_watcher
 logger = _logger
 redis_client = _redis_client
-from core.vllm_manager import wait_for_vllm_model_ready_and_test, get_aggregated_models, save_model_vllm_params, get_model_vllm_params
-from core.llama_cpp_manager import llama_cpp_manager, test_llama_cpp_model
-from middleware.error_handler import ModelNotFoundException
 
 manage_router = APIRouter(prefix="/manage")
 integration_router = APIRouter(prefix="/api/v1")
+
+
+class AtomicSwitchRequest:
+    def __init__(self, model_name: str, model_path: Optional[str] = None, set_as_default: bool = False):
+        self.model_name = model_name
+        self.model_path = model_path
+        self.set_as_default = set_as_default
+
+
+@manage_router.get("/switch/status")
+async def get_switch_status():
+    from core.deps import model_switch_orchestrator
+    is_switching = model_switch_orchestrator.is_switching
+    session = model_switch_orchestrator.current_session
+    return {
+        "is_switching": is_switching,
+        "session": session.to_dict() if session else None,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@manage_router.post("/switch/atomic")
+async def atomic_switch_model(request: Request):
+    from core.deps import model_switch_orchestrator
+    from core.vllm_manager import get_current_model_info, MODEL_BASE_PATH
+    import os
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request body")
+
+    model_name = body.get("model_name")
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model_name is required")
+
+    set_as_default = body.get("set_as_default", False)
+    model_path = body.get("model_path")
+
+    if not scheduler.is_model_available(model_name):
+        raise ModelNotFoundException(model_name)
+
+    if model_switch_orchestrator.is_switching:
+        current = model_switch_orchestrator.current_session
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "模型切换正在进行中",
+                "session_id": current.session_id if current else None,
+                "target_model": current.target_model if current else None,
+            }
+        )
+
+    target_path = model_path
+    if not target_path:
+        config = scheduler.get_model_config(model_name)
+        target_path = (config or {}).get("model_path") or os.path.join(MODEL_BASE_PATH, model_name)
+
+    if not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail=f"模型路径不存在: {target_path}")
+
+    current_info = get_current_model_info()
+    previous_model = current_info.get("name") if current_info else None
+    previous_path = current_info.get("path") if current_info else None
+
+    task = asyncio.create_task(
+        model_switch_orchestrator.switch(
+            target_model=model_name,
+            target_model_path=target_path,
+            previous_model=previous_model,
+            previous_model_path=previous_path,
+        )
+    )
+
+    async def _on_switch_done(t: asyncio.Task):
+        try:
+            session = t.result()
+            if session.completed_successfully:
+                scheduler.mark_model_selected(model_name)
+                if set_as_default:
+                    scheduler.set_default_model(model_name)
+                _clear_model_caches()
+        except Exception as e:
+            logger.error("Switch task callback error: %s", e)
+
+    task.add_done_callback(lambda t: asyncio.create_task(_on_switch_done(t)))
+
+    await asyncio.sleep(0.1)
+    current_session = model_switch_orchestrator.current_session
+
+    return {
+        "status": "switching",
+        "session_id": current_session.session_id if current_session else None,
+        "target_model": model_name,
+        "previous_model": previous_model,
+        "message": "模型切换已启动，请通过 WebSocket 或轮询 /manage/switch/status 追踪进度",
+    }
+
+
+@manage_router.delete("/switch/cancel")
+async def cancel_switch():
+    from core.deps import model_switch_orchestrator
+    if not model_switch_orchestrator.is_switching:
+        return {"status": "no_switch_in_progress"}
+    model_switch_orchestrator.request_cancel()
+    return {"status": "cancel_requested"}
 
 
 def _clear_model_caches():
@@ -239,53 +345,68 @@ async def stop_model(model_name: str):
 
 
 @manage_router.post("/models/{model_name}/switch")
-async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True):
+async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True, set_as_default: Optional[bool] = False):
     if not scheduler.is_model_available(model_name):
         raise ModelNotFoundException(model_name)
 
-    scheduler._switching_in_progress = True
-    try:
-        success = await scheduler.switch_model(model_name)
-        if not success:
-            raise HTTPException(status_code=503, detail=f"Failed to switch to model {model_name}, insufficient memory")
+    from core.deps import model_switch_orchestrator
+    from core.vllm_manager import get_current_model_info, MODEL_BASE_PATH
+    import os
 
-        scheduler.mark_model_selected(model_name)
-        _clear_model_caches()
-
-        if test_enabled:
-            backend_type = scheduler.get_model_backend_type(model_name)
-
-            if backend_type == 'llama_cpp':
-                port = scheduler.get_model_port(model_name)
-                test_result = await test_llama_cpp_model(model_name, port)
-
-                if not test_result.get("success", False):
-                    error_msg = test_result.get("message", "Unknown error during model test")
-                    raise HTTPException(status_code=503, detail=f"Model switch successful but self-test failed: {error_msg}")
-
-                return {
-                    "status": "switched_and_tested",
-                    "model": model_name,
-                    "backend_type": "llama_cpp",
-                    "test_result": test_result
-                }
-
-            test_result = await wait_for_vllm_model_ready_and_test(model_name, test_enabled=True)
-
-            if not test_result.get("success", False):
-                error_msg = test_result.get("error", "Unknown error during model test")
-                raise HTTPException(status_code=503, detail=f"Model switch successful but self-test failed: {error_msg}")
-
-            return {
-                "status": "switched_and_tested",
-                "model": model_name,
-                "backend_type": "vllm",
-                "test_result": test_result.get("test_result")
+    if model_switch_orchestrator.is_switching:
+        current = model_switch_orchestrator.current_session
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "模型切换正在进行中",
+                "session_id": current.session_id if current else None,
+                "target_model": current.target_model if current else None,
             }
+        )
 
-        return {"status": "switched", "model": model_name}
-    finally:
-        scheduler._switching_in_progress = False
+    config = scheduler.get_model_config(model_name)
+    target_path = (config or {}).get("model_path") or os.path.join(MODEL_BASE_PATH, model_name)
+
+    if not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail=f"模型路径不存在: {target_path}")
+
+    current_info = get_current_model_info()
+    previous_model = current_info.get("name") if current_info else None
+    previous_path = current_info.get("path") if current_info else None
+
+    task = asyncio.create_task(
+        model_switch_orchestrator.switch(
+            target_model=model_name,
+            target_model_path=target_path,
+            previous_model=previous_model,
+            previous_model_path=previous_path,
+        )
+    )
+
+    async def _on_switch_done(t: asyncio.Task):
+        try:
+            session = t.result()
+            if session.completed_successfully:
+                scheduler.mark_model_selected(model_name)
+                if set_as_default:
+                    scheduler.set_default_model(model_name)
+                _clear_model_caches()
+        except Exception as e:
+            logger.error("Switch task callback error: %s", e)
+
+    task.add_done_callback(lambda t: asyncio.create_task(_on_switch_done(t)))
+
+    await asyncio.sleep(0.1)
+    current_session = model_switch_orchestrator.current_session
+
+    return {
+        "status": "switching",
+        "session_id": current_session.session_id if current_session else None,
+        "target_model": model_name,
+        "previous_model": previous_model,
+        "backend_type": "vllm",
+        "message": "模型切换已启动，请通过 WebSocket 或轮询 /manage/switch/status 追踪进度",
+    }
 
 
 @manage_router.get("/default-model")

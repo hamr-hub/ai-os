@@ -508,3 +508,57 @@ export interface VLLMConfigUpdateRequest {
   max_num_batched_tokens?: number
   tensor_parallel_size?: number
 }
+
+export type SwitchPhaseStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
+export type SwitchOverallPhase =
+  | 'idle' | 'phase1' | 'phase2' | 'phase3' | 'phase4'
+  | 'rolling_back' | 'rolled_back' | 'completed' | 'failed'
+export type SwitchLogLevel = 'info' | 'warning' | 'error' | 'success'
+
+export interface SwitchPhaseDetail {
+  phase: number
+  name: string
+  status: SwitchPhaseStatus
+  progress: number
+  started_at: string | null
+  finished_at: string | null
+  logs: string[]
+  error: string | null
+}
+
+export interface SwitchSession {
+  session_id: string
+  target_model: string
+  previous_model: string | null
+  started_at: string
+  finished_at: string | null
+  overall_phase: SwitchOverallPhase
+  overall_progress: number
+  phases: SwitchPhaseDetail[]
+  error: string | null
+  rollback_reason: string | null
+  completed_successfully: boolean
+}
+
+export interface SwitchProgressMessage {
+  type: 'switch_progress' | 'switch_failed' | 'rollback_started' | 'rollback_completed' | 'switch_state_sync'
+  timestamp: string
+  session_id: string
+  overall_phase: SwitchOverallPhase
+  overall_progress: number
+  current_phase: number
+  phase_progress: number
+  log: string
+  level: SwitchLogLevel
+  target_model: string
+  previous_model: string | null
+  final: boolean
+  session: SwitchSession | null
+  is_switching?: boolean
+}
+
+export interface SwitchStatusResponse {
+  is_switching: boolean
+  session: SwitchSession | null
+  timestamp: string
+}

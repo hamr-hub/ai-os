@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, type Component } from 'vue'
 import { useModels } from '@/composables/useModels'
+import { useModelSwitch } from '@/composables/useModelSwitch'
 import {
   runModelTest,
   getTestResults,
@@ -57,9 +58,28 @@ const {
   refresh,
   handleStartModel,
   handleStopModel,
-  handleSwitchAndSetDefault,
   handleSetDefaultModel,
 } = useModels()
+
+const {
+  isSwitching: isAtomicSwitching,
+  currentSession: switchSession,
+  latestLog: switchLog,
+  latestLogLevel: switchLogLevel,
+  overallProgress: switchProgress,
+  phases: switchPhases,
+  isRollingBack: switchRollingBack,
+  isCompleted: switchCompleted,
+  isFailed: switchFailed,
+  wsConnected,
+  triggerSwitch: triggerAtomicSwitch,
+  triggerCancel: triggerSwitchCancel,
+  initSwitchMonitor,
+} = useModelSwitch()
+
+onMounted(() => {
+  initSwitchMonitor()
+})
 
 const runningModels = computed(() => modelList.value.filter((m) => m.running))
 const stoppedModels = computed(() => modelList.value.filter((m) => !m.running))
@@ -106,6 +126,10 @@ function toggleGroup(baseName: string) {
   } else {
     expandedGroups.value.add(baseName)
   }
+}
+
+function handleAtomicSwitch(modelName: string) {
+  triggerAtomicSwitch(modelName, true)
 }
 
 function openVLLMConfig(model: ModelVariant) {
@@ -555,7 +579,55 @@ watch(
       </div>
     </header>
 
-    <div v-if="switchingModel" class="switch-banner">
+    <div v-if="isAtomicSwitching || switchSession" class="switch-progress-panel">
+      <div class="switch-header">
+        <Loader2 v-if="isAtomicSwitching && !switchRollingBack" class="w-5 h-5 animate-spin" />
+        <AlertTriangle v-else-if="switchRollingBack" class="w-5 h-5 text-orange-500" />
+        <CheckCircle v-else-if="switchCompleted" class="w-5 h-5 text-green-500" />
+        <XCircle v-else-if="switchFailed" class="w-5 h-5 text-red-500" />
+        <span class="switch-title">
+          <template v-if="switchRollingBack">回滚中 - {{ switchSession?.previous_model || '未知' }}</template>
+          <template v-else-if="switchCompleted">切换完成 - {{ switchSession?.target_model }}</template>
+          <template v-else-if="switchFailed">切换失败</template>
+          <template v-else>正在切换到 {{ switchSession?.target_model || switchingModel }}</template>
+        </span>
+        <span class="switch-progress-text">{{ switchProgress }}%</span>
+        <button v-if="isAtomicSwitching && !switchRollingBack && !switchCompleted" class="cancel-btn" @click="triggerSwitchCancel">
+          取消
+        </button>
+      </div>
+
+      <div class="switch-phase-steps">
+        <div v-for="p in switchPhases" :key="p.phase" class="phase-step" :class="`phase-${p.status}`">
+          <div class="phase-indicator">
+            <CheckCircle v-if="p.status === 'success'" class="w-4 h-4" />
+            <XCircle v-if="p.status === 'failed'" class="w-4 h-4" />
+            <Loader2 v-if="p.status === 'running'" class="w-4 h-4 animate-spin" />
+            <span v-if="p.status === 'skipped'" class="skip-icon">-</span>
+            <span v-if="p.status === 'pending'" class="pending-dot"></span>
+          </div>
+          <div class="phase-content">
+            <div class="phase-name">{{ p.name }}</div>
+            <div v-if="p.status === 'running'" class="phase-progress-bar">
+              <div class="phase-progress-fill" :style="{ width: p.progress + '%' }"></div>
+            </div>
+            <div v-if="p.error" class="phase-error">{{ p.error }}</div>
+            <div v-if="p.logs.length > 0" class="phase-logs">
+              <div v-for="log in p.logs.slice(-3)" :key="log" class="phase-log-line">{{ log }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="switchLog" class="switch-latest-log" :class="`log-${switchLogLevel}`">
+        {{ switchLog }}
+      </div>
+      <div class="switch-monitor-mode">
+        监控方式：{{ wsConnected ? 'WebSocket' : '轮询兜底' }}
+      </div>
+    </div>
+
+    <div v-if="!isAtomicSwitching && switchingModel" class="switch-banner">
       <Loader2 class="w-5 h-5 animate-spin" />
       <span class="switch-text">正在切换到 {{ switchingModel }}，请耐心等待...</span>
       <span class="switch-hint">vLLM 加载模型通常需要 30-120 秒</span>
@@ -633,15 +705,15 @@ watch(
                     <button
                       v-if="!variant.running"
                       class="action-btn primary small"
-                      :disabled="!!actionLoading || !!switchingModel"
-                      @click.stop="handleSwitchAndSetDefault(variant.name)"
+                      :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
+                      @click.stop="handleAtomicSwitch(variant.name)"
                     >
                       <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
                     </button>
                     <button
                       v-if="variant.running"
                       class="action-btn danger small"
-                      :disabled="!!actionLoading || !!switchingModel"
+                      :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
                       @click.stop="handleStopModel(variant.name)"
                     >
                       <Square class="w-3.5 h-3.5" />
@@ -696,7 +768,7 @@ watch(
                 <div class="card-actions">
                   <button
                     class="action-btn"
-                    :disabled="!!actionLoading || !!switchingModel"
+                    :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
                     title="设为默认"
                     @click="handleSetDefaultModel(model.name)"
                   >
@@ -704,7 +776,7 @@ watch(
                   </button>
                   <button
                     class="action-btn danger"
-                    :disabled="!!actionLoading || !!switchingModel"
+                    :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
                     title="停止"
                     @click="handleStopModel(model.name)"
                   >
@@ -746,14 +818,14 @@ watch(
               <div class="item-actions">
                 <button
                   class="action-btn primary"
-                  :disabled="!!actionLoading || !!switchingModel"
+                  :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
                   @click="handleSwitchAndSetDefault(model.name)"
                 >
                   <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
                 </button>
                 <button
                   class="action-btn"
-                  :disabled="!!actionLoading || !!switchingModel"
+                  :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
                   @click="handleStartModel(model.name)"
                 >
                   <Play class="w-3.5 h-3.5" /> 启动
@@ -1190,6 +1262,171 @@ watch(
 </template>
 
 <style scoped>
+.switch-progress-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 8px 16px;
+}
+
+.switch-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.switch-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.switch-progress-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  margin-left: auto;
+}
+
+.cancel-btn {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-primary);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-left: 8px;
+}
+
+.switch-phase-steps {
+  display: flex;
+  gap: 8px;
+}
+
+.phase-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  font-size: 12px;
+}
+
+.phase-step.phase-running {
+  border: 1px solid var(--accent-primary);
+  background: rgba(var(--accent-primary-rgb), 0.05);
+}
+
+.phase-step.phase-success {
+  border: 1px solid #22c55e;
+}
+
+.phase-step.phase-failed {
+  border: 1px solid #ef4444;
+}
+
+.phase-step.phase-skipped {
+  opacity: 0.5;
+}
+
+.phase-indicator {
+  flex-shrink: 0;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pending-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-primary);
+}
+
+.skip-icon {
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.phase-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.phase-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.phase-progress-bar {
+  height: 4px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.phase-progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.phase-error {
+  color: #ef4444;
+  font-size: 11px;
+}
+
+.phase-logs {
+  max-height: 48px;
+  overflow-y: auto;
+}
+
+.phase-log-line {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.switch-latest-log {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--bg-secondary);
+}
+
+.switch-latest-log.log-warning { color: #f97316; }
+.switch-latest-log.log-error { color: #ef4444; }
+.switch-latest-log.log-success { color: #22c55e; }
+
+.switch-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.switch-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.switch-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .model-mgmt {
   height: 100vh;
   overflow: hidden;

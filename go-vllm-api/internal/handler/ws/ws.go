@@ -25,6 +25,24 @@ func NewWSHandler(manager *service.WSManager, logger *zap.Logger) *WSHandler {
 
 func (h *WSHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/ws/monitor", h.Monitor)
+	rg.GET("/ws/model-switch", h.ModelSwitch)
+}
+
+func (h *WSHandler) ModelSwitch(c *gin.Context) {
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		h.logger.Error("ws upgrade", zap.Error(err))
+		return
+	}
+	h.manager.Connect(conn, "model_switch")
+	defer h.manager.Disconnect(conn, "model_switch")
+
+	for {
+		_, _, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+	}
 }
 
 func (h *WSHandler) Monitor(c *gin.Context) {

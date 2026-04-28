@@ -1,6 +1,7 @@
 package manage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -70,6 +71,44 @@ func (h *ManageHandler) waitForModelReady(ctx context.Context, modelName string)
 	return nil
 }
 
+func (h *ManageHandler) proxyPythonManage(c *gin.Context, method string, path string, body interface{}) {
+	baseURL := "http://localhost:35000"
+	var reqBody *bytes.Reader
+	if body != nil {
+		payload, err := json.Marshal(body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		reqBody = bytes.NewReader(payload)
+	} else {
+		reqBody = bytes.NewReader(nil)
+	}
+
+	req, err := http.NewRequestWithContext(c.Request.Context(), method, baseURL+path, reqBody)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	var data interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(resp.StatusCode, data)
+}
+
 func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	m := rg.Group("/manage")
 	{
@@ -82,6 +121,9 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.POST("/models/:model_name/start", h.StartModel)
 		m.POST("/models/:model_name/stop", h.StopModel)
 		m.POST("/models/:model_name/switch", h.SwitchModel)
+		m.POST("/switch/atomic", h.AtomicSwitchModel)
+		m.GET("/switch/status", h.GetAtomicSwitchStatus)
+		m.DELETE("/switch/cancel", h.CancelAtomicSwitch)
 		m.GET("/default-model", h.GetDefaultModel)
 		m.POST("/default-model/:model_name", h.SetDefaultModel)
 		m.DELETE("/default-model", h.ClearDefaultModel)
@@ -363,29 +405,28 @@ func (h *ManageHandler) SwitchModel(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
 		return
 	}
+	body := gin.H{
+		"model_name":     modelName,
+		"set_as_default": true,
+	}
+	h.proxyPythonManage(c, http.MethodPost, "/manage/switch/atomic", body)
+}
 
-	h.scheduler.SetSwitchingInProgress(true)
-	defer h.scheduler.SetSwitchingInProgress(false)
-
-	mc := h.scheduler.GetModelConfig(modelName)
-	if mc != nil && mc.Service == "vllm" {
-		err := h.vllmManager.SwitchModelWithTest(c.Request.Context(), mc.ModelPath, modelName, mc.Port)
-		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Failed to switch model %s: %v", modelName, err)})
-			return
-		}
-		h.scheduler.MarkModelSelected(modelName)
-		c.JSON(http.StatusOK, gin.H{"status": "switched", "model": modelName})
+func (h *ManageHandler) AtomicSwitchModel(c *gin.Context) {
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	h.proxyPythonManage(c, http.MethodPost, "/manage/switch/atomic", body)
+}
 
-	ok := h.scheduler.SwitchModel(c.Request.Context(), modelName)
-	if !ok {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Failed to switch to model %s, insufficient memory", modelName)})
-		return
-	}
-	h.scheduler.MarkModelSelected(modelName)
-	c.JSON(http.StatusOK, gin.H{"status": "switched", "model": modelName})
+func (h *ManageHandler) GetAtomicSwitchStatus(c *gin.Context) {
+	h.proxyPythonManage(c, http.MethodGet, "/manage/switch/status", nil)
+}
+
+func (h *ManageHandler) CancelAtomicSwitch(c *gin.Context) {
+	h.proxyPythonManage(c, http.MethodDelete, "/manage/switch/cancel", nil)
 }
 
 func (h *ManageHandler) GetDefaultModel(c *gin.Context) {

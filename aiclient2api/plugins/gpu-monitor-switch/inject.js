@@ -12,6 +12,9 @@
     var switchPollingInterval = null;
     var switchPollingController = null;
     var switchStatusInterval = null;
+    var switchWs = null;
+    var switchSession = null;
+    var switchFinalizedSessionId = null;
     var SWITCH_POLL_TIMEOUT = 180000;
 
     var sectionHTML = `
@@ -259,6 +262,100 @@
         }
     }
 
+    async function finalizeSwitchSession(session) {
+        if (!session || !session.session_id || switchFinalizedSessionId === session.session_id) {
+            return;
+        }
+        switchFinalizedSessionId = session.session_id;
+        try {
+            var r = await fetch('/api/model-switch/finalize-switch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session: session })
+            });
+            var result = await r.json();
+            if (!result.success) {
+                showModelMessage('error', '切换完成后的预热失败: ' + (result.error || '未知错误'));
+                return;
+            }
+            showModelMessage('info', '切换成功: ' + session.target_model + '，预热与健康检查模型已更新');
+        } catch (e) {
+            showModelMessage('error', '切换完成后的预热失败: ' + e.message);
+        }
+    }
+
+    function renderSwitchSessionState(session) {
+        switchSession = session || null;
+        if (!session) {
+            return;
+        }
+
+        showSwitchingOverlay(session.target_model);
+        var runningPhase = session.phases && session.phases.find(function(phase) { return phase.status === 'running'; });
+        if (runningPhase) {
+            updateSwitchingStep(runningPhase.phase);
+        }
+
+        var status = document.getElementById('switch-elapsed');
+        if (status) {
+            var latestPhase = runningPhase || (session.phases && session.phases.find(function(phase) { return phase.status === 'failed'; })) || session.phases[session.phases.length - 1];
+            var latestLog = latestPhase && latestPhase.logs && latestPhase.logs.length > 0
+                ? latestPhase.logs[latestPhase.logs.length - 1]
+                : '模型切换进行中';
+            status.textContent = latestLog;
+        }
+
+        if (session.completed_successfully || session.overall_phase === 'completed') {
+            stopSwitchPolling();
+            hideSwitchingOverlay();
+            activeModelAction = null;
+            setActionButtonsDisabled(false);
+            finalizeSwitchSession(session);
+            renderModels();
+            loadGPUData();
+            updateCharts();
+            return;
+        }
+
+        if (session.overall_phase === 'rolled_back' || session.overall_phase === 'failed') {
+            stopSwitchPolling();
+            hideSwitchingOverlay();
+            activeModelAction = null;
+            setActionButtonsDisabled(false);
+            showModelMessage('error', '切换失败: ' + (session.rollback_reason || session.error || '未知错误'));
+        }
+    }
+
+    function ensureSwitchWebSocket() {
+        if (switchWs && (switchWs.readyState === WebSocket.OPEN || switchWs.readyState === WebSocket.CONNECTING)) {
+            return;
+        }
+        try {
+            var wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            switchWs = new WebSocket(wsProtocol + '//' + window.location.host + '/ws/model-switch');
+            switchWs.onmessage = function(event) {
+                try {
+                    var payload = JSON.parse(event.data);
+                    if (payload.session) {
+                        renderSwitchSessionState(payload.session);
+                    }
+                } catch (e) {
+                    console.error('[SwitchWS] Parse error:', e);
+                }
+            };
+            switchWs.onclose = function() {
+                switchWs = null;
+            };
+            switchWs.onerror = function() {
+                if (switchWs) {
+                    switchWs.close();
+                }
+            };
+        } catch (e) {
+            console.error('[SwitchWS] Connect error:', e);
+        }
+    }
+
     function stopSwitchPolling() {
         if (switchPollingInterval) {
             clearInterval(switchPollingInterval);
@@ -276,19 +373,17 @@
 
     function startSwitchPolling(modelName) {
         stopSwitchPolling();
+        ensureSwitchWebSocket();
 
         var startTime = Date.now();
         var pollingController = new AbortController();
         switchPollingController = pollingController;
-
-        updateSwitchingStep(3);
 
         switchStatusInterval = setInterval(function() {
             if (pollingController.signal.aborted) return;
             updateSwitchingStatus(Date.now() - startTime);
         }, 1000);
 
-        var pollCount = 0;
         switchPollingInterval = setInterval(function() {
             if (pollingController.signal.aborted) {
                 stopSwitchPolling();
@@ -298,28 +393,17 @@
             if (Date.now() - startTime > SWITCH_POLL_TIMEOUT) {
                 stopSwitchPolling();
                 hideSwitchingOverlay();
-                showModelMessage('error', '切换超时：模型 ' + modelName + ' 在 ' + Math.floor(SWITCH_POLL_TIMEOUT / 1000) + ' 秒内未就绪，请手动刷新检查状态');
+                showModelMessage('error', '切换超时：模型 ' + modelName + ' 在 ' + Math.floor(SWITCH_POLL_TIMEOUT / 1000) + ' 秒内未完成，请手动刷新检查状态');
                 setActionButtonsDisabled(false);
                 activeModelAction = null;
                 return;
             }
 
-            pollCount++;
-            fetch('/api/model-switch/models', { signal: pollingController.signal })
+            fetch('/api/model-switch/switch-status', { signal: pollingController.signal })
                 .then(function(r) { return r.json(); })
                 .then(function(result) {
                     if (result.success && result.data) {
-                        var targetModel = result.data.find(function(m) { return m.name === modelName; });
-                        if (targetModel && targetModel.running) {
-                            stopSwitchPolling();
-                            hideSwitchingOverlay();
-                            showModelMessage('info', '切换成功: ' + modelName + '，模型已就绪');
-                            activeModelAction = null;
-                            setActionButtonsDisabled(false);
-                            renderModels();
-                            loadGPUData();
-                            updateCharts();
-                        }
+                        renderSwitchSessionState(result.data.session);
                     }
                 })
                 .catch(function(e) {
@@ -327,7 +411,7 @@
                         console.error('[Polling] Error:', e);
                     }
                 });
-        }, 5000);
+        }, 3000);
     }
 
     async function executeModelAction(action, name, successText) {
@@ -341,6 +425,7 @@
         if (action === 'switch') {
             showSwitchingOverlay(name);
             updateSwitchingStep(1);
+            ensureSwitchWebSocket();
         }
 
         try {
@@ -361,19 +446,8 @@
 
             if (action === 'switch') {
                 updateSwitchingStep(2);
-                var warmup = result.data && result.data.warmup;
-                var providerUpdate = result.data && result.data.providerUpdate;
-
-                if (warmup && warmup.success && providerUpdate && providerUpdate.success) {
-                    updateSwitchingStep(3);
-                    startSwitchPolling(name);
-                } else if (warmup && warmup.success) {
-                    updateSwitchingStep(3);
-                    startSwitchPolling(name);
-                } else {
-                    updateSwitchingStep(3);
-                    startSwitchPolling(name);
-                }
+                switchFinalizedSessionId = null;
+                startSwitchPolling(name);
             } else {
                 hideSwitchingOverlay();
                 activeModelAction = null;
