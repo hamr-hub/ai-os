@@ -97,15 +97,29 @@ class BackendClient {
         if (isModelSwitch) {
             if (this.goAvailable) {
                 try {
-                    logger.info(`[BackendClient] Model switch -> Go backend (no fallback)`);
+                    logger.info('[BackendClient] Model switch -> Go backend');
                     const response = await fetch(goUrl, { ...options, signal: timeoutSignal });
-                    return response;
+                    if (response.ok) return response;
+                    logger.warn(`[BackendClient] Go backend returned ${response.status} for model switch, trying Python fallback`);
                 } catch (error) {
-                    logger.error('[BackendClient] Go backend failed for model switch:', error.message);
-                    throw new Error(`Go backend failed for model switch: ${error.message}`);
+                    logger.warn('[BackendClient] Go backend failed for model switch, trying Python fallback:', error.message);
                 }
             }
-            throw new Error('Go backend unavailable for model switch');
+            if (this.pythonAvailable) {
+                try {
+                    this.activeBackend = 'python';
+                    logger.info('[BackendClient] Model switch -> Python backend fallback');
+                    const pythonTimeoutSignal = options.signal || AbortSignal.timeout(180000);
+                    const response = await fetch(pythonUrl, { ...options, signal: pythonTimeoutSignal });
+                    if (response.ok) return response;
+                    logger.warn(`[BackendClient] Python backend returned ${response.status} for model switch`);
+                    return response;
+                } catch (error) {
+                    logger.error('[BackendClient] Python backend failed for model switch:', error.message);
+                    throw new Error(`Python backend failed for model switch: ${error.message}`);
+                }
+            }
+            throw new Error('No available backend for model switch');
         }
 
         if (isLongOperation) {

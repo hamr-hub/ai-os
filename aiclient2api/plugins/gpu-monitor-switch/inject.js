@@ -519,6 +519,18 @@
         var el = document.getElementById('modelSwitchContent');
         if (!el) return;
 
+        function formatMemorySize(sizeMB) {
+            if (!sizeMB || sizeMB <= 0) return 'N/A';
+            if (sizeMB >= 1024) {
+                return (sizeMB / 1024).toFixed(1) + ' GB';
+            }
+            return sizeMB.toFixed(0) + ' MB';
+        }
+
+        function getMemoryText(model) {
+            return model.requiredMemory || (model.memoryGB ? model.memoryGB + 'GB' : 'N/A');
+        }
+
         if (activeModelAction) {
             var actionParts = activeModelAction.split(':');
             var actionType = actionParts[0];
@@ -552,6 +564,8 @@
                     '<span class="model-status status-healthy">当前运行</span></div>';
                 html += '<div class="model-details">' +
                     '<div class="detail-item"><span class="detail-label">类型</span><span class="detail-value">' + escapeHtml(currentModel.backendType || 'vllm') + '</span></div>' +
+                    '<div class="detail-item"><span class="detail-label">大小</span><span class="detail-value">' + formatMemorySize(currentModel.sizeMB || currentModel.size_mb) + '</span></div>' +
+                    '<div class="detail-item"><span class="detail-label">显存</span><span class="detail-value">' + getMemoryText(currentModel) + '</span></div>' +
                     '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (currentModel.port || '--') + '</span></div></div>';
                 html += '<div class="model-actions">' +
                     '<button class="btn btn-sm btn-danger" onclick="window.stopModel(\'' + escapeHtml(currentModel.name) + '\')">' +
@@ -566,6 +580,8 @@
                         '<span class="model-status status-disabled">未运行</span></div>';
                     html += '<div class="model-details">' +
                         '<div class="detail-item"><span class="detail-label">类型</span><span class="detail-value">' + escapeHtml(model.backendType || 'vllm') + '</span></div>' +
+                        '<div class="detail-item"><span class="detail-label">大小</span><span class="detail-value">' + formatMemorySize(model.sizeMB || model.size_mb) + '</span></div>' +
+                        '<div class="detail-item"><span class="detail-label">显存</span><span class="detail-value">' + getMemoryText(model) + '</span></div>' +
                         '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (model.port || '--') + '</span></div></div>';
                     html += '<div class="model-actions">' +
                         '<button class="btn btn-sm btn-primary" onclick="window.switchModel(\'' + escapeHtml(model.name) + '\')">' +
