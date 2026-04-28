@@ -201,12 +201,14 @@ class ModelSwitchService {
                         requiredMemory: variant.required_memory || '',
                         memoryGB: variant.required_memory_gb || 0,
                         sizeMB: variant.size_mb || 0,
+                        sizeBytes: (variant.size_mb || 0) * 1024 * 1024,
                         multimodal: variant.multimodal || false,
                         vllmConfig: variant.vllm_config || null,
                         isCurrent: variant.is_current || false,
                         status: variant.running ? 'running' : 'stopped',
                         variantCount: group.variant_count,
-                        groupSizeMB: group.total_size_mb
+                        groupSizeMB: group.total_size_mb,
+                        groupSizeBytes: (group.total_size_mb || 0) * 1024 * 1024
                     });
                 }
             }
@@ -219,7 +221,10 @@ class ModelSwitchService {
                     backendType: info.backend_type || info.service || 'vllm',
                     port: info.port || null,
                     description: info.description || '',
-                    status: info.running ? 'running' : 'stopped'
+                    status: info.running ? 'running' : 'stopped',
+                    sizeMB: info.size_mb || 0,
+                    sizeBytes: (info.size_mb || 0) * 1024 * 1024,
+                    vllmConfig: info.vllm_config || null
                 });
             }
         }

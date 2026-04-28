@@ -611,10 +611,11 @@
         .model-variant {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            padding: 12px 20px;
+            align-items: flex-start;
+            padding: 14px 20px;
             border-bottom: 1px solid var(--border-primary);
             transition: background 0.2s ease;
+            gap: 16px;
         }
 
         .model-variant:last-child {
@@ -636,13 +637,23 @@
         .model-variant-info {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .model-variant-main {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
 
         .model-variant-name {
             font-size: 0.95em;
             font-weight: 500;
             color: var(--text-primary);
+            word-break: break-all;
         }
 
         .model-variant-meta {
@@ -650,12 +661,31 @@
             gap: 15px;
             font-size: 0.8em;
             color: var(--text-secondary);
+            flex-wrap: wrap;
         }
 
         .model-variant-meta span {
             display: flex;
             align-items: center;
             gap: 4px;
+        }
+
+        .model-variant-config {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .model-variant-config-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 0.75em;
+            color: var(--text-secondary);
+            background: rgba(139, 148, 158, 0.12);
+            border: 1px solid rgba(139, 148, 158, 0.15);
         }
 
         .model-variant-badge {
@@ -683,6 +713,8 @@
         .model-variant-actions {
             display: flex;
             gap: 8px;
+            flex-shrink: 0;
+            align-items: center;
         }
 
         .model-variant-actions .btn {
@@ -744,6 +776,36 @@
             <div id="model-error"></div>
             <div id="model-success"></div>
             <div id="model-list" class="model-list">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const VLLM_PARAM_FIELDS = [
+            { key: 'gpu_memory_utilization', label: 'GPU', format: value => Number(value).toFixed(2) },
+            { key: 'max_model_len', label: '上下文', format: value => Number(value).toLocaleString('zh-CN') },
+            { key: 'max_num_seqs', label: '并发', format: value => Number(value).toLocaleString('zh-CN') },
+            { key: 'max_num_batched_tokens', label: '批量Token', format: value => Number(value).toLocaleString('zh-CN') },
+            { key: 'tensor_parallel_size', label: 'TP', format: value => Number(value).toLocaleString('zh-CN') }
+        ];
+
+        function formatVLLMConfig(config) {
+            if (!config) return '';
+            return VLLM_PARAM_FIELDS
+                .filter(field => config[field.key] !== null && config[field.key] !== undefined)
+                .map(field => `<span class="model-variant-config-item">${field.label}: ${field.format(config[field.key])}</span>`)
+                .join('');
+        }
+
+        function buildVLLMSummary(config) {
+            if (!config || !config.has_custom_config) return '';
+            const content = formatVLLMConfig(config);
+            if (!content) return '<div class="model-variant-config"><span class="model-variant-config-item">已配置自定义参数</span></div>';
+            return `<div class="model-variant-config">${content}</div>`;
+        }
+
+        const chartStore = new Map();
                 <div class="loading">加载中...</div>
             </div>
         </div>
@@ -1068,18 +1130,22 @@
                     const variantsHtml = variants.map(variant => {
                         const statusClass = variant.running ? 'running' : '';
                         const currentClass = variant.isCurrent ? 'current' : '';
-                        const sizeStr = formatMemorySize(variant.sizeMB);
+                        const sizeStr = formatMemorySize(variant.sizeMB || variant.size_mb);
                         const memStr = variant.requiredMemory || (variant.memoryGB ? `${variant.memoryGB}GB` : '');
+                        const vllmSummary = buildVLLMSummary(variant.vllmConfig || variant.vllm_config);
                         return `
                             <div class="model-variant ${statusClass} ${currentClass}">
                                 <div class="model-variant-info">
-                                    <div class="model-variant-name">${variant.name}</div>
+                                    <div class="model-variant-main">
+                                        <div class="model-variant-name">${variant.name}</div>
+                                        ${(variant.vllmConfig || variant.vllm_config) && (variant.vllmConfig || variant.vllm_config).has_custom_config ? '<span class="model-variant-badge badge-configured">已配置</span>' : ''}
+                                    </div>
                                     <div class="model-variant-meta">
                                         <span>📦 ${sizeStr}</span>
                                         ${memStr ? `<span>💾 ${memStr}</span>` : ''}
                                         ${variant.multimodal ? '<span>🖼️ 多模态</span>' : ''}
-                                        ${variant.vllmConfig && variant.vllmConfig.has_custom_config ? '<span>⚙️ 已配置</span>' : ''}
                                     </div>
+                                    ${vllmSummary}
                                 </div>
                                 <div class="model-variant-actions">
                                     ${variant.isCurrent ? '<span class="model-variant-badge badge-current">当前</span>' : ''}
@@ -1089,6 +1155,22 @@
                             </div>
                         `;
                     }).join('');
+
+                    return `
+                        <div class="model-group" data-group="${group.base_name}">
+                            <div class="model-group-header" onclick="toggleModelGroup('${group.base_name}')">
+                                <div class="model-group-info">
+                                    <span class="model-group-name">${group.base_name}</span>
+                                    <span class="model-group-meta">${group.variant_count} 个变体 · ${formatMemorySize(group.total_size_mb)}</span>
+                                </div>
+                                <span class="model-group-toggle">▶</span>
+                            </div>
+                            <div class="model-variants" id="group-${group.base_name}">
+                                ${variantsHtml}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
 
                     return `
                         <div class="model-group" data-group="${group.base_name}">
