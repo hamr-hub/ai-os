@@ -118,6 +118,7 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.POST("/gpu/history/config", h.ConfigureGPUHistory)
 		m.GET("/models", h.GetModelStatus)
 		m.GET("/models/summary", h.ModelsSummary)
+		m.GET("/models/aggregated", h.GetAggregatedModels)
 		m.POST("/models/:model_name/start", h.StartModel)
 		m.POST("/models/:model_name/stop", h.StopModel)
 		m.POST("/models/:model_name/switch", h.SwitchModel)

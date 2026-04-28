@@ -621,7 +621,14 @@ class ModelSwitchOrchestrator:
                 )
                 for line in result.stdout.strip().splitlines():
                     try:
-                        pids.append(int(line.strip()))
+                        pid = int(line.strip())
+                        # Exclude go-vllm-api process to avoid killing our own proxy
+                        cmd = subprocess.run(
+                            ["cat", f"/proc/{pid}/cmdline"],
+                            capture_output=True, text=True, timeout=2
+                        ).stdout.replace("\x00", " ")
+                        if "go-vllm-api" not in cmd and "go_vllm_api" not in cmd:
+                            pids.append(pid)
                     except ValueError:
                         pass
             except Exception:

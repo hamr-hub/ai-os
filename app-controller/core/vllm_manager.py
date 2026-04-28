@@ -1083,8 +1083,9 @@ def _update_vllm_script(model_path: str, model_name: str = None) -> bool:
         
         if not os.path.exists(VLLM_START_SCRIPT):
             logger.warning("Start script not found: %s", VLLM_START_SCRIPT)
-            return systemd_updated
-
+            # 即使启动脚本不存在，只要 runtime override 更新成功就可以继续
+            return runtime_updated or systemd_updated
+        
         with open(VLLM_START_SCRIPT, 'r') as f:
             content = f.read()
 
@@ -1146,7 +1147,13 @@ def _update_vllm_script(model_path: str, model_name: str = None) -> bool:
                 f.write('\n'.join(new_lines))
             logger.info("Updated start script: %s", model_path)
 
-        return state_updated or runtime_updated or systemd_updated or replaced
+        # 必须至少有一种方式成功更新了模型路径
+        success = runtime_updated or systemd_updated or replaced
+        if not success:
+            logger.error("Failed to update model path by any method: runtime=%s, systemd=%s, script=%s",
+                        runtime_updated, systemd_updated, replaced)
+        
+        return success
     except Exception as e:
         logger.error("Failed to update vLLM script: %s", e)
         return False

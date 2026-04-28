@@ -721,6 +721,177 @@
             padding: 6px 12px;
             font-size: 0.85em;
         }
+
+        .switch-progress-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .switch-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .switch-spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--bg-tertiary);
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            flex-shrink: 0;
+        }
+
+        .switch-panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .switch-panel-model {
+            font-size: 14px;
+            color: var(--color-primary);
+            font-weight: 500;
+            margin-left: auto;
+            word-break: break-all;
+        }
+
+        .switch-cancel-btn {
+            padding: 6px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border-primary);
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .switch-cancel-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .switch-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .switch-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            transition: all 0.3s ease;
+        }
+
+        .switch-step.active {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .switch-step.completed {
+            background: rgba(34, 197, 94, 0.05);
+        }
+
+        .switch-step.failed {
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .step-indicator {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .step-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: all 0.3s ease;
+        }
+
+        .switch-step.active .step-dot {
+            background: var(--color-primary);
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+            animation: pulse-dot 1.5s ease infinite;
+        }
+
+        .switch-step.completed .step-dot {
+            background: var(--color-success);
+        }
+
+        .switch-step.failed .step-dot {
+            background: var(--color-danger);
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .step-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .switch-step.completed .step-title {
+            color: var(--color-success);
+        }
+
+        .switch-step.failed .step-title {
+            color: var(--color-danger);
+        }
+
+        .switch-log {
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            max-height: 60px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        .switch-monitor-mode {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -775,6 +946,47 @@
             </div>
             <div id="model-error"></div>
             <div id="model-success"></div>
+            <div id="switch-progress-panel" class="switch-progress-panel" style="display: none;">
+                <div class="switch-panel-header">
+                    <div class="switch-spinner"></div>
+                    <div class="switch-panel-title">
+                        <span id="switch-panel-status-text">正在切换模型</span>
+                    </div>
+                    <div class="switch-panel-model" id="switch-panel-model-name"></div>
+                    <button class="switch-cancel-btn" id="switch-cancel-btn" onclick="cancelSwitch()">取消</button>
+                </div>
+                <div class="switch-steps">
+                    <div class="switch-step" id="switch-step-1">
+                        <div class="step-indicator">
+                            <div class="step-dot"></div>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">发送切换请求</div>
+                            <div class="step-desc">正在停止当前模型并准备切换</div>
+                        </div>
+                    </div>
+                    <div class="switch-step" id="switch-step-2">
+                        <div class="step-indicator">
+                            <div class="step-dot"></div>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">后端加载模型</div>
+                            <div class="step-desc">vLLM 正在加载新模型到 GPU</div>
+                        </div>
+                    </div>
+                    <div class="switch-step" id="switch-step-3">
+                        <div class="step-indicator">
+                            <div class="step-dot"></div>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">验证模型就绪</div>
+                            <div class="step-desc">检查模型是否正常响应</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="switch-log" id="switch-log"></div>
+                <div class="switch-monitor-mode" id="switch-monitor-mode"></div>
+            </div>
             <div id="model-list" class="model-list">
                 <div class="loading">加载中...</div>
             </div>
@@ -1220,7 +1432,275 @@
             }
         }
 
+        let switchPollingInterval = null;
+        let switchStatusInterval = null;
+        let switchPollingController = null;
+        let switchWs = null;
+        let currentSwitchSession = null;
+        let switchFinalizedSessionId = null;
+        let isSwitching = false;
+        const SWITCH_POLL_TIMEOUT = 180000;
+
+        function showSwitchProgressPanel(modelName) {
+            const panel = document.getElementById('switch-progress-panel');
+            if (!panel) return;
+            panel.style.display = 'block';
+            document.getElementById('switch-panel-model-name').textContent = modelName;
+            document.getElementById('switch-panel-status-text').textContent = '正在切换模型';
+            document.getElementById('switch-cancel-btn').style.display = 'block';
+            document.getElementById('switch-log').textContent = '准备中...';
+            document.getElementById('switch-monitor-mode').textContent = '监控方式：轮询中';
+
+            for (let i = 1; i <= 3; i++) {
+                const step = document.getElementById(`switch-step-${i}`);
+                step.classList.remove('active', 'completed', 'failed');
+            }
+        }
+
+        function hideSwitchProgressPanel() {
+            const panel = document.getElementById('switch-progress-panel');
+            if (panel) panel.style.display = 'none';
+        }
+
+        function updateSwitchStep(step, status) {
+            const el = document.getElementById(`switch-step-${step}`);
+            if (!el) return;
+            el.classList.remove('active', 'completed', 'failed');
+            if (status) el.classList.add(status);
+
+            const statusTexts = {
+                1: '正在发送切换请求...',
+                2: '后端正在加载模型，预计需要 1-2 分钟...',
+                3: '正在验证模型是否就绪...'
+            };
+            const log = document.getElementById('switch-log');
+            if (log && statusTexts[step]) {
+                log.textContent = statusTexts[step];
+            }
+        }
+
+        function stopSwitchPolling() {
+            if (switchPollingInterval) {
+                clearInterval(switchPollingInterval);
+                switchPollingInterval = null;
+            }
+            if (switchStatusInterval) {
+                clearInterval(switchStatusInterval);
+                switchStatusInterval = null;
+            }
+            if (switchPollingController) {
+                switchPollingController.abort();
+                switchPollingController = null;
+            }
+        }
+
+        function ensureSwitchWebSocket() {
+            if (switchWs && (switchWs.readyState === WebSocket.OPEN || switchWs.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            try {
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                switchWs = new WebSocket(wsProtocol + '//' + window.location.host + '/ws/model-switch');
+                switchWs.onmessage = function(event) {
+                    try {
+                        const payload = JSON.parse(event.data);
+                        if (payload.session) {
+                            renderSwitchSessionState(payload.session);
+                        }
+                    } catch (e) {
+                        console.error('[SwitchWS] Parse error:', e);
+                    }
+                };
+                switchWs.onclose = function() {
+                    switchWs = null;
+                };
+                switchWs.onerror = function() {
+                    if (switchWs) switchWs.close();
+                };
+            } catch (e) {
+                console.error('[SwitchWS] Connect error:', e);
+            }
+        }
+
+        function renderSwitchSessionState(session) {
+            currentSwitchSession = session || null;
+            if (!session) return;
+
+            const runningPhase = session.phases && session.phases.find(p => p.status === 'running');
+            if (runningPhase) {
+                updateSwitchStep(runningPhase.phase, 'active');
+            }
+
+            const log = document.getElementById('switch-log');
+            if (log) {
+                const latestPhase = runningPhase || 
+                    (session.phases && session.phases.find(p => p.status === 'failed')) || 
+                    session.phases[session.phases.length - 1];
+                const latestLog = latestPhase && latestPhase.logs && latestPhase.logs.length > 0
+                    ? latestPhase.logs[latestPhase.logs.length - 1]
+                    : '模型切换进行中';
+                log.textContent = latestLog;
+            }
+
+            const statusText = document.getElementById('switch-panel-status-text');
+            if (session.completed_successfully || session.overall_phase === 'completed') {
+                stopSwitchPolling();
+                if (statusText) statusText.textContent = '切换完成';
+                document.getElementById('switch-cancel-btn').style.display = 'none';
+
+                for (let i = 1; i <= 3; i++) {
+                    const step = document.getElementById(`switch-step-${i}`);
+                    step.classList.remove('active', 'failed');
+                    step.classList.add('completed');
+                }
+
+                setTimeout(() => {
+                    hideSwitchProgressPanel();
+                    finalizeSwitchSession(session);
+                    loadModelData();
+                    loadGPUData();
+                }, 1500);
+
+                isSwitching = false;
+                return;
+            }
+
+            if (session.overall_phase === 'rolled_back' || session.overall_phase === 'failed') {
+                stopSwitchPolling();
+                if (statusText) statusText.textContent = '切换失败';
+                document.getElementById('switch-cancel-btn').style.display = 'none';
+
+                const failedPhase = session.phases && session.phases.find(p => p.status === 'failed');
+                if (failedPhase) {
+                    updateSwitchStep(failedPhase.phase, 'failed');
+                }
+
+                const errorMsg = session.rollback_reason || session.error || '未知错误';
+                document.getElementById('switch-log').textContent = '错误: ' + errorMsg;
+
+                setTimeout(() => {
+                    hideSwitchProgressPanel();
+                    document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${errorMsg}</div>`;
+                }, 3000);
+
+                isSwitching = false;
+            }
+        }
+
+        async function finalizeSwitchSession(session) {
+            if (!session || !session.session_id || switchFinalizedSessionId === session.session_id) {
+                return;
+            }
+            switchFinalizedSessionId = session.session_id;
+            try {
+                const r = await fetch('/api/model-switch/finalize-switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session })
+                });
+                const result = await r.json();
+                if (!result.success) {
+                    console.error('Finalize switch failed:', result.error);
+                    return;
+                }
+                document.getElementById('model-success').innerHTML = `<div class="success-message">切换成功: ${session.target_model}，预热与健康检查模型已更新</div>`;
+                setTimeout(() => {
+                    document.getElementById('model-success').innerHTML = '';
+                }, 3000);
+            } catch (e) {
+                console.error('Finalize switch error:', e);
+            }
+        }
+
+        function startSwitchPolling(modelName) {
+            stopSwitchPolling();
+            ensureSwitchWebSocket();
+
+            const startTime = Date.now();
+            const pollingController = new AbortController();
+            switchPollingController = pollingController;
+
+            switchStatusInterval = setInterval(() => {
+                if (pollingController.signal.aborted) return;
+                const elapsed = Date.now() - startTime;
+                const log = document.getElementById('switch-log');
+                if (log) {
+                    log.textContent = `已等待 ${Math.floor(elapsed / 1000)} 秒...`;
+                }
+            }, 1000);
+
+            switchPollingInterval = setInterval(() => {
+                if (pollingController.signal.aborted) {
+                    stopSwitchPolling();
+                    return;
+                }
+
+                if (Date.now() - startTime > SWITCH_POLL_TIMEOUT) {
+                    stopSwitchPolling();
+                    hideSwitchProgressPanel();
+                    document.getElementById('model-error').innerHTML = `<div class="error">切换超时：模型 ${modelName} 在 ${Math.floor(SWITCH_POLL_TIMEOUT / 1000)} 秒内未完成，请手动刷新检查状态</div>`;
+                    isSwitching = false;
+                    return;
+                }
+
+                fetch('/api/model-switch/switch-status', { signal: pollingController.signal })
+                    .then(r => r.json())
+                    .then(result => {
+                        if (result.success && result.data) {
+                            renderSwitchSessionState(result.data.session);
+                        }
+                    })
+                    .catch(e => {
+                        if (e.name !== 'AbortError') {
+                            console.error('[Polling] Error:', e);
+                        }
+                    });
+            }, 3000);
+        }
+
+        function cancelSwitch() {
+            if (!currentSwitchSession || !currentSwitchSession.session_id) {
+                hideSwitchProgressPanel();
+                isSwitching = false;
+                return;
+            }
+
+            fetch('/api/model-switch/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: currentSwitchSession.session_id })
+            })
+            .then(r => r.json())
+            .then(result => {
+                stopSwitchPolling();
+                hideSwitchProgressPanel();
+                if (result.success) {
+                    document.getElementById('model-success').innerHTML = `<div class="success-message">切换已取消</div>`;
+                } else {
+                    document.getElementById('model-error').innerHTML = `<div class="error">取消失败: ${result.error}</div>`;
+                }
+                setTimeout(() => {
+                    document.getElementById('model-success').innerHTML = '';
+                    document.getElementById('model-error').innerHTML = '';
+                }, 3000);
+                isSwitching = false;
+                loadModelData();
+            })
+            .catch(e => {
+                console.error('Cancel switch error:', e);
+            });
+        }
+
         async function switchToModel(modelName) {
+            if (isSwitching) {
+                document.getElementById('model-error').innerHTML = '<div class="error">正在切换中，请稍后再试</div>';
+                return;
+            }
+
+            isSwitching = true;
+            showSwitchProgressPanel(modelName);
+            updateSwitchStep(1, 'active');
+
             try {
                 const response = await fetch('/api/model-switch/switch', {
                     method: 'POST',
@@ -1228,17 +1708,23 @@
                     body: JSON.stringify({ modelName })
                 });
                 const result = await response.json();
-                if (result.success) {
-                    document.getElementById('model-success').innerHTML = `<div class="success-message">模型切换成功: ${modelName}</div>`;
-                    setTimeout(() => {
-                        document.getElementById('model-success').innerHTML = '';
-                    }, 3000);
-                    loadModelData();
-                } else {
+                
+                if (!result.success) {
+                    hideSwitchProgressPanel();
                     document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${result.error}</div>`;
+                    isSwitching = false;
+                    return;
                 }
+
+                updateSwitchStep(1, 'completed');
+                updateSwitchStep(2, 'active');
+                switchFinalizedSessionId = null;
+                startSwitchPolling(modelName);
+
             } catch (error) {
+                hideSwitchProgressPanel();
                 document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${error.message}</div>`;
+                isSwitching = false;
             }
         }
 
