@@ -329,8 +329,7 @@ func (vm *VLLMManager) SwitchModelWithTest(ctx context.Context, modelPath string
 	}
 	vm.logger.Info("vllm service restarted", zap.String("model", modelName), zap.String("service", serviceName))
 
-	time.Sleep(8 * time.Second)
-	if err := vm.WaitUntilReady(ctx, port, 300*time.Second, 3*time.Second); err != nil {
+	if err := vm.WaitUntilReady(ctx, port, 180*time.Second, 3*time.Second); err != nil {
 		return fmt.Errorf("wait for vllm readiness: %w", err)
 	}
 
@@ -345,6 +344,7 @@ func (vm *VLLMManager) SwitchModelWithTest(ctx context.Context, modelPath string
 
 func (vm *VLLMManager) TestModel(ctx context.Context, port int, modelName string) error {
 	maxRetries := 5
+	retryInterval := 3 * time.Second
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		vm.logger.Info("testing model", zap.String("model", modelName), zap.Int("attempt", attempt))
 		err := vm.sendTestRequest(ctx, port, modelName)
@@ -354,7 +354,8 @@ func (vm *VLLMManager) TestModel(ctx context.Context, port int, modelName string
 		}
 		vm.logger.Warn("model test attempt failed", zap.String("model", modelName), zap.Int("attempt", attempt), zap.Error(err))
 		if attempt < maxRetries {
-			time.Sleep(5 * time.Second)
+			time.Sleep(retryInterval)
+			retryInterval = min(retryInterval+2*time.Second, 5*time.Second)
 		}
 	}
 	return fmt.Errorf("model %s failed after %d attempts", modelName, maxRetries)
@@ -414,6 +415,7 @@ func (vm *VLLMManager) WaitUntilReady(ctx context.Context, port int, timeout tim
 
 	deadline := time.Now().Add(timeout)
 	var lastErr error
+	pollInterval := 500 * time.Millisecond
 
 	for {
 		req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://localhost:%d/v1/models", port), nil)
@@ -443,12 +445,16 @@ func (vm *VLLMManager) WaitUntilReady(ctx context.Context, port int, timeout tim
 			return lastErr
 		}
 
-		timer := time.NewTimer(interval)
+		timer := time.NewTimer(pollInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()
 		case <-timer.C:
+		}
+		pollInterval = time.Duration(float64(pollInterval) * 1.5)
+		if pollInterval > interval {
+			pollInterval = interval
 		}
 	}
 }

@@ -536,39 +536,43 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
 
         model_path = None
 
-        # 优先读取启动脚本使用的状态文件，避免只读 systemd 环境导致识别漂移。
+        # 1. 优先读取状态文件
         if os.path.exists(VLLM_MODEL_STATE_FILE):
             with open(VLLM_MODEL_STATE_FILE, 'r') as f:
                 state_model_path = f.read().strip()
-            if state_model_path:
+            if state_model_path and os.path.exists(state_model_path):
                 model_path = state_model_path
 
-        # 其次读取 systemd 当前生效的环境变量，兼容 /run runtime override。
+        # 2. 读取 systemd 当前生效的环境变量
+        if not model_path:
+            try:
+                result = subprocess.run(
+                    [SYSTEMCTL_BIN, 'show', VLLM_SERVICE_NAME, '--property=Environment', '--value'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    match = re.search(r'VLLM_MODEL_PATH=([^\s"]+)', result.stdout)
+                    if match:
+                        candidate = match.group(1)
+                        if os.path.exists(candidate):
+                            model_path = candidate
+            except Exception as exc:
+                logger.debug("Failed to read effective systemd environment: %s", exc)
 
-        try:
-            result = subprocess.run(
-                [SYSTEMCTL_BIN, 'show', VLLM_SERVICE_NAME, '--property=Environment', '--value'],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if not model_path and result.returncode == 0:
-                match = re.search(r'VLLM_MODEL_PATH=([^\s"]+)', result.stdout)
-                if match:
-                    model_path = match.group(1)
-        except Exception as exc:
-            logger.warning("Failed to read effective systemd environment: %s", exc)
-
-        # 如果拿不到生效环境，再回退到持久化 service 文件。
+        # 3. 回退到持久化 service 文件
         service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
         if not model_path and os.path.exists(service_file):
             with open(service_file, 'r') as f:
                 content = f.read()
             match = re.search(r'Environment="VLLM_MODEL_PATH=([^"]*)"', content)
             if match:
-                model_path = match.group(1)
+                candidate = match.group(1)
+                if os.path.exists(candidate):
+                    model_path = candidate
         
-        # 如果 systemd 环境变量未设置，尝试从启动脚本读取
+        # 4. 从启动脚本读取
         if not model_path and os.path.exists(VLLM_START_SCRIPT):
             with open(VLLM_START_SCRIPT, 'r') as f:
                 content = f.read()
@@ -578,17 +582,20 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
                     parts = line.strip().split()
                     for i, part in enumerate(parts):
                         if part == 'serve' and i + 1 < len(parts):
-                            model_path = parts[i + 1].strip('"').strip("'")
-                            if model_path.startswith('$'):
-                                var_name = model_path.lstrip('$').strip('{}')
-                                model_path = os.environ.get(var_name, '')
-                                if not model_path:
+                            candidate = parts[i + 1].strip('"').strip("'")
+                            if candidate.startswith('$'):
+                                var_name = candidate.lstrip('$').strip('{}')
+                                candidate = os.environ.get(var_name, '')
+                                if not candidate:
                                     for env_line in content.split('\n'):
                                         if 'MODEL_PATH=' in env_line and ':-' in env_line:
                                             match = re.search(r':-([^}]+)\}', env_line)
                                             if match:
-                                                model_path = match.group(1).strip('"').strip("'")
+                                                candidate = match.group(1).strip('"').strip("'")
                                                 break
+                            
+                            if candidate and os.path.exists(candidate):
+                                model_path = candidate
                             break
                     
                     if model_path:
@@ -601,8 +608,11 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
         config_model_name = _find_model_name_from_path(model_path)
         vllm_port = discover_vllm_port()
         
+        result_name = config_model_name or os.path.basename(model_path)
+        logger.info("Current model detected: %s (path=%s, running=%s)", result_name, model_path, service_running)
+        
         return {
-            "name": config_model_name or os.path.basename(model_path),
+            "name": result_name,
             "path": model_path,
             "service": VLLM_SERVICE_NAME,
             "port": vllm_port,

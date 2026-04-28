@@ -80,7 +80,7 @@ export function useModels() {
     error.value = null
     try {
       const [aggregated, defaultModelResult] = await Promise.all([
-        getAggregatedModels(),
+        getAggregatedModels({ signal: controller.signal }),
         getDefaultModel({ signal: controller.signal }),
       ])
       aggregatedModels.value = aggregated

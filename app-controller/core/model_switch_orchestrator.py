@@ -112,13 +112,13 @@ class _SwitchAborted(Exception):
 
 
 class ModelSwitchOrchestrator:
-    PHASE1_STOP_TIMEOUT = 60
-    PHASE1_PORT_CHECK_TIMEOUT = 30
-    PHASE2_KILL_TIMEOUT = 120
-    PHASE2_VERIFY_TIMEOUT = 30
-    PHASE3_START_TIMEOUT = 300
+    PHASE1_STOP_TIMEOUT = 30
+    PHASE1_PORT_CHECK_TIMEOUT = 15
+    PHASE2_KILL_TIMEOUT = 60
+    PHASE2_VERIFY_TIMEOUT = 15
+    PHASE3_START_TIMEOUT = 180
     PHASE4_TEST_RETRIES = 3
-    PHASE4_TEST_TIMEOUT = 30
+    PHASE4_TEST_TIMEOUT = 15
 
     FATAL_KEYWORDS = [
         "cuda out of memory",
@@ -223,6 +223,7 @@ class ModelSwitchOrchestrator:
         await self._broadcast(session, phase=1, progress=30, log="检测端口是否释放")
 
         start_time = time.time()
+        poll_interval = 1.0
         while time.time() - start_time < self.PHASE1_PORT_CHECK_TIMEOUT:
             if self._cancel_requested:
                 await self._rollback(session, "用户请求取消")
@@ -237,7 +238,8 @@ class ModelSwitchOrchestrator:
             elapsed = int(time.time() - start_time)
             await self._log(session, phase,
                            f"等待端口释放 ({elapsed}s/{self.PHASE1_PORT_CHECK_TIMEOUT}s)")
-            await asyncio.sleep(3)
+            await asyncio.sleep(poll_interval)
+            poll_interval = min(poll_interval * 1.5, 3)
 
         if self._is_port_alive(self._vllm_port):
             await self._log(session, phase,
@@ -278,6 +280,7 @@ class ModelSwitchOrchestrator:
                               log=f"SIGTERM 已发送，等待进程退出（最多 {self.PHASE2_KILL_TIMEOUT}s）")
 
         start_time = time.time()
+        poll_interval = 2.0
         while time.time() - start_time < self.PHASE2_KILL_TIMEOUT:
             if self._cancel_requested:
                 await self._rollback(session, "用户请求取消")
@@ -290,7 +293,8 @@ class ModelSwitchOrchestrator:
             progress = 30 + int(50 * elapsed / self.PHASE2_KILL_TIMEOUT)
             await self._broadcast(session, phase=2, progress=progress,
                                   log=f"等待进程退出... ({elapsed}s)")
-            await asyncio.sleep(5)
+            await asyncio.sleep(poll_interval)
+            poll_interval = min(poll_interval * 1.2, 5)
 
         still_alive = self._find_vllm_pids()
         if still_alive:
@@ -383,6 +387,7 @@ class ModelSwitchOrchestrator:
         await self._log(session, phase, "vLLM 服务启动指令已发送")
 
         start_time = time.time()
+        poll_interval = 2.0
         while time.time() - start_time < self.PHASE3_START_TIMEOUT:
             if self._cancel_requested:
                 await self._rollback(session, "用户请求取消")
@@ -405,7 +410,7 @@ class ModelSwitchOrchestrator:
             port = discover_vllm_port()
             health_url = f"http://localhost:{port}/health"
             try:
-                async with httpx.AsyncClient(timeout=5) as client:
+                async with httpx.AsyncClient(timeout=3) as client:
                     resp = await client.get(health_url)
                     if resp.status_code == 200:
                         phase.status = PhaseStatus.SUCCESS
@@ -420,7 +425,8 @@ class ModelSwitchOrchestrator:
 
             await self._broadcast(session, phase=3, progress=min(progress, 90),
                                   log=f"等待服务就绪... ({elapsed}s/{self.PHASE3_START_TIMEOUT}s)")
-            await asyncio.sleep(5)
+            await asyncio.sleep(poll_interval)
+            poll_interval = min(poll_interval * 1.3, 8)
 
         error_msg = f"vLLM 服务在 {self.PHASE3_START_TIMEOUT}s 内未就绪"
         phase.status = PhaseStatus.FAILED
@@ -468,7 +474,7 @@ class ModelSwitchOrchestrator:
                 await self._log(session, phase, f"测试第{attempt}次异常: {e}")
 
             if attempt < self.PHASE4_TEST_RETRIES:
-                await asyncio.sleep(10)
+                await asyncio.sleep(5)
 
         error_msg = f"冒烟测试在 {self.PHASE4_TEST_RETRIES} 次重试后失败"
         phase.status = PhaseStatus.FAILED

@@ -363,6 +363,10 @@ func (h *ManageHandler) ModelsSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (h *ManageHandler) GetAggregatedModels(c *gin.Context) {
+	h.proxyPythonManage(c, http.MethodGet, "/manage/models/aggregated", nil)
+}
+
 func (h *ManageHandler) StartModel(c *gin.Context) {
 	modelName := c.Param("model_name")
 	if !h.scheduler.IsModelAvailable(modelName) {

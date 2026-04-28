@@ -139,18 +139,23 @@ export function useModelSwitch() {
           if (prevSession && !status.is_switching) {
             if (status.session.completed_successfully) {
               appStore.success(`模型 ${status.session.target_model} 切换成功`)
-            } else if (status.session.overall_phase === 'rolled_back') {
+            } else if (status.session.overall_phase === 'rolled_back' || status.session.overall_phase === 'failed') {
               const errMsg = status.session.rollback_reason || status.session.error || '切换失败'
               appStore.error(`模型切换失败: ${errMsg}`)
               error.value = errMsg
+            } else if (status.session.overall_phase === 'completed') {
+              appStore.success(`模型 ${status.session.target_model} 切换成功`)
             }
             stopPolling()
           }
+        } else if (!status.is_switching && isSwitching.value) {
+          isSwitching.value = false
+          stopPolling()
         }
       } catch (e) {
         console.warn('[useModelSwitch] Poll error:', e)
       }
-    }, 3000)
+    }, 2000)
   }
 
   const stopPolling = () => {

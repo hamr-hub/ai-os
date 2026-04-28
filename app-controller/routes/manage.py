@@ -114,8 +114,13 @@ async def atomic_switch_model(request: Request):
                 if set_as_default:
                     scheduler.set_default_model(model_name)
                 _clear_model_caches()
+            else:
+                logger.error("Model switch failed: %s", session.error or session.rollback_reason or "unknown")
+                scheduler.clear_default_model()
+                _clear_model_caches()
         except Exception as e:
             logger.error("Switch task callback error: %s", e)
+            scheduler.clear_default_model()
 
     task.add_done_callback(lambda t: asyncio.create_task(_on_switch_done(t)))
 
@@ -391,8 +396,13 @@ async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True, 
                 if set_as_default:
                     scheduler.set_default_model(model_name)
                 _clear_model_caches()
+            else:
+                logger.error("Model switch failed: %s", session.error or session.rollback_reason or "unknown")
+                scheduler.clear_default_model()
+                _clear_model_caches()
         except Exception as e:
             logger.error("Switch task callback error: %s", e)
+            scheduler.clear_default_model()
 
     task.add_done_callback(lambda t: asyncio.create_task(_on_switch_done(t)))
 
@@ -1228,46 +1238,6 @@ async def llama_cpp_status():
     for model_name in llama_models:
         status[model_name] = llama_cpp_manager.get_server_status(model_name)
     return {"models": status, "total": len(llama_models)}
-
-
-@manage_router.get("/models/aggregated")
-async def get_models_aggregated(refresh: Optional[bool] = False):
-    cache_key = "api:manage:models:aggregated"
-
-    if not refresh:
-        cached = cache_service.get(cache_key)
-        if cached is not None:
-            return cached
-
-    aggregated = get_aggregated_models()
-    
-    models_status = {}
-    if not refresh:
-        cached_status = cache_service.get("api:manage:models:status")
-        if cached_status is not None:
-            models_status = cached_status
-    
-    if not models_status:
-        all_models = scheduler.get_available_models()
-        for model in all_models:
-            models_status[model] = {
-                "running": scheduler.is_model_running(model),
-                "port": scheduler.get_model_port(model),
-                "active_requests": scheduler.get_active_requests(model),
-                "preloaded": scheduler.is_model_preloaded(model),
-            }
-    
-    for group in aggregated:
-        for variant in group["variants"]:
-            model_name = variant["name"]
-            if model_name in models_status:
-                variant["running"] = models_status[model_name]["running"]
-                variant["port"] = models_status[model_name].get("port", variant.get("port"))
-                variant["active_requests"] = models_status[model_name].get("active_requests", 0)
-                variant["preloaded"] = models_status[model_name].get("preloaded", variant.get("preloaded", False))
-    
-    cache_service.set(cache_key, aggregated, ttl_seconds=10)
-    return aggregated
 
 
 @manage_router.get("/models/{model_name}/vllm-params")
