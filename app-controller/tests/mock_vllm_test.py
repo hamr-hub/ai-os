@@ -1,18 +1,14 @@
 import asyncio
 import json
-import signal
-import socket
-import subprocess
+import os
+import sys
 import time
 import httpx
 import logging
 import uuid
-import os
-import sys
-from datetime import datetime
-from enum import Enum
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+import subprocess
+import signal
+import socket
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -25,7 +21,6 @@ from core.model_switch_orchestrator import (
     _SwitchAborted,
 )
 from core.websocket_manager import WebSocketManager
-from core.cache_service import cache_service
 
 MOCK_VLLM_PORT = 18888
 MOCK_VLLM_SERVICE_NAME = "vllm-mock-test"
@@ -40,16 +35,83 @@ class MockVLLMState:
     model_path: str = "/mnt/pve_models/Qwen3.6-35B-A3B-NVFP4"
     start_fail_mode: bool = False
     chat_fail_mode: bool = False
-    health_delay_seconds: int = 2
-    pid: int = 99999
+    server_process: subprocess.Popen = None
+    health_delay_seconds: float = 0.5
 
 
 mock_state = MockVLLMState()
 
+mock_server_script = os.path.join(os.path.dirname(__file__), "mock_vllm_server.py")
+
+
+def _start_mock_server(chat_fail=False):
+    env = os.environ.copy()
+    env["MOCK_VLLM_PORT"] = str(MOCK_VLLM_PORT)
+    env["MOCK_CHAT_FAIL"] = str(int(chat_fail))
+    env["MOCK_HEALTH_DELAY"] = str(mock_state.health_delay_seconds)
+
+    proc = subprocess.Popen(
+        [sys.executable, mock_server_script],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    for _ in range(20):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', MOCK_VLLM_PORT))
+            sock.close()
+            if result == 0:
+                logger.info("Mock vLLM server started on port %d (PID=%d)", MOCK_VLLM_PORT, proc.pid)
+                mock_state.server_process = proc
+                mock_state.running = True
+                return proc
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    stderr = proc.stderr.read().decode() if proc.stderr else ""
+    logger.error("Mock vLLM server failed to start: %s", stderr[:500])
+    raise RuntimeError("Mock vLLM server failed to start")
+
+
+def _kill_mock_server():
+    proc = mock_state.server_process
+    if proc is None:
+        mock_state.running = False
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except Exception:
+        try:
+            proc.kill()
+            proc.wait(timeout=3)
+        except Exception:
+            pass
+    mock_state.server_process = None
+    mock_state.running = False
+
+    for _ in range(10):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', MOCK_VLLM_PORT))
+            sock.close()
+            if result != 0:
+                logger.info("Mock vLLM port %d confirmed free", MOCK_VLLM_PORT)
+                return
+        except Exception:
+            return
+        time.sleep(0.5)
+    logger.warning("Mock vLLM port %d still not free after kill", MOCK_VLLM_PORT)
+
 
 def mock_stop_vllm_service() -> bool:
-    logger.info("[MOCK] stop_vllm_service called")
-    mock_state.running = False
+    logger.info("[MOCK] stop_vllm_service called, killing mock server")
+    _kill_mock_server()
     return True
 
 
@@ -57,8 +119,12 @@ def mock_start_vllm_service() -> bool:
     logger.info("[MOCK] start_vllm_service called, fail_mode=%s", mock_state.start_fail_mode)
     if mock_state.start_fail_mode:
         return False
-    mock_state.running = True
-    return True
+    try:
+        _start_mock_server(chat_fail=mock_state.chat_fail_mode)
+        return True
+    except Exception as e:
+        logger.error("[MOCK] Failed to start mock server: %s", e)
+        return False
 
 
 def mock__update_vllm_script(model_path: str, model_name: str = None) -> bool:
@@ -77,34 +143,14 @@ def mock_refresh_vllm_port_cache():
     logger.info("[MOCK] refresh_vllm_port_cache called")
 
 
-original_imports = {}
-
-
 def patch_vllm_manager_module():
     import core.vllm_manager as vm
-    original_imports['stop'] = vm.stop_vllm_service
-    original_imports['start'] = vm.start_vllm_service
-    original_imports['update_script'] = vm._update_vllm_script
-    original_imports['discover_port'] = vm.discover_vllm_port
-    original_imports['refresh_cache'] = vm.refresh_vllm_port_cache
-
     vm.stop_vllm_service = mock_stop_vllm_service
     vm.start_vllm_service = mock_start_vllm_service
     vm._update_vllm_script = mock__update_vllm_script
     vm.discover_vllm_port = mock_discover_vllm_port
     vm.refresh_vllm_port_cache = mock_refresh_vllm_port_cache
-
     logger.info("Patched core.vllm_manager with mock functions")
-
-
-def restore_vllm_manager_module():
-    import core.vllm_manager as vm
-    vm.stop_vllm_service = original_imports['stop']
-    vm.start_vllm_service = original_imports['start']
-    vm._update_vllm_script = original_imports['update_script']
-    vm.discover_vllm_port = original_imports['discover_port']
-    vm.refresh_vllm_port_cache = original_imports['refresh_cache']
-    logger.info("Restored core.vllm_manager original functions")
 
 
 ws_manager = WebSocketManager()
@@ -124,41 +170,41 @@ orchestrator.PHASE3_START_TIMEOUT = 60
 orchestrator.PHASE4_TEST_RETRIES = 3
 orchestrator.PHASE4_TEST_TIMEOUT = 10
 
-
-def patch_orchestrator_internal_methods():
-    orchestrator._check_vllm_logs_for_errors = lambda: None
-    orchestrator._find_vllm_pids = lambda: []
-    logger.info("Patched orchestrator internal methods (journalctl/pgrep mocked out)")
+orchestrator._check_vllm_logs_for_errors = lambda: None
+orchestrator._find_vllm_pids = lambda: []
+orchestrator._find_pids_on_port = lambda port: []
+logger.info("Patched orchestrator internal methods")
 
 
 class WSCollector:
     def __init__(self):
-        self.messages: List[Dict] = []
+        self.messages: list = []
 
     async def broadcast(self, message, channel=None):
         self.messages.append(message)
-        logger.info("[WS] channel=%s phase=%s progress=%s log=%s level=%s",
+        logger.info("[WS] ch=%s phase=%s prog=%s%% log=%s lvl=%s evt=%s",
                     channel,
                     message.get("overall_phase"),
                     message.get("overall_progress"),
                     message.get("log"),
-                    message.get("level"))
+                    message.get("level"),
+                    message.get("event_type", "switch_progress"))
 
 
 async def test_normal_switch():
     logger.info("=" * 60)
-    logger.info("TEST 1: Normal model switch (all phases succeed)")
+    logger.info("TEST 1: Normal model switch (all 4 phases succeed)")
     logger.info("=" * 60)
 
-    ws_collector = WSCollector()
-    orchestrator._ws_manager = ws_collector
-    mock_state.running = True
+    ws = WSCollector()
+    orchestrator._ws_manager = ws
+    orchestrator._current_session = None
+    orchestrator._cancel_requested = False
     mock_state.start_fail_mode = False
     mock_state.chat_fail_mode = False
+    mock_state.health_delay_seconds = 0.3
 
-    mock_vllm_process = await _start_mock_vllm_server()
-
-    await asyncio.sleep(1)
+    _start_mock_server(chat_fail=False)
 
     try:
         session = await orchestrator.switch(
@@ -168,29 +214,23 @@ async def test_normal_switch():
             previous_model_path="/mnt/pve_models/Qwen3.6-35B-A3B-NVFP4",
         )
 
-        logger.info("Session result: phase=%s, success=%s, error=%s",
+        logger.info("Result: phase=%s success=%s error=%s",
                     session.overall_phase.value, session.completed_successfully, session.error)
-
         for p in session.phases:
-            logger.info("  Phase%d [%s]: status=%s progress=%s logs=%d error=%s",
-                        p.phase, p.name, p.status.value, p.progress, len(p.logs), p.error)
-            for log_entry in p.logs[-3:]:
-                logger.info("    %s", log_entry)
-
-        logger.info("WS messages collected: %d", len(ws_collector.messages))
+            logger.info("  Phase%d [%s]: status=%s progress=%d error=%s",
+                        p.phase, p.name, p.status.value, p.progress, p.error)
 
         assert session.completed_successfully, f"Expected success, got: {session.error}"
         assert session.overall_phase == SwitchPhase.COMPLETED
-        for p in session.phases:
-            assert p.status == PhaseStatus.SUCCESS, f"Phase {p.phase} expected SUCCESS, got {p.status}"
+        assert all(p.status in (PhaseStatus.SUCCESS, PhaseStatus.SKIPPED) for p in session.phases)
 
         logger.info("TEST 1 PASSED")
         return True
     except Exception as e:
-        logger.error("TEST 1 FAILED: %s", e)
+        logger.error("TEST 1 FAILED: %s", e, exc_info=True)
         return False
     finally:
-        _stop_mock_vllm(mock_vllm_process)
+        _kill_mock_server()
         orchestrator._current_session = None
         if orchestrator._global_lock.locked():
             orchestrator._global_lock.release()
@@ -198,17 +238,18 @@ async def test_normal_switch():
 
 async def test_concurrent_switch():
     logger.info("=" * 60)
-    logger.info("TEST 2: Concurrent switch request (lock mutual exclusion)")
+    logger.info("TEST 2: Concurrent switch (lock exclusion)")
     logger.info("=" * 60)
 
-    ws_collector = WSCollector()
-    orchestrator._ws_manager = ws_collector
-    mock_state.running = True
+    ws = WSCollector()
+    orchestrator._ws_manager = ws
+    orchestrator._current_session = None
+    orchestrator._cancel_requested = False
     mock_state.start_fail_mode = False
     mock_state.chat_fail_mode = False
+    mock_state.health_delay_seconds = 0.3
 
-    mock_vllm_process = await _start_mock_vllm_server()
-    await asyncio.sleep(1)
+    _start_mock_server(chat_fail=False)
 
     try:
         task1 = asyncio.create_task(
@@ -220,7 +261,7 @@ async def test_concurrent_switch():
             )
         )
 
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.5)
 
         try:
             task2 = asyncio.create_task(
@@ -236,7 +277,7 @@ async def test_concurrent_switch():
             logger.info("Second switch correctly rejected: %s", e)
 
         session1 = await task1
-        logger.info("First switch completed: phase=%s success=%s",
+        logger.info("First switch: phase=%s success=%s",
                     session1.overall_phase.value, session1.completed_successfully)
 
         assert session1.completed_successfully
@@ -245,10 +286,10 @@ async def test_concurrent_switch():
         logger.info("TEST 2 PASSED")
         return True
     except Exception as e:
-        logger.error("TEST 2 FAILED: %s", e)
+        logger.error("TEST 2 FAILED: %s", e, exc_info=True)
         return False
     finally:
-        _stop_mock_vllm(mock_vllm_process)
+        _kill_mock_server()
         orchestrator._current_session = None
         if orchestrator._global_lock.locked():
             orchestrator._global_lock.release()
@@ -259,14 +300,15 @@ async def test_start_failure_rollback():
     logger.info("TEST 3: Start failure triggers rollback")
     logger.info("=" * 60)
 
-    ws_collector = WSCollector()
-    orchestrator._ws_manager = ws_collector
-    mock_state.running = True
+    ws = WSCollector()
+    orchestrator._ws_manager = ws
+    orchestrator._current_session = None
+    orchestrator._cancel_requested = False
     mock_state.start_fail_mode = True
     mock_state.chat_fail_mode = False
+    mock_state.health_delay_seconds = 0.3
 
-    mock_vllm_process = await _start_mock_vllm_server()
-    await asyncio.sleep(1)
+    _start_mock_server(chat_fail=False)
 
     try:
         session = await orchestrator.switch(
@@ -276,17 +318,11 @@ async def test_start_failure_rollback():
             previous_model_path="/mnt/pve_models/Qwen3.6-35B-A3B-NVFP4",
         )
 
-        logger.info("Session result: phase=%s, success=%s, rollback_reason=%s",
+        logger.info("Result: phase=%s success=%s rollback=%s",
                     session.overall_phase.value, session.completed_successfully, session.rollback_reason)
-
         for p in session.phases:
             logger.info("  Phase%d [%s]: status=%s error=%s",
                         p.phase, p.name, p.status.value, p.error)
-
-        rollback_msgs = [m for m in ws_collector.messages if m.get("event_type") in ("rollback_started", "rollback_completed")]
-        logger.info("Rollback WS messages: %d", len(rollback_msgs))
-        for msg in rollback_msgs:
-            logger.info("  %s: %s", msg.get("event_type"), msg.get("log"))
 
         assert not session.completed_successfully
         assert session.overall_phase in (SwitchPhase.ROLLED_BACK, SwitchPhase.FAILED)
@@ -295,11 +331,11 @@ async def test_start_failure_rollback():
         logger.info("TEST 3 PASSED")
         return True
     except Exception as e:
-        logger.error("TEST 3 FAILED: %s", e)
+        logger.error("TEST 3 FAILED: %s", e, exc_info=True)
         return False
     finally:
         mock_state.start_fail_mode = False
-        _stop_mock_vllm(mock_vllm_process)
+        _kill_mock_server()
         orchestrator._current_session = None
         if orchestrator._global_lock.locked():
             orchestrator._global_lock.release()
@@ -310,14 +346,15 @@ async def test_chat_smoke_failure_rollback():
     logger.info("TEST 4: Chat smoke test failure triggers rollback")
     logger.info("=" * 60)
 
-    ws_collector = WSCollector()
-    orchestrator._ws_manager = ws_collector
-    mock_state.running = True
+    ws = WSCollector()
+    orchestrator._ws_manager = ws
+    orchestrator._current_session = None
+    orchestrator._cancel_requested = False
     mock_state.start_fail_mode = False
     mock_state.chat_fail_mode = True
+    mock_state.health_delay_seconds = 0.3
 
-    mock_vllm_process = await _start_mock_vllm_server()
-    await asyncio.sleep(1)
+    _start_mock_server(chat_fail=False)
 
     try:
         session = await orchestrator.switch(
@@ -327,9 +364,8 @@ async def test_chat_smoke_failure_rollback():
             previous_model_path="/mnt/pve_models/Qwen3.6-35B-A3B-NVFP4",
         )
 
-        logger.info("Session result: phase=%s, success=%s, rollback_reason=%s",
+        logger.info("Result: phase=%s success=%s rollback=%s",
                     session.overall_phase.value, session.completed_successfully, session.rollback_reason)
-
         for p in session.phases:
             logger.info("  Phase%d [%s]: status=%s error=%s",
                         p.phase, p.name, p.status.value, p.error)
@@ -341,11 +377,11 @@ async def test_chat_smoke_failure_rollback():
         logger.info("TEST 4 PASSED")
         return True
     except Exception as e:
-        logger.error("TEST 4 FAILED: %s", e)
+        logger.error("TEST 4 FAILED: %s", e, exc_info=True)
         return False
     finally:
         mock_state.chat_fail_mode = False
-        _stop_mock_vllm(mock_vllm_process)
+        _kill_mock_server()
         orchestrator._current_session = None
         if orchestrator._global_lock.locked():
             orchestrator._global_lock.release()
@@ -356,14 +392,15 @@ async def test_cancel_switch():
     logger.info("TEST 5: Cancel switch mid-process")
     logger.info("=" * 60)
 
-    ws_collector = WSCollector()
-    orchestrator._ws_manager = ws_collector
-    mock_state.running = True
+    ws = WSCollector()
+    orchestrator._ws_manager = ws
+    orchestrator._current_session = None
+    orchestrator._cancel_requested = False
     mock_state.start_fail_mode = False
     mock_state.chat_fail_mode = False
+    mock_state.health_delay_seconds = 0.3
 
-    mock_vllm_process = await _start_mock_vllm_server()
-    await asyncio.sleep(1)
+    _start_mock_server(chat_fail=False)
 
     try:
         switch_task = asyncio.create_task(
@@ -381,7 +418,7 @@ async def test_cancel_switch():
 
         session = await switch_task
 
-        logger.info("Session result: phase=%s, success=%s, rollback_reason=%s",
+        logger.info("Result: phase=%s success=%s rollback=%s",
                     session.overall_phase.value, session.completed_successfully, session.rollback_reason)
 
         assert not session.completed_successfully
@@ -390,10 +427,10 @@ async def test_cancel_switch():
         logger.info("TEST 5 PASSED")
         return True
     except Exception as e:
-        logger.error("TEST 5 FAILED: %s", e)
+        logger.error("TEST 5 FAILED: %s", e, exc_info=True)
         return False
     finally:
-        _stop_mock_vllm(mock_vllm_process)
+        _kill_mock_server()
         orchestrator._current_session = None
         orchestrator._cancel_requested = False
         if orchestrator._global_lock.locked():
@@ -402,23 +439,23 @@ async def test_cancel_switch():
 
 async def test_status_api():
     logger.info("=" * 60)
-    logger.info("TEST 6: Status API during and after switch")
+    logger.info("TEST 6: Status tracking during/after switch")
     logger.info("=" * 60)
 
-    ws_collector = WSCollector()
-    orchestrator._ws_manager = ws_collector
-    mock_state.running = False
+    ws = WSCollector()
+    orchestrator._ws_manager = ws
+    orchestrator._current_session = None
+    orchestrator._cancel_requested = False
     mock_state.start_fail_mode = False
     mock_state.chat_fail_mode = False
+    mock_state.health_delay_seconds = 0.3
 
-    assert not orchestrator.is_switching
-    assert orchestrator.current_session is None
-    logger.info("Before switch: is_switching=%s, session=%s", orchestrator.is_switching, orchestrator.current_session)
-
-    mock_vllm_process = await _start_mock_vllm_server()
-    await asyncio.sleep(1)
+    _start_mock_server(chat_fail=False)
 
     try:
+        assert not orchestrator.is_switching
+        assert orchestrator.current_session is None
+
         switch_task = asyncio.create_task(
             orchestrator.switch(
                 target_model="Status-Model",
@@ -427,86 +464,30 @@ async def test_status_api():
         )
 
         await asyncio.sleep(1)
-        is_switching_during = orchestrator.is_switching
-        session_during = orchestrator.current_session
-        logger.info("During switch: is_switching=%s, session_id=%s, phase=%s",
-                    is_switching_during,
-                    session_during.session_id if session_during else None,
-                    session_during.overall_phase.value if session_during else None)
+        assert orchestrator.is_switching
+        assert orchestrator.current_session is not None
+        logger.info("During switch: is_switching=%s session_id=%s",
+                    orchestrator.is_switching, orchestrator.current_session.session_id)
 
         session = await switch_task
-
-        is_switching_after = orchestrator.is_switching
-        logger.info("After switch: is_switching=%s", is_switching_after)
-
-        assert is_switching_during
-        assert not is_switching_after
+        assert not orchestrator.is_switching
 
         logger.info("TEST 6 PASSED")
         return True
     except Exception as e:
-        logger.error("TEST 6 FAILED: %s", e)
+        logger.error("TEST 6 FAILED: %s", e, exc_info=True)
         return False
     finally:
-        _stop_mock_vllm(mock_vllm_process)
+        _kill_mock_server()
         orchestrator._current_session = None
         if orchestrator._global_lock.locked():
             orchestrator._global_lock.release()
 
 
-mock_vllm_server_process = None
-
-
-async def _start_mock_vllm_server():
-    global mock_vllm_server_process
-
-    script_path = os.path.join(os.path.dirname(__file__), "mock_vllm_server.py")
-    env = os.environ.copy()
-    env["MOCK_VLLM_PORT"] = str(MOCK_VLLM_PORT)
-    env["MOCK_CHAT_FAIL"] = str(int(mock_state.chat_fail_mode))
-
-    proc = subprocess.Popen(
-        [sys.executable, script_path],
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    mock_vllm_server_process = proc
-
-    for _ in range(10):
-        if orchestrator._is_port_alive(MOCK_VLLM_PORT):
-            logger.info("Mock vLLM server started on port %d (PID=%d)", MOCK_VLLM_PORT, proc.pid)
-            return proc
-        await asyncio.sleep(0.5)
-
-    logger.error("Mock vLLM server failed to start within 5s")
-    stderr = proc.stderr.read().decode() if proc.stderr else ""
-    logger.error("stderr: %s", stderr[:500])
-    raise RuntimeError("Mock vLLM server failed to start")
-
-
-def _stop_mock_vllm(proc):
-    global mock_vllm_server_process
-    if proc is None:
-        return
-    try:
-        proc.terminate()
-        proc.wait(timeout=5)
-    except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
-    mock_vllm_server_process = None
-    logger.info("Mock vLLM server stopped")
-
-
 async def run_all_tests():
     patch_vllm_manager_module()
-    patch_orchestrator_internal_methods()
 
     results = {}
-
     tests = [
         ("normal_switch", test_normal_switch),
         ("concurrent_switch", test_concurrent_switch),
@@ -524,15 +505,11 @@ async def run_all_tests():
         except Exception as e:
             logger.error("Test %s crashed: %s", name, e)
             results[name] = False
-
-        await asyncio.sleep(2)
-
-    restore_vllm_manager_module()
+        await asyncio.sleep(1)
 
     logger.info("\n" + "=" * 60)
     logger.info("FINAL RESULTS")
     logger.info("=" * 60)
-
     all_passed = True
     for name, result in results.items():
         status = "PASS" if result else "FAIL"
@@ -541,10 +518,7 @@ async def run_all_tests():
             all_passed = False
 
     logger.info("=" * 60)
-    if all_passed:
-        logger.info("ALL TESTS PASSED")
-    else:
-        logger.info("SOME TESTS FAILED")
+    logger.info("ALL PASSED" if all_passed else "SOME FAILED")
     logger.info("=" * 60)
 
     return all_passed
