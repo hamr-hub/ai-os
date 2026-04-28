@@ -65,7 +65,7 @@ func NewManageHandler(
 
 func (h *ManageHandler) waitForModelReady(ctx context.Context, modelName string) error {
 	port := h.scheduler.GetModelPort(modelName)
-	if err := h.vllmManager.WaitUntilReady(ctx, port, 90*time.Second, time.Second); err != nil {
+	if err := h.vllmManager.WaitUntilReady(ctx, port, 600*time.Second, 5*time.Second); err != nil {
 		return fmt.Errorf("model %s readiness probe failed: %w", modelName, err)
 	}
 	return nil

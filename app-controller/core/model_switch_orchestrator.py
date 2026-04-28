@@ -290,7 +290,7 @@ class ModelSwitchOrchestrator:
         url = f"http://localhost:{port}/v1/chat/completions"
 
         payload = {
-            "model": session.target_model,
+            "model": session.target_model_path,
             "messages": [{"role": "user", "content": "Hi"}],
             "max_tokens": 5,
             "temperature": 0.0,
@@ -569,7 +569,7 @@ class ModelSwitchOrchestrator:
         url = f"http://localhost:{port}/v1/chat/completions"
 
         payload = {
-            "model": session.target_model,
+            "model": session.target_model_path,
             "messages": [{"role": "user", "content": "Hi"}],
             "max_tokens": 5,
             "temperature": 0.0,
@@ -615,6 +615,9 @@ class ModelSwitchOrchestrator:
         await self._broadcast(session, phase=0, progress=0,
                               log=f"开始回滚: {reason}", level="warning",
                               event_type="rollback_started")
+
+        from core.vllm_manager import _cleanup_runtime_override
+        _cleanup_runtime_override()
 
         if session.previous_model_path:
             from core.vllm_manager import _update_vllm_script, start_vllm_service

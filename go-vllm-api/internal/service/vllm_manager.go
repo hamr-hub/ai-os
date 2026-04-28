@@ -329,7 +329,8 @@ func (vm *VLLMManager) SwitchModelWithTest(ctx context.Context, modelPath string
 	}
 	vm.logger.Info("vllm service restarted", zap.String("model", modelName), zap.String("service", serviceName))
 
-	if err := vm.WaitUntilReady(ctx, port, 180*time.Second, 3*time.Second); err != nil {
+	// 600s timeout for large models (70B+) to load into VRAM
+	if err := vm.WaitUntilReady(ctx, port, 600*time.Second, 5*time.Second); err != nil {
 		return fmt.Errorf("wait for vllm readiness: %w", err)
 	}
 
@@ -407,29 +408,47 @@ func (vm *VLLMManager) sendTestRequest(ctx context.Context, port int, modelName 
 
 func (vm *VLLMManager) WaitUntilReady(ctx context.Context, port int, timeout time.Duration, interval time.Duration) error {
 	if timeout <= 0 {
-		timeout = 90 * time.Second
+		timeout = 600 * time.Second
 	}
 	if interval <= 0 {
-		interval = time.Second
+		interval = 5 * time.Second
 	}
 
 	deadline := time.Now().Add(timeout)
 	var lastErr error
-	pollInterval := 500 * time.Millisecond
+	pollInterval := 2 * time.Second
 
+	// Use a dedicated client for readiness checks with longer timeout
+	readinessClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        5,
+			MaxIdleConnsPerHost: 2,
+			IdleConnTimeout:     30 * time.Second,
+		},
+	}
+
+	startTime := time.Now()
+	attemptCount := 0
 	for {
+		attemptCount++
 		req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://localhost:%d/v1/models", port), nil)
 		if err != nil {
 			return err
 		}
 
-		resp, err := vm.requestClient.Do(req)
+		resp, err := readinessClient.Do(req)
 		if err == nil {
 			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
 			resp.Body.Close()
 			if readErr != nil {
 				lastErr = fmt.Errorf("read readiness response: %w", readErr)
 			} else if resp.StatusCode == http.StatusOK {
+				elapsed := time.Since(startTime)
+				vm.logger.Info("vLLM model ready",
+					zap.Int("port", port),
+					zap.Duration("elapsed", elapsed),
+					zap.Int("attempts", attemptCount))
 				return nil
 			} else {
 				lastErr = fmt.Errorf("readiness returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
@@ -439,11 +458,24 @@ func (vm *VLLMManager) WaitUntilReady(ctx context.Context, port int, timeout tim
 		}
 
 		if time.Now().After(deadline) {
+			elapsed := time.Since(startTime)
+			vm.logger.Warn("vLLM readiness timeout",
+				zap.Int("port", port),
+				zap.Duration("elapsed", elapsed),
+				zap.Int("attempts", attemptCount),
+				zap.Error(lastErr))
 			if lastErr == nil {
 				lastErr = fmt.Errorf("readiness probe timed out")
 			}
 			return lastErr
 		}
+
+		elapsed := time.Since(startTime)
+		vm.logger.Info("waiting for vLLM readiness",
+			zap.Int("port", port),
+			zap.Duration("elapsed", elapsed),
+			zap.Duration("remaining", deadline.Sub(time.Now())),
+			zap.Int("attempt", attemptCount))
 
 		timer := time.NewTimer(pollInterval)
 		select {

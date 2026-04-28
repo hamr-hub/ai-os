@@ -41,7 +41,6 @@ source "$VLLM_ENV_DIR/bin/activate"
 export TERM=xterm-256color
 
 # ===== 4. 核心稳定参数 =====
-export VLLM_ATTENTION_BACKEND=TRITON_ATTN
 export VLLM_USE_V1=1
 export NCCL_P2P_DISABLE=1
 export NCCL_SOCKET_REUSEPORT=1
@@ -78,13 +77,17 @@ if [ -f "$VLLM_PARAMS_FILE" ]; then
     MAX_NUM_SEQS=$(python3 -c "import json; print(json.load(open('$VLLM_PARAMS_FILE')).get('max_num_seqs', 256))")
     MAX_NUM_BATCHED_TOKENS=$(python3 -c "import json; print(json.load(open('$VLLM_PARAMS_FILE')).get('max_num_batched_tokens', 16384))")
     ENABLE_CHUNKED_PREFILL=$(python3 -c "import json; v=json.load(open('$VLLM_PARAMS_FILE')).get('enable_chunked_prefill', True); print('true' if v else 'false')")
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 已加载模型个性化参数: gpu_memory_utilization=$GPU_MEMORY_UTILIZATION, max_model_len=$MAX_MODEL_LEN, max_num_seqs=$MAX_NUM_SEQS" | tee -a "$LOG_FILE"
+    TOOL_CALL_PARSER=$(python3 -c "import json; v=json.load(open('$VLLM_PARAMS_FILE')).get('tool_call_parser'); print(v if v else '')")
+    ATTENTION_BACKEND=$(python3 -c "import json; v=json.load(open('$VLLM_PARAMS_FILE')).get('attention_backend'); print(v if v else '')")
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 已加载模型个性化参数: gpu_memory_utilization=$GPU_MEMORY_UTILIZATION, max_model_len=$MAX_MODEL_LEN, max_num_seqs=$MAX_NUM_SEQS, tool_call_parser=$TOOL_CALL_PARSER, attention_backend=$ATTENTION_BACKEND" | tee -a "$LOG_FILE"
 else
     GPU_MEMORY_UTILIZATION="0.92"
     MAX_MODEL_LEN="32768"
     MAX_NUM_SEQS="256"
     MAX_NUM_BATCHED_TOKENS="16384"
     ENABLE_CHUNKED_PREFILL="true"
+    TOOL_CALL_PARSER=""
+    ATTENTION_BACKEND=""
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 未找到参数文件，使用默认值" | tee -a "$LOG_FILE"
 fi
 
@@ -92,6 +95,17 @@ fi
 CHUNKED_PREFILL_ARGS=""
 if [ "$ENABLE_CHUNKED_PREFILL" = "true" ]; then
     CHUNKED_PREFILL_ARGS="--enable-chunked-prefill"
+fi
+
+# 构建 attention backend
+if [ -n "$ATTENTION_BACKEND" ]; then
+    export VLLM_ATTENTION_BACKEND="$ATTENTION_BACKEND"
+fi
+
+# 构建 tool call 参数
+TOOL_CALL_ARGS=""
+if [ -n "$TOOL_CALL_PARSER" ]; then
+    TOOL_CALL_ARGS="--enable-auto-tool-choice --tool-call-parser $TOOL_CALL_PARSER"
 fi
 
 # ===== 8. 等待模型目录就绪 =====
@@ -147,6 +161,5 @@ exec vllm serve "$MODEL_PATH" \
   --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
   --max-num-seqs "$MAX_NUM_SEQS" \
   --enforce-eager \
-  --enable-auto-tool-choice \
-  --tool-call-parser gemma4 \
+  $TOOL_CALL_ARGS \
   2>&1 | tee -a "$LOG_FILE"

@@ -817,33 +817,37 @@ async def switch_vllm_model_with_test(model_name: str, test_enabled: bool = True
         model_switch_lock.release()
 
 
-async def _wait_for_vllm_ready(max_wait: int = 180, check_interval: int = 5) -> bool:
+async def _wait_for_vllm_ready(max_wait: int = 600, check_interval: int = 5) -> bool:
     """
     等待 vLLM 服务就绪（动态端口发现 + 健康检查）
-    :param max_wait: 最大等待时间（秒）
+    :param max_wait: 最大等待时间（秒），默认600秒以适应大模型加载
     :param check_interval: 检查间隔（秒）
     :return: 是否就绪
     """
     start_time = time.time()
+    attempt_count = 0
     while (time.time() - start_time) < max_wait:
+        attempt_count += 1
+        elapsed = int(time.time() - start_time)
         # 每次循环都动态发现端口（因为端口可能会变化）
         vllm_port = discover_vllm_port()
         health_url = f"http://localhost:{vllm_port}/health"
         
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
+            async with httpx.AsyncClient(timeout=10) as client:
                 response = await client.get(health_url)
                 if response.status_code == 200:
-                    elapsed = int(time.time() - start_time)
-                    logger.info("vLLM service ready after %d seconds (port=%d)", elapsed, vllm_port)
+                    logger.info("vLLM service ready after %d seconds (port=%d, attempts=%d)", elapsed, vllm_port, attempt_count)
                     return True
         except Exception:
             pass
         
+        logger.info("waiting for vLLM readiness... (elapsed=%ds, remaining=%ds, attempt=%d)", 
+                     elapsed, max_wait - elapsed, attempt_count)
         await asyncio.sleep(check_interval)
     
     elapsed = int(time.time() - start_time)
-    logger.warning("vLLM service not ready after %d seconds", elapsed)
+    logger.warning("vLLM service not ready after %d seconds (attempts=%d)", elapsed, attempt_count)
     return False
 
 
@@ -986,6 +990,24 @@ def _write_runtime_service_override(model_path: str) -> bool:
         return False
 
 
+def _cleanup_runtime_override() -> bool:
+    """Remove the runtime override file and reload systemd to prevent stale overrides."""
+    try:
+        override_dir = f"/run/systemd/system/{VLLM_SERVICE_NAME}.service.d"
+        override_file = os.path.join(override_dir, "override.conf")
+        if os.path.exists(override_file):
+            os.remove(override_file)
+            logger.info("Removed runtime service override file")
+            result = subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                logger.warning("daemon-reload failed after cleanup: %s", (result.stderr or '').strip())
+                return False
+        return True
+    except Exception as exc:
+        logger.warning("Failed to cleanup runtime override: %s", exc)
+        return False
+
+
 def _write_model_state_file(model_path: str) -> bool:
     try:
         state_dir = os.path.dirname(VLLM_MODEL_STATE_FILE)
@@ -1077,91 +1099,74 @@ async def _test_vllm_model(model_name: str, max_retries: int = 5, retry_delay: i
     """
     vllm_port = discover_vllm_port()
     vllm_url = f"http://localhost:{vllm_port}/v1/chat/completions"
-    
-    test_payload = {
-        "model": model_name,
-        "messages": [{"role": "user", "content": "Hello, please respond with a brief message."}],
-        "max_tokens": 10,
-        "temperature": 0.7
-    }
-    
+
+    model_path = os.path.join(MODEL_BASE_PATH, model_name)
+
     for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                response = await client.post(vllm_url, json=test_payload, timeout=30)
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    
-                    # 检查响应是否有效
-                    if result.get("choices") and len(result["choices"]) > 0:
-                        content = result["choices"][0].get("message", {}).get("content", "")
-                        if content.strip():
-                            return {
-                                "success": True,
-                                "message": "Model test passed",
-                                "attempt": attempt + 1,
-                                "response_content": content.strip(),
-                                "token_count": result.get("usage", {}).get("completion_tokens", 0)
-                            }
+        for model_id in [model_path, model_name]:
+            test_payload = {
+                "model": model_id,
+                "messages": [{"role": "user", "content": "Hello, please respond with a brief message."}],
+                "max_tokens": 10,
+                "temperature": 0.7
+            }
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    response = await client.post(vllm_url, json=test_payload, timeout=30)
+
+                    if response.status_code == 200:
+                        result = response.json()
+
+                        if result.get("choices") and len(result["choices"]) > 0:
+                            content = result["choices"][0].get("message", {}).get("content", "")
+                            if content.strip():
+                                return {
+                                    "success": True,
+                                    "message": "Model test passed",
+                                    "attempt": attempt + 1,
+                                    "response_content": content.strip(),
+                                    "token_count": result.get("usage", {}).get("completion_tokens", 0),
+                                    "matched_model_id": model_id,
+                                }
+                            else:
+                                return {
+                                    "success": False,
+                                    "message": "Model returned empty response",
+                                    "attempt": attempt + 1,
+                                    "error": "Empty response content"
+                                }
                         else:
                             return {
                                 "success": False,
-                                "message": "Model returned empty response",
+                                "message": "Invalid response structure from vLLM",
                                 "attempt": attempt + 1,
-                                "error": "Empty response content"
+                                "error": "Missing choices in response"
                             }
+                    elif response.status_code == 404:
+                        continue
                     else:
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(retry_delay)
+                            break
                         return {
                             "success": False,
-                            "message": "Invalid response structure from vLLM",
+                            "message": f"vLLM returned HTTP error {response.status_code}",
                             "attempt": attempt + 1,
-                            "error": "Missing choices in response"
+                            "error": response.text[:200] if response.text else "Unknown error"
                         }
-                else:
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(retry_delay)
-                        continue
-                    return {
-                        "success": False,
-                        "message": f"vLLM returned HTTP error {response.status_code}",
-                        "attempt": attempt + 1,
-                        "error": response.text[:200] if response.text else "Unknown error"
-                    }
-        except httpx.HTTPError as e:
-            if attempt < max_retries - 1:
-                await asyncio.sleep(retry_delay)
-                continue
-            return {
-                "success": False,
-                "message": f"HTTP request failed",
-                "attempt": attempt + 1,
-                "error": str(e)
-            }
-        except asyncio.TimeoutError:
-            if attempt < max_retries - 1:
-                await asyncio.sleep(retry_delay)
-                continue
-            return {
-                "success": False,
-                "message": "Request timed out",
-                "attempt": attempt + 1,
-                "error": "Timeout waiting for response"
-            }
-        except Exception as e:
-            if attempt < max_retries - 1:
-                await asyncio.sleep(retry_delay)
-                continue
-            return {
-                "success": False,
-                "message": "Unexpected error during test",
-                "attempt": attempt + 1,
-                "error": str(e)
-            }
-    
-    return {
-        "success": False,
-        "message": "All retry attempts failed",
-        "attempt": max_retries,
-        "error": "Max retries exceeded"
-    }
+            except httpx.HTTPError as e:
+                pass
+            except asyncio.TimeoutError:
+                pass
+            except Exception as e:
+                pass
+
+        if attempt < max_retries - 1:
+            await asyncio.sleep(retry_delay)
+            continue
+        return {
+            "success": False,
+            "message": f"Model test failed after {max_retries} retries",
+            "attempt": max_retries,
+            "error": f"Neither model_name={model_name} nor model_path={model_path} was accepted by vLLM"
+        }

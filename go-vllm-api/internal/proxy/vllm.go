@@ -201,14 +201,15 @@ func (p *VLLMProxy) ListModels(ctx context.Context, port int) (interface{}, erro
 
 func (p *VLLMProxy) WaitUntilReady(ctx context.Context, port int, timeout time.Duration, interval time.Duration) error {
 	if timeout <= 0 {
-		timeout = 90 * time.Second
+		timeout = 600 * time.Second
 	}
 	if interval <= 0 {
-		interval = time.Second
+		interval = 5 * time.Second
 	}
 
 	deadline := time.Now().Add(timeout)
 	var lastErr error
+	pollInterval := 2 * time.Second
 
 	for {
 		req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://localhost:%d/v1/models", port), nil)
@@ -238,12 +239,16 @@ func (p *VLLMProxy) WaitUntilReady(ctx context.Context, port int, timeout time.D
 			return lastErr
 		}
 
-		timer := time.NewTimer(interval)
+		timer := time.NewTimer(pollInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()
 		case <-timer.C:
+		}
+		pollInterval = time.Duration(float64(pollInterval) * 1.5)
+		if pollInterval > interval {
+			pollInterval = interval
 		}
 	}
 }
