@@ -253,7 +253,19 @@ def get_stopped_model():
                 # 只选择 vLLM 后端且未运行的模型
                 backend = variant.get("backend_type", "vllm")
                 if not variant.get("running") and backend == "vllm":
-                    return variant["name"]
+                    # 验证模型目录有 config.json
+                    model_path = variant.get("path", "")
+                    config_path = f"{model_path}/config.json"
+                    try:
+                        config_resp = requests.get(f"{PYTHON_BACKEND}/manage/files/read?path={config_path}", timeout=5)
+                        if config_resp.status_code == 200:
+                            return variant["name"]
+                    except:
+                        # 尝试直接检查文件系统
+                        import subprocess
+                        result = subprocess.run(["ls", config_path], capture_output=True, timeout=5)
+                        if result.returncode == 0:
+                            return variant["name"]
         
         return None
     except Exception as e:

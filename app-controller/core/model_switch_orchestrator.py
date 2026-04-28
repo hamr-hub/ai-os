@@ -116,7 +116,7 @@ class ModelSwitchOrchestrator:
     PHASE1_PORT_CHECK_TIMEOUT = 15
     PHASE2_KILL_TIMEOUT = 60
     PHASE2_VERIFY_TIMEOUT = 15
-    PHASE3_START_TIMEOUT = 180
+    PHASE3_START_TIMEOUT = 600  # 大模型可能需要 5-10 分钟加载
     PHASE4_TEST_RETRIES = 3
     PHASE4_TEST_TIMEOUT = 15
 
@@ -173,22 +173,17 @@ class ModelSwitchOrchestrator:
             self._current_session = session
 
             try:
+                # 简化流程：更新配置 → 重启服务 → 测试
                 session.overall_phase = SwitchPhase.PHASE1
-                await self._phase1_stop_and_verify(session)
+                await self._phase1_update_config_and_restart(session)
 
                 session.overall_phase = SwitchPhase.PHASE2
-                await self._phase2_force_kill_if_needed(session)
-
-                session.overall_phase = SwitchPhase.PHASE3
-                await self._phase3_start_and_check(session)
-
-                session.overall_phase = SwitchPhase.PHASE4
-                await self._phase4_smoke_test(session)
+                await self._phase2_smoke_test(session)
 
                 session.overall_phase = SwitchPhase.COMPLETED
                 session.completed_successfully = True
                 session.finished_at = datetime.now().isoformat()
-                await self._broadcast(session, phase=4, progress=100,
+                await self._broadcast(session, phase=2, progress=100,
                                       log="模型切换完成，所有测试通过", level="success", final=True)
 
             except _SwitchAborted:
@@ -203,6 +198,135 @@ class ModelSwitchOrchestrator:
                 session.finished_at = session.finished_at or datetime.now().isoformat()
 
             return session
+
+    async def _phase1_update_config_and_restart(self, session: SwitchSession):
+        """Phase 1: 更新配置并重启服务"""
+        phase = session.phases[0]
+        phase.status = PhaseStatus.RUNNING
+        phase.started_at = datetime.now().isoformat()
+
+        await self._log(session, phase, f"更新模型配置: {session.target_model}")
+        await self._broadcast(session, phase=1, progress=10, log="更新模型配置")
+
+        from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache
+        script_ok = _update_vllm_script(session.target_model_path, session.target_model)
+        if not script_ok:
+            error_msg = "更新模型路径配置失败"
+            phase.status = PhaseStatus.FAILED
+            phase.error = error_msg
+            phase.finished_at = datetime.now().isoformat()
+            await self._rollback(session, error_msg)
+            raise _SwitchAborted(error_msg)
+
+        await self._log(session, phase, "模型配置更新成功")
+        refresh_vllm_port_cache()
+
+        await self._broadcast(session, phase=1, progress=30, log="重启 vLLM 服务")
+        await self._log(session, phase, "重启 vLLM 服务...")
+
+        from core.vllm_manager import restart_vllm_service
+        restart_ok = restart_vllm_service()
+        if not restart_ok:
+            error_msg = "systemctl restart 失败"
+            phase.status = PhaseStatus.FAILED
+            phase.error = error_msg
+            phase.finished_at = datetime.now().isoformat()
+            await self._rollback(session, error_msg)
+            raise _SwitchAborted(error_msg)
+
+        await self._log(session, phase, "vLLM 服务重启指令已发送")
+
+        # 等待服务就绪
+        start_time = time.time()
+        poll_interval = 3.0
+        while time.time() - start_time < self.PHASE3_START_TIMEOUT:
+            if self._cancel_requested:
+                await self._rollback(session, "用户请求取消")
+                raise _SwitchAborted("Cancelled")
+
+            elapsed = int(time.time() - start_time)
+            progress = 35 + int(55 * elapsed / self.PHASE3_START_TIMEOUT)
+
+            from core.vllm_manager import discover_vllm_port
+            port = discover_vllm_port()
+            health_url = f"http://localhost:{port}/health"
+            try:
+                async with httpx.AsyncClient(timeout=3) as client:
+                    resp = await client.get(health_url)
+                    if resp.status_code == 200:
+                        phase.status = PhaseStatus.SUCCESS
+                        phase.progress = 100
+                        phase.finished_at = datetime.now().isoformat()
+                        await self._log(session, phase, f"vLLM 服务就绪 (耗时 {elapsed}s)")
+                        await self._broadcast(session, phase=1, progress=100,
+                                              log="vLLM 服务就绪", level="success")
+                        return
+            except Exception:
+                pass
+
+            await self._broadcast(session, phase=1, progress=min(progress, 90),
+                                  log=f"等待服务就绪... ({elapsed}s)")
+            await asyncio.sleep(poll_interval)
+            poll_interval = min(poll_interval * 1.3, 8)
+
+        error_msg = f"vLLM 服务在 {self.PHASE3_START_TIMEOUT}s 内未就绪"
+        phase.status = PhaseStatus.FAILED
+        phase.error = error_msg
+        phase.finished_at = datetime.now().isoformat()
+        await self._rollback(session, error_msg)
+        raise _SwitchAborted(error_msg)
+
+    async def _phase2_smoke_test(self, session: SwitchSession):
+        """Phase 2: 冒烟测试"""
+        phase = session.phases[1]
+        phase.status = PhaseStatus.RUNNING
+        phase.started_at = datetime.now().isoformat()
+
+        await self._log(session, phase, "开始冒烟测试...")
+        await self._broadcast(session, phase=2, progress=10, log="冒烟测试")
+
+        from core.vllm_manager import discover_vllm_port
+        port = discover_vllm_port()
+        url = f"http://localhost:{port}/v1/chat/completions"
+
+        payload = {
+            "model": session.target_model,
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 5,
+            "temperature": 0.0,
+        }
+
+        for attempt in range(1, self.PHASE4_TEST_RETRIES + 1):
+            progress = int(20 * attempt / self.PHASE4_TEST_RETRIES)
+            await self._broadcast(session, phase=2, progress=progress,
+                                  log=f"冒烟测试第 {attempt}/{self.PHASE4_TEST_RETRIES} 次")
+            try:
+                async with httpx.AsyncClient(timeout=self.PHASE4_TEST_TIMEOUT) as client:
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content.strip():
+                            phase.status = PhaseStatus.SUCCESS
+                            phase.progress = 100
+                            phase.finished_at = datetime.now().isoformat()
+                            await self._log(session, phase,
+                                           f"冒烟测试通过 (第{attempt}次)")
+                            await self._broadcast(session, phase=2, progress=100,
+                                                  log="冒烟测试通过", level="success")
+                            return
+            except Exception as e:
+                await self._log(session, phase, f"测试第{attempt}次异常: {e}")
+
+            if attempt < self.PHASE4_TEST_RETRIES:
+                await asyncio.sleep(5)
+
+        error_msg = f"冒烟测试在 {self.PHASE4_TEST_RETRIES} 次重试后失败"
+        phase.status = PhaseStatus.FAILED
+        phase.error = error_msg
+        phase.finished_at = datetime.now().isoformat()
+        await self._rollback(session, error_msg)
+        raise _SwitchAborted(error_msg)
 
     async def _phase1_stop_and_verify(self, session: SwitchSession):
         phase = session.phases[0]

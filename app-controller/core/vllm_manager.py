@@ -1036,12 +1036,10 @@ def _write_vllm_params_file(model_name: str) -> bool:
 
 def _update_vllm_script(model_path: str, model_name: str = None) -> bool:
     """
-    更新 vLLM systemd 服务文件和启动脚本中的模型路径
-    优先级：systemd 服务文件 > 启动脚本
+    更新 vLLM 模型配置
+    通过 systemd runtime override 设置环境变量来切换模型，不修改启动脚本
     """
     try:
-        import re
-
         # 如果未提供模型名称，尝试从路径中推断
         if not model_name:
             model_name = _find_model_name_from_path(model_path)
@@ -1055,107 +1053,17 @@ def _update_vllm_script(model_path: str, model_name: str = None) -> bool:
 
         state_updated = _write_model_state_file(model_path)
 
-        # 再尝试写入 runtime override，兼容 /etc 只读的部署环境。
+        # 写入 runtime override，通过环境变量传递模型路径
         runtime_updated = _write_runtime_service_override(model_path)
 
-        # 同时尽量更新持久化 service 文件；失败时不影响 runtime 切换。
-        systemd_updated = False
-        service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
-        if os.path.exists(service_file):
-            try:
-                with open(service_file, 'r') as f:
-                    content = f.read()
-
-                new_content = re.sub(
-                    r'Environment="VLLM_MODEL_PATH=[^"]*"',
-                    f'Environment="VLLM_MODEL_PATH={model_path}"',
-                    content
-                )
-
-                if new_content != content:
-                    with open(service_file, 'w') as f:
-                        f.write(new_content)
-                    subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True, timeout=10)
-                    logger.info("Updated systemd service file: %s", model_path)
-                    systemd_updated = True
-            except OSError as exc:
-                logger.warning("Failed to persist systemd service file update: %s", exc)
-        
-        if not os.path.exists(VLLM_START_SCRIPT):
-            logger.warning("Start script not found: %s", VLLM_START_SCRIPT)
-            # 即使启动脚本不存在，只要 runtime override 更新成功就可以继续
-            return runtime_updated or systemd_updated
-        
-        with open(VLLM_START_SCRIPT, 'r') as f:
-            content = f.read()
-
-        lines = content.split('\n')
-        new_lines = []
-        replaced = False
-
-        for line in lines:
-            # 匹配 MODEL_PATH="${VLLM_MODEL_PATH:-...}" 或 MODEL_PATH="..." 格式
-            if 'MODEL_PATH=' in line and '=' in line and not line.strip().startswith('#'):
-                # 处理带默认值的格式：MODEL_PATH="${VLLM_MODEL_PATH:-/path/to/model}"
-                if ':-' in line:
-                    # 只替换默认值部分
-                    new_line = re.sub(
-                        r'(:-)[^}]+\}',
-                        f':-{model_path}"',
-                        line
-                    )
-                    # 如果正则替换失败，使用原始行
-                    if ':-' not in new_line:
-                        new_line = line
-                    new_lines.append(new_line)
-                    replaced = True
-                    continue
-                # 处理直接赋值的格式：MODEL_PATH="/path/to/model"
-                elif 'VLLM_MODEL_PATH' in line:
-                    parts = line.split('=', 1)
-                    if len(parts) >= 2:
-                        new_line = f'{parts[0]}="{model_path}"'
-                        new_lines.append(new_line)
-                        replaced = True
-                        continue
-            
-            # 匹配 vllm serve 命令（如果存在硬编码路径）
-            if 'vllm serve' in line and not line.strip().startswith('#'):
-                # 检查是否包含变量引用，如果已经是变量引用则不修改
-                if '$MODEL_PATH' in line or '${MODEL_PATH}' in line:
-                    new_lines.append(line)
-                    continue
-                
-                # 替换硬编码的模型路径
-                parts = line.split('vllm serve')
-                if len(parts) >= 2:
-                    rest_parts = parts[1].strip().split()
-                    if len(rest_parts) >= 1:
-                        new_line = f'{parts[0]}vllm serve "{model_path}" {" ".join(rest_parts[1:])}'
-                        new_lines.append(new_line)
-                        replaced = True
-                        continue
-            
-            new_lines.append(line)
-
-        if not replaced and not systemd_updated and not runtime_updated and not state_updated:
-            logger.warning("No model path found in start script to update")
-            return False
-
-        if replaced:
-            with open(VLLM_START_SCRIPT, 'w') as f:
-                f.write('\n'.join(new_lines))
-            logger.info("Updated start script: %s", model_path)
-
-        # 必须至少有一种方式成功更新了模型路径
-        success = runtime_updated or systemd_updated or replaced
+        # 返回是否成功更新了配置
+        success = runtime_updated
         if not success:
-            logger.error("Failed to update model path by any method: runtime=%s, systemd=%s, script=%s",
-                        runtime_updated, systemd_updated, replaced)
+            logger.error("Failed to update runtime service override")
         
         return success
     except Exception as e:
-        logger.error("Failed to update vLLM script: %s", e)
+        logger.error("Failed to update vLLM config: %s", e)
         return False
 
 
