@@ -329,16 +329,34 @@
             }
 
             updateSwitchingStep(1);
-            var r = await fetch('/api/model-switch/switch', {
+            var apiKey = localStorage.getItem('gpu_api_key') || '123456';
+            var response = await fetch('/v1/chat/completions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ modelName: name })
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + apiKey
+                },
+                body: JSON.stringify({
+                    model: name,
+                    messages: [{ role: 'user', content: 'hi' }],
+                    max_tokens: 8,
+                    temperature: 0
+                }),
+                signal: AbortSignal.timeout(180000)
             });
-            var result = await r.json();
 
-            if (!result.success) {
+            updateSwitchingStep(3);
+
+            if (!response.ok) {
+                var errorText = '切换失败';
+                try {
+                    var errData = await response.json();
+                    errorText = errData.error || errData.message || errorText;
+                } catch (e) {
+                    errorText = response.statusText || errorText;
+                }
                 hideSwitchingOverlay();
-                showModelMessage('error', '切换失败: ' + (result.error || '未知错误'));
+                showModelMessage('error', errorText);
                 activeModelAction = null;
                 setActionButtonsDisabled(false);
                 return;
