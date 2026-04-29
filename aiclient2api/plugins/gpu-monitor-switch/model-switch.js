@@ -102,6 +102,8 @@ class ModelSwitchService {
                         multimodal: variant.multimodal || false,
                         vllmConfig: variant.vllm_config || null,
                         isCurrent: variant.is_current || false,
+                        modelPath: variant.model_path || variant.path || '',
+                        pathExists: variant.path_exists !== false,
                         status: variant.running ? 'running' : 'stopped',
                         variantCount: group.variant_count,
                         groupSizeMB: group.total_size_mb,
@@ -118,6 +120,8 @@ class ModelSwitchService {
                     backendType: info.backend_type || info.service || 'vllm',
                     port: info.port || null,
                     description: info.description || '',
+                    modelPath: info.model_path || '',
+                    pathExists: info.path_exists !== false,
                     status: info.running ? 'running' : 'stopped',
                     sizeMB: info.size_mb || 0,
                     sizeBytes: (info.size_mb || 0) * 1024 * 1024,
@@ -210,43 +214,24 @@ class ModelSwitchService {
 
     async switchModel(modelName) {
         try {
-            logger.info(`[Model Switch Service] Starting atomic model switch to: ${modelName}`);
-            const response = await backendClient.postWithFallback(
-                '/manage/switch/atomic',
-                {
-                    action: 'switch',
-                    model_name: modelName,
-                    set_as_default: true,
-                }
-            );
-            let result;
-            try {
-                result = await response.json();
-            } catch (e) {
-                logger.warn('[Model Switch Service] Failed to parse switch result:', e.message);
-                result = { status: 'unknown', raw: await response.text().catch(() => '') };
-            }
-
-            if (!response.ok) {
-                logger.error('[Model Switch Service] Model switch returned error:', result);
-                return {
-                    success: false,
-                    error: this._extractError(result, `Switch failed with status ${response.status}`),
-                    backendStatus: backendClient.getStatus()
-                };
-            }
+            logger.info(`[Model Switch Service] Switching model via chat API: ${modelName}`);
+            const response = await fetch(`${backendClient.getBaseUrl()}/v1/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: modelName,
+                    messages: [{ role: 'user', content: 'hi' }],
+                    max_tokens: 8,
+                    temperature: 0
+                }),
+                signal: AbortSignal.timeout(180000)
+            });
 
             await this.fetchModelsFromBackend();
 
             return {
-                success: true,
-                data: {
-                    modelName,
-                    sessionId: result.session_id,
-                    targetModel: result.target_model,
-                    previousModel: result.previous_model,
-                    status: result.status,
-                },
+                success: response.ok,
+                data: { modelName, status: response.ok ? 'completed' : 'failed' },
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };
@@ -258,26 +243,24 @@ class ModelSwitchService {
 
     async startModel(modelName) {
         try {
-            const response = await backendClient.postWithFallback(
-                '/manage/switch/atomic',
-                {
-                    action: 'start',
-                    model_name: modelName,
-                }
-            );
-            const result = await response.json();
+            logger.info(`[Model Switch Service] Starting model via chat API: ${modelName}`);
+            const response = await fetch(`${backendClient.getBaseUrl()}/v1/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: modelName,
+                    messages: [{ role: 'user', content: 'hi' }],
+                    max_tokens: 8,
+                    temperature: 0
+                }),
+                signal: AbortSignal.timeout(180000)
+            });
+
             await this.fetchModelsFromBackend();
+
             return {
                 success: response.ok,
-                data: {
-                    modelName,
-                    sessionId: result.session_id,
-                    targetModel: result.target_model,
-                    previousModel: result.previous_model,
-                    status: result.status,
-                    action: result.action || 'start',
-                },
-                error: response.ok ? undefined : this._extractError(result, `Start failed with status ${response.status}`),
+                data: { modelName, status: response.ok ? 'completed' : 'failed' },
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };
@@ -288,27 +271,10 @@ class ModelSwitchService {
 
     async stopModel(modelName) {
         try {
-            const response = await backendClient.postWithFallback(
-                '/manage/switch/atomic',
-                {
-                    action: 'stop',
-                    model_name: modelName,
-                }
-            );
-            const result = await response.json();
-            await this.fetchModelsFromBackend();
+            logger.info(`[Model Switch Service] Stop model not supported via chat API: ${modelName}`);
             return {
-                success: response.ok,
-                data: {
-                    modelName,
-                    sessionId: result.session_id,
-                    targetModel: result.target_model,
-                    previousModel: result.previous_model,
-                    status: result.status,
-                    action: result.action || 'stop',
-                },
-                error: response.ok ? undefined : this._extractError(result, `Stop failed with status ${response.status}`),
-                timestamp: new Date().toISOString(),
+                success: false,
+                error: 'Stop model operation is not supported in auto-switch mode',
                 backendStatus: backendClient.getStatus()
             };
         } catch (error) {

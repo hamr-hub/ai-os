@@ -346,6 +346,19 @@
     flex-shrink: 0;
 }
 
+.path-missing-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    cursor: default;
+}
+
 .btn {
     padding: 8px 16px;
     border-radius: 6px;

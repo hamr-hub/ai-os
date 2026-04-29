@@ -443,6 +443,9 @@ async def get_aggregated_models():
             vllm_config = _get_model_vllm_config(model_name)
             variant["vllm_config"] = vllm_config
 
+            model_path = variant.get("path", "")
+            variant["path_exists"] = os.path.exists(model_path) if model_path else False
+
     current_model = scheduler.get_current_model_name()
     for group in aggregated:
         for variant in group.get("variants", []):

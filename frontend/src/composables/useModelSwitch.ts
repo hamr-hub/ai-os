@@ -1,6 +1,6 @@
 import { ref, computed, onUnmounted } from 'vue'
 import type { SwitchSession, SwitchProgressMessage, SwitchLogLevel } from '@/types'
-import { getSwitchStatus, cancelSwitch, atomicSwitchModel } from '@/api/client'
+import { getSwitchStatus } from '@/api/client'
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
 
@@ -186,47 +186,21 @@ export function useModelSwitch() {
     setAsDefault = false,
     action: 'switch' | 'start' | 'stop' = 'switch'
   ) => {
+    void modelName
+    void setAsDefault
+    void action
     error.value = null
     isSwitching.value = true
 
     connectWS()
     startPolling()
-
-    try {
-      await atomicSwitchModel(modelName, setAsDefault, action)
-    } catch (err) {
-      const axiosErr = err as { response?: { status?: number; data?: { error?: string; message?: string; detail?: string | { error?: string; rollback_reason?: string } } } }
-
-      if (axiosErr.response?.status === 409) {
-        appStore.warning('模型切换正在进行中，请等待完成')
-        return
-      }
-
-      const detail = axiosErr.response?.data?.detail
-      const apiError = typeof detail === 'object'
-        ? detail.error || detail.rollback_reason
-        : detail || axiosErr.response?.data?.error || axiosErr.response?.data?.message
-
-      const fullError = apiError || (err instanceof Error ? err.message : `${action === 'start' ? '启动' : action === 'stop' ? '停止' : '切换'}失败`)
-      error.value = fullError
-      isSwitching.value = false
-      stopPolling()
-
-      if (fullError.includes('insufficient memory') || fullError.includes('memory')) {
-        appStore.warning(`模型 ${modelName} 所需显存超过当前可用显存，${action === 'start' ? '启动' : '切换'}失败`)
-      } else {
-        appStore.warning(`模型 ${modelName}${action === 'start' ? '启动' : action === 'stop' ? '停止' : '切换'}失败：${fullError}`)
-      }
-    }
   }
 
   const triggerCancel = async () => {
-    try {
-      await cancelSwitch()
-      appStore.warning('已请求取消切换，将触发回滚')
-    } catch (e) {
-      console.warn('[useModelSwitch] Cancel error:', e)
-    }
+    error.value = null
+    isSwitching.value = false
+    stopPolling()
+    disconnectWS()
   }
 
   const initSwitchMonitor = () => {

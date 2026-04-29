@@ -298,6 +298,7 @@ func (h *ManageHandler) GetModelStatus(c *gin.Context) {
 	status := make(map[string]interface{})
 	for _, m := range models {
 		mc := h.scheduler.GetModelConfig(m)
+		modelPath := h.scheduler.GetModelPath(m)
 		status[m] = gin.H{
 			"running":                   h.scheduler.IsModelRunning(m),
 			"port":                      h.scheduler.GetModelPort(m),
@@ -308,6 +309,8 @@ func (h *ManageHandler) GetModelStatus(c *gin.Context) {
 			"supports_tool_calling":     h.scheduler.GetModelSupportsToolCalling(m),
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
 			"last_used":                 nil,
+			"model_path":                modelPath,
+			"path_exists": func() bool { _, err := os.Stat(modelPath); return err == nil }(),
 			"description": func() string {
 				if mc != nil {
 					return mc.Description
@@ -342,6 +345,7 @@ func (h *ManageHandler) ModelsSummary(c *gin.Context) {
 	summary := make([]map[string]interface{}, 0)
 	for _, m := range models {
 		mc := h.scheduler.GetModelConfig(m)
+		modelPath := h.scheduler.GetModelPath(m)
 		entry := gin.H{
 			"name":                      m,
 			"running":                   h.scheduler.IsModelRunning(m),
@@ -350,6 +354,8 @@ func (h *ManageHandler) ModelsSummary(c *gin.Context) {
 			"supports_images":           h.scheduler.GetModelSupportsImages(m),
 			"supports_tool_calling":     h.scheduler.GetModelSupportsToolCalling(m),
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
+			"model_path":                modelPath,
+			"path_exists": func() bool { _, err := os.Stat(modelPath); return err == nil }(),
 		}
 		if mc != nil {
 			entry["description"] = mc.Description
@@ -930,12 +936,15 @@ func (h *ManageHandler) MonitorAll(c *gin.Context) {
 	modelStatus := make(map[string]interface{})
 	for _, m := range models {
 		mc := h.scheduler.GetModelConfig(m)
+		modelPath := h.scheduler.GetModelPath(m)
 		modelStatus[m] = gin.H{
 			"running":         h.scheduler.IsModelRunning(m),
 			"port":            h.scheduler.GetModelPort(m),
 			"service":         h.scheduler.GetModelService(m),
 			"active_requests": h.scheduler.GetActiveRequests(m),
 			"preloaded":       h.scheduler.IsModelPreloaded(m),
+			"model_path":      modelPath,
+			"path_exists":     func() bool { _, err := os.Stat(modelPath); return err == nil }(),
 			"backend_type": func() string {
 				if mc != nil {
 					return mc.Service
@@ -1001,6 +1010,7 @@ func (h *ManageHandler) NodeIntegrationStatus(c *gin.Context) {
 	models := h.scheduler.GetAvailableModels()
 	modelStatuses := make(map[string]interface{})
 	for _, m := range models {
+		modelPath := h.scheduler.GetModelPath(m)
 		modelStatuses[m] = gin.H{
 			"available":                 h.scheduler.IsModelAvailable(m),
 			"running":                   h.scheduler.IsModelRunning(m),
@@ -1011,6 +1021,8 @@ func (h *ManageHandler) NodeIntegrationStatus(c *gin.Context) {
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
 			"active_requests":           h.scheduler.GetActiveRequests(m),
 			"can_accept":                h.scheduler.CanAcceptRequest(m),
+			"model_path":                modelPath,
+			"path_exists": func() bool { _, err := os.Stat(modelPath); return err == nil }(),
 		}
 	}
 

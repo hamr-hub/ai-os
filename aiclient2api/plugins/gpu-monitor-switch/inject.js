@@ -398,17 +398,18 @@
         activeModelAction = action + ':' + name;
         setActionButtonsDisabled(true);
 
-        var actionLabel = action === 'switch' ? '切换' : action === 'start' ? '启动' : '停止';
+        var actionLabel = action === 'switch' || action === 'start' ? '切换' : '停止';
         showModelMessage('info', '正在' + actionLabel + '模型：' + name + '...');
 
-        if (action === 'switch') {
+        if (action === 'switch' || action === 'start') {
             showSwitchingOverlay(name);
             updateSwitchingStep(1);
             ensureSwitchWebSocket();
         }
 
         try {
-            var r = await fetch('/api/model-switch/' + action, {
+            var endpoint = action === 'stop' ? '/api/model-switch/stop' : '/api/model-switch/switch';
+            var r = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ modelName: name })
@@ -417,13 +418,13 @@
             if (!result.success) {
                 hideSwitchingOverlay();
                 stopSwitchPolling();
-                showModelMessage('error', (action === 'switch' ? '切换失败: ' : '操作失败: ') + result.error);
+                showModelMessage('error', (action === 'switch' || action === 'start' ? '切换失败: ' : '操作失败: ') + result.error);
                 activeModelAction = null;
                 setActionButtonsDisabled(false);
                 return;
             }
 
-            if (action === 'switch') {
+            if (action === 'switch' || action === 'start') {
                 updateSwitchingStep(2);
                 startSwitchPolling(name);
             } else {
@@ -436,7 +437,7 @@
         } catch (e) {
             hideSwitchingOverlay();
             stopSwitchPolling();
-            showModelMessage('error', (action === 'switch' ? '切换失败: ' : '操作失败: ') + e.message);
+            showModelMessage('error', (action === 'switch' || action === 'start' ? '切换失败: ' : '操作失败: ') + e.message);
             activeModelAction = null;
             setActionButtonsDisabled(false);
         }
@@ -566,11 +567,17 @@
                         '<div class="detail-item"><span class="detail-label">大小</span><span class="detail-value">' + formatMemorySize(model.sizeMB || model.size_mb) + '</span></div>' +
                         '<div class="detail-item"><span class="detail-label">显存</span><span class="detail-value">' + getMemoryText(model) + '</span></div>' +
                         '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (model.port || '--') + '</span></div></div>';
-                    html += '<div class="model-actions">' +
-                        '<button class="btn btn-sm btn-primary" onclick="window.switchModel(\'' + escapeHtml(model.name) + '\')">' +
-                        '<i class="fas fa-exchange-alt"></i> 切换</button>' +
-                        '<button class="btn btn-sm btn-success" onclick="window.startModel(\'' + escapeHtml(model.name) + '\')">' +
-                        '<i class="fas fa-play"></i> 启动</button></div></div>';
+                    html += '<div class="model-actions">';
+                    if (model.pathExists) {
+                        html += '<button class="btn btn-sm btn-primary" onclick="window.switchModel(\'' + escapeHtml(model.name) + '\')">' +
+                            '<i class="fas fa-exchange-alt"></i> 切换</button>' +
+                            '<button class="btn btn-sm btn-success" onclick="window.startModel(\'' + escapeHtml(model.name) + '\')">' +
+                            '<i class="fas fa-play"></i> 启动</button>';
+                    } else {
+                        html += '<span class="path-missing-tag" title="模型文件目录不存在: ' + escapeHtml(model.modelPath || model.name) + '">' +
+                            '<i class="fas fa-exclamation-triangle"></i> 路径不存在</span>';
+                    }
+                    html += '</div></div>';
                 });
             }
             html += '</div>';

@@ -73,8 +73,6 @@ const {
   isCompleted: switchCompleted,
   isFailed: switchFailed,
   wsConnected,
-  triggerSwitch: triggerAtomicSwitch,
-  triggerCancel: triggerSwitchCancel,
   initSwitchMonitor,
 } = useModelSwitch()
 
@@ -130,7 +128,7 @@ function toggleGroup(baseName: string) {
 }
 
 function handleAtomicSwitch(modelName: string) {
-  triggerAtomicSwitch(modelName, true)
+  handleSwitchAndSetDefault(modelName)
 }
 
 function openVLLMConfig(model: ModelVariant) {
@@ -341,6 +339,15 @@ function getModelMemoryWarning(modelName: string): string | null {
     return `所需 ${model.required_memory} > 可用 ${formatMemory(gpuInfo.value.current.available_memory)}`
   }
   return null
+}
+
+function getPathExists(modelName: string): boolean | undefined {
+  if (!aggregatedModels.value?.groups) return undefined
+  for (const group of aggregatedModels.value.groups) {
+    const variant = group.variants.find(v => v.name === modelName)
+    if (variant) return variant.path_exists
+  }
+  return undefined
 }
 
 onMounted(() => {
@@ -593,9 +600,6 @@ watch(
           <template v-else>正在切换到 {{ switchSession?.target_model || switchingModel }}</template>
         </span>
         <span class="switch-progress-text">{{ switchProgress }}%</span>
-        <button v-if="isAtomicSwitching && !switchRollingBack && !switchCompleted" class="cancel-btn" @click="triggerSwitchCancel">
-          取消
-        </button>
       </div>
 
       <div class="switch-phase-steps">
@@ -704,13 +708,20 @@ watch(
                       <Settings class="w-3.5 h-3.5" />
                     </button>
                     <button
-                      v-if="!variant.running"
+                      v-if="!variant.running && getPathExists(variant.name) !== false"
                       class="action-btn primary small"
                       :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
                       @click.stop="handleAtomicSwitch(variant.name)"
                     >
                       <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
                     </button>
+                    <span
+                      v-if="getPathExists(variant.name) === false"
+                      class="path-missing-tag"
+                      :title="'模型文件目录不存在: ' + (variant.path || '')"
+                    >
+                      <AlertTriangle class="w-3 h-3" /> 路径不存在
+                    </span>
                     <button
                       v-if="variant.running"
                       class="action-btn danger small"
@@ -818,12 +829,20 @@ watch(
               </div>
               <div class="item-actions">
                 <button
+                  v-if="getPathExists(model.name) !== false"
                   class="action-btn primary"
                   :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
                   @click="handleSwitchAndSetDefault(model.name)"
                 >
                   <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
                 </button>
+                <span
+                  v-if="getPathExists(model.name) === false"
+                  class="path-missing-tag"
+                  :title="'模型文件目录不存在: ' + (model.name || '')"
+                >
+                  <AlertTriangle class="w-3 h-3" /> 路径不存在
+                </span>
                 <button
                   class="action-btn"
                   :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
@@ -2387,6 +2406,18 @@ watch(
 .action-btn.small {
   padding: 5px 8px;
   font-size: 11px;
+}
+
+.path-missing-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .modal-overlay {

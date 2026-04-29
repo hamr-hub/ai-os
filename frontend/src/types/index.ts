@@ -407,6 +407,7 @@ export interface ModelStatusEntry {
   description?: string
   required_memory?: string
   backend_type?: string
+  path_exists?: boolean
 }
 
 export interface GPUEnhancedInfo {
@@ -468,6 +469,7 @@ export interface ModelVariant {
   backend_type: string
   vllm_config: VLLMConfig
   is_current: boolean
+  path_exists?: boolean
 }
 
 export interface ModelGroup {

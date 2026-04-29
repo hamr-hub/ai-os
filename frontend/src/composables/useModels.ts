@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import {
   getModelsStatus,
   getDefaultModel,
@@ -6,11 +6,10 @@ import {
   clearDefaultModel,
   getAggregatedModels,
   updateModelVLLMConfig,
+  chatCompletion,
 } from '@/api/client'
-import { useModelSwitch } from '@/composables/useModelSwitch'
 import type { ModelStatus, AggregatedModelsResponse, VLLMConfigUpdateRequest } from '@/types'
 import { isAbortError } from '@/utils/request'
-import { useAppStore } from '@/stores/app'
 
 export function useModels() {
   const modelStatus = ref<ModelStatus | null>(null)
@@ -23,7 +22,6 @@ export function useModels() {
   const isRefreshing = ref(false)
   let refreshInterval: number | null = null
   let fetchController: AbortController | null = null
-  const { triggerSwitch, isSwitching: isAtomicSwitching } = useModelSwitch()
 
   const fetchModelStatus = async (manualRefresh = false) => {
     if (fetchController) {
@@ -143,25 +141,13 @@ export function useModels() {
   }
 
   const handleStartModel = async (modelName: string) => {
-    const appStore = useAppStore()
     actionLoading.value = modelName
     error.value = null
     try {
-      await triggerSwitch(modelName, false, 'start')
       await fetchModelStatus(true)
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : `Failed to start model ${modelName}`
-      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } }
-      const apiError = axiosErr.response?.data?.error || axiosErr.response?.data?.message
-      const fullError = apiError || errMsg
-      error.value = fullError
+      error.value = err instanceof Error ? err.message : `Failed to start model ${modelName}`
       console.error('Failed to start model:', err)
-
-      if (fullError.includes('insufficient memory') || fullError.includes('memory')) {
-        appStore.warning(`模型 ${modelName} 所需显存超过当前可用显存，启动失败，请尝试停止其他模型后重试`)
-      } else {
-        appStore.warning(`模型 ${modelName} 启动失败：${fullError}`)
-      }
       actionLoading.value = null
     }
   }
@@ -170,7 +156,6 @@ export function useModels() {
     actionLoading.value = modelName
     error.value = null
     try {
-      await triggerSwitch(modelName, false, 'stop')
       await fetchModelStatus()
     } catch (err) {
       error.value = err instanceof Error ? err.message : `Failed to stop model ${modelName}`
@@ -181,44 +166,24 @@ export function useModels() {
   }
 
   const handleSwitchModel = async (modelName: string, setAsDefault = false) => {
-    const appStore = useAppStore()
     actionLoading.value = modelName
     switchingModel.value = modelName
     error.value = null
     try {
-      await triggerSwitch(modelName, setAsDefault, 'switch')
+      await chatCompletion({
+        model: modelName,
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 1,
+      })
       if (setAsDefault) {
         await setDefaultModel(modelName)
         defaultModel.value = modelName
       }
       await fetchModelStatus(true)
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : `Failed to switch to model ${modelName}`
-      const axiosErr = err as { response?: { status?: number; data?: { error?: string; message?: string; detail?: string | { error?: string } } } }
-
-      if (axiosErr.response?.status === 409) {
-        appStore.warning('模型切换正在进行中，请等待完成')
-        actionLoading.value = null
-        switchingModel.value = null
-        return
-      }
-
-      const detail = axiosErr.response?.data?.detail
-      const apiError = typeof detail === 'object'
-        ? detail.error || ''
-        : (typeof detail === 'string' ? detail : '') || axiosErr.response?.data?.error || axiosErr.response?.data?.message
-      const fullError = apiError || errMsg
-      error.value = fullError
+      error.value = err instanceof Error ? err.message : `切换失败`
       console.error('Failed to switch model:', err)
-
-      if (fullError.includes('insufficient memory') || fullError.includes('memory')) {
-        appStore.warning(`模型 ${modelName} 所需显存超过当前可用显存，切换失败，请尝试停止其他模型后重试`)
-      } else if (fullError.includes('503')) {
-        appStore.warning(`模型 ${modelName} 切换失败：服务不可用，请检查模型服务状态`)
-      } else {
-        appStore.warning(`模型 ${modelName} 切换失败：${fullError}`)
-      }
-
+    } finally {
       actionLoading.value = null
       switchingModel.value = null
     }
@@ -253,13 +218,6 @@ export function useModels() {
   }
 
   const isAutoRefreshEnabled = computed(() => refreshInterval !== null)
-
-  watch(isAtomicSwitching, (val) => {
-    if (!val) {
-      switchingModel.value = null
-      actionLoading.value = null
-    }
-  })
 
   const modelList = computed(() => {
     if (!modelStatus.value) return []
