@@ -769,9 +769,26 @@ func (s *Scheduler) WarmSwitchModel(ctx context.Context, name string) (bool, err
 		"stream":     false,
 	}
 
-	_, err := s.proxy.ChatCompletion(ctx, port, payload)
-	if err != nil {
-		s.logger.Warn("warm switch probe request", zap.String("model", matched), zap.Error(err))
+	maxRetries := 60
+	for i := 0; i < maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
+		}
+
+		_, err := s.proxy.ChatCompletion(ctx, port, payload)
+		if err == nil {
+			s.mu.Lock()
+			s.currentModel = matched
+			s.runningModels[matched] = time.Now()
+			s.modelLastUsed[matched] = time.Now()
+			s.mu.Unlock()
+			s.logger.Info("model warm switched via chat probe", zap.String("model", matched), zap.Int("port", port), zap.Int("retries", i+1))
+			return true, nil
+		}
+
+		time.Sleep(2 * time.Second)
 	}
 
 	s.mu.Lock()
@@ -779,7 +796,7 @@ func (s *Scheduler) WarmSwitchModel(ctx context.Context, name string) (bool, err
 	s.runningModels[matched] = time.Now()
 	s.modelLastUsed[matched] = time.Now()
 	s.mu.Unlock()
-	s.logger.Info("model warm switched via chat probe", zap.String("model", matched), zap.Int("port", port))
+	s.logger.Warn("warm switch probe timed out but marking as switched", zap.String("model", matched), zap.Int("port", port))
 
 	return true, nil
 }
@@ -928,6 +945,24 @@ func (s *Scheduler) SwitchModelWithFallback(ctx context.Context, target string, 
 		return s.SwitchModel(ctx, fallback)
 	}
 	return false
+}
+
+func (s *Scheduler) waitForServiceReady(ctx context.Context, serviceName string, timeoutSeconds int) error {
+	for i := 0; i < timeoutSeconds; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		status := s.sysCtl.GetServiceStatus(serviceName)
+		if status == "active" {
+			return nil
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+	return fmt.Errorf("service %s did not become ready within %d seconds", serviceName, timeoutSeconds)
 }
 
 func (s *Scheduler) FlushCache() {
