@@ -220,6 +220,8 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
 
         await ensure_model_ready(scheduler, model_name)
 
+        scheduler.mark_model_selected(model_name)
+
         backend_url = get_backend_url(model_name, scheduler)
         vllm_url = f"{backend_url}/v1/chat/completions"
 
@@ -369,6 +371,7 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
     finally:
         if slot_acquired:
             scheduler.release_request(model_name)
+        cache.delete("api:manage:models:aggregated")
         metrics.record_request(
             endpoint="/v1/chat/completions",
             status_code=status_code,
