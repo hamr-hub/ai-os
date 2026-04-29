@@ -131,6 +131,11 @@ class ModelSwitchOrchestrator:
         "killed",
         "oom",
         "out of memory",
+        "cuda error",
+        "cuda failed",
+        "fatal error",
+        "assertion failed",
+        "memory alloc",
     ]
 
     def __init__(self, ws_manager, vllm_service_name: str, vllm_port: int, model_base_path: str):
@@ -474,6 +479,7 @@ class ModelSwitchOrchestrator:
 
         start_time = time.time()
         poll_interval = 3.0
+        last_error_check = 0
         while time.time() - start_time < self.PHASE3_START_TIMEOUT:
             if self._cancel_requested:
                 await self._rollback(session, "用户请求取消")
@@ -482,6 +488,17 @@ class ModelSwitchOrchestrator:
             elapsed = int(time.time() - start_time)
             progress = 35 + int(55 * elapsed / self.PHASE3_START_TIMEOUT)
             phase.progress = min(progress, 90)
+
+            if elapsed - last_error_check >= 10:
+                error_msg = self._check_vllm_logs_for_errors()
+                if error_msg:
+                    phase.status = PhaseStatus.FAILED
+                    phase.error = f"服务启动失败: {error_msg}"
+                    phase.finished_at = datetime.now().isoformat()
+                    await self._log(session, phase, f"检测到致命错误: {error_msg}")
+                    await self._rollback(session, f"vLLM 服务致命错误: {error_msg}")
+                    raise _SwitchAborted(f"Fatal error: {error_msg}")
+                last_error_check = elapsed
 
             from core.vllm_manager import discover_vllm_port
             port = discover_vllm_port()
@@ -654,6 +671,7 @@ class ModelSwitchOrchestrator:
             raise _SwitchAborted(error_msg)
 
         start_time = time.time()
+        last_error_check = 0
         while time.time() - start_time < self.PHASE3_START_TIMEOUT:
             if self._cancel_requested:
                 await self._rollback(session, "用户请求取消")
@@ -661,6 +679,18 @@ class ModelSwitchOrchestrator:
 
             elapsed = int(time.time() - start_time)
             phase.progress = min(95, 15 + int(80 * elapsed / self.PHASE3_START_TIMEOUT))
+
+            if elapsed - last_error_check >= 10:
+                error_msg = self._check_vllm_logs_for_errors()
+                if error_msg:
+                    phase.status = PhaseStatus.FAILED
+                    phase.error = f"服务启动失败: {error_msg}"
+                    phase.finished_at = datetime.now().isoformat()
+                    await self._log(session, phase, f"检测到致命错误: {error_msg}")
+                    await self._rollback(session, f"vLLM 服务致命错误: {error_msg}")
+                    raise _SwitchAborted(f"Fatal error: {error_msg}")
+                last_error_check = elapsed
+
             try:
                 from core.vllm_manager import discover_vllm_port
                 port = discover_vllm_port()
@@ -856,15 +886,27 @@ class ModelSwitchOrchestrator:
     def _check_vllm_logs_for_errors(self) -> Optional[str]:
         try:
             result = subprocess.run(
-                ["journalctl", "-u", self._vllm_service_name, "-n", "50",
-                 "--no-pager", "--output=short"],
+                ["journalctl", "-u", self._vllm_service_name, "-n", "100",
+                 "--no-pager", "--output=short", "--since", "2 min ago"],
                 capture_output=True, text=True, timeout=5
             )
+            logs = result.stdout
             for keyword in self.FATAL_KEYWORDS:
-                if keyword.lower() in result.stdout.lower():
-                    matched_lines = [line for line in result.stdout.splitlines()
+                if keyword.lower() in logs.lower():
+                    matched_lines = [line for line in logs.splitlines()
                                      if keyword.lower() in line.lower()]
                     return matched_lines[-1] if matched_lines else keyword
+
+            result = subprocess.run(
+                [SYSTEMCTL_BIN, "is-failed", self._vllm_service_name],
+                capture_output=True, text=True, timeout=3
+            )
+            if result.returncode == 0:
+                status_result = subprocess.run(
+                    [SYSTEMCTL_BIN, "status", self._vllm_service_name, "--no-pager", "-n", "20"],
+                    capture_output=True, text=True, timeout=5
+                )
+                return f"服务处于 failed 状态: {status_result.stdout[:200]}"
         except Exception:
             pass
         return None
