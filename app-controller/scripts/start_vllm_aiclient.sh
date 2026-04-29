@@ -151,6 +151,8 @@ nvidia-smi --query-gpu=index,name,memory.total,memory.free --format=csv | tee -a
 # ===== 10. 启动 vLLM =====
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 启动 vLLM 服务，模型: $MODEL_PATH, 端口: $VLLM_PORT" | tee -a "$LOG_FILE"
 
+# 使用进程替代 pipe 配合 exec，确保 vLLM 替换当前 bash 进程成为主进程
+exec > >(tee -a "$LOG_FILE") 2>&1
 exec vllm serve "$MODEL_PATH" \
   --trust-remote-code \
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
@@ -162,5 +164,4 @@ exec vllm serve "$MODEL_PATH" \
   --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
   --max-num-seqs "$MAX_NUM_SEQS" \
   --enforce-eager \
-  $TOOL_CALL_ARGS \
-  2>&1 | tee -a "$LOG_FILE"
+  $TOOL_CALL_ARGS
