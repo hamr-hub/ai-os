@@ -283,7 +283,7 @@ vllm:
   service_name: vllm-aiclient
   start_script: /root/ai-os/app-controller/scripts/start_vllm_aiclient.sh
   model_base_path: /mnt/pve_models
-  default_port: 8000
+  default_port: 8001
   backend_base_url: ""
   health_url: ""
   default_gpu_memory_utilization: 0.92

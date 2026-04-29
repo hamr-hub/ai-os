@@ -80,16 +80,42 @@ class SwitchSession:
     rollback_reason: Optional[str] = None
     completed_successfully: bool = False
 
+    @classmethod
+    def create_switch_phases(cls) -> List[PhaseDetail]:
+        return [
+            PhaseDetail(1, "更新配置并重启"),
+            PhaseDetail(2, "冒烟测试"),
+        ]
+
+    @classmethod
+    def create_start_phases(cls) -> List[PhaseDetail]:
+        return [
+            PhaseDetail(1, "停止旧服务"),
+            PhaseDetail(2, "强制清理进程"),
+            PhaseDetail(3, "启动新服务"),
+            PhaseDetail(4, "冒烟测试"),
+        ]
+
+    @classmethod
+    def create_stop_phases(cls) -> List[PhaseDetail]:
+        return [
+            PhaseDetail(1, "停止服务"),
+            PhaseDetail(2, "强制清理进程"),
+        ]
+
     def _calc_overall_progress(self) -> int:
-        weights = [25, 25, 25, 25]
+        n = len(self.phases)
+        if n == 0:
+            return 0
+        weight_each = 100 // n
         total = 0
-        for i, p in enumerate(self.phases):
+        for p in self.phases:
             if p.status == PhaseStatus.SUCCESS:
-                total += weights[i]
+                total += weight_each
             elif p.status == PhaseStatus.RUNNING:
-                total += int(weights[i] * p.progress / 100)
+                total += int(weight_each * p.progress / 100)
             elif p.status == PhaseStatus.SKIPPED:
-                total += weights[i]
+                total += weight_each
         return min(total, 100)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -114,12 +140,12 @@ class _SwitchAborted(Exception):
 
 
 class ModelSwitchOrchestrator:
-    SWITCH_MAX_TIMEOUT = 900
+    SWITCH_MAX_TIMEOUT = 300
     PHASE1_STOP_TIMEOUT = 30
     PHASE1_PORT_CHECK_TIMEOUT = 15
     PHASE2_KILL_TIMEOUT = 60
     PHASE2_VERIFY_TIMEOUT = 15
-    PHASE3_START_TIMEOUT = 600  # 大模型可能需要 5-10 分钟加载
+    PHASE3_START_TIMEOUT = 300  # 大模型可能需要几分钟加载
     PHASE4_TEST_RETRIES = 3
     PHASE4_TEST_TIMEOUT = 15
 
@@ -182,6 +208,7 @@ class ModelSwitchOrchestrator:
                 previous_model_path=previous_model_path,
                 started_at=datetime.now().isoformat(),
                 action="switch",
+                phases=SwitchSession.create_switch_phases(),
             )
             self._current_session = session
 
@@ -247,6 +274,7 @@ class ModelSwitchOrchestrator:
                 previous_model_path=previous_model_path,
                 started_at=datetime.now().isoformat(),
                 action="start",
+                phases=SwitchSession.create_start_phases(),
             )
             self._current_session = session
 
@@ -333,15 +361,8 @@ class ModelSwitchOrchestrator:
                 previous_model_path=previous_model_path,
                 started_at=datetime.now().isoformat(),
                 action="stop",
+                phases=SwitchSession.create_stop_phases(),
             )
-            session.phases[2].status = PhaseStatus.SKIPPED
-            session.phases[2].progress = 100
-            session.phases[2].started_at = session.started_at
-            session.phases[2].finished_at = session.started_at
-            session.phases[3].status = PhaseStatus.SKIPPED
-            session.phases[3].progress = 100
-            session.phases[3].started_at = session.started_at
-            session.phases[3].finished_at = session.started_at
             self._current_session = session
 
             try:
@@ -480,6 +501,7 @@ class ModelSwitchOrchestrator:
         start_time = time.time()
         poll_interval = 3.0
         last_error_check = 0
+        port_seen_alive = False
         while time.time() - start_time < self.PHASE3_START_TIMEOUT:
             if self._cancel_requested:
                 await self._rollback(session, "用户请求取消")
@@ -489,7 +511,7 @@ class ModelSwitchOrchestrator:
             progress = 35 + int(55 * elapsed / self.PHASE3_START_TIMEOUT)
             phase.progress = min(progress, 90)
 
-            if elapsed - last_error_check >= 10:
+            if elapsed - last_error_check >= 5:
                 error_msg = self._check_vllm_logs_for_errors()
                 if error_msg:
                     phase.status = PhaseStatus.FAILED
@@ -503,6 +525,18 @@ class ModelSwitchOrchestrator:
             from core.vllm_manager import discover_vllm_port
             port = discover_vllm_port()
             health_url = _build_vllm_health_url(port)
+
+            is_port_open = self._is_port_alive(port)
+            if is_port_open:
+                port_seen_alive = True
+            elif elapsed >= 30 and not port_seen_alive:
+                phase.status = PhaseStatus.FAILED
+                phase.error = f"服务重启后 30s 内端口 {port} 未打开，服务可能未成功启动"
+                phase.finished_at = datetime.now().isoformat()
+                await self._log(session, phase, phase.error)
+                await self._rollback(session, phase.error)
+                raise _SwitchAborted(phase.error)
+
             try:
                 async with httpx.AsyncClient(timeout=3) as client:
                     resp = await client.get(health_url)
@@ -672,6 +706,7 @@ class ModelSwitchOrchestrator:
 
         start_time = time.time()
         last_error_check = 0
+        port_seen_alive = False
         while time.time() - start_time < self.PHASE3_START_TIMEOUT:
             if self._cancel_requested:
                 await self._rollback(session, "用户请求取消")
@@ -680,7 +715,7 @@ class ModelSwitchOrchestrator:
             elapsed = int(time.time() - start_time)
             phase.progress = min(95, 15 + int(80 * elapsed / self.PHASE3_START_TIMEOUT))
 
-            if elapsed - last_error_check >= 10:
+            if elapsed - last_error_check >= 5:
                 error_msg = self._check_vllm_logs_for_errors()
                 if error_msg:
                     phase.status = PhaseStatus.FAILED
@@ -694,6 +729,16 @@ class ModelSwitchOrchestrator:
             try:
                 from core.vllm_manager import discover_vllm_port
                 port = discover_vllm_port()
+                is_port_open = self._is_port_alive(port)
+                if is_port_open:
+                    port_seen_alive = True
+                elif elapsed >= 30 and not port_seen_alive:
+                    phase.status = PhaseStatus.FAILED
+                    phase.error = f"服务启动后 30s 内端口 {port} 未打开"
+                    phase.finished_at = datetime.now().isoformat()
+                    await self._rollback(session, phase.error)
+                    raise _SwitchAborted(phase.error)
+
                 async with httpx.AsyncClient(timeout=3) as client:
                     resp = await client.get(_build_vllm_health_url(port))
                     if resp.status_code == 200:
