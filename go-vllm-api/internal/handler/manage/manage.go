@@ -464,34 +464,12 @@ func (h *ManageHandler) ModelSwitchDirect(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	var ok bool
-	var err error
-
-	switch req.Mode {
-	case "cold":
-		ok, err = h.scheduler.HotSwitchModel(ctx, modelName)
-	case "warm":
-		ok, err = h.scheduler.WarmSwitchModel(ctx, modelName)
-	default:
-		ok, err = h.scheduler.WarmSwitchModel(ctx, modelName)
-	}
-
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to switch to model: %s: %v", modelName, err)})
-		return
-	}
-
-	if req.SetAsDefault {
-		h.scheduler.SetDefaultModel(modelName)
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":         "success",
+	body := gin.H{
+		"action":         "switch",
 		"model_name":     modelName,
 		"set_as_default": req.SetAsDefault,
-		"mode":           req.Mode,
-	})
+	}
+	h.proxyPythonManage(c, http.MethodPost, "/manage/switch/atomic", body)
 }
 
 func (h *ManageHandler) GetDefaultModel(c *gin.Context) {

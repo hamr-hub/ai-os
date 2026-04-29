@@ -82,15 +82,15 @@ class ModelSwitchService {
     async warmupModel(modelName) {
         try {
             const baseUrl = backendClient.getBaseUrl();
-            const response = await fetch(`${baseUrl}/model-switch/switch`, {
+            const response = await fetch(`${baseUrl}/manage/switch/atomic`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    action: 'switch',
                     model_name: modelName,
-                    set_as_default: false,
-                    mode: 'warm'
+                    set_as_default: false
                 }),
-                signal: AbortSignal.timeout(45000)
+                signal: AbortSignal.timeout(30000)
             });
             const text = await response.text();
             let data = null;
@@ -296,24 +296,24 @@ class ModelSwitchService {
             const baseUrl = backendClient.getBaseUrl();
             logger.info(`[Model Switch Service] Switching model (${mode}): ${modelName}, baseUrl: ${baseUrl}`);
 
-            const response = await fetch(`${baseUrl}/model-switch/switch`, {
+            const response = await fetch(`${baseUrl}/manage/switch/atomic`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    action: 'switch',
                     model_name: modelName,
-                    set_as_default: false,
-                    mode: mode
+                    set_as_default: false
                 }),
-                signal: AbortSignal.timeout(180000)
+                signal: AbortSignal.timeout(30000)
             });
 
             logger.info(`[Model Switch Service] Switch response status: ${response.status}`);
 
             const data = await response.json();
 
-            if (!response.ok || !data.success) {
-                const errorText = data.error || (data.data && data.data.error) || 'Switch failed';
-                logger.error(`[Model Switch Service] Model switch failed (${mode}): ${response.status} - ${errorText}`);
+            if (!response.ok) {
+                const errorText = data.detail || data.error || data.message || 'Switch initiation failed';
+                logger.error(`[Model Switch Service] Model switch initiation failed: ${response.status} - ${errorText}`);
 
                 this.switchTasks.set(taskId, {
                     modelName,
@@ -340,23 +340,90 @@ class ModelSwitchService {
                 };
             }
 
-            await this.fetchModelsFromBackend();
+            const sessionId = data.session_id;
+            logger.info(`[Model Switch Service] Atomic switch started, session: ${sessionId}, polling status...`);
+
+            const maxPollTime = 180000;
+            const pollInterval = 3000;
+            const startTime = Date.now();
+
+            while (Date.now() - startTime < maxPollTime) {
+                await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+                const statusResponse = await fetch(`${baseUrl}/manage/switch/status`, {
+                    signal: AbortSignal.timeout(10000)
+                });
+                const statusData = await statusResponse.json();
+
+                if (!statusData.is_switching && statusData.session && statusData.session.completed_successfully) {
+                    await this.fetchModelsFromBackend();
+
+                    this.switchTasks.set(taskId, {
+                        modelName,
+                        status: 'completed',
+                        endTime: Date.now()
+                    });
+
+                    this.broadcastSwitchResult(taskId, {
+                        success: true,
+                        modelName,
+                        mode
+                    });
+
+                    return {
+                        success: true,
+                        data: { modelName, status: 'completed', mode, sessionId },
+                        timestamp: new Date().toISOString(),
+                        backendStatus: backendClient.getStatus()
+                    };
+                }
+
+                if (!statusData.is_switching && statusData.session && !statusData.session.completed_successfully) {
+                    const errorMsg = statusData.session.error || statusData.session.rollback_reason || 'Switch failed';
+                    logger.error(`[Model Switch Service] Model switch failed: ${errorMsg}`);
+
+                    this.switchTasks.set(taskId, {
+                        modelName,
+                        status: 'failed',
+                        error: errorMsg,
+                        endTime: Date.now()
+                    });
+
+                    this.broadcastSwitchResult(taskId, {
+                        success: false,
+                        error: errorMsg,
+                        modelName
+                    });
+
+                    return {
+                        success: false,
+                        error: errorMsg,
+                        data: { modelName, status: 'failed', sessionId },
+                        timestamp: new Date().toISOString(),
+                        backendStatus: backendClient.getStatus()
+                    };
+                }
+            }
+
+            logger.error('[Model Switch Service] Model switch polling timed out');
 
             this.switchTasks.set(taskId, {
                 modelName,
-                status: 'completed',
+                status: 'failed',
+                error: 'Switch polling timed out',
                 endTime: Date.now()
             });
 
             this.broadcastSwitchResult(taskId, {
-                success: true,
-                modelName,
-                mode
+                success: false,
+                error: 'Switch polling timed out',
+                modelName
             });
 
             return {
-                success: true,
-                data: { modelName, status: 'completed', mode },
+                success: false,
+                error: 'Switch polling timed out',
+                data: { modelName, status: 'failed' },
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };

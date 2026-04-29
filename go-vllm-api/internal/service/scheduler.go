@@ -746,8 +746,34 @@ func (s *Scheduler) WarmSwitchModel(ctx context.Context, name string) (bool, err
 		return false, fmt.Errorf("model config not found: %s", matched)
 	}
 
-	if s.proxy == nil {
-		return false, fmt.Errorf("vllm proxy unavailable")
+	mem := s.gpuMonitor.GetMemoryUsage()
+	if mem != nil {
+		requiredMem := config.ParseMemorySize(mc.RequiredMemory)
+		if mem.Available < requiredMem+s.GetMinAvailableMemory() {
+			ok, err := s.freeUpMemory(ctx, matched)
+			if !ok {
+				return false, fmt.Errorf("insufficient memory: %w", err)
+			}
+		}
+	}
+
+	if s.vllmManager == nil {
+		return false, fmt.Errorf("vllm manager unavailable")
+	}
+
+	if err := s.vllmManager.SwitchModel(ctx, mc.ModelPath); err != nil {
+		s.logger.Error("failed to switch vllm model state", zap.String("model", matched), zap.Error(err))
+		return false, fmt.Errorf("switch vllm model state: %w", err)
+	}
+
+	success := s.sysCtl.RestartService(mc.Service)
+	if !success {
+		return false, fmt.Errorf("failed to restart service %s", mc.Service)
+	}
+
+	if err := s.waitForServiceReady(ctx, mc.Service, 120); err != nil {
+		s.logger.Error("service failed to become ready after restart", zap.String("service", mc.Service), zap.Error(err))
+		return false, fmt.Errorf("service %s failed to become ready: %w", mc.Service, err)
 	}
 
 	port := s.vllmManager.GetCurrentPort()
@@ -755,40 +781,35 @@ func (s *Scheduler) WarmSwitchModel(ctx context.Context, name string) (bool, err
 		port = 8000
 	}
 
-	vllmModelName := mc.ModelPath
-	if vllmModelName == "" {
-		vllmModelName = matched
-	}
-
-	payload := map[string]interface{}{
-		"model":      vllmModelName,
-		"messages": []map[string]interface{}{
-			{"role": "user", "content": "Hello"},
-		},
-		"max_tokens": 1,
-		"stream":     false,
-	}
-
-	maxRetries := 60
-	for i := 0; i < maxRetries; i++ {
-		select {
-		case <-ctx.Done():
-			return false, ctx.Err()
-		default:
+	if s.proxy != nil {
+		vllmModelName := mc.ModelPath
+		if vllmModelName == "" {
+			vllmModelName = matched
 		}
 
-		_, err := s.proxy.ChatCompletion(ctx, port, payload)
-		if err == nil {
-			s.mu.Lock()
-			s.currentModel = matched
-			s.runningModels[matched] = time.Now()
-			s.modelLastUsed[matched] = time.Now()
-			s.mu.Unlock()
-			s.logger.Info("model warm switched via chat probe", zap.String("model", matched), zap.Int("port", port), zap.Int("retries", i+1))
-			return true, nil
+		payload := map[string]interface{}{
+			"model":      vllmModelName,
+			"messages": []map[string]interface{}{
+				{"role": "user", "content": "Hello"},
+			},
+			"max_tokens": 1,
+			"stream":     false,
 		}
 
-		time.Sleep(2 * time.Second)
+		for i := 0; i < 30; i++ {
+			select {
+			case <-ctx.Done():
+				return false, ctx.Err()
+			default:
+			}
+
+			_, err := s.proxy.ChatCompletion(ctx, port, payload)
+			if err == nil {
+				break
+			}
+
+			time.Sleep(2 * time.Second)
+		}
 	}
 
 	s.mu.Lock()
@@ -796,7 +817,7 @@ func (s *Scheduler) WarmSwitchModel(ctx context.Context, name string) (bool, err
 	s.runningModels[matched] = time.Now()
 	s.modelLastUsed[matched] = time.Now()
 	s.mu.Unlock()
-	s.logger.Warn("warm switch probe timed out but marking as switched", zap.String("model", matched), zap.Int("port", port))
+	s.logger.Info("model warm switched", zap.String("model", matched))
 
 	return true, nil
 }
