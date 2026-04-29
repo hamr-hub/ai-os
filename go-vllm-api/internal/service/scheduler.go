@@ -722,6 +722,11 @@ func (s *Scheduler) HotSwitchModel(ctx context.Context, name string) (bool, erro
 		return false, fmt.Errorf("failed to restart service %s", mc.Service)
 	}
 
+	if err := s.waitForServiceReady(ctx, mc.Service, 120); err != nil {
+		s.logger.Error("service failed to become ready after restart", zap.String("service", mc.Service), zap.Error(err))
+		return false, fmt.Errorf("service %s failed to become ready: %w", mc.Service, err)
+	}
+
 	s.mu.Lock()
 	s.runningModels[matched] = time.Now()
 	s.modelLastUsed[matched] = time.Now()
