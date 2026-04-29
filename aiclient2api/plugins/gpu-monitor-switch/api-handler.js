@@ -149,7 +149,7 @@ export async function handleGPUMonitorApiRoutes(method, path, req, res, config) 
 }
 
 export async function handleModelSwitchApiRoutes(method, path, req, res, config) {
-    if (path !== '/api/model-switch/models' && path !== '/api/model-switch/status' && path !== '/api/model-switch/switch' && path !== '/api/model-switch/start' && path !== '/api/model-switch/stop' && path !== '/api/model-switch/aggregated' && path !== '/api/model-switch/switch-status' && path !== '/api/model-switch/cancel' && !path.match(/^\/api\/model-switch\/vllm-params\/[^/]+$/)) return false;
+    if (path !== '/api/model-switch/models' && path !== '/api/model-switch/status' && path !== '/api/model-switch/switch' && path !== '/api/model-switch/start' && path !== '/api/model-switch/stop' && path !== '/api/model-switch/force-restart' && path !== '/api/model-switch/aggregated' && path !== '/api/model-switch/switch-status' && path !== '/api/model-switch/cancel' && !path.match(/^\/api\/model-switch\/vllm-params\/[^/]+$/)) return false;
     try {
         if (path === '/api/model-switch/models' && method === 'GET') {
             sendJSONResponse(res, 200, await modelSwitchService.getModelsList());
@@ -191,6 +191,12 @@ export async function handleModelSwitchApiRoutes(method, path, req, res, config)
         }
         if (path === '/api/model-switch/cancel' && method === 'POST') {
             sendJSONResponse(res, 200, await modelSwitchService.cancelSwitch());
+            return true;
+        }
+        if (path === '/api/model-switch/force-restart' && method === 'POST') {
+            const body = await parseRequestBody(req);
+            if (!body.modelName) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelName' }); return true; }
+            sendJSONResponse(res, 200, await modelSwitchService.forceRestartModel(body.modelName, body.modelPath));
             return true;
         }
         if (path === '/api/model-switch/start' && method === 'POST') {
