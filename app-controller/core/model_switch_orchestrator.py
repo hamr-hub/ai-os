@@ -149,6 +149,10 @@ class ModelSwitchOrchestrator:
     def current_session(self) -> Optional[SwitchSession]:
         return self._current_session
 
+    def clear_completed_session(self):
+        if self._current_session and not self.is_switching:
+            self._current_session = None
+
     def request_cancel(self):
         self._cancel_requested = True
 

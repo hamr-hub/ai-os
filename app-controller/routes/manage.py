@@ -85,6 +85,8 @@ async def atomic_switch_model(request: Request):
             }
         )
 
+    model_switch_orchestrator.clear_completed_session()
+
     current_info = get_current_model_info()
     previous_model = current_info.get("name") if current_info else None
     previous_path = current_info.get("path") if current_info else None
