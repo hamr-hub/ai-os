@@ -127,11 +127,21 @@ func (sc *SystemController) RestartService(name string) bool {
 
 	waited := 0
 	for waited < 30 {
-		if sc.getServiceStatusLocked(name) != "active" {
+		status := sc.getServiceStatusLocked(name)
+		if status != "active" && status != "deactivating" {
 			break
 		}
 		time.Sleep(1 * time.Second)
 		waited++
+	}
+
+	if waited >= 30 {
+		sc.logger.Warn("service stop timeout, forcing kill", zap.String("service", name))
+		killCmd := sc.command("systemctl", "kill", name)
+		if killCmd != nil {
+			killCmd.Run()
+			time.Sleep(2 * time.Second)
+		}
 	}
 
 	cmd = sc.command("systemctl", "start", name)
