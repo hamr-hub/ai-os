@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -223,6 +224,14 @@ func main() {
 }
 
 func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service.Scheduler, ws *service.WSManager, mc *service.MetricsCollector, sc *service.SystemStatusCollector, l *zap.Logger) {
+	pythonBaseURL := os.Getenv("PYTHON_BACKEND_URL")
+	if pythonBaseURL == "" {
+		pythonBaseURL = "http://192.168.7.103:35000"
+	}
+	switchStatusURL := pythonBaseURL + "/manage/switch/status"
+
+	httpClient := &http.Client{Timeout: 2 * time.Second}
+
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -245,6 +254,25 @@ func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service
 			ws.BroadcastStatus(gpuSummary, modelStatus)
 			mc.SaveGPUHistory(gpuSummary)
 			sc.SaveSystemHistory()
+
+			resp, err := httpClient.Get(switchStatusURL)
+			if err != nil {
+				l.Debug("failed to fetch switch status from python", zap.Error(err))
+				continue
+			}
+			var switchData map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&switchData); err != nil {
+				l.Debug("failed to decode switch status", zap.Error(err))
+			}
+			resp.Body.Close()
+
+			if switchData != nil {
+				isSwitching, _ := switchData["is_switching"].(bool)
+				session := switchData["session"]
+				if isSwitching && session != nil {
+					ws.Broadcast("model_switch", switchData)
+				}
+			}
 		}
 	}
 }

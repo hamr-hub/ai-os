@@ -173,17 +173,16 @@ export function useModelSwitch() {
     error.value = null
     isSwitching.value = true
 
+    connectWS()
+    startPolling()
+
     try {
       await atomicSwitchModel(modelName, setAsDefault, action)
-      connectWS()
-      startPolling()
     } catch (err) {
       const axiosErr = err as { response?: { status?: number; data?: { error?: string; message?: string; detail?: string | { error?: string; rollback_reason?: string } } } }
 
       if (axiosErr.response?.status === 409) {
         appStore.warning('模型切换正在进行中，请等待完成')
-        connectWS()
-        startPolling()
         return
       }
 
