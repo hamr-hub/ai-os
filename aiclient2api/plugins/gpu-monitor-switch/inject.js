@@ -8,13 +8,9 @@
     var gpuHistory = [];
     var autoRefreshTimer = null;
     var isAutoRefreshing = false;
+    var gpuStatusRendered = false;
     var activeModelAction = null;
-    var switchPollingInterval = null;
-    var switchPollingController = null;
-    var switchStatusInterval = null;
-    var switchWs = null;
-    var switchSession = null;
-    var SWITCH_POLL_TIMEOUT = 180000;
+    var modelsRendered = false;
 
     var sectionHTML = `
 <div id="gpu-monitor" class="section" data-section="gpu-monitor" style="display: none;">
@@ -177,6 +173,40 @@
 
     function getColor(v) { if (v < 60) return '#10b981'; if (v < 80) return '#f59e0b'; return '#ef4444'; }
 
+    function updateGPUStatusInPlace(data) {
+        if (!data || data.length === 0) return;
+        var cards = document.querySelectorAll('#gpuStatusContent .gpu-card');
+        data.forEach(function(gpu, i) {
+            var card = cards[i];
+            if (!card) return;
+            var metrics = card.querySelectorAll('.metric');
+            var memUsed = gpu.memoryUsed ? (gpu.memoryUsed / (1024*1024*1024)).toFixed(1) : '--';
+            var memTotal = gpu.memoryTotal ? (gpu.memoryTotal / (1024*1024*1024)).toFixed(1) : '--';
+            var memPercent = gpu.memoryUsagePercent || gpu.memoryUtilization || 0;
+            var gpuUtil = gpu.gpuUtilization || 0;
+            var temp = gpu.temperature != null ? gpu.temperature : '--';
+            var power = gpu.powerDraw != null ? gpu.powerDraw.toFixed(1) + 'W' : '--';
+            var powerLimit = gpu.powerLimit != null ? gpu.powerLimit.toFixed(1) + 'W' : '';
+
+            if (metrics[0]) {
+                metrics[0].querySelector('.metric-value').textContent = gpuUtil.toFixed(1) + '%';
+                var fill0 = metrics[0].querySelector('.progress-fill');
+                if (fill0) { fill0.style.width = gpuUtil + '%'; fill0.style.background = getColor(gpuUtil); }
+            }
+            if (metrics[1]) {
+                metrics[1].querySelector('.metric-value').textContent = memUsed + ' GB / ' + memTotal + ' GB';
+                var fill1 = metrics[1].querySelector('.progress-fill');
+                if (fill1) { fill1.style.width = memPercent + '%'; fill1.style.background = getColor(memPercent); }
+            }
+            if (metrics[2]) {
+                metrics[2].querySelector('.metric-value').textContent = temp + (temp !== '--' ? '°C' : '');
+            }
+            if (metrics[3]) {
+                metrics[3].querySelector('.metric-value').textContent = power + (powerLimit ? ' / ' + powerLimit : '');
+            }
+        });
+    }
+
     function setActionButtonsDisabled(disabled) {
         document.querySelectorAll('#modelSwitchContent .model-actions .btn').forEach(function(btn) {
             btn.disabled = disabled;
@@ -261,138 +291,6 @@
         }
     }
 
-    function renderSwitchSessionState(session) {
-        switchSession = session || null;
-        if (!session) {
-            return;
-        }
-
-        showSwitchingOverlay(session.target_model);
-        var runningPhase = session.phases && session.phases.find(function(phase) { return phase.status === 'running'; });
-        if (runningPhase) {
-            updateSwitchingStep(runningPhase.phase);
-        }
-
-        var status = document.getElementById('switch-elapsed');
-        if (status) {
-            var latestPhase = runningPhase || (session.phases && session.phases.find(function(phase) { return phase.status === 'failed'; })) || session.phases[session.phases.length - 1];
-            var latestLog = latestPhase && latestPhase.logs && latestPhase.logs.length > 0
-                ? latestPhase.logs[latestPhase.logs.length - 1]
-                : '模型切换进行中';
-            status.textContent = latestLog;
-        }
-
-        if (session.completed_successfully || session.overall_phase === 'completed') {
-            stopSwitchPolling();
-            hideSwitchingOverlay();
-            activeModelAction = null;
-            switchSession = null;
-            setActionButtonsDisabled(false);
-            showModelMessage('info', '切换成功: ' + session.target_model);
-            renderModels();
-            loadGPUData();
-            updateCharts();
-            return;
-        }
-
-        if (session.overall_phase === 'rolled_back' || session.overall_phase === 'failed') {
-            stopSwitchPolling();
-            hideSwitchingOverlay();
-            activeModelAction = null;
-            switchSession = null;
-            setActionButtonsDisabled(false);
-            showModelMessage('error', '切换失败: ' + (session.rollback_reason || session.error || '未知错误'));
-        }
-    }
-
-    function ensureSwitchWebSocket() {
-        if (switchWs && (switchWs.readyState === WebSocket.OPEN || switchWs.readyState === WebSocket.CONNECTING)) {
-            return;
-        }
-        try {
-            var wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            switchWs = new WebSocket(wsProtocol + '//' + window.location.host + '/ws/model-switch');
-            switchWs.onmessage = function(event) {
-                try {
-                    var payload = JSON.parse(event.data);
-                    if (payload.session) {
-                        renderSwitchSessionState(payload.session);
-                    }
-                } catch (e) {
-                    console.error('[SwitchWS] Parse error:', e);
-                }
-            };
-            switchWs.onclose = function() {
-                switchWs = null;
-            };
-            switchWs.onerror = function() {
-                if (switchWs) {
-                    switchWs.close();
-                }
-            };
-        } catch (e) {
-            console.error('[SwitchWS] Connect error:', e);
-        }
-    }
-
-    function stopSwitchPolling() {
-        if (switchPollingInterval) {
-            clearInterval(switchPollingInterval);
-            switchPollingInterval = null;
-        }
-        if (switchStatusInterval) {
-            clearInterval(switchStatusInterval);
-            switchStatusInterval = null;
-        }
-        if (switchPollingController) {
-            switchPollingController.abort();
-            switchPollingController = null;
-        }
-    }
-
-    function startSwitchPolling(modelName) {
-        stopSwitchPolling();
-        ensureSwitchWebSocket();
-
-        var startTime = Date.now();
-        var pollingController = new AbortController();
-        switchPollingController = pollingController;
-
-        switchStatusInterval = setInterval(function() {
-            if (pollingController.signal.aborted) return;
-            updateSwitchingStatus(Date.now() - startTime);
-        }, 1000);
-
-        switchPollingInterval = setInterval(function() {
-            if (pollingController.signal.aborted) {
-                stopSwitchPolling();
-                return;
-            }
-
-            if (Date.now() - startTime > SWITCH_POLL_TIMEOUT) {
-                stopSwitchPolling();
-                hideSwitchingOverlay();
-                showModelMessage('error', '切换超时：模型 ' + modelName + ' 在 ' + Math.floor(SWITCH_POLL_TIMEOUT / 1000) + ' 秒内未完成，请手动刷新检查状态');
-                setActionButtonsDisabled(false);
-                activeModelAction = null;
-                return;
-            }
-
-            fetch('/api/model-switch/switch-status', { signal: pollingController.signal })
-                .then(function(r) { return r.json(); })
-                .then(function(result) {
-                    if (result.success && result.data) {
-                        renderSwitchSessionState(result.data.session);
-                    }
-                })
-                .catch(function(e) {
-                    if (e.name !== 'AbortError') {
-                        console.error('[Polling] Error:', e);
-                    }
-                });
-        }, 3000);
-    }
-
     async function executeModelAction(action, name, successText) {
         if (activeModelAction) return;
         activeModelAction = action + ':' + name;
@@ -404,39 +302,58 @@
         if (action === 'switch' || action === 'start') {
             showSwitchingOverlay(name);
             updateSwitchingStep(1);
-            ensureSwitchWebSocket();
         }
 
         try {
-            var endpoint = action === 'stop' ? '/api/model-switch/stop' : '/api/model-switch/switch';
-            var r = await fetch(endpoint, {
+            if (action === 'stop') {
+                var r = await fetch('/api/model-switch/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ modelName: name })
+                });
+                var result = await r.json();
+                if (!result.success) {
+                    hideSwitchingOverlay();
+                    showModelMessage('error', '操作失败: ' + result.error);
+                    activeModelAction = null;
+                    setActionButtonsDisabled(false);
+                    return;
+                }
+                hideSwitchingOverlay();
+                activeModelAction = null;
+                setActionButtonsDisabled(false);
+                modelsRendered = false;
+                await renderModels();
+                showModelMessage('info', successText);
+                return;
+            }
+
+            updateSwitchingStep(1);
+            var r = await fetch('/api/model-switch/switch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ modelName: name })
             });
             var result = await r.json();
+
             if (!result.success) {
                 hideSwitchingOverlay();
-                stopSwitchPolling();
-                showModelMessage('error', (action === 'switch' || action === 'start' ? '切换失败: ' : '操作失败: ') + result.error);
+                showModelMessage('error', '切换失败: ' + (result.error || '未知错误'));
                 activeModelAction = null;
                 setActionButtonsDisabled(false);
                 return;
             }
 
-            if (action === 'switch' || action === 'start') {
-                updateSwitchingStep(2);
-                startSwitchPolling(name);
-            } else {
-                hideSwitchingOverlay();
-                activeModelAction = null;
-                setActionButtonsDisabled(false);
-                await renderModels();
-                showModelMessage('info', successText);
-            }
+            hideSwitchingOverlay();
+            activeModelAction = null;
+            setActionButtonsDisabled(false);
+            modelsRendered = false;
+            await renderModels();
+            loadGPUData();
+            updateCharts();
+            showModelMessage('info', successText);
         } catch (e) {
             hideSwitchingOverlay();
-            stopSwitchPolling();
             showModelMessage('error', (action === 'switch' || action === 'start' ? '切换失败: ' : '操作失败: ') + e.message);
             activeModelAction = null;
             setActionButtonsDisabled(false);
@@ -450,7 +367,12 @@
             var r = await fetch('/api/gpu-monitor');
             var result = await r.json();
             if (result.success && result.data && result.data.length > 0) {
-                el.innerHTML = renderGPUStatus(result.data);
+                if (!gpuStatusRendered) {
+                    el.innerHTML = renderGPUStatus(result.data);
+                    gpuStatusRendered = true;
+                } else {
+                    updateGPUStatusInPlace(result.data);
+                }
                 var gpu = result.data[0];
                 gpuHistory.push({
                     utilization: gpu.gpuUtilization || 0,
@@ -462,6 +384,7 @@
                 updateCharts();
             } else if (!isAutoRefreshing) {
                 el.innerHTML = '<div class="empty-state"><i class="fas fa-info-circle"></i><p>未检测到 GPU 设备</p></div>';
+                gpuStatusRendered = false;
             }
         } catch (e) {
             if (!isAutoRefreshing) {
@@ -476,9 +399,6 @@
         loadGPUData();
         autoRefreshTimer = setInterval(function() {
             loadGPUData();
-            if (!activeModelAction && !switchSession) {
-                renderModels();
-            }
         }, REFRESH_INTERVAL);
         var btn = document.getElementById('gpuAutoRefreshBtn');
         if (btn) {
@@ -500,6 +420,7 @@
     }
 
     async function renderModels() {
+        if (modelsRendered) return;
         var el = document.getElementById('modelSwitchContent');
         if (!el) return;
 
@@ -582,6 +503,7 @@
             }
             html += '</div>';
             el.innerHTML = html;
+            modelsRendered = true;
         } catch (e) {
             el.innerHTML = '<div class="empty-state error"><i class="fas fa-exclamation-triangle"></i><p>加载失败: ' + e.message + '</p></div>';
         }
@@ -638,7 +560,7 @@
 
     function bindEvents() {
         var refreshBtn = document.getElementById('gpuRefreshBtn');
-        if (refreshBtn) refreshBtn.addEventListener('click', function() { loadGPUData(); renderModels(); });
+        if (refreshBtn) refreshBtn.addEventListener('click', function() { gpuStatusRendered = false; modelsRendered = false; loadGPUData(); renderModels(); });
         var autoBtn = document.getElementById('gpuAutoRefreshBtn');
         if (autoBtn) autoBtn.addEventListener('click', function() {
             if (isAutoRefreshing) stopAutoRefresh();
