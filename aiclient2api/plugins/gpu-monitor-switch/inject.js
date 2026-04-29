@@ -495,6 +495,8 @@
                     '<div class="detail-item"><span class="detail-label">显存</span><span class="detail-value">' + getMemoryText(currentModel) + '</span></div>' +
                     '<div class="detail-item"><span class="detail-label">端口</span><span class="detail-value">' + (currentModel.port || '--') + '</span></div></div>';
                 html += '<div class="model-actions">' +
+                    '<button class="btn btn-sm btn-warning" onclick="window.forceRestartModel(\'' + escapeHtml(currentModel.name) + '\')">' +
+                    '<i class="fas fa-power-off"></i> 强制重启</button>' +
                     '<button class="btn btn-sm btn-danger" onclick="window.stopModel(\'' + escapeHtml(currentModel.name) + '\')">' +
                     '<i class="fas fa-stop"></i> 停止</button></div></div>';
             }
@@ -541,6 +543,97 @@
 
     window.stopModel = async function(name) {
         await executeModelAction('stop', name, '已停止: ' + name);
+    };
+
+    window.forceRestartModel = async function(name) {
+        if (activeModelAction) return;
+        activeModelAction = 'force-restart:' + name;
+        setActionButtonsDisabled(true);
+
+        showForceRestartOverlay(name);
+        connectSwitchWebSocket();
+
+        var pollTimer = null;
+        var startTime = Date.now();
+        var pollInterval = 2000;
+
+        function startPolling() {
+            pollTimer = setInterval(async function() {
+                try {
+                    var r = await fetch('/api/model-switch/switch-status');
+                    var result = await r.json();
+                    if (result.data && result.data.is_switching === false) {
+                        var session = result.data.session;
+                        if (session) {
+                            if (session.completed_successfully) {
+                                clearInterval(pollTimer);
+                                setTimeout(function() {
+                                    hideSwitchingOverlay();
+                                    disconnectSwitchWebSocket();
+                                    activeModelAction = null;
+                                    setActionButtonsDisabled(false);
+                                    modelsRendered = false;
+                                    renderModels();
+                                    loadGPUData();
+                                    updateCharts();
+                                    showModelMessage('info', '强制重启成功: ' + name);
+                                }, 2000);
+                            } else if (session.overall_phase === 'rolled_back' || session.overall_phase === 'failed') {
+                                clearInterval(pollTimer);
+                                setTimeout(function() {
+                                    hideSwitchingOverlay();
+                                    disconnectSwitchWebSocket();
+                                    activeModelAction = null;
+                                    setActionButtonsDisabled(false);
+                                    modelsRendered = false;
+                                    renderModels();
+                                    showModelMessage('error', '强制重启失败，已回滚: ' + (session.rollback_reason || session.error || '未知错误'));
+                                }, 3000);
+                            }
+                        }
+                    }
+                } catch (e) {}
+            }, pollInterval);
+        }
+
+        try {
+            var r = await fetch('/api/model-switch/force-restart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelName: name })
+            });
+            var result = await r.json();
+
+            if (!result.success) {
+                hideSwitchingOverlay();
+                disconnectSwitchWebSocket();
+                showModelMessage('error', '强制重启失败: ' + (result.error || '未知错误'));
+                activeModelAction = null;
+                setActionButtonsDisabled(false);
+                return;
+            }
+
+            startPolling();
+
+            var timeoutMs = 300000;
+            setTimeout(function() {
+                if (activeModelAction === 'force-restart:' + name) {
+                    clearInterval(pollTimer);
+                    hideSwitchingOverlay();
+                    disconnectSwitchWebSocket();
+                    showModelMessage('error', '强制重启超时 (5分钟)，请检查服务状态');
+                    activeModelAction = null;
+                    setActionButtonsDisabled(false);
+                }
+            }, timeoutMs);
+        } catch (e) {
+            clearInterval(pollTimer);
+            hideSwitchingOverlay();
+            disconnectSwitchWebSocket();
+            showModelMessage('error', '强制重启失败: ' + e.message);
+            activeModelAction = null;
+            setActionButtonsDisabled(false);
+        }
     };
 
     function injectMenuItem() {
