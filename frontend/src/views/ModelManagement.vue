@@ -58,6 +58,7 @@ const {
   refresh,
   handleStartModel,
   handleStopModel,
+  handleSwitchAndSetDefault,
   handleSetDefaultModel,
 } = useModels()
 

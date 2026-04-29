@@ -1,9 +1,6 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import {
   getModelsStatus,
-  startModel,
-  stopModel,
-  switchModel,
   getDefaultModel,
   setDefaultModel,
   clearDefaultModel,

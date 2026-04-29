@@ -528,6 +528,7 @@ export interface SwitchPhaseDetail {
 
 export interface SwitchSession {
   session_id: string
+  action: 'switch' | 'start' | 'stop'
   target_model: string
   previous_model: string | null
   started_at: string

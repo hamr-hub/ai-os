@@ -194,6 +194,7 @@ export function useModelSwitch() {
       const fullError = apiError || (err instanceof Error ? err.message : `${action === 'start' ? '启动' : action === 'stop' ? '停止' : '切换'}失败`)
       error.value = fullError
       isSwitching.value = false
+      stopPolling()
 
       if (fullError.includes('insufficient memory') || fullError.includes('memory')) {
         appStore.warning(`模型 ${modelName} 所需显存超过当前可用显存，${action === 'start' ? '启动' : '切换'}失败`)

@@ -1437,7 +1437,6 @@
         let switchPollingController = null;
         let switchWs = null;
         let currentSwitchSession = null;
-        let switchFinalizedSessionId = null;
         let isSwitching = false;
         const SWITCH_POLL_TIMEOUT = 180000;
 
@@ -1556,7 +1555,7 @@
 
                 setTimeout(() => {
                     hideSwitchProgressPanel();
-                    finalizeSwitchSession(session);
+                    document.getElementById('model-success').innerHTML = `<div class="success-message">切换成功: ${session.target_model}</div>`;
                     loadModelData();
                     loadGPUData();
                 }, 1500);
@@ -1584,31 +1583,6 @@
                 }, 3000);
 
                 isSwitching = false;
-            }
-        }
-
-        async function finalizeSwitchSession(session) {
-            if (!session || !session.session_id || switchFinalizedSessionId === session.session_id) {
-                return;
-            }
-            switchFinalizedSessionId = session.session_id;
-            try {
-                const r = await fetch('/api/model-switch/finalize-switch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session })
-                });
-                const result = await r.json();
-                if (!result.success) {
-                    console.error('Finalize switch failed:', result.error);
-                    return;
-                }
-                document.getElementById('model-success').innerHTML = `<div class="success-message">切换成功: ${session.target_model}，预热与健康检查模型已更新</div>`;
-                setTimeout(() => {
-                    document.getElementById('model-success').innerHTML = '';
-                }, 3000);
-            } catch (e) {
-                console.error('Finalize switch error:', e);
             }
         }
 
@@ -1718,7 +1692,6 @@
 
                 updateSwitchStep(1, 'completed');
                 updateSwitchStep(2, 'active');
-                switchFinalizedSessionId = null;
                 startSwitchPolling(modelName);
 
             } catch (error) {

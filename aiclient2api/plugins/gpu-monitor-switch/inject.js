@@ -14,7 +14,6 @@
     var switchStatusInterval = null;
     var switchWs = null;
     var switchSession = null;
-    var switchFinalizedSessionId = null;
     var SWITCH_POLL_TIMEOUT = 180000;
 
     var sectionHTML = `
@@ -262,28 +261,6 @@
         }
     }
 
-    async function finalizeSwitchSession(session) {
-        if (!session || !session.session_id || switchFinalizedSessionId === session.session_id) {
-            return;
-        }
-        switchFinalizedSessionId = session.session_id;
-        try {
-            var r = await fetch('/api/model-switch/finalize-switch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session: session })
-            });
-            var result = await r.json();
-            if (!result.success) {
-                showModelMessage('error', '切换完成后的预热失败: ' + (result.error || '未知错误'));
-                return;
-            }
-            showModelMessage('info', '切换成功: ' + session.target_model + '，预热与健康检查模型已更新');
-        } catch (e) {
-            showModelMessage('error', '切换完成后的预热失败: ' + e.message);
-        }
-    }
-
     function renderSwitchSessionState(session) {
         switchSession = session || null;
         if (!session) {
@@ -310,7 +287,7 @@
             hideSwitchingOverlay();
             activeModelAction = null;
             setActionButtonsDisabled(false);
-            finalizeSwitchSession(session);
+            showModelMessage('info', '切换成功: ' + session.target_model);
             renderModels();
             loadGPUData();
             updateCharts();
@@ -446,7 +423,6 @@
 
             if (action === 'switch') {
                 updateSwitchingStep(2);
-                switchFinalizedSessionId = null;
                 startSwitchPolling(name);
             } else {
                 hideSwitchingOverlay();

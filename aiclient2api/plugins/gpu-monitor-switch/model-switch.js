@@ -1,7 +1,5 @@
 import logger from '../../utils/logger.js';
-import { backendClient, GO_BACKEND_URL, PYTHON_BACKEND_URL } from './backend-client.js';
-import fs from 'fs/promises';
-import pathModule from 'path';
+import { backendClient } from './backend-client.js';
 
 class ModelSwitchService {
     constructor() {
@@ -70,117 +68,6 @@ class ModelSwitchService {
         } catch (error) {
             logger.error('[Model Switch Service] Error warming model:', error.message);
             return { success: false, error: error.message };
-        }
-    }
-
-    async updateProviderCheckModel(modelName) {
-        const configPath = pathModule.resolve(process.cwd(), 'configs', 'provider_pools.json');
-        logger.info(`[Model Switch Service] updateProviderCheckModel: configPath=${configPath}, modelName=${modelName}`);
-        logger.info(`[Model Switch Service] process.cwd()=${process.cwd()}`);
-        try {
-            const raw = await fs.readFile(configPath, 'utf8');
-            logger.info(`[Model Switch Service] Read config, length=${raw.length}`);
-            const config = JSON.parse(raw);
-            const providers = Array.isArray(config['openai-custom']) ? config['openai-custom'] : [];
-            logger.info(`[Model Switch Service] Found ${providers.length} providers in config`);
-            let updated = false;
-            for (const provider of providers) {
-                logger.info(`[Model Switch Service] Checking provider: customName=${provider?.customName}`);
-                if (provider && provider.customName === 'app-controller') {
-                    const oldModel = provider.checkModelName;
-                    provider.checkModelName = modelName;
-                    provider.lastHealthCheckModel = modelName;
-                    provider.lastModelSwitchTime = new Date().toISOString();
-                    provider.isHealthy = true;
-                    provider.errorCount = 0;
-                    provider.lastErrorTime = null;
-                    provider.lastErrorMessage = null;
-                    updated = true;
-                    logger.info(`[Model Switch Service] Updated checkModelName: ${oldModel} -> ${modelName}, reset health status`);
-                }
-            }
-            if (!updated) {
-                logger.error('[Model Switch Service] app-controller provider not found in provider_pools.json');
-                return { success: false, error: 'app-controller provider not found' };
-            }
-            const writeData = JSON.stringify(config, null, 2);
-            await fs.writeFile(configPath, writeData, 'utf8');
-            logger.info(`[Model Switch Service] Successfully wrote config to ${configPath}`);
-
-            const verifyRaw = await fs.readFile(configPath, 'utf8');
-            const verifyConfig = JSON.parse(verifyRaw);
-            const verifyProvider = verifyConfig['openai-custom'].find(p => p.customName === 'app-controller');
-            if (verifyProvider && verifyProvider.checkModelName === modelName) {
-                logger.info(`[Model Switch Service] Verification: checkModelName=${verifyProvider.checkModelName} - OK`);
-            } else {
-                logger.error('[Model Switch Service] Verification failed after write');
-                return { success: false, error: 'verification failed' };
-            }
-
-            await this._updateInMemoryProviderStatus(modelName);
-
-            return { success: true, modelName };
-        } catch (error) {
-            logger.error('[Model Switch Service] Error updating provider check model:', error.message);
-            logger.error('[Model Switch Service] Stack:', error.stack);
-            return { success: false, error: error.message };
-        }
-    }
-
-    async _updateInMemoryProviderStatus(modelName) {
-        try {
-            const { getProviderPoolManager } = await import('../../services/service-manager.js');
-            const poolManager = getProviderPoolManager();
-            if (!poolManager || !poolManager.providerStatus) {
-                logger.warn('[Model Switch Service] ProviderPoolManager not available, skipping in-memory update');
-                return;
-            }
-
-            const providerType = 'openai-custom';
-            const providers = poolManager.providerStatus[providerType];
-            if (!Array.isArray(providers)) {
-                logger.warn(`[Model Switch Service] No providerStatus for ${providerType}`);
-                return;
-            }
-
-            for (const provider of providers) {
-                if (provider.config && provider.config.customName === 'app-controller') {
-                    const oldModel = provider.config.checkModelName;
-                    provider.config.checkModelName = modelName;
-                    provider.config.lastHealthCheckModel = modelName;
-                    provider.config.lastModelSwitchTime = new Date().toISOString();
-                    provider.config.isHealthy = true;
-                    provider.config.errorCount = 0;
-                    provider.config.lastErrorTime = null;
-                    provider.config.lastErrorMessage = null;
-                    if (provider.healthState) {
-                        provider.healthState.isHealthy = true;
-                        provider.healthState.errorCount = 0;
-                        provider.healthState.lastErrorTime = null;
-                        provider.healthState.lastErrorMessage = null;
-                    }
-                    logger.info(`[Model Switch Service] Updated in-memory checkModelName: ${oldModel} -> ${modelName}, reset health status`);
-                }
-            }
-
-            if (poolManager.providerPools && Array.isArray(poolManager.providerPools[providerType])) {
-                for (const provider of poolManager.providerPools[providerType]) {
-                    if (provider.customName === 'app-controller') {
-                        provider.checkModelName = modelName;
-                        provider.lastHealthCheckModel = modelName;
-                        provider.lastModelSwitchTime = new Date().toISOString();
-                        provider.isHealthy = true;
-                        provider.errorCount = 0;
-                        provider.lastErrorTime = null;
-                        provider.lastErrorMessage = null;
-                        logger.info(`[Model Switch Service] Updated in-memory providerPools checkModelName -> ${modelName}, reset health status`);
-                    }
-                }
-            }
-
-            logger.info('[Model Switch Service] In-memory provider status updated successfully');
-        } catch (error) {
-            logger.warn('[Model Switch Service] Failed to update in-memory provider status:', error.message);
         }
     }
 
@@ -311,38 +198,13 @@ class ModelSwitchService {
         }
     }
 
-    async finalizeAtomicSwitch(session) {
-        if (!session || !session.completed_successfully || session.overall_phase !== 'completed') {
-            return {
-                success: false,
-                error: session?.rollback_reason || session?.error || 'switch not completed'
-            };
-        }
-
-        const modelName = session.target_model;
-        const warmup = await this.warmupModel(modelName);
-        const providerUpdate = await this.updateProviderCheckModel(modelName);
-        await this.fetchModelsFromBackend();
-
-        return {
-            success: Boolean(warmup?.success && providerUpdate?.success),
-            data: {
-                modelName,
-                warmup,
-                providerUpdate,
-                session,
-            },
-            timestamp: new Date().toISOString(),
-            backendStatus: backendClient.getStatus()
-        };
-    }
-
     async switchModel(modelName) {
         try {
             logger.info(`[Model Switch Service] Starting atomic model switch to: ${modelName}`);
             const response = await backendClient.postWithFallback(
                 '/manage/switch/atomic',
                 {
+                    action: 'switch',
                     model_name: modelName,
                     set_as_default: true,
                 }
