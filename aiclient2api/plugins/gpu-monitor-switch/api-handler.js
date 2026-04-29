@@ -191,21 +191,28 @@ export async function handleModelSwitchApiRoutes(method, path, req, res, config)
             const body = await parseRequestBody(req);
             if (!body.modelName) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelName' }); return true; }
             const mode = body.mode || 'warm';
-            const response = await fetch(`${backendClient.getBaseUrl()}/model-switch/switch`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model_name: body.modelName,
-                    set_as_default: body.setAsDefault || false,
-                    mode: mode
-                }),
-                signal: AbortSignal.timeout(180000)
-            });
-            const data = await response.json();
-            if (response.ok) {
-                sendJSONResponse(res, 200, { success: true, data: data, mode: mode });
-            } else {
-                sendJSONResponse(res, response.status, { success: false, error: data.error || 'Switch failed' });
+            try {
+                const baseUrl = backendClient.getBaseUrl();
+                logger.info(`[API Handler] Switching model: ${body.modelName} (${mode}), baseUrl: ${baseUrl}`);
+                const response = await fetch(`${baseUrl}/model-switch/switch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model_name: body.modelName,
+                        set_as_default: body.setAsDefault || false,
+                        mode: mode
+                    }),
+                    signal: AbortSignal.timeout(180000)
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    sendJSONResponse(res, 200, { success: true, data: data, mode: mode });
+                } else {
+                    sendJSONResponse(res, response.status, { success: false, error: data.error || 'Switch failed' });
+                }
+            } catch (error) {
+                logger.error('[API Handler] Model switch error:', error.message);
+                sendJSONResponse(res, 500, { success: false, error: 'fetch failed: ' + error.message });
             }
             return true;
         }

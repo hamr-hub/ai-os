@@ -81,14 +81,14 @@ class ModelSwitchService {
 
     async warmupModel(modelName) {
         try {
-            const response = await fetch(`${backendClient.getBaseUrl()}/v1/chat/completions`, {
+            const baseUrl = backendClient.getBaseUrl();
+            const response = await fetch(`${baseUrl}/model-switch/switch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: modelName,
-                    messages: [{ role: 'user', content: 'hi' }],
-                    max_tokens: 8,
-                    temperature: 0
+                    model_name: modelName,
+                    set_as_default: false,
+                    mode: 'warm'
                 }),
                 signal: AbortSignal.timeout(45000)
             });
@@ -293,11 +293,13 @@ class ModelSwitchService {
                 startTime: Date.now()
             });
 
-            const response = await fetch('/api/model-switch/switch', {
+            const baseUrl = backendClient.getBaseUrl();
+            const response = await fetch(`${baseUrl}/model-switch/switch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    modelName: modelName,
+                    model_name: modelName,
+                    set_as_default: false,
                     mode: mode
                 }),
                 signal: AbortSignal.timeout(180000)
