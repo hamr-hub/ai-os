@@ -281,6 +281,56 @@ class ModelSwitchService {
             return { success: false, error: error.message, backendStatus: backendClient.getStatus() };
         }
     }
+
+    async forceRestartModel(modelName, modelPath) {
+        try {
+            logger.info(`[Model Switch Service] Force restarting model via atomic switch: ${modelName}`);
+            const response = await backendClient.fetchWithFallback('/manage/switch/atomic', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'switch',
+                    model_name: modelName,
+                    model_path: modelPath || null
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                const detail = result.detail;
+                const errorMsg = typeof detail === 'object'
+                    ? (detail.error || detail.message || JSON.stringify(detail))
+                    : (detail || result.error || result.message || `Force restart failed with status ${response.status}`);
+                return {
+                    success: false,
+                    error: errorMsg,
+                    data: result,
+                    timestamp: new Date().toISOString(),
+                    backendStatus: backendClient.getStatus()
+                };
+            }
+
+            await this.fetchModelsFromBackend();
+
+            return {
+                success: true,
+                data: {
+                    modelName,
+                    sessionId: result.session_id,
+                    status: result.status,
+                    targetModel: result.target_model,
+                    previousModel: result.previous_model,
+                    message: result.message
+                },
+                timestamp: new Date().toISOString(),
+                backendStatus: backendClient.getStatus()
+            };
+        } catch (error) {
+            logger.error('[Model Switch Service] Error force restarting model:', error.message);
+            return { success: false, error: error.message, backendStatus: backendClient.getStatus() };
+        }
+    }
 }
 
 const modelSwitchService = new ModelSwitchService();
