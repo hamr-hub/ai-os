@@ -115,6 +115,8 @@ func (sc *SystemController) RestartService(name string) bool {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
+	sc.clearModelPathEnv(name)
+
 	cmd := sc.command("systemctl", "stop", name)
 	if cmd == nil {
 		sc.logger.Error("restart service", zap.String("service", name), zap.String("reason", "systemctl unavailable"))
@@ -155,6 +157,15 @@ func (sc *SystemController) RestartService(name string) bool {
 	}
 	sc.logger.Info("service restarted", zap.String("service", name))
 	return true
+}
+
+func (sc *SystemController) clearModelPathEnv(name string) {
+	cmd := sc.command("systemctl", "unset-environment", "VLLM_MODEL_PATH")
+	if cmd != nil {
+		if err := cmd.Run(); err != nil {
+			sc.logger.Debug("clear VLLM_MODEL_PATH env failed", zap.Error(err))
+		}
+	}
 }
 
 func (sc *SystemController) getServiceStatusLocked(name string) string {

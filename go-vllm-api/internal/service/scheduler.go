@@ -776,6 +776,10 @@ func (s *Scheduler) WarmSwitchModel(ctx context.Context, name string) (bool, err
 		return false, fmt.Errorf("service %s failed to become ready: %w", mc.Service, err)
 	}
 
+	if err := s.vllmManager.SwitchModel(ctx, mc.ModelPath); err != nil {
+		s.logger.Warn("failed to re-update vllm model state after restart", zap.String("model", matched), zap.Error(err))
+	}
+
 	port := s.vllmManager.GetCurrentPort()
 	if port == 0 {
 		port = 8000
