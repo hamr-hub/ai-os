@@ -99,6 +99,8 @@ class AIClientInterface:
                     }
                 await asyncio.sleep(5)
 
+            self.scheduler.mark_model_selected(model_name)
+
             vllm_url = _build_backend_url(self.scheduler, model_name)
 
             model_config = self.scheduler.get_model_config(model_name)
@@ -170,6 +172,8 @@ class AIClientInterface:
                     })
                     return
                 await asyncio.sleep(5)
+
+            self.scheduler.mark_model_selected(model_name)
 
             vllm_url = _build_backend_url(self.scheduler, model_name)
 
@@ -297,6 +301,8 @@ class AIClientInterface:
                         }
                     }
                 await asyncio.sleep(5)
+
+            self.scheduler.mark_model_selected(model_name)
 
             vllm_url = _build_backend_url(self.scheduler, model_name)
 

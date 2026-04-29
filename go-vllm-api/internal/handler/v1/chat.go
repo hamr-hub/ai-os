@@ -243,6 +243,8 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	h.scheduler.MarkModelSelected(modelName)
+
 	port := h.scheduler.GetModelPort(modelName)
 	vllmModelName := h.scheduler.GetModelPath(modelName)
 
@@ -369,6 +371,8 @@ func (h *V1Handler) CreateEmbeddings(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
+
+	h.scheduler.MarkModelSelected(modelName)
 
 	port := h.scheduler.GetModelPort(modelName)
 	payload := map[string]interface{}{
