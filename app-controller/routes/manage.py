@@ -63,15 +63,16 @@ async def atomic_switch_model(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid request body")
 
+    action = body.get("action", "switch")
+    if action not in {"switch", "start", "stop"}:
+        raise HTTPException(status_code=400, detail="action must be switch, start or stop")
+
     model_name = body.get("model_name")
     if not model_name:
         raise HTTPException(status_code=400, detail="model_name is required")
 
     set_as_default = body.get("set_as_default", False)
     model_path = body.get("model_path")
-
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
 
     if model_switch_orchestrator.is_switching:
         current = model_switch_orchestrator.current_session
@@ -84,34 +85,63 @@ async def atomic_switch_model(request: Request):
             }
         )
 
-    target_path = model_path
-    if not target_path:
-        config = scheduler.get_model_config(model_name)
-        target_path = (config or {}).get("model_path") or os.path.join(MODEL_BASE_PATH, model_name)
-
-    if not os.path.exists(target_path):
-        raise HTTPException(status_code=404, detail=f"模型路径不存在: {target_path}")
-
     current_info = get_current_model_info()
     previous_model = current_info.get("name") if current_info else None
     previous_path = current_info.get("path") if current_info else None
 
-    task = asyncio.create_task(
-        model_switch_orchestrator.switch(
-            target_model=model_name,
-            target_model_path=target_path,
-            previous_model=previous_model,
-            previous_model_path=previous_path,
+    if action != "stop":
+        if not scheduler.is_model_available(model_name):
+            raise ModelNotFoundException(model_name)
+        target_path = model_path
+        if not target_path:
+            config = scheduler.get_model_config(model_name)
+            target_path = (config or {}).get("model_path") or os.path.join(MODEL_BASE_PATH, model_name)
+        if not os.path.exists(target_path):
+            raise HTTPException(status_code=404, detail=f"模型路径不存在: {target_path}")
+    else:
+        target_path = previous_path or ""
+
+    if action == "switch":
+        task = asyncio.create_task(
+            model_switch_orchestrator.switch(
+                target_model=model_name,
+                target_model_path=target_path,
+                previous_model=previous_model,
+                previous_model_path=previous_path,
+            )
         )
-    )
+        status = "switching"
+        message = "模型切换已启动，请通过 WebSocket 或轮询 /manage/switch/status 追踪进度"
+    elif action == "start":
+        task = asyncio.create_task(
+            model_switch_orchestrator.start(
+                target_model=model_name,
+                target_model_path=target_path,
+                previous_model=previous_model,
+                previous_model_path=previous_path,
+            )
+        )
+        status = "starting"
+        message = "模型启动已启动，请通过 WebSocket 或轮询 /manage/switch/status 追踪进度"
+    else:
+        task = asyncio.create_task(
+            model_switch_orchestrator.stop(
+                target_model=model_name,
+                previous_model=previous_model,
+                previous_model_path=previous_path,
+            )
+        )
+        status = "stopping"
+        message = "模型停止已启动，请通过 WebSocket 或轮询 /manage/switch/status 追踪进度"
 
     async def _on_switch_done(t: asyncio.Task):
         try:
             session = t.result()
             if session.completed_successfully:
-                scheduler.mark_model_selected(model_name)
-                if set_as_default:
-                    scheduler.set_default_model(model_name)
+                if action in {"switch", "start"}:
+                    scheduler.mark_model_selected(model_name)
+                    if set_as_default:
+                        scheduler.set_default_model(model_name)
                 _clear_model_caches()
             else:
                 logger.error("Model switch failed: %s", session.error or session.rollback_reason or "unknown")
@@ -127,11 +157,12 @@ async def atomic_switch_model(request: Request):
     current_session = model_switch_orchestrator.current_session
 
     return {
-        "status": "switching",
+        "status": status,
+        "action": action,
         "session_id": current_session.session_id if current_session else None,
         "target_model": model_name,
         "previous_model": previous_model,
-        "message": "模型切换已启动，请通过 WebSocket 或轮询 /manage/switch/status 追踪进度",
+        "message": message,
     }
 
 
@@ -312,111 +343,38 @@ async def models_summary(refresh: Optional[bool] = False):
 
 @manage_router.post("/models/{model_name}/start")
 async def start_model(model_name: str):
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
-
-    if scheduler.is_model_running(model_name):
-        return {"status": "already_running", "model": model_name}
-
-    backend_type = scheduler.get_model_backend_type(model_name)
-    if backend_type == 'vllm':
-        # vLLM 后端是单实例服务，界面上的“启动”实际等价于切换到该模型。
-        success = await scheduler.switch_model(model_name)
-        if success:
-            scheduler.mark_model_selected(model_name)
-    else:
-        success = await scheduler.start_model(model_name)
-    if success:
-        _clear_model_caches()
-        return {"status": "starting", "model": model_name}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to start model {model_name}")
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "error": "此接口已废弃",
+            "replacement": "/manage/switch/atomic",
+            "example": {"action": "start", "model_name": model_name},
+        }
+    )
 
 
 @manage_router.post("/models/{model_name}/stop")
 async def stop_model(model_name: str):
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
-
-    if not scheduler.is_model_running(model_name):
-        return {"status": "already_stopped", "model": model_name}
-
-    success = await scheduler.stop_model(model_name)
-    if success:
-        _clear_model_caches()
-        return {"status": "stopped", "model": model_name}
-    else:
-        raise HTTPException(status_code=500, detail=f"Failed to stop model {model_name}")
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "error": "此接口已废弃",
+            "replacement": "/manage/switch/atomic",
+            "example": {"action": "stop", "model_name": model_name},
+        }
+    )
 
 
 @manage_router.post("/models/{model_name}/switch")
 async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True, set_as_default: Optional[bool] = False):
-    if not scheduler.is_model_available(model_name):
-        raise ModelNotFoundException(model_name)
-
-    from core.deps import model_switch_orchestrator
-    from core.vllm_manager import get_current_model_info, MODEL_BASE_PATH
-    import os
-
-    if model_switch_orchestrator.is_switching:
-        current = model_switch_orchestrator.current_session
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "模型切换正在进行中",
-                "session_id": current.session_id if current else None,
-                "target_model": current.target_model if current else None,
-            }
-        )
-
-    config = scheduler.get_model_config(model_name)
-    target_path = (config or {}).get("model_path") or os.path.join(MODEL_BASE_PATH, model_name)
-
-    if not os.path.exists(target_path):
-        raise HTTPException(status_code=404, detail=f"模型路径不存在: {target_path}")
-
-    current_info = get_current_model_info()
-    previous_model = current_info.get("name") if current_info else None
-    previous_path = current_info.get("path") if current_info else None
-
-    task = asyncio.create_task(
-        model_switch_orchestrator.switch(
-            target_model=model_name,
-            target_model_path=target_path,
-            previous_model=previous_model,
-            previous_model_path=previous_path,
-        )
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "error": "此接口已废弃",
+            "replacement": "/manage/switch/atomic",
+            "example": {"action": "switch", "model_name": model_name, "set_as_default": bool(set_as_default)},
+        }
     )
-
-    async def _on_switch_done(t: asyncio.Task):
-        try:
-            session = t.result()
-            if session.completed_successfully:
-                scheduler.mark_model_selected(model_name)
-                if set_as_default:
-                    scheduler.set_default_model(model_name)
-                _clear_model_caches()
-            else:
-                logger.error("Model switch failed: %s", session.error or session.rollback_reason or "unknown")
-                scheduler.clear_default_model()
-                _clear_model_caches()
-        except Exception as e:
-            logger.error("Switch task callback error: %s", e)
-            scheduler.clear_default_model()
-
-    task.add_done_callback(lambda t: asyncio.create_task(_on_switch_done(t)))
-
-    await asyncio.sleep(0.1)
-    current_session = model_switch_orchestrator.current_session
-
-    return {
-        "status": "switching",
-        "session_id": current_session.session_id if current_session else None,
-        "target_model": model_name,
-        "previous_model": previous_model,
-        "backend_type": "vllm",
-        "message": "模型切换已启动，请通过 WebSocket 或轮询 /manage/switch/status 追踪进度",
-    }
 
 
 @manage_router.get("/default-model")

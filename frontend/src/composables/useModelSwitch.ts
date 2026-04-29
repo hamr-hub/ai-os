@@ -165,12 +165,16 @@ export function useModelSwitch() {
     }
   }
 
-  const triggerSwitch = async (modelName: string, setAsDefault = false) => {
+  const triggerSwitch = async (
+    modelName: string,
+    setAsDefault = false,
+    action: 'switch' | 'start' | 'stop' = 'switch'
+  ) => {
     error.value = null
     isSwitching.value = true
 
     try {
-      await atomicSwitchModel(modelName, setAsDefault)
+      await atomicSwitchModel(modelName, setAsDefault, action)
       connectWS()
       startPolling()
     } catch (err) {
@@ -188,14 +192,14 @@ export function useModelSwitch() {
         ? detail.error || detail.rollback_reason
         : detail || axiosErr.response?.data?.error || axiosErr.response?.data?.message
 
-      const fullError = apiError || (err instanceof Error ? err.message : '切换失败')
+      const fullError = apiError || (err instanceof Error ? err.message : `${action === 'start' ? '启动' : action === 'stop' ? '停止' : '切换'}失败`)
       error.value = fullError
       isSwitching.value = false
 
       if (fullError.includes('insufficient memory') || fullError.includes('memory')) {
-        appStore.warning(`模型 ${modelName} 所需显存超过当前可用显存，切换失败`)
+        appStore.warning(`模型 ${modelName} 所需显存超过当前可用显存，${action === 'start' ? '启动' : '切换'}失败`)
       } else {
-        appStore.warning(`模型 ${modelName} 切换失败：${fullError}`)
+        appStore.warning(`模型 ${modelName}${action === 'start' ? '启动' : action === 'stop' ? '停止' : '切换'}失败：${fullError}`)
       }
     }
   }

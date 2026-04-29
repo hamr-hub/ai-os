@@ -387,12 +387,28 @@ class ModelSwitchService {
     async startModel(modelName) {
         try {
             const response = await backendClient.postWithFallback(
-                `/manage/models/${encodeURIComponent(modelName)}/start`,
-                {}
+                '/manage/switch/atomic',
+                {
+                    action: 'start',
+                    model_name: modelName,
+                }
             );
             const result = await response.json();
             await this.fetchModelsFromBackend();
-            return { success: true, data: { modelName: modelName, action: 'start' }, timestamp: new Date().toISOString(), backendStatus: backendClient.getStatus() };
+            return {
+                success: response.ok,
+                data: {
+                    modelName,
+                    sessionId: result.session_id,
+                    targetModel: result.target_model,
+                    previousModel: result.previous_model,
+                    status: result.status,
+                    action: result.action || 'start',
+                },
+                error: response.ok ? undefined : result.error || result.message || result.detail?.error || `Start failed with status ${response.status}`,
+                timestamp: new Date().toISOString(),
+                backendStatus: backendClient.getStatus()
+            };
         } catch (error) {
             return { success: false, error: error.message, backendStatus: backendClient.getStatus() };
         }
@@ -401,12 +417,28 @@ class ModelSwitchService {
     async stopModel(modelName) {
         try {
             const response = await backendClient.postWithFallback(
-                `/manage/models/${encodeURIComponent(modelName)}/stop`,
-                {}
+                '/manage/switch/atomic',
+                {
+                    action: 'stop',
+                    model_name: modelName,
+                }
             );
             const result = await response.json();
             await this.fetchModelsFromBackend();
-            return { success: true, data: { modelName: modelName, action: 'stop' }, timestamp: new Date().toISOString(), backendStatus: backendClient.getStatus() };
+            return {
+                success: response.ok,
+                data: {
+                    modelName,
+                    sessionId: result.session_id,
+                    targetModel: result.target_model,
+                    previousModel: result.previous_model,
+                    status: result.status,
+                    action: result.action || 'stop',
+                },
+                error: response.ok ? undefined : result.error || result.message || result.detail?.error || `Stop failed with status ${response.status}`,
+                timestamp: new Date().toISOString(),
+                backendStatus: backendClient.getStatus()
+            };
         } catch (error) {
             return { success: false, error: error.message, backendStatus: backendClient.getStatus() };
         }

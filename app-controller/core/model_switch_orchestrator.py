@@ -67,6 +67,7 @@ class SwitchSession:
     previous_model: Optional[str]
     previous_model_path: Optional[str]
     started_at: str
+    action: str = "switch"
     finished_at: Optional[str] = None
     overall_phase: SwitchPhase = SwitchPhase.IDLE
     phases: List[PhaseDetail] = field(default_factory=lambda: [
@@ -94,6 +95,7 @@ class SwitchSession:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "session_id": self.session_id,
+            "action": self.action,
             "target_model": self.target_model,
             "previous_model": self.previous_model,
             "started_at": self.started_at,
@@ -169,6 +171,7 @@ class ModelSwitchOrchestrator:
                 previous_model=previous_model,
                 previous_model_path=previous_model_path,
                 started_at=datetime.now().isoformat(),
+                action="switch",
             )
             self._current_session = session
 
@@ -199,6 +202,121 @@ class ModelSwitchOrchestrator:
 
             return session
 
+    async def start(
+        self,
+        target_model: str,
+        target_model_path: str,
+        previous_model: Optional[str] = None,
+        previous_model_path: Optional[str] = None,
+    ) -> SwitchSession:
+        if self._global_lock.locked():
+            raise RuntimeError("Model switch already in progress")
+
+        async with self._global_lock:
+            self._cancel_requested = False
+            session = SwitchSession(
+                session_id=str(uuid.uuid4()),
+                target_model=target_model,
+                target_model_path=target_model_path,
+                previous_model=previous_model,
+                previous_model_path=previous_model_path,
+                started_at=datetime.now().isoformat(),
+                action="start",
+            )
+            self._current_session = session
+
+            try:
+                session.overall_phase = SwitchPhase.PHASE1
+                await self._phase1_stop_and_verify(session)
+
+                session.overall_phase = SwitchPhase.PHASE2
+                await self._phase2_force_kill_if_needed(session)
+
+                session.overall_phase = SwitchPhase.PHASE3
+                await self._phase3_start_and_check(session)
+
+                session.overall_phase = SwitchPhase.PHASE4
+                await self._phase4_smoke_test(session)
+
+                session.overall_phase = SwitchPhase.COMPLETED
+                session.completed_successfully = True
+                session.finished_at = datetime.now().isoformat()
+                await self._broadcast(session, phase=4, progress=100,
+                                      log="模型启动完成，所有测试通过", level="success", final=True)
+
+            except _SwitchAborted:
+                logger.error("Start aborted")
+
+            except Exception as exc:
+                logger.exception("Unexpected error during start: %s", exc)
+                session.error = str(exc)
+                await self._rollback(session, f"意外错误: {exc}", from_exception=True)
+
+            finally:
+                session.finished_at = session.finished_at or datetime.now().isoformat()
+
+            return session
+
+    async def stop(
+        self,
+        target_model: str,
+        previous_model: Optional[str] = None,
+        previous_model_path: Optional[str] = None,
+    ) -> SwitchSession:
+        if self._global_lock.locked():
+            raise RuntimeError("Model switch already in progress")
+
+        async with self._global_lock:
+            self._cancel_requested = False
+            session = SwitchSession(
+                session_id=str(uuid.uuid4()),
+                target_model=target_model,
+                target_model_path=previous_model_path or "",
+                previous_model=previous_model,
+                previous_model_path=previous_model_path,
+                started_at=datetime.now().isoformat(),
+                action="stop",
+            )
+            session.phases[2].status = PhaseStatus.SKIPPED
+            session.phases[2].progress = 100
+            session.phases[2].started_at = session.started_at
+            session.phases[2].finished_at = session.started_at
+            session.phases[3].status = PhaseStatus.SKIPPED
+            session.phases[3].progress = 100
+            session.phases[3].started_at = session.started_at
+            session.phases[3].finished_at = session.started_at
+            self._current_session = session
+
+            try:
+                session.overall_phase = SwitchPhase.PHASE1
+                await self._phase1_stop_and_verify(session)
+
+                session.overall_phase = SwitchPhase.PHASE2
+                await self._phase2_force_kill_if_needed(session)
+
+                session.overall_phase = SwitchPhase.COMPLETED
+                session.completed_successfully = True
+                session.finished_at = datetime.now().isoformat()
+                await self._broadcast(session, phase=2, progress=100,
+                                      log="模型停止完成", level="success", final=True)
+
+            except _SwitchAborted:
+                logger.error("Stop aborted")
+
+            except Exception as exc:
+                logger.exception("Unexpected error during stop: %s", exc)
+                session.error = str(exc)
+                session.overall_phase = SwitchPhase.FAILED
+                session.finished_at = datetime.now().isoformat()
+                await self._broadcast(session, phase=2, progress=100,
+                                      log=f"模型停止失败: {exc}", level="error", final=True)
+
+            finally:
+                session.finished_at = session.finished_at or datetime.now().isoformat()
+
+            return session
+
+    async def _phase1_stop_and_verify(self, session: SwitchSession):
     async def _phase1_update_config_and_restart(self, session: SwitchSession):
         """Phase 1: 更新配置并重启服务"""
         phase = session.phases[0]

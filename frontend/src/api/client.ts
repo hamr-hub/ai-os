@@ -190,29 +190,30 @@ export async function getModels(): Promise<ModelsResponse> {
 }
 
 export async function startModel(name: string): Promise<ActionResponse> {
-  const { data } = await client.post<ActionResponse>(`/models/${name}/start`)
+  const data = await atomicSwitchModel(name, false, 'start')
   return data
 }
 
 export async function stopModel(name: string): Promise<ActionResponse> {
-  const { data } = await client.post<ActionResponse>(`/models/${name}/stop`)
+  const data = await atomicSwitchModel(name, false, 'stop')
   return data
 }
 
 export async function switchModel(name: string, testEnabled = true): Promise<ActionResponse> {
-  const { data } = await client.post<ActionResponse>(`/models/${name}/switch`, null, {
-    params: { test_enabled: testEnabled },
-  })
+  void testEnabled
+  const data = await atomicSwitchModel(name, true, 'switch')
   return data
 }
 
 export async function atomicSwitchModel(
   name: string,
-  setAsDefault = false
-): Promise<ActionResponse & { session_id?: string; target_model?: string; previous_model?: string | null }> {
+  setAsDefault = false,
+  action: 'switch' | 'start' | 'stop' = 'switch'
+): Promise<ActionResponse & { session_id?: string; target_model?: string; previous_model?: string | null; action?: string }> {
   const { data } = await client.post<
-    ActionResponse & { session_id?: string; target_model?: string; previous_model?: string | null }
+    ActionResponse & { session_id?: string; target_model?: string; previous_model?: string | null; action?: string }
   >('/switch/atomic', {
+    action,
     model_name: name,
     set_as_default: setAsDefault,
   })

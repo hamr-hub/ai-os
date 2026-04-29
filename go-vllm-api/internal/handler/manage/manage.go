@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"go-vllm-api/internal/config"
@@ -72,7 +73,10 @@ func (h *ManageHandler) waitForModelReady(ctx context.Context, modelName string)
 }
 
 func (h *ManageHandler) proxyPythonManage(c *gin.Context, method string, path string, body interface{}) {
-	baseURL := "http://localhost:35000"
+	baseURL := os.Getenv("PYTHON_BACKEND_URL")
+	if baseURL == "" {
+		baseURL = "http://192.168.7.103:35000"
+	}
 	var reqBody *bytes.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -374,16 +378,11 @@ func (h *ManageHandler) StartModel(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
 		return
 	}
-	if h.scheduler.IsModelRunning(modelName) {
-		c.JSON(http.StatusOK, gin.H{"status": "already_running", "model": modelName})
-		return
+	body := gin.H{
+		"action":     "start",
+		"model_name": modelName,
 	}
-	ok, err := h.scheduler.StartModel(c.Request.Context(), modelName)
-	if ok {
-		c.JSON(http.StatusOK, gin.H{"status": "starting", "model": modelName})
-	} else {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to start model %s: %v", modelName, err)})
-	}
+	h.proxyPythonManage(c, http.MethodPost, "/manage/switch/atomic", body)
 }
 
 func (h *ManageHandler) StopModel(c *gin.Context) {
@@ -392,16 +391,11 @@ func (h *ManageHandler) StopModel(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
 		return
 	}
-	if !h.scheduler.IsModelRunning(modelName) {
-		c.JSON(http.StatusOK, gin.H{"status": "already_stopped", "model": modelName})
-		return
+	body := gin.H{
+		"action":     "stop",
+		"model_name": modelName,
 	}
-	ok := h.scheduler.StopModel(c.Request.Context(), modelName)
-	if ok {
-		c.JSON(http.StatusOK, gin.H{"status": "stopped", "model": modelName})
-	} else {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to stop model %s", modelName)})
-	}
+	h.proxyPythonManage(c, http.MethodPost, "/manage/switch/atomic", body)
 }
 
 func (h *ManageHandler) SwitchModel(c *gin.Context) {
@@ -411,6 +405,7 @@ func (h *ManageHandler) SwitchModel(c *gin.Context) {
 		return
 	}
 	body := gin.H{
+		"action":         "switch",
 		"model_name":     modelName,
 		"set_as_default": true,
 	}

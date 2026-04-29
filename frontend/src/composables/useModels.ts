@@ -10,6 +10,7 @@ import {
   getAggregatedModels,
   updateModelVLLMConfig,
 } from '@/api/client'
+import { useModelSwitch } from '@/composables/useModelSwitch'
 import type { ModelStatus, AggregatedModelsResponse, VLLMConfigUpdateRequest } from '@/types'
 import { isAbortError } from '@/utils/request'
 import { useAppStore } from '@/stores/app'
@@ -25,6 +26,7 @@ export function useModels() {
   const isRefreshing = ref(false)
   let refreshInterval: number | null = null
   let fetchController: AbortController | null = null
+  const { triggerSwitch } = useModelSwitch()
 
   const fetchModelStatus = async (manualRefresh = false) => {
     if (fetchController) {
@@ -148,7 +150,7 @@ export function useModels() {
     actionLoading.value = modelName
     error.value = null
     try {
-      await startModel(modelName)
+      await triggerSwitch(modelName, false, 'start')
       await fetchModelStatus(true)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : `Failed to start model ${modelName}`
@@ -171,7 +173,7 @@ export function useModels() {
     actionLoading.value = modelName
     error.value = null
     try {
-      await stopModel(modelName)
+      await triggerSwitch(modelName, false, 'stop')
       await fetchModelStatus()
     } catch (err) {
       error.value = err instanceof Error ? err.message : `Failed to stop model ${modelName}`
@@ -187,7 +189,7 @@ export function useModels() {
     switchingModel.value = modelName
     error.value = null
     try {
-      await switchModel(modelName, true)
+      await triggerSwitch(modelName, setAsDefault, 'switch')
       if (setAsDefault) {
         await setDefaultModel(modelName)
         defaultModel.value = modelName

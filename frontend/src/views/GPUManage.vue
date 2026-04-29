@@ -2,11 +2,13 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useGPU } from '@/composables/useGPU'
 import { useModels } from '@/composables/useModels'
-import { getGPUEnhancedInfo, getGPUProcesses, getVLLMMetrics, switchModel as apiSwitchModel, startModel as apiStartModel, stopModel as apiStopModel } from '@/api/client'
+import { useModelSwitch } from '@/composables/useModelSwitch'
+import { getGPUEnhancedInfo, getGPUProcesses, getVLLMMetrics } from '@/api/client'
 import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, Server, Play, Square, ArrowRightLeft, Fan, Gauge, HardDrive, AlertTriangle } from 'lucide-vue-next'
 
 const { gpuSummary, loading: gpuLoading, refresh: refreshGPU } = useGPU()
 const { modelList, actionLoading, refresh: refreshModels } = useModels()
+const { triggerSwitch } = useModelSwitch()
 
 const enhancedInfo = ref<any>(null)
 const gpuProcesses = ref<any[]>([])
@@ -104,28 +106,25 @@ const togglePolling = () => {
 
 const handleSwitchModel = async (modelName: string) => {
   try {
-    await apiSwitchModel(modelName)
+    await triggerSwitch(modelName, false, 'switch')
     await refreshAll()
   } catch {
-    // handled by global error
   }
 }
 
 const handleStartModel = async (modelName: string) => {
   try {
-    await apiStartModel(modelName)
+    await triggerSwitch(modelName, false, 'start')
     await refreshAll()
   } catch {
-    // handled by global error
   }
 }
 
 const handleStopModel = async (modelName: string) => {
   try {
-    await apiStopModel(modelName)
+    await triggerSwitch(modelName, false, 'stop')
     await refreshAll()
   } catch {
-    // handled by global error
   }
 }
 
