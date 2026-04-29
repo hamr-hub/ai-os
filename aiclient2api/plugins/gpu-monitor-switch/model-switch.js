@@ -294,6 +294,8 @@ class ModelSwitchService {
             });
 
             const baseUrl = backendClient.getBaseUrl();
+            logger.info(`[Model Switch Service] Switching model (${mode}): ${modelName}, baseUrl: ${baseUrl}`);
+
             const response = await fetch(`${baseUrl}/model-switch/switch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -304,6 +306,8 @@ class ModelSwitchService {
                 }),
                 signal: AbortSignal.timeout(180000)
             });
+
+            logger.info(`[Model Switch Service] Switch response status: ${response.status}`);
 
             const data = await response.json();
 
