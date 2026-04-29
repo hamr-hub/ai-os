@@ -83,7 +83,10 @@ class BackendClient {
     }
 
     async fetchWithFallback(path, options = {}) {
-        const isModelSwitch = path.includes('/switch');
+        const isAtomicSwitch = path.includes('/switch/atomic');
+        const isSwitchStatus = path.includes('/switch/status');
+        const isSwitchCancel = path.includes('/switch/cancel');
+        const isModelSwitch = isAtomicSwitch || isSwitchStatus || isSwitchCancel;
         const isModelStart = path.includes('/start');
         const isModelStop = path.includes('/stop');
         const isLongOperation = isModelSwitch || isModelStart || isModelStop;

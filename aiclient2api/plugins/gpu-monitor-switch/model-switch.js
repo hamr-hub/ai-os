@@ -7,6 +7,16 @@ class ModelSwitchService {
         this.lastFetchTime = null;
     }
 
+    _extractError(result, fallbackMessage) {
+        if (!result) return fallbackMessage;
+        const detail = result.detail;
+        if (typeof detail === 'string' && detail) return detail;
+        if (detail && typeof detail === 'object') {
+            return detail.error || detail.message || detail.rollback_reason || fallbackMessage;
+        }
+        return result.error || result.message || fallbackMessage;
+    }
+
     async init() {
         logger.info('[Model Switch Service] Initializing model switch service (with Go/Python fallback)...');
         await this.fetchModelsFromBackend();
@@ -221,7 +231,7 @@ class ModelSwitchService {
                 logger.error('[Model Switch Service] Model switch returned error:', result);
                 return {
                     success: false,
-                    error: result.error || result.message || result.detail?.error || `Switch failed with status ${response.status}`,
+                    error: this._extractError(result, `Switch failed with status ${response.status}`),
                     backendStatus: backendClient.getStatus()
                 };
             }
@@ -267,7 +277,7 @@ class ModelSwitchService {
                     status: result.status,
                     action: result.action || 'start',
                 },
-                error: response.ok ? undefined : result.error || result.message || result.detail?.error || `Start failed with status ${response.status}`,
+                error: response.ok ? undefined : this._extractError(result, `Start failed with status ${response.status}`),
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };
@@ -297,7 +307,7 @@ class ModelSwitchService {
                     status: result.status,
                     action: result.action || 'stop',
                 },
-                error: response.ok ? undefined : result.error || result.message || result.detail?.error || `Stop failed with status ${response.status}`,
+                error: response.ok ? undefined : this._extractError(result, `Stop failed with status ${response.status}`),
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };
