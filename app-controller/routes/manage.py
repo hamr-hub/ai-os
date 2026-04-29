@@ -45,6 +45,17 @@ async def get_switch_status():
     from core.deps import model_switch_orchestrator
     is_switching = model_switch_orchestrator.is_switching
     session = model_switch_orchestrator.current_session
+
+    terminal_phases = {"completed", "failed", "rolled_back"}
+
+    if session and not is_switching and session.overall_phase.value not in terminal_phases:
+        session.overall_phase = SwitchPhase.FAILED if hasattr(SwitchPhase, 'FAILED') else session.overall_phase
+        from core.model_switch_orchestrator import SwitchPhase as _SP
+        session.overall_phase = _SP.FAILED
+        session.error = session.error or "切换进程异常中断，锁已释放但任务未完成"
+        session.finished_at = session.finished_at or datetime.now().isoformat()
+        logger.warning("Stale switch session detected: phase=%s, lock released. Marked as FAILED.", session.overall_phase.value)
+
     return {
         "is_switching": is_switching,
         "session": session.to_dict() if session else None,

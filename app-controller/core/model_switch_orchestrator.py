@@ -114,6 +114,7 @@ class _SwitchAborted(Exception):
 
 
 class ModelSwitchOrchestrator:
+    SWITCH_MAX_TIMEOUT = 900
     PHASE1_STOP_TIMEOUT = 30
     PHASE1_PORT_CHECK_TIMEOUT = 15
     PHASE2_KILL_TIMEOUT = 60
@@ -180,12 +181,27 @@ class ModelSwitchOrchestrator:
             self._current_session = session
 
             try:
-                # 简化流程：更新配置 → 重启服务 → 测试
                 session.overall_phase = SwitchPhase.PHASE1
-                await self._phase1_update_config_and_restart(session)
+                try:
+                    await asyncio.wait_for(
+                        self._phase1_update_config_and_restart(session),
+                        timeout=self.SWITCH_MAX_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = f"切换超时 ({self.SWITCH_MAX_TIMEOUT}s)"
+                    await self._rollback(session, session.error)
+                    raise _SwitchAborted(session.error)
 
                 session.overall_phase = SwitchPhase.PHASE2
-                await self._phase2_smoke_test(session)
+                try:
+                    await asyncio.wait_for(
+                        self._phase2_smoke_test(session),
+                        timeout=60,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = "冒烟测试超时 (60s)"
+                    await self._rollback(session, session.error)
+                    raise _SwitchAborted(session.error)
 
                 session.overall_phase = SwitchPhase.COMPLETED
                 session.completed_successfully = True
@@ -231,16 +247,48 @@ class ModelSwitchOrchestrator:
 
             try:
                 session.overall_phase = SwitchPhase.PHASE1
-                await self._phase1_stop_and_verify(session)
+                try:
+                    await asyncio.wait_for(
+                        self._phase1_stop_and_verify(session),
+                        timeout=self.SWITCH_MAX_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = f"停止服务超时 ({self.SWITCH_MAX_TIMEOUT}s)"
+                    await self._rollback(session, session.error)
+                    raise _SwitchAborted(session.error)
 
                 session.overall_phase = SwitchPhase.PHASE2
-                await self._phase2_force_kill_if_needed(session)
+                try:
+                    await asyncio.wait_for(
+                        self._phase2_force_kill_if_needed(session),
+                        timeout=60,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = "清理进程超时 (60s)"
+                    await self._rollback(session, session.error)
+                    raise _SwitchAborted(session.error)
 
                 session.overall_phase = SwitchPhase.PHASE3
-                await self._phase3_start_and_check(session)
+                try:
+                    await asyncio.wait_for(
+                        self._phase3_start_and_check(session),
+                        timeout=self.SWITCH_MAX_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = f"启动服务超时 ({self.SWITCH_MAX_TIMEOUT}s)"
+                    await self._rollback(session, session.error)
+                    raise _SwitchAborted(session.error)
 
                 session.overall_phase = SwitchPhase.PHASE4
-                await self._phase4_smoke_test(session)
+                try:
+                    await asyncio.wait_for(
+                        self._phase4_smoke_test(session),
+                        timeout=60,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = "冒烟测试超时 (60s)"
+                    await self._rollback(session, session.error)
+                    raise _SwitchAborted(session.error)
 
                 session.overall_phase = SwitchPhase.COMPLETED
                 session.completed_successfully = True
@@ -293,10 +341,32 @@ class ModelSwitchOrchestrator:
 
             try:
                 session.overall_phase = SwitchPhase.PHASE1
-                await self._phase1_stop_and_verify(session)
+                try:
+                    await asyncio.wait_for(
+                        self._phase1_stop_and_verify(session),
+                        timeout=self.SWITCH_MAX_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = f"停止服务超时 ({self.SWITCH_MAX_TIMEOUT}s)"
+                    session.overall_phase = SwitchPhase.FAILED
+                    session.finished_at = datetime.now().isoformat()
+                    await self._broadcast(session, phase=1, progress=100,
+                                          log=session.error, level="error", final=True)
+                    raise _SwitchAborted(session.error)
 
                 session.overall_phase = SwitchPhase.PHASE2
-                await self._phase2_force_kill_if_needed(session)
+                try:
+                    await asyncio.wait_for(
+                        self._phase2_force_kill_if_needed(session),
+                        timeout=60,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = "清理进程超时 (60s)"
+                    session.overall_phase = SwitchPhase.FAILED
+                    session.finished_at = datetime.now().isoformat()
+                    await self._broadcast(session, phase=2, progress=100,
+                                          log=session.error, level="error", final=True)
+                    raise _SwitchAborted(session.error)
 
                 session.overall_phase = SwitchPhase.COMPLETED
                 session.completed_successfully = True

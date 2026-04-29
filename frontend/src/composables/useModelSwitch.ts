@@ -94,7 +94,12 @@ export function useModelSwitch() {
     if (msg.type === 'switch_state_sync') {
       if (msg.session) {
         currentSession.value = msg.session
-        isSwitching.value = msg.is_switching ?? (msg.session.overall_phase !== 'completed' && msg.session.overall_phase !== 'failed' && msg.session.overall_phase !== 'rolled_back')
+        if (isTerminalPhase(msg.session.overall_phase)) {
+          isSwitching.value = false
+          stopPolling()
+        } else {
+          isSwitching.value = msg.is_switching ?? true
+        }
       }
       return
     }
@@ -126,17 +131,31 @@ export function useModelSwitch() {
     }
   }
 
+  const isTerminalPhase = (phase: string) =>
+    phase === 'completed' || phase === 'failed' || phase === 'rolled_back' || phase === 'idle'
+
   const startPolling = () => {
     if (pollInterval) return
     pollInterval = window.setInterval(async () => {
       try {
         const status = await getSwitchStatus()
+
+        if (!status.is_switching && isSwitching.value) {
+          isSwitching.value = false
+          stopPolling()
+          disconnectWS()
+          return
+        }
+
         isSwitching.value = status.is_switching
         if (status.session) {
-          const prevSession = currentSession.value
           currentSession.value = status.session
 
-          if (prevSession && !status.is_switching) {
+          if (isTerminalPhase(status.session.overall_phase)) {
+            isSwitching.value = false
+            stopPolling()
+            disconnectWS()
+
             if (status.session.completed_successfully) {
               appStore.success(`模型 ${status.session.target_model} 切换成功`)
             } else if (status.session.overall_phase === 'rolled_back' || status.session.overall_phase === 'failed') {
@@ -146,11 +165,8 @@ export function useModelSwitch() {
             } else if (status.session.overall_phase === 'completed') {
               appStore.success(`模型 ${status.session.target_model} 切换成功`)
             }
-            stopPolling()
+            return
           }
-        } else if (!status.is_switching && isSwitching.value) {
-          isSwitching.value = false
-          stopPolling()
         }
       } catch (e) {
         console.warn('[useModelSwitch] Poll error:', e)
@@ -216,9 +232,19 @@ export function useModelSwitch() {
   const initSwitchMonitor = () => {
     getSwitchStatus().then((status) => {
       if (status.is_switching && status.session) {
+        if (isTerminalPhase(status.session.overall_phase)) {
+          isSwitching.value = false
+          currentSession.value = status.session
+          return
+        }
         isSwitching.value = true
         currentSession.value = status.session
         connectWS()
+      } else if (status.session && isTerminalPhase(status.session.overall_phase)) {
+        currentSession.value = status.session
+        isSwitching.value = false
+      } else {
+        isSwitching.value = false
       }
     }).catch(() => {})
   }
