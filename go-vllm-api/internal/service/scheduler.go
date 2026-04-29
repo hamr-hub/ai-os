@@ -337,7 +337,10 @@ func (s *Scheduler) shouldSkipKeepAlivePreload(name string) bool {
 	currentModelPath := s.getCurrentVLLMModelPath()
 	mc := s.GetModelConfig(name)
 	if mc == nil || currentModelPath == "" {
-		return false
+		s.mu.RLock()
+		hasCurrent := s.currentModel != ""
+		s.mu.RUnlock()
+		return hasCurrent
 	}
 	return currentModelPath != mc.ModelPath
 }

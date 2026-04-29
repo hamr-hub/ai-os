@@ -297,9 +297,9 @@ func (vm *VLLMManager) replaceModelPath(content string, newPath string) string {
 			parts := strings.Fields(trimmed)
 			for j, p := range parts {
 				if p == "--model" && j+1 < len(parts) {
-					oldPath := parts[j+1]
+					oldPath := strings.Trim(parts[j+1], "\"")
 					if oldPath != newPath {
-						parts[j+1] = newPath
+						parts[j+1] = fmt.Sprintf("\"%s\"", newPath)
 						lines[i] = strings.Join(parts, " ")
 						modified = true
 					}
@@ -313,7 +313,7 @@ func (vm *VLLMManager) replaceModelPath(content string, newPath string) string {
 				parts := strings.Fields(line)
 				for j, p := range parts {
 					if strings.HasPrefix(p, "/mnt/pve_models/") {
-						parts[j] = newPath
+						parts[j] = fmt.Sprintf("\"%s\"", newPath)
 						lines[i] = strings.Join(parts, " ")
 						modified = true
 						break

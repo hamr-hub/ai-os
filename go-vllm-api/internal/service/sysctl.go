@@ -111,6 +111,46 @@ func (sc *SystemController) StopService(name string) bool {
 	return true
 }
 
+func (sc *SystemController) ForceKillProcess(name string) bool {
+	return sc.forceKillProcess(name, true)
+}
+
+func (sc *SystemController) forceKillProcess(name string, acquireLock bool) bool {
+	if acquireLock {
+		sc.mu.Lock()
+		defer sc.mu.Unlock()
+	}
+
+	sc.logger.Warn("force killing process", zap.String("service", name))
+
+	pkillCmd := sc.command("pkill", "-f", name)
+	if pkillCmd != nil {
+		if err := pkillCmd.Run(); err != nil {
+			sc.logger.Warn("pkill failed, trying pgrep + kill", zap.String("service", name), zap.Error(err))
+			
+			pgrepCmd := exec.Command("pgrep", "-f", name)
+			output, err := pgrepCmd.Output()
+			if err == nil && len(output) > 0 {
+				pids := strings.Fields(string(output))
+				for _, pid := range pids {
+					killCmd := exec.Command("kill", "-9", pid)
+					if err := killCmd.Run(); err != nil {
+						sc.logger.Warn("kill -9 failed", zap.String("pid", pid), zap.Error(err))
+					} else {
+						sc.logger.Info("process killed", zap.String("pid", pid))
+					}
+				}
+			}
+		} else {
+			sc.logger.Info("pkill successful", zap.String("service", name))
+			time.Sleep(1 * time.Second)
+			return true
+		}
+	}
+
+	return false
+}
+
 func (sc *SystemController) RestartService(name string) bool {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -139,9 +179,17 @@ func (sc *SystemController) RestartService(name string) bool {
 
 	if waited >= 30 {
 		sc.logger.Warn("service stop timeout, forcing kill", zap.String("service", name))
+		
 		killCmd := sc.command("systemctl", "kill", name)
 		if killCmd != nil {
 			killCmd.Run()
+			time.Sleep(2 * time.Second)
+		}
+
+		status := sc.getServiceStatusLocked(name)
+		if status == "active" || status == "deactivating" {
+			sc.logger.Warn("systemctl kill failed, using pkill", zap.String("service", name))
+			sc.forceKillProcess(name, false)
 			time.Sleep(2 * time.Second)
 		}
 	}
