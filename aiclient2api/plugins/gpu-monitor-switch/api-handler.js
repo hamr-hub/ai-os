@@ -194,21 +194,22 @@ export async function handleModelSwitchApiRoutes(method, path, req, res, config)
             try {
                 const baseUrl = backendClient.getBaseUrl();
                 logger.info(`[API Handler] Switching model: ${body.modelName} (${mode}), baseUrl: ${baseUrl}`);
-                const response = await fetch(`${baseUrl}/model-switch/switch`, {
+                const response = await fetch(`${baseUrl}/manage/switch/atomic`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        action: 'switch',
                         model_name: body.modelName,
-                        set_as_default: body.setAsDefault || false,
-                        mode: mode
+                        set_as_default: body.setAsDefault || false
                     }),
-                    signal: AbortSignal.timeout(180000)
+                    signal: AbortSignal.timeout(30000)
                 });
                 const data = await response.json();
                 if (response.ok) {
                     sendJSONResponse(res, 200, { success: true, data: data, mode: mode });
                 } else {
-                    sendJSONResponse(res, response.status, { success: false, error: data.error || 'Switch failed' });
+                    const errorMsg = data.detail || data.error || data.message || 'Switch failed';
+                    sendJSONResponse(res, response.status, { success: false, error: errorMsg });
                 }
             } catch (error) {
                 logger.error('[API Handler] Model switch error:', error.message);
