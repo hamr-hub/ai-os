@@ -200,28 +200,40 @@ models:
       attention_backend: FLASH_ATTN
 
   Gemma-4-31B-GGUF-Q4:
-    service: llama_cpp
-    port: 8001
+    service: vllm-aiclient
+    port: 8000
     required_memory: 20GB
     preload: false
     keep_alive: false
     model_path: /mnt/pve_models/Gemma-4-31B-GGUF-Q4/gemma-4-31b-q4_k_m.gguf
     supports_images: false
-    n_gpu_layers: -1
-    ctx_size: 8192
-    description: "Gemma 4 31B GGUF Q4_K_M 量化（llama_cpp 后端）"
+    description: "Gemma 4 31B GGUF Q4_K_M 量化（vLLM 后端）"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 8192
+      max_num_batched_tokens: 4096
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   Qwen3.6-35B-GGUF-Q4:
-    service: llama_cpp
-    port: 8002
+    service: vllm-aiclient
+    port: 8000
     required_memory: 24GB
     preload: false
     keep_alive: false
     model_path: /mnt/pve_models/Qwen3.6-35B-GGUF-Q4/qwen3.6-35b-q4_k_m.gguf
     supports_images: false
-    n_gpu_layers: -1
-    ctx_size: 8192
-    description: "Qwen3.6 35B GGUF Q4_K_M 量化（llama_cpp 后端）"
+    description: "Qwen3.6 35B GGUF Q4_K_M 量化（vLLM 后端）"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 8192
+      max_num_batched_tokens: 4096
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
 settings:
   concurrency_limit: 32
@@ -265,10 +277,3 @@ vllm:
   default_gpu_memory_utilization: 0.92
   default_max_model_len: 32768
   model_state_file: /root/ai-os/app-controller/scripts/.vllm_model_path
-
-llama_cpp:
-  server_module: llama_cpp.server
-  models_base_path: /mnt/pve_models
-  default_n_gpu_layers: -1
-  default_ctx_size: 4096
-  default_host: 0.0.0.0

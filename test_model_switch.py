@@ -4,6 +4,7 @@
 """
 
 import json
+import os
 import time
 import requests
 import sys
@@ -12,7 +13,7 @@ from datetime import datetime
 # 服务地址
 PYTHON_BACKEND = "http://localhost:35000"
 GO_BACKEND = "http://localhost:35001"
-AICLIENT_GATEWAY = "http://localhost:3000"
+AICLIENT_GATEWAY = "http://192.168.7.103:3000"
 
 def log(msg, level="INFO"):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -243,29 +244,29 @@ def test_finalize_endpoint():
 
 
 def get_stopped_model():
-    """获取一个已停止的 vLLM 模型用于切换测试（排除 llama.cpp gguf 模型）"""
+    """获取一个已停止的 vLLM 模型用于切换测试（排除 llama.cpp gguf 模型，优先小模型）"""
     try:
         resp = requests.get(f"{PYTHON_BACKEND}/manage/models/aggregated", timeout=10)
         data = resp.json()
         
+        candidates = []
         for group in data.get("groups", []):
             for variant in group.get("variants", []):
-                # 只选择 vLLM 后端且未运行的模型
                 backend = variant.get("backend_type", "vllm")
                 if not variant.get("running") and backend == "vllm":
-                    # 验证模型目录有 config.json
                     model_path = variant.get("path", "")
                     config_path = f"{model_path}/config.json"
-                    try:
-                        config_resp = requests.get(f"{PYTHON_BACKEND}/manage/files/read?path={config_path}", timeout=5)
-                        if config_resp.status_code == 200:
-                            return variant["name"]
-                    except:
-                        # 尝试直接检查文件系统
-                        import subprocess
-                        result = subprocess.run(["ls", config_path], capture_output=True, timeout=5)
-                        if result.returncode == 0:
-                            return variant["name"]
+                    if os.path.exists(config_path):
+                        mem = variant.get("required_memory_gb", 999)
+                        name = variant.get("name", "")
+                        priority = 0
+                        if "NVFP4" in name or "nvfp4" in name:
+                            priority = 1
+                        candidates.append((priority, mem, name))
+        
+        if candidates:
+            candidates.sort(key=lambda x: (-x[0], x[1]))
+            return candidates[0][2]
         
         return None
     except Exception as e:

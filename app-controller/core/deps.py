@@ -46,11 +46,6 @@ from core.vllm_manager import (                         # vLLM 管理
     VLLM_SERVICE_NAME,
     VLLM_DEFAULT_PORT
 )
-from core.llama_cpp_manager import (                    # llama.cpp 管理
-    llama_cpp_manager,
-    test_llama_cpp_model,
-    scan_gguf_models,
-)
 import httpx
 import os
 

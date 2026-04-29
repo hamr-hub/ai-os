@@ -4,7 +4,6 @@ from datetime import datetime
 import asyncio
 import copy
 
-from core.llama_cpp_manager import llama_cpp_manager, scan_gguf_models
 from core.vllm_manager import save_model_vllm_params, get_model_vllm_params
 from middleware.error_handler import ModelNotFoundException
 from schemas.service import ServiceControlRequest
@@ -152,6 +151,7 @@ def _clear_model_caches():
         "api:v1:status"
     ]:
         cache_service.delete(key)
+    cache_service.delete_pattern("ai_controller:cache:model_running:*")
 
 
 @manage_router.get("/gpu")
@@ -1223,21 +1223,6 @@ async def model_info(model_name: str, refresh: Optional[bool] = False):
 
     cache_service.set(cache_key, result, ttl_seconds=10)
     return result
-
-
-@manage_router.get("/llama_cpp/models")
-async def list_llama_cpp_models():
-    return {"models": scan_gguf_models(), "running": llama_cpp_manager.get_all_running_models()}
-
-
-@manage_router.get("/llama_cpp/status")
-async def llama_cpp_status():
-    models = scheduler.get_available_models()
-    llama_models = [m for m in models if scheduler.get_model_backend_type(m) == 'llama_cpp']
-    status = {}
-    for model_name in llama_models:
-        status[model_name] = llama_cpp_manager.get_server_status(model_name)
-    return {"models": status, "total": len(llama_models)}
 
 
 @manage_router.get("/models/{model_name}/vllm-params")

@@ -529,39 +529,55 @@ def _get_model_size(model_path: str) -> int:
 def get_current_model_info() -> Optional[Dict[str, Any]]:
     """
     获取当前运行的 vLLM 模型信息（返回配置文件中的模型名称）
-    优先级：systemd 环境变量 > 启动脚本解析
+    优先级：systemd 当前生效环境变量 > runtime override > 状态文件 > service 文件 > 启动脚本
+    systemd 环境变量最权威，因为它反映了服务实际启动时使用的配置（含 override），
+    状态文件可能因写入失败或进程崩溃而过期。
     """
     try:
         import re
 
         model_path = None
 
-        # 1. 优先读取状态文件
-        if os.path.exists(VLLM_MODEL_STATE_FILE):
+        # 1. 最高优先级：systemd 当前生效的环境变量（含 runtime override）
+        try:
+            result = subprocess.run(
+                [SYSTEMCTL_BIN, 'show', VLLM_SERVICE_NAME, '--property=Environment', '--value'],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                match = re.search(r'VLLM_MODEL_PATH=([^\s"]+)', result.stdout)
+                if match:
+                    candidate = match.group(1)
+                    if candidate and os.path.exists(candidate):
+                        model_path = candidate
+        except Exception as exc:
+            logger.debug("Failed to read effective systemd environment: %s", exc)
+
+        # 2. 读取 runtime override 文件（/run/systemd/system/...）
+        if not model_path:
+            override_file = f"/run/systemd/system/{VLLM_SERVICE_NAME}.service.d/override.conf"
+            if os.path.exists(override_file):
+                try:
+                    with open(override_file, 'r') as f:
+                        content = f.read()
+                    match = re.search(r'VLLM_MODEL_PATH=([^\s"]+)', content)
+                    if match:
+                        candidate = match.group(1).strip('"').strip("'")
+                        if candidate and os.path.exists(candidate):
+                            model_path = candidate
+                except Exception as exc:
+                    logger.debug("Failed to read runtime override: %s", exc)
+
+        # 3. 读取状态文件（可能过期，作为回退）
+        if not model_path and os.path.exists(VLLM_MODEL_STATE_FILE):
             with open(VLLM_MODEL_STATE_FILE, 'r') as f:
                 state_model_path = f.read().strip()
             if state_model_path and os.path.exists(state_model_path):
                 model_path = state_model_path
 
-        # 2. 读取 systemd 当前生效的环境变量
-        if not model_path:
-            try:
-                result = subprocess.run(
-                    [SYSTEMCTL_BIN, 'show', VLLM_SERVICE_NAME, '--property=Environment', '--value'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if result.returncode == 0 and result.stdout.strip():
-                    match = re.search(r'VLLM_MODEL_PATH=([^\s"]+)', result.stdout)
-                    if match:
-                        candidate = match.group(1)
-                        if os.path.exists(candidate):
-                            model_path = candidate
-            except Exception as exc:
-                logger.debug("Failed to read effective systemd environment: %s", exc)
-
-        # 3. 回退到持久化 service 文件
+        # 4. 回退到持久化 service 文件
         service_file = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service"
         if not model_path and os.path.exists(service_file):
             with open(service_file, 'r') as f:
@@ -572,7 +588,7 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
                 if os.path.exists(candidate):
                     model_path = candidate
         
-        # 4. 从启动脚本读取
+        # 5. 从启动脚本读取
         if not model_path and os.path.exists(VLLM_START_SCRIPT):
             with open(VLLM_START_SCRIPT, 'r') as f:
                 content = f.read()
@@ -971,7 +987,9 @@ async def wait_for_vllm_model_ready_and_test(model_name: str, test_enabled: bool
 
 
 def _write_runtime_service_override(model_path: str) -> bool:
-    """Write a writable runtime override so model switching still works when /etc is read-only."""
+    """Write a runtime override to /run/systemd so model switching works even when /etc is read-only.
+    /run is always writable (tmpfs), while /etc may be read-only on some systems.
+    """
     try:
         override_dir = f"/run/systemd/system/{VLLM_SERVICE_NAME}.service.d"
         override_file = os.path.join(override_dir, "override.conf")
@@ -981,7 +999,7 @@ def _write_runtime_service_override(model_path: str) -> bool:
             f.write(f'Environment="VLLM_MODEL_PATH={model_path}"\n')
         result = subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True, text=True, timeout=10)
         if result.returncode != 0:
-            logger.warning("daemon-reload failed after runtime override: %s", (result.stderr or '').strip())
+            logger.warning("daemon-reload failed after override: %s", (result.stderr or '').strip())
             return False
         logger.info("Updated runtime service override: %s", model_path)
         return True
@@ -1060,30 +1078,45 @@ def _update_vllm_script(model_path: str, model_name: str = None) -> bool:
     """
     更新 vLLM 模型配置
     通过 systemd runtime override 设置环境变量来切换模型，不修改启动脚本
+    同时更新状态文件和参数文件，确保即使 runtime override 失败，
+    get_current_model_info() 也能通过其他优先级获取正确的模型路径
     """
     try:
-        # 如果未提供模型名称，尝试从路径中推断
         if not model_name:
             model_name = _find_model_name_from_path(model_path)
             if not model_name:
                 model_name = os.path.basename(model_path)
         
-        # 写入 vLLM 参数文件
         params_written = _write_vllm_params_file(model_name)
         if params_written:
             logger.info("Wrote vLLM params for model: %s", model_name)
 
         state_updated = _write_model_state_file(model_path)
+        if not state_updated:
+            logger.warning("Failed to update model state file, but continuing with runtime override")
 
-        # 写入 runtime override，通过环境变量传递模型路径
         runtime_updated = _write_runtime_service_override(model_path)
 
-        # 返回是否成功更新了配置
-        success = runtime_updated
-        if not success:
-            logger.error("Failed to update runtime service override")
-        
-        return success
+        if not runtime_updated:
+            logger.warning("Runtime service override failed, attempting systemctl set-environment as fallback")
+            try:
+                result = subprocess.run(
+                    [SYSTEMCTL_BIN, 'set-environment',
+                     f'VLLM_MODEL_PATH={model_path}'],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    logger.info("Fallback: set-environment succeeded for %s", model_path)
+                    runtime_updated = True
+                else:
+                    logger.warning("Fallback set-environment also failed: %s", result.stderr)
+            except Exception as fallback_exc:
+                logger.warning("Fallback set-environment exception: %s", fallback_exc)
+
+        if not runtime_updated:
+            logger.error("All methods to update model path failed, but state file and params file were updated")
+
+        return runtime_updated or state_updated
     except Exception as e:
         logger.error("Failed to update vLLM config: %s", e)
         return False

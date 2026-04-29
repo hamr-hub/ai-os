@@ -14,10 +14,7 @@ def _build_backend_url(scheduler: Scheduler, model_name: str) -> str:
     return f"http://localhost:{port}"
 
 def _build_backend_model_name(scheduler: Scheduler, model_name: str) -> str:
-    backend_type = scheduler.get_model_backend_type(model_name)
     model_config = scheduler.get_model_config(model_name)
-    if backend_type == 'llama_cpp':
-        return model_config.get('model_path', model_name) if model_config else model_name
     return model_config.get('model_path', model_name) if model_config else model_name
 
 class AIClientInterface:

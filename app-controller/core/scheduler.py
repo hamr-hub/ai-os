@@ -9,7 +9,6 @@ from typing import Dict, Optional, List, Set
 from datetime import datetime, timedelta
 from .rate_limiter import RateLimiter
 from core.cache_service import cache_service
-from core.llama_cpp_manager import llama_cpp_manager
 
 logger = logging.getLogger("ai_controller.scheduler")
 
@@ -55,7 +54,6 @@ class Scheduler:
         self._switching_in_progress = False
         self._init_preloaded_models()
         self._default_model = None
-        self._register_llama_cpp_models()
     
     def _load_config(self) -> Dict:
         config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
@@ -101,26 +99,11 @@ class Scheduler:
             if model_config.get('preload', False):
                 self.preloaded_models.add(model_name)
 
-    def _register_llama_cpp_models(self):
-        for model_name in list(llama_cpp_manager._configs.keys()):
-            llama_cpp_manager.unregister_model(model_name)
-        for model_name, model_config in self.config.get('models', {}).items():
-            service = model_config.get('service', '')
-            if service == 'llama_cpp':
-                llama_cpp_manager.register_model(model_name, model_config)
-
     def set_config(self, new_config: Dict):
         self.config = new_config if isinstance(new_config, dict) else {}
         self._init_preloaded_models()
-        self._register_llama_cpp_models()
 
     def get_model_backend_type(self, model_name: str) -> str:
-        config = self.get_model_config(model_name)
-        if not config:
-            return 'unknown'
-        service = config.get('service', '')
-        if service == 'llama_cpp':
-            return 'llama_cpp'
         return 'vllm'
     
     def get_available_models(self) -> List[str]:
@@ -205,60 +188,25 @@ class Scheduler:
     
     def is_model_running(self, model_name: str) -> bool:
         cache_key = f"ai_controller:cache:model_running:{model_name}"
-        # Only cache positive results (True), skip cache for False to allow re-checking
-        cached = cache_service.get(cache_key)
+        cached = cache_service.get(cache_key, ttl_seconds=3)
         if cached is True:
             return True
 
         with self._model_lock:
-            backend_type = self.get_model_backend_type(model_name)
-            logger.info(f"is_model_running({model_name}): checking, backend_type={backend_type}")
-
-            if backend_type == 'llama_cpp':
-                running = llama_cpp_manager.is_server_running(model_name)
-                if running:
+            from core.vllm_manager import get_current_model_info
+            current_info = get_current_model_info()
+            if current_info and current_info.get('running'):
+                current_name = current_info.get('name')
+                if current_name == model_name:
                     if model_name not in self.running_models:
                         self.running_models[model_name] = datetime.now()
                     cache_service.set(cache_key, True, ttl=3)
                     return True
-
-                if model_name in self.running_models:
-                    del self.running_models[model_name]
-                cache_service.set(cache_key, False, ttl=3)
-                return False
-
-            if backend_type == 'vllm':
-                from core.vllm_manager import get_current_model_info
-                current_info = get_current_model_info()
-                logger.info(f"is_model_running({model_name}): backend_type={backend_type}, current_info={current_info}")
-                if current_info and current_info.get('running'):
-                    current_name = current_info.get('name')
-                    logger.info(f"is_model_running: current_name={current_name}, requested={model_name}, match={current_name == model_name}")
-                    if current_name == model_name:
-                        if model_name not in self.running_models:
-                            self.running_models[model_name] = datetime.now()
-                        cache_service.set(cache_key, True, ttl=3)
-                        return True
-                    else:
-                        logger.info(f"is_model_running: name mismatch, current={current_name}, requested={model_name}")
-                
-                if model_name in self.running_models:
-                    del self.running_models[model_name]
-                cache_service.set(cache_key, False, ttl=3)
-                return False
-
-            port = self.get_model_port(model_name)
-            if port:
-                process_info = self.sys_controller.get_process_info(port)
-                if process_info:
-                    if model_name not in self.running_models:
-                        self.running_models[model_name] = datetime.now()
-                    cache_service.set(cache_key, True, ttl=3)
-                    return True
-
+                else:
+                    logger.info(f"is_model_running: name mismatch, current={current_name}, requested={model_name}")
+            
             if model_name in self.running_models:
                 del self.running_models[model_name]
-
             cache_service.set(cache_key, False, ttl=3)
             return False
     
@@ -473,84 +421,41 @@ class Scheduler:
         if not service_name:
             return False
 
-        backend_type = self.get_model_backend_type(model_name)
+        from core.vllm_manager import get_current_model_info, _update_vllm_script
+        
         model_path = config.get('model_path')
         replaced_model_name = None
 
-        if backend_type == 'llama_cpp':
-            if llama_cpp_manager.is_server_running(model_name):
-                with self._model_lock:
-                    self.running_models[model_name] = datetime.now()
-                return True
+        current_info = get_current_model_info()
+        if current_info and current_info.get('running') and current_info.get('name') == model_name:
+            logger.info(f"Model {model_name} is already running in vLLM service")
+            with self._model_lock:
+                self.running_models[model_name] = datetime.now()
+            return True
+        
+        if model_path:
+            logger.info(f"Updating vLLM script to model path: {model_path}")
+            if not _update_vllm_script(model_path, model_name):
+                logger.error(f"Failed to update vLLM script for {model_name}")
+                return False
 
-            mem_info = self.gpu_monitor.get_memory_usage()
-            if mem_info:
-                required_memory = _parse_memory_size(config.get('required_memory', 0))
-                if mem_info.get('available', 0) < required_memory + self.get_min_available_memory():
-                    success = await self._free_up_memory(model_name)
-                    if not success:
-                        return False
+        if self.sys_controller.is_service_running(service_name):
+            logger.info(f"vLLM service running with different model, stopping it first")
+            replaced_model_name = current_info.get('name') if current_info else None
+            if not self.sys_controller.stop_service(service_name):
+                logger.error("Failed to stop vLLM service %s before starting %s", service_name, model_name)
+                return False
+            if replaced_model_name:
+                self._mark_model_stopped(replaced_model_name)
+            await self._cleanup_memory_fragmentation()
+            await self.gpu_monitor.refresh_cache()
 
-            success = llama_cpp_manager.start_server(model_name)
-            if success:
-                with self._model_lock:
-                    self.running_models[model_name] = datetime.now()
-
-                preload_timeout = self.config.get('settings', {}).get('preload_timeout', 120)
-                port = self.get_model_port(model_name)
-                ready = await self._wait_for_model_ready(model_name, port, timeout=preload_timeout)
-                if not ready:
-                    logger.error(f"llama.cpp model {model_name} failed to become ready within {preload_timeout}s")
-                    llama_cpp_manager.stop_server(model_name)
-                    self._mark_model_stopped(model_name)
-                    return False
-
-                warmup_ok = await self._send_warmup_request(model_name)
-                if not warmup_ok:
-                    logger.warning("Warmup request did not succeed for llama.cpp model %s", model_name)
-
-            return success
-
-        # For vLLM, we need to check if the correct model is already loaded
-        if backend_type == 'vllm':
-            from core.vllm_manager import get_current_model_info, _update_vllm_script
-            
-            current_info = get_current_model_info()
-            # matched_name is from get_current_model_info which tries to match path to config name
-            if current_info and current_info.get('running') and current_info.get('name') == model_name:
-                logger.info(f"Model {model_name} is already running in vLLM service")
-                with self._model_lock:
-                    self.running_models[model_name] = datetime.now()
-                return True
-            
-            # Apply the new model target before touching the currently running service.
-            if model_path:
-                logger.info(f"Updating vLLM script to model path: {model_path}")
-                if not _update_vllm_script(model_path, model_name):
-                    logger.error(f"Failed to update vLLM script for {model_name}")
-                    return False
-
-            # If service is running with wrong model, stop it first
-            if self.sys_controller.is_service_running(service_name):
-                logger.info(f"vLLM service running with different model, stopping it first")
-                replaced_model_name = current_info.get('name') if current_info else None
-                if not self.sys_controller.stop_service(service_name):
-                    logger.error("Failed to stop vLLM service %s before starting %s", service_name, model_name)
-                    return False
-                if replaced_model_name:
-                    self._mark_model_stopped(replaced_model_name)
-                # Give the driver/monitor cache a chance to observe released VRAM before re-checking memory.
-                await self._cleanup_memory_fragmentation()
-                await self.gpu_monitor.refresh_cache()
-
-        # General service start logic
         mem_info = self.gpu_monitor.get_memory_usage()
         if mem_info:
             required_memory = _parse_memory_size(config.get('required_memory', 0))
             required_with_headroom = required_memory + self.get_min_available_memory()
 
-            if backend_type == 'vllm' and replaced_model_name and mem_info.get('available', 0) < required_with_headroom:
-                # The immediate reading after a vLLM stop can be stale; refresh once before failing memory checks.
+            if replaced_model_name and mem_info.get('available', 0) < required_with_headroom:
                 gpu_status = await self.gpu_monitor.refresh_cache()
                 if gpu_status:
                     mem_info = {
@@ -567,38 +472,16 @@ class Scheduler:
 
         success = self.sys_controller.start_service(service_name)
         if success:
-            if backend_type == 'vllm':
-                # vLLM 大模型加载时间长，需要等待模型真正就绪
-                preload_timeout = self.config.get('settings', {}).get('preload_timeout', 240)
-                ready = await self._wait_for_model_ready(model_name, self.get_model_port(model_name), timeout=preload_timeout)
-                
-                if ready:
-                    with self._model_lock:
-                        self.running_models[model_name] = datetime.now()
-                    logger.info(f"vLLM model {model_name} is ready")
-                    return True
-                else:
-                    logger.error(f"vLLM model {model_name} failed to become ready within {preload_timeout}s")
-                    self.sys_controller.stop_service(service_name)
-                    self._mark_model_stopped(model_name)
-                    return False
-
-            # Poll for readiness instead of arbitrary sleep
-            preload_timeout = self.config.get('settings', {}).get('preload_timeout', 120)
-            port = self.get_model_port(model_name)
-            ready = await self._wait_for_model_ready(model_name, port, timeout=preload_timeout)
+            preload_timeout = self.config.get('settings', {}).get('preload_timeout', 240)
+            ready = await self._wait_for_model_ready(model_name, self.get_model_port(model_name), timeout=preload_timeout)
             
             if ready:
-                warmup_ok = await self._send_warmup_request(model_name)
-                if not warmup_ok:
-                    logger.warning("Warmup request did not succeed for model %s", model_name)
-                gpu_util = self.config.get('settings', {}).get('gpu_memory_utilization', 0.9)
-                adjust_ok = await self._adjust_gpu_utilization(model_name, gpu_util)
-                if not adjust_ok:
-                    logger.warning("GPU utilization adjustment did not succeed for model %s", model_name)
+                with self._model_lock:
+                    self.running_models[model_name] = datetime.now()
+                logger.info(f"vLLM model {model_name} is ready")
                 return True
             else:
-                logger.error(f"Model {model_name} failed to become ready within {preload_timeout}s")
+                logger.error(f"vLLM model {model_name} failed to become ready within {preload_timeout}s")
                 self.sys_controller.stop_service(service_name)
                 self._mark_model_stopped(model_name)
                 return False
@@ -655,17 +538,6 @@ class Scheduler:
         config = self.get_model_config(model_name)
         if not config:
             return False
-
-        backend_type = self.get_model_backend_type(model_name)
-
-        if backend_type == 'llama_cpp':
-            success = llama_cpp_manager.stop_server(model_name)
-            if success:
-                await self._cleanup_memory_fragmentation()
-                with self._model_lock:
-                    if model_name in self.running_models:
-                        del self.running_models[model_name]
-            return success
 
         service_name = config.get('service')
         if not service_name:
@@ -837,14 +709,12 @@ class Scheduler:
                 for model_name in self.preloaded_models:
                     config = self.get_model_config(model_name)
                     if config and config.get('keep_alive', False):
-                        if self.get_model_backend_type(model_name) == 'vllm':
-                            from core.vllm_manager import get_current_model_info
+                        from core.vllm_manager import get_current_model_info
 
-                            current_info = get_current_model_info()
-                            current_target = current_info.get('name') if current_info else None
-                            if current_target and current_target != model_name:
-                                # vLLM 是单实例服务，切换到其他模型后不能让 keep_alive 抢回服务。
-                                continue
+                        current_info = get_current_model_info()
+                        current_target = current_info.get('name') if current_info else None
+                        if current_target and current_target != model_name:
+                            continue
                         if not self.is_model_running(model_name):
                             logger.warning(f"Preloaded model {model_name} is not running, restarting...")
                             restarted = await self.start_model(model_name)

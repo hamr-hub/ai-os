@@ -71,10 +71,7 @@ def get_backend_url(model_name: str, scheduler) -> str:
     return f"http://localhost:{port}"
 
 def get_backend_model_name(model_name: str, scheduler) -> str:
-    backend_type = scheduler.get_model_backend_type(model_name)
     model_config = scheduler.get_model_config(model_name)
-    if backend_type == 'llama_cpp':
-        return model_config.get('model_path', model_name) if model_config else model_name
     return model_config.get('model_path', model_name) if model_config else model_name
 
 
