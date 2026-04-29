@@ -190,8 +190,23 @@ export async function handleModelSwitchApiRoutes(method, path, req, res, config)
         if (path === '/api/model-switch/switch' && method === 'POST') {
             const body = await parseRequestBody(req);
             if (!body.modelName) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelName' }); return true; }
-            const asyncMode = body.async !== false;
-            sendJSONResponse(res, 200, await modelSwitchService.switchModel(body.modelName, asyncMode));
+            const mode = body.mode || 'warm';
+            const response = await fetch(`${backendClient.getBaseUrl()}/model-switch/switch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model_name: body.modelName,
+                    set_as_default: body.setAsDefault || false,
+                    mode: mode
+                }),
+                signal: AbortSignal.timeout(180000)
+            });
+            const data = await response.json();
+            if (response.ok) {
+                sendJSONResponse(res, 200, { success: true, data: data, mode: mode });
+            } else {
+                sendJSONResponse(res, response.status, { success: false, error: data.error || 'Switch failed' });
+            }
             return true;
         }
         if (path === '/api/model-switch/task-status' && method === 'GET') {

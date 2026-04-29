@@ -192,6 +192,13 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		api.GET("/status", h.NodeIntegrationStatus)
 		api.GET("/models/:model_name/info", h.ModelInfo)
 	}
+
+	modelSwitch := rg.Group("/model-switch")
+	{
+		modelSwitch.POST("/switch", h.ModelSwitchDirect)
+		modelSwitch.GET("/switch-status", h.GetAtomicSwitchStatus)
+		modelSwitch.DELETE("/cancel", h.CancelAtomicSwitch)
+	}
 }
 
 func (h *ManageHandler) GetGPUStatus(c *gin.Context) {
@@ -433,6 +440,58 @@ func (h *ManageHandler) GetAtomicSwitchStatus(c *gin.Context) {
 
 func (h *ManageHandler) CancelAtomicSwitch(c *gin.Context) {
 	h.proxyPythonManage(c, http.MethodDelete, "/manage/switch/cancel", nil)
+}
+
+func (h *ManageHandler) ModelSwitchDirect(c *gin.Context) {
+	var req struct {
+		ModelName    string `json:"model_name"`
+		SetAsDefault bool   `json:"set_as_default"`
+		Mode         string `json:"mode"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	modelName := req.ModelName
+	if modelName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model_name is required"})
+		return
+	}
+
+	if !h.scheduler.IsModelAvailable(modelName) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
+		return
+	}
+
+	ctx := c.Request.Context()
+	var ok bool
+	var err error
+
+	switch req.Mode {
+	case "cold":
+		ok, err = h.scheduler.HotSwitchModel(ctx, modelName)
+	case "warm":
+		ok, err = h.scheduler.WarmSwitchModel(ctx, modelName)
+	default:
+		ok, err = h.scheduler.WarmSwitchModel(ctx, modelName)
+	}
+
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to switch to model: %s: %v", modelName, err)})
+		return
+	}
+
+	if req.SetAsDefault {
+		h.scheduler.SetDefaultModel(modelName)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":         "success",
+		"model_name":     modelName,
+		"set_as_default": req.SetAsDefault,
+		"mode":           req.Mode,
+	})
 }
 
 func (h *ManageHandler) GetDefaultModel(c *gin.Context) {

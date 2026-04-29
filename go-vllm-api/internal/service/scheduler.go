@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go-vllm-api/internal/config"
+	"go-vllm-api/internal/proxy"
 	"go-vllm-api/internal/repository"
 
 	"go.uber.org/zap"
@@ -25,17 +26,19 @@ type Scheduler struct {
 	cfg                 *config.AppConfig
 	llamaCppMgr         *LlamaCppManager
 	vllmManager         *VLLMManager
+	proxy               *proxy.VLLMProxy
 	runningModels       map[string]time.Time
 	preloaded           map[string]bool
 	modelLastUsed       map[string]time.Time
 	modelSwitchTime     map[string]time.Time
+	currentModel        string
 	defaultModel        string
 	mu                  sync.RWMutex
 	rateLimiter         *RateLimiter
 	switchingInProgress bool
 }
 
-func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig, llamaCppMgr *LlamaCppManager, vllmManager *VLLMManager) *Scheduler {
+func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig, llamaCppMgr *LlamaCppManager, vllmManager *VLLMManager, vllmProxy *proxy.VLLMProxy) *Scheduler {
 	s := &Scheduler{
 		logger:          logger,
 		gpuMonitor:      gpuMonitor,
@@ -44,6 +47,7 @@ func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemCont
 		cfg:             cfg,
 		llamaCppMgr:     llamaCppMgr,
 		vllmManager:     vllmManager,
+		proxy:           vllmProxy,
 		runningModels:   make(map[string]time.Time),
 		preloaded:       make(map[string]bool),
 		modelLastUsed:   make(map[string]time.Time),
@@ -664,7 +668,115 @@ func (s *Scheduler) SwitchModel(ctx context.Context, name string) bool {
 			}
 		}
 	}
-	return s.sysCtl.StartService(mc.Service)
+
+	if s.vllmManager != nil {
+		if err := s.vllmManager.SwitchModel(ctx, mc.ModelPath); err != nil {
+			s.logger.Error("failed to switch vllm model state", zap.String("model", matched), zap.Error(err))
+			return false
+		}
+	}
+
+	success := s.sysCtl.RestartService(mc.Service)
+	if success {
+		s.mu.Lock()
+		s.runningModels[matched] = time.Now()
+		s.modelLastUsed[matched] = time.Now()
+		s.mu.Unlock()
+		s.logger.Info("model switched via restart", zap.String("model", matched))
+	}
+	return success
+}
+
+func (s *Scheduler) HotSwitchModel(ctx context.Context, name string) (bool, error) {
+	matched := s.FindMatchingModel(name)
+	if matched == "" {
+		return false, fmt.Errorf("model not found: %s", name)
+	}
+	mc := s.GetModelConfig(matched)
+	if mc == nil {
+		return false, fmt.Errorf("model config not found: %s", matched)
+	}
+
+	mem := s.gpuMonitor.GetMemoryUsage()
+	if mem != nil {
+		requiredMem := config.ParseMemorySize(mc.RequiredMemory)
+		if mem.Available < requiredMem+s.GetMinAvailableMemory() {
+			ok, err := s.freeUpMemory(ctx, matched)
+			if !ok {
+				return false, fmt.Errorf("insufficient memory: %w", err)
+			}
+		}
+	}
+
+	if s.vllmManager == nil {
+		return false, fmt.Errorf("vllm manager unavailable")
+	}
+
+	if err := s.vllmManager.SwitchModel(ctx, mc.ModelPath); err != nil {
+		s.logger.Error("failed to switch vllm model state", zap.String("model", matched), zap.Error(err))
+		return false, fmt.Errorf("switch vllm model state: %w", err)
+	}
+
+	success := s.sysCtl.RestartService(mc.Service)
+	if !success {
+		return false, fmt.Errorf("failed to restart service %s", mc.Service)
+	}
+
+	s.mu.Lock()
+	s.runningModels[matched] = time.Now()
+	s.modelLastUsed[matched] = time.Now()
+	s.mu.Unlock()
+	s.logger.Info("model hot switched", zap.String("model", matched))
+
+	return true, nil
+}
+
+func (s *Scheduler) WarmSwitchModel(ctx context.Context, name string) (bool, error) {
+	matched := s.FindMatchingModel(name)
+	if matched == "" {
+		return false, fmt.Errorf("model not found: %s", name)
+	}
+	mc := s.GetModelConfig(matched)
+	if mc == nil {
+		return false, fmt.Errorf("model config not found: %s", matched)
+	}
+
+	if s.proxy == nil {
+		return false, fmt.Errorf("vllm proxy unavailable")
+	}
+
+	port := s.vllmManager.GetCurrentPort()
+	if port == 0 {
+		port = 8000
+	}
+
+	vllmModelName := mc.ModelPath
+	if vllmModelName == "" {
+		vllmModelName = matched
+	}
+
+	payload := map[string]interface{}{
+		"model":      vllmModelName,
+		"messages": []map[string]interface{}{
+			{"role": "user", "content": "Hello"},
+		},
+		"max_tokens": 1,
+		"stream":     false,
+	}
+
+	_, err := s.proxy.ChatCompletion(ctx, port, payload)
+	if err != nil {
+		s.logger.Warn("warm switch probe request", zap.String("model", matched), zap.Error(err))
+	}
+
+	s.mu.Lock()
+	s.currentModel = matched
+	s.runningModels[matched] = time.Now()
+	s.modelLastUsed[matched] = time.Now()
+	s.mu.Unlock()
+	s.logger.Info("model warm switched via chat probe", zap.String("model", matched), zap.Int("port", port))
+
+	return true, nil
 }
 
 func (s *Scheduler) freeUpMemory(ctx context.Context, targetModel string) (bool, error) {

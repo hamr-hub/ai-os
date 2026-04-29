@@ -64,6 +64,15 @@ func (vm *VLLMManager) SetSysCtl(sysCtl *SystemController) {
 	vm.sysCtl = sysCtl
 }
 
+func (vm *VLLMManager) GetCurrentPort() int {
+	vm.portMu.RLock()
+	defer vm.portMu.RUnlock()
+	if vm.cachedPort != 0 {
+		return vm.cachedPort
+	}
+	return vm.cfg.DefaultPort
+}
+
 func (vm *VLLMManager) checkPort(port int, timeout time.Duration) bool {
 	address := fmt.Sprintf("localhost:%d", port)
 	conn, err := net.DialTimeout("tcp", address, timeout)

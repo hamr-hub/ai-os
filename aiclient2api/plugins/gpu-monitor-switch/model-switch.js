@@ -243,6 +243,7 @@ class ModelSwitchService {
     }
 
     async switchModel(modelName, async = true) {
+        const mode = async ? 'warm' : 'cold';
         const taskId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
         if (async) {
@@ -253,7 +254,7 @@ class ModelSwitchService {
             });
 
             setImmediate(() => {
-                this._executeSwitch(taskId, modelName).catch(err => {
+                this._executeSwitch(taskId, modelName, mode).catch(err => {
                     logger.error('[Model Switch Service] Async switch task failed:', err.message);
                     this.switchTasks.set(taskId, {
                         modelName,
@@ -281,10 +282,10 @@ class ModelSwitchService {
             };
         }
 
-        return this._executeSwitch(taskId, modelName);
+        return this._executeSwitch(taskId, modelName, mode);
     }
 
-    async _executeSwitch(taskId, modelName) {
+    async _executeSwitch(taskId, modelName, mode = 'warm') {
         try {
             this.switchTasks.set(taskId, {
                 modelName,
@@ -292,24 +293,21 @@ class ModelSwitchService {
                 startTime: Date.now()
             });
 
-            const baseUrl = backendClient.getBaseUrl();
-            logger.info(`[Model Switch Service] Switching model via chat API: ${modelName}, baseUrl: ${baseUrl}`);
-
-            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+            const response = await fetch('/api/model-switch/switch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: modelName,
-                    messages: [{ role: 'user', content: 'hi' }],
-                    max_tokens: 8,
-                    temperature: 0
+                    modelName: modelName,
+                    mode: mode
                 }),
                 signal: AbortSignal.timeout(180000)
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                logger.error(`[Model Switch Service] Model switch failed: ${response.status} - ${errorText}`);
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                const errorText = data.error || (data.data && data.data.error) || 'Switch failed';
+                logger.error(`[Model Switch Service] Model switch failed (${mode}): ${response.status} - ${errorText}`);
 
                 this.switchTasks.set(taskId, {
                     modelName,
@@ -346,12 +344,13 @@ class ModelSwitchService {
 
             this.broadcastSwitchResult(taskId, {
                 success: true,
-                modelName
+                modelName,
+                mode
             });
 
             return {
                 success: true,
-                data: { modelName, status: 'completed' },
+                data: { modelName, status: 'completed', mode },
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };

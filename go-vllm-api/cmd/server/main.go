@@ -118,10 +118,10 @@ func main() {
 	vllmManager.SetSysCtl(sysCtl)
 
 	llamaCppMgr.RegisterModelsFromConfig(cfg)
-	scheduler := service.NewScheduler(zapLogger, gpuMonitor, sysCtl, redisRepo, cfg, llamaCppMgr, vllmManager)
+	vllmProxy := proxy.NewVLLMProxy(zapLogger, cfg.VLLM.VLLMHost)
+	scheduler := service.NewScheduler(zapLogger, gpuMonitor, sysCtl, redisRepo, cfg, llamaCppMgr, vllmManager, vllmProxy)
 	metricsCollector := service.NewMetricsCollector(redisRepo, zapLogger)
 	promExporter := prometheus.NewPrometheusExporter()
-	vllmProxy := proxy.NewVLLMProxy(zapLogger, cfg.VLLM.VLLMHost)
 	wsManager := service.NewWSManager(zapLogger)
 	cacheUpdater := service.NewCacheUpdater(gpuMonitor, scheduler, cacheService, zapLogger)
 

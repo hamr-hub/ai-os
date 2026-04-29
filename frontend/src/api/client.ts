@@ -201,7 +201,11 @@ export async function stopModel(name: string): Promise<ActionResponse> {
 
 export async function switchModel(name: string, testEnabled = true): Promise<ActionResponse> {
   void testEnabled
-  const data = await atomicSwitchModel(name, true, 'switch')
+  const { data } = await client.post<ActionResponse>('/model-switch/switch', {
+    model_name: name,
+    set_as_default: true,
+    mode: 'warm',
+  })
   return data
 }
 

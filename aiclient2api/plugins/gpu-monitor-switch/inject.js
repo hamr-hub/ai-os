@@ -462,7 +462,7 @@
             var switchResult = await fetch('/api/model-switch/switch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ modelName: name, async: true })
+                body: JSON.stringify({ modelName: name, mode: 'warm' })
             });
             var switchData = await switchResult.json();
 
