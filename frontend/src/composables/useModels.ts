@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import {
   getModelsStatus,
   getDefaultModel,
@@ -23,7 +23,7 @@ export function useModels() {
   const isRefreshing = ref(false)
   let refreshInterval: number | null = null
   let fetchController: AbortController | null = null
-  const { triggerSwitch } = useModelSwitch()
+  const { triggerSwitch, isSwitching: isAtomicSwitching } = useModelSwitch()
 
   const fetchModelStatus = async (manualRefresh = false) => {
     if (fetchController) {
@@ -198,6 +198,8 @@ export function useModels() {
 
       if (axiosErr.response?.status === 409) {
         appStore.warning('模型切换正在进行中，请等待完成')
+        actionLoading.value = null
+        switchingModel.value = null
         return
       }
 
@@ -251,6 +253,13 @@ export function useModels() {
   }
 
   const isAutoRefreshEnabled = computed(() => refreshInterval !== null)
+
+  watch(isAtomicSwitching, (val) => {
+    if (!val) {
+      switchingModel.value = null
+      actionLoading.value = null
+    }
+  })
 
   const modelList = computed(() => {
     if (!modelStatus.value) return []
