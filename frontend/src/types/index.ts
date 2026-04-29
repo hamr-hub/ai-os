@@ -127,6 +127,7 @@ export interface ModelStatus {
     description?: string
     required_memory?: string
     backend_type?: string
+    path_exists?: boolean
   }
 }
 

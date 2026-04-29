@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -18,6 +19,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
 type V1Handler struct {
 	scheduler  *service.Scheduler
@@ -86,27 +92,32 @@ func (h *V1Handler) ListModels(c *gin.Context) {
 	}
 
 	models := h.scheduler.GetAvailableModels()
-	list := make([]model.ModelInfo, 0)
+	list := make([]gin.H, 0)
 	for _, name := range models {
 		mc := h.scheduler.GetModelConfig(name)
-		info := model.ModelInfo{
-			ID:      name,
-			Object:  "model",
-			Running: h.scheduler.IsModelRunning(name),
-			Port:    8000,
+		modelPath := ""
+		if mc != nil {
+			modelPath = mc.ModelPath
+		}
+		info := gin.H{
+			"id":              name,
+			"object":          "model",
+			"running":         h.scheduler.IsModelRunning(name),
+			"port":            h.scheduler.GetModelPort(name),
+			"supports_images": h.scheduler.GetModelSupportsImages(name),
+			"path_exists":     len(modelPath) > 0 && fileExists(modelPath),
 		}
 		if mc != nil {
-			info.SupportsImages = mc.SupportsImages
-			info.Description = mc.Description
-			info.Service = mc.Service
-			info.Port = mc.Port
+			info["description"] = mc.Description
+			info["service"] = mc.Service
+			info["port"] = mc.Port
 		}
 		list = append(list, info)
 	}
 
-	result := model.ModelsListResponse{
-		Object: "list",
-		Data:   list,
+	result := gin.H{
+		"object": "list",
+		"data":   list,
 	}
 	h.cache.Set(cacheKey, result, 300)
 	c.JSON(http.StatusOK, result)

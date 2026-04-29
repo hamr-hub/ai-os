@@ -341,15 +341,6 @@ function getModelMemoryWarning(modelName: string): string | null {
   return null
 }
 
-function getPathExists(modelName: string): boolean | undefined {
-  if (!aggregatedModels.value?.groups) return undefined
-  for (const group of aggregatedModels.value.groups) {
-    const variant = group.variants.find(v => v.name === modelName)
-    if (variant) return variant.path_exists
-  }
-  return undefined
-}
-
 onMounted(() => {
   fetchHistory()
   fetchGPUInfo()
@@ -708,7 +699,7 @@ watch(
                       <Settings class="w-3.5 h-3.5" />
                     </button>
                     <button
-                      v-if="!variant.running && getPathExists(variant.name) !== false"
+                      v-if="!variant.running && variant.path_exists !== false"
                       class="action-btn primary small"
                       :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
                       @click.stop="handleAtomicSwitch(variant.name)"
@@ -716,7 +707,7 @@ watch(
                       <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
                     </button>
                     <span
-                      v-if="getPathExists(variant.name) === false"
+                      v-if="variant.path_exists === false"
                       class="path-missing-tag"
                       :title="'模型文件目录不存在: ' + (variant.path || '')"
                     >
@@ -829,7 +820,7 @@ watch(
               </div>
               <div class="item-actions">
                 <button
-                  v-if="getPathExists(model.name) !== false"
+                  v-if="model.path_exists !== false"
                   class="action-btn primary"
                   :disabled="!!actionLoading || !!switchingModel || isAtomicSwitching"
                   @click="handleSwitchAndSetDefault(model.name)"
@@ -837,7 +828,7 @@ watch(
                   <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
                 </button>
                 <span
-                  v-if="getPathExists(model.name) === false"
+                  v-if="model.path_exists === false"
                   class="path-missing-tag"
                   :title="'模型文件目录不存在: ' + (model.name || '')"
                 >
