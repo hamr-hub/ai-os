@@ -179,3 +179,7 @@ llama_cpp:
   default_n_gpu_layers: -1
   default_ctx_size: 4096
   default_host: "0.0.0.0"
+
+discovery:
+  auto_discover: true
+  priority: "scan_first"

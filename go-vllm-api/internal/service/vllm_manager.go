@@ -60,6 +60,10 @@ func (vm *VLLMManager) SetConfig(cfg *config.VLLMConfig) {
 	vm.cfg = cfg
 }
 
+func (vm *VLLMManager) SetSysCtl(sysCtl *SystemController) {
+	vm.sysCtl = sysCtl
+}
+
 func (vm *VLLMManager) checkPort(port int, timeout time.Duration) bool {
 	address := fmt.Sprintf("localhost:%d", port)
 	conn, err := net.DialTimeout("tcp", address, timeout)

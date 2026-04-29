@@ -86,6 +86,19 @@ func main() {
 	}
 	zapLogger.Info("config loaded", zap.String("path", *configPath), zap.Int("models", len(cfg.Models)))
 
+	// Create VLLMManager and LlamaCppManager early for model discovery
+	vllmManager := service.NewVLLMManager(&cfg.VLLM, zapLogger, nil)
+	llamaCppMgr := service.NewLlamaCppManager(zapLogger, cfg)
+
+	// Auto-discover models from directory if enabled
+	if cfg.Discovery.AutoDiscover {
+		zapLogger.Info("auto-discovering models from directory", zap.Bool("auto_discover", cfg.Discovery.AutoDiscover))
+		discovered := discoverModelsFromDirectory(cfg, vllmManager, llamaCppMgr, zapLogger)
+		zapLogger.Info("discovered models from directory", zap.Int("count", len(discovered)))
+		cfg.MergeDiscoveredModels(discovered)
+		zapLogger.Info("merged discovered models with config", zap.Int("total_models", len(cfg.Models)))
+	}
+
 	redisRepo := repository.NewRedisRepo(
 		cfg.Settings.Redis.Host,
 		cfg.Settings.Redis.Port,
@@ -100,8 +113,10 @@ func main() {
 	cacheService := service.NewCacheService(redisRepo)
 	gpuMonitor := service.NewGPUMonitor(zapLogger)
 	sysCtl := service.NewSystemController(zapLogger)
-	vllmManager := service.NewVLLMManager(&cfg.VLLM, zapLogger, sysCtl)
-	llamaCppMgr := service.NewLlamaCppManager(zapLogger, cfg)
+
+	// Update vllmManager with sysCtl now that it's available
+	vllmManager.SetSysCtl(sysCtl)
+
 	llamaCppMgr.RegisterModelsFromConfig(cfg)
 	scheduler := service.NewScheduler(zapLogger, gpuMonitor, sysCtl, redisRepo, cfg, llamaCppMgr, vllmManager)
 	metricsCollector := service.NewMetricsCollector(redisRepo, zapLogger)
@@ -275,4 +290,48 @@ func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service
 			}
 		}
 	}
+}
+
+// discoverModelsFromDirectory scans model directories and returns discovered models
+func discoverModelsFromDirectory(cfg *config.AppConfig, vllmMgr *service.VLLMManager, llamaCppMgr *service.LlamaCppManager, l *zap.Logger) []config.DiscoveredModel {
+	var discovered []config.DiscoveredModel
+	seen := make(map[string]bool)
+
+	// Scan vLLM models
+	if vllmMgr != nil {
+		vllmResults := vllmMgr.ScanModels()
+		for _, vr := range vllmResults {
+			if seen[vr.Name] {
+				continue
+			}
+			seen[vr.Name] = true
+			discovered = append(discovered, config.DiscoveredModel{
+				Name:          vr.Name,
+				Path:          vr.Path,
+				EstimatedSize: vr.SizeBytes,
+				Service:       "vllm-aiclient",
+			})
+			l.Info("discovered vLLM model", zap.String("name", vr.Name), zap.String("path", vr.Path))
+		}
+	}
+
+	// Scan LlamaCpp GGUF models
+	if llamaCppMgr != nil {
+		ggufResults := llamaCppMgr.ScanGGUFModels()
+		for _, gr := range ggufResults {
+			if seen[gr.Name] {
+				continue
+			}
+			seen[gr.Name] = true
+			discovered = append(discovered, config.DiscoveredModel{
+				Name:          gr.Name,
+				Path:          gr.Path,
+				EstimatedSize: gr.SizeBytes,
+				Service:       "llama_cpp",
+			})
+			l.Info("discovered LlamaCpp model", zap.String("name", gr.Name), zap.String("path", gr.Path))
+		}
+	}
+
+	return discovered
 }

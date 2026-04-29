@@ -12,10 +12,18 @@ import (
 )
 
 type AppConfig struct {
-	Models   map[string]ModelConfig `yaml:"models"`
-	Settings SettingsConfig         `yaml:"settings"`
-	VLLM     VLLMConfig             `yaml:"vllm"`
-	LlamaCpp LlamaCppConfig         `yaml:"llama_cpp"`
+	Models     map[string]ModelConfig `yaml:"models"`
+	Settings   SettingsConfig         `yaml:"settings"`
+	VLLM       VLLMConfig             `yaml:"vllm"`
+	LlamaCpp   LlamaCppConfig         `yaml:"llama_cpp"`
+	Discovery  DiscoveryConfig        `yaml:"discovery"`
+}
+
+type DiscoveryConfig struct {
+	AutoDiscover   bool     `yaml:"auto_discover"`
+	ScanPaths      []string `yaml:"scan_paths"`
+	IgnorePatterns []string `yaml:"ignore_patterns"`
+	Priority       string   `yaml:"priority"` // "scan_first" or "config_first"
 }
 
 type ModelConfig struct {
@@ -211,6 +219,14 @@ func Load(path string) (*AppConfig, error) {
 		c.VLLM.VLLMHost = "localhost"
 	}
 
+	// Discovery defaults
+	if c.Discovery.Priority == "" {
+		c.Discovery.Priority = "scan_first"
+	}
+	if len(c.Discovery.ScanPaths) == 0 && c.VLLM.ModelBasePath != "" {
+		c.Discovery.ScanPaths = []string{c.VLLM.ModelBasePath}
+	}
+
 	cfg = &c
 	return cfg, nil
 }
@@ -244,4 +260,76 @@ func Set(newCfg *AppConfig) {
 	cfgMu.Lock()
 	defer cfgMu.Unlock()
 	cfg = newCfg
+}
+
+// DiscoveredModel represents a model discovered from directory scanning
+type DiscoveredModel struct {
+	Name          string
+	Path          string
+	EstimatedSize int64
+	Service       string // "vllm" or "llama_cpp"
+}
+
+// MergeDiscoveredModels merges discovered models with existing config.
+// If priority is "scan_first", discovered models take precedence.
+// If priority is "config_first", existing config takes precedence.
+func (c *AppConfig) MergeDiscoveredModels(discovered []DiscoveredModel) {
+	if c.Models == nil {
+		c.Models = make(map[string]ModelConfig)
+	}
+
+	scanFirst := c.Discovery.Priority == "scan_first"
+
+	for _, dm := range discovered {
+		existing, hasConfig := c.Models[dm.Name]
+
+		if scanFirst {
+			// Scan priority: use discovered model, apply config as extension
+			mc := ModelConfig{
+				Service:   dm.Service,
+				ModelPath: dm.Path,
+				Port:      c.VLLM.DefaultPort,
+			}
+			if dm.Service == "llama_cpp" {
+				mc.Port = 8001 // Default llama.cpp port
+			}
+
+			// Apply config extensions if exists
+			if hasConfig {
+				if existing.Service != "" {
+					mc.Service = existing.Service
+				}
+				if existing.Port != 0 {
+					mc.Port = existing.Port
+				}
+				if existing.RequiredMemory != "" {
+					mc.RequiredMemory = existing.RequiredMemory
+				}
+				if existing.Description != "" {
+					mc.Description = existing.Description
+				}
+				mc.SupportsImages = existing.SupportsImages
+				mc.SupportsToolCalling = existing.SupportsToolCalling
+				mc.SupportsImageGeneration = existing.SupportsImageGeneration
+				mc.Preload = existing.Preload
+				mc.KeepAlive = existing.KeepAlive
+				mc.ConcurrencyLimit = existing.ConcurrencyLimit
+				mc.NGPULayers = existing.NGPULayers
+				mc.CtxSize = existing.CtxSize
+				mc.NThreads = existing.NThreads
+				mc.Host = existing.Host
+				mc.ExtraArgs = existing.ExtraArgs
+			}
+			c.Models[dm.Name] = mc
+		} else {
+			// Config priority: only add if not in config
+			if !hasConfig {
+				c.Models[dm.Name] = ModelConfig{
+					Service:   dm.Service,
+					ModelPath: dm.Path,
+					Port:      c.VLLM.DefaultPort,
+				}
+			}
+		}
+	}
 }

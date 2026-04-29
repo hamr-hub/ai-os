@@ -459,38 +459,55 @@
             }
 
             updateSwitchingStep(1);
-            var apiKey = localStorage.getItem('gpu_api_key') || '123456';
-            var response = await fetch('http://192.168.7.103:35001/v1/chat/completions', {
+            var switchResult = await fetch('/api/model-switch/switch', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + apiKey
-                },
-                body: JSON.stringify({
-                    model: name,
-                    messages: [{ role: 'user', content: 'hi' }],
-                    max_tokens: 8,
-                    temperature: 0
-                }),
-                signal: AbortSignal.timeout(180000)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelName: name, async: true })
             });
+            var switchData = await switchResult.json();
 
-            updateSwitchingStep(3);
-
-            if (!response.ok) {
-                var errorText = '切换失败';
-                try {
-                    var errData = await response.json();
-                    errorText = errData.error || errData.message || errorText;
-                } catch (e) {
-                    errorText = response.statusText || errorText;
-                }
+            if (!switchData.success) {
                 hideSwitchingOverlay();
-                showModelMessage('error', errorText);
+                showModelMessage('error', '切换请求失败: ' + (switchData.error || '未知错误'));
                 activeModelAction = null;
                 setActionButtonsDisabled(false);
                 return;
             }
+
+            var taskId = switchData.taskId;
+            updateSwitchingStep(2);
+
+            var taskCompleted = false;
+            var taskTimeoutMs = 300000;
+            var pollIntervalMs = 3000;
+            var pollStart = Date.now();
+
+            while (!taskCompleted && (Date.now() - pollStart) < taskTimeoutMs) {
+                await new Promise(function(resolve) { setTimeout(resolve, pollIntervalMs); });
+                try {
+                    var statusR = await fetch('/api/model-switch/task-status?taskId=' + encodeURIComponent(taskId));
+                    var statusData = await statusR.json();
+                    if (statusData.success && statusData.status === 'completed') {
+                        taskCompleted = true;
+                    } else if (statusData.success && statusData.status === 'failed') {
+                        hideSwitchingOverlay();
+                        showModelMessage('error', '切换失败: ' + (statusData.error || '未知错误'));
+                        activeModelAction = null;
+                        setActionButtonsDisabled(false);
+                        return;
+                    }
+                } catch (pollErr) {}
+            }
+
+            if (!taskCompleted) {
+                hideSwitchingOverlay();
+                showModelMessage('error', '切换超时，请检查模型状态');
+                activeModelAction = null;
+                setActionButtonsDisabled(false);
+                return;
+            }
+
+            updateSwitchingStep(3);
 
             hideSwitchingOverlay();
             activeModelAction = null;
@@ -500,6 +517,7 @@
             loadGPUData();
             updateCharts();
             showModelMessage('info', successText);
+            return;
         } catch (e) {
             hideSwitchingOverlay();
             showModelMessage('error', (action === 'switch' || action === 'start' ? '切换失败: ' : '操作失败: ') + e.message);

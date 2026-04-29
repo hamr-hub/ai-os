@@ -153,7 +153,7 @@ export async function handleGPUMonitorApiRoutes(method, path, req, res, config) 
 }
 
 export async function handleModelSwitchApiRoutes(method, path, req, res, config) {
-    if (path !== '/api/model-switch/models' && path !== '/api/model-switch/status' && path !== '/api/model-switch/switch' && path !== '/api/model-switch/start' && path !== '/api/model-switch/stop' && path !== '/api/model-switch/force-restart' && path !== '/api/model-switch/aggregated' && path !== '/api/model-switch/switch-status' && path !== '/api/model-switch/cancel' && !path.match(/^\/api\/model-switch\/vllm-params\/[^/]+$/)) return false;
+    if (path !== '/api/model-switch/models' && path !== '/api/model-switch/status' && path !== '/api/model-switch/switch' && path !== '/api/model-switch/start' && path !== '/api/model-switch/stop' && path !== '/api/model-switch/force-restart' && path !== '/api/model-switch/aggregated' && path !== '/api/model-switch/switch-status' && path !== '/api/model-switch/cancel' && path !== '/api/model-switch/task-status' && !path.match(/^\/api\/model-switch\/vllm-params\/[^/]+$/)) return false;
     try {
         if (path === '/api/model-switch/models' && method === 'GET') {
             sendJSONResponse(res, 200, await modelSwitchService.getModelsList());
@@ -190,7 +190,15 @@ export async function handleModelSwitchApiRoutes(method, path, req, res, config)
         if (path === '/api/model-switch/switch' && method === 'POST') {
             const body = await parseRequestBody(req);
             if (!body.modelName) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelName' }); return true; }
-            sendJSONResponse(res, 200, await modelSwitchService.switchModel(body.modelName));
+            const asyncMode = body.async !== false;
+            sendJSONResponse(res, 200, await modelSwitchService.switchModel(body.modelName, asyncMode));
+            return true;
+        }
+        if (path === '/api/model-switch/task-status' && method === 'GET') {
+            const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+            const taskId = urlObj.searchParams.get('taskId');
+            if (!taskId) { sendJSONResponse(res, 400, { success: false, error: 'Missing taskId parameter' }); return true; }
+            sendJSONResponse(res, 200, modelSwitchService.getSwitchTaskStatus(taskId));
             return true;
         }
         if (path === '/api/model-switch/cancel' && method === 'POST') {

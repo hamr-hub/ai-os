@@ -5,6 +5,35 @@ class ModelSwitchService {
     constructor() {
         this.modelsCache = {};
         this.lastFetchTime = null;
+        this.switchTasks = new Map();
+        this.wsClients = new Set();
+        this._cleanupInterval = setInterval(() => {
+            const now = Date.now();
+            for (const [id, task] of this.switchTasks) {
+                if (task.endTime && (now - task.endTime > 600000)) {
+                    this.switchTasks.delete(id);
+                }
+            }
+        }, 120000);
+    }
+
+    registerWebSocket(ws) {
+        this.wsClients.add(ws);
+        ws.on('close', () => this.wsClients.delete(ws));
+    }
+
+    broadcastSwitchResult(taskId, result) {
+        const message = JSON.stringify({
+            type: 'model-switch-result',
+            taskId,
+            ...result,
+            timestamp: new Date().toISOString()
+        });
+        this.wsClients.forEach(client => {
+            if (client.readyState === 1) {
+                client.send(message);
+            }
+        });
     }
 
     _extractError(result, fallbackMessage) {
@@ -23,6 +52,7 @@ class ModelSwitchService {
     }
 
     async destroy() {
+        clearInterval(this._cleanupInterval);
         logger.info('[Model Switch Service] Model switch service destroyed');
     }
 
@@ -212,10 +242,59 @@ class ModelSwitchService {
         }
     }
 
-    async switchModel(modelName) {
+    async switchModel(modelName, async = true) {
+        const taskId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+        if (async) {
+            this.switchTasks.set(taskId, {
+                modelName,
+                status: 'pending',
+                startTime: Date.now()
+            });
+
+            setImmediate(() => {
+                this._executeSwitch(taskId, modelName).catch(err => {
+                    logger.error('[Model Switch Service] Async switch task failed:', err.message);
+                    this.switchTasks.set(taskId, {
+                        modelName,
+                        status: 'failed',
+                        error: err.message,
+                        endTime: Date.now()
+                    });
+                    this.broadcastSwitchResult(taskId, {
+                        success: false,
+                        error: err.message,
+                        modelName
+                    });
+                });
+            });
+
+            logger.info(`[Model Switch Service] Async model switch started: ${modelName}, taskId: ${taskId}`);
+
+            return {
+                success: true,
+                async: true,
+                taskId,
+                modelName,
+                status: 'pending',
+                message: 'Model switch started in background'
+            };
+        }
+
+        return this._executeSwitch(taskId, modelName);
+    }
+
+    async _executeSwitch(taskId, modelName) {
         try {
+            this.switchTasks.set(taskId, {
+                modelName,
+                status: 'switching',
+                startTime: Date.now()
+            });
+
             const baseUrl = backendClient.getBaseUrl();
             logger.info(`[Model Switch Service] Switching model via chat API: ${modelName}, baseUrl: ${baseUrl}`);
+
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -231,20 +310,89 @@ class ModelSwitchService {
             if (!response.ok) {
                 const errorText = await response.text();
                 logger.error(`[Model Switch Service] Model switch failed: ${response.status} - ${errorText}`);
+
+                this.switchTasks.set(taskId, {
+                    modelName,
+                    status: 'failed',
+                    error: errorText,
+                    statusCode: response.status,
+                    endTime: Date.now()
+                });
+
+                this.broadcastSwitchResult(taskId, {
+                    success: false,
+                    error: errorText,
+                    statusCode: response.status,
+                    modelName
+                });
+
+                return {
+                    success: false,
+                    error: errorText,
+                    statusCode: response.status,
+                    data: { modelName, status: 'failed' },
+                    timestamp: new Date().toISOString(),
+                    backendStatus: backendClient.getStatus()
+                };
             }
 
             await this.fetchModelsFromBackend();
 
+            this.switchTasks.set(taskId, {
+                modelName,
+                status: 'completed',
+                endTime: Date.now()
+            });
+
+            this.broadcastSwitchResult(taskId, {
+                success: true,
+                modelName
+            });
+
             return {
-                success: response.ok,
-                data: { modelName, status: response.ok ? 'completed' : 'failed' },
+                success: true,
+                data: { modelName, status: 'completed' },
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };
         } catch (error) {
             logger.error('[Model Switch Service] Error switching model:', error.message);
-            return { success: false, error: error.message, backendStatus: backendClient.getStatus() };
+
+            this.switchTasks.set(taskId, {
+                modelName,
+                status: 'failed',
+                error: error.message,
+                endTime: Date.now()
+            });
+
+            this.broadcastSwitchResult(taskId, {
+                success: false,
+                error: error.message,
+                modelName
+            });
+
+            return {
+                success: false,
+                error: error.message,
+                backendStatus: backendClient.getStatus()
+            };
         }
+    }
+
+    getSwitchTaskStatus(taskId) {
+        const task = this.switchTasks.get(taskId);
+        if (!task) {
+            return { success: false, error: 'Task not found', taskId };
+        }
+        return {
+            success: true,
+            taskId,
+            modelName: task.modelName,
+            status: task.status,
+            startTime: task.startTime,
+            endTime: task.endTime,
+            error: task.error
+        };
     }
 
     async startModel(modelName) {
