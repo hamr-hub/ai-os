@@ -286,6 +286,7 @@
             stopSwitchPolling();
             hideSwitchingOverlay();
             activeModelAction = null;
+            switchSession = null;
             setActionButtonsDisabled(false);
             showModelMessage('info', '切换成功: ' + session.target_model);
             renderModels();
@@ -298,6 +299,7 @@
             stopSwitchPolling();
             hideSwitchingOverlay();
             activeModelAction = null;
+            switchSession = null;
             setActionButtonsDisabled(false);
             showModelMessage('error', '切换失败: ' + (session.rollback_reason || session.error || '未知错误'));
         }
@@ -471,7 +473,12 @@
         if (autoRefreshTimer) return;
         isAutoRefreshing = true;
         loadGPUData();
-        autoRefreshTimer = setInterval(function() { loadGPUData(); renderModels(); }, REFRESH_INTERVAL);
+        autoRefreshTimer = setInterval(function() {
+            loadGPUData();
+            if (!activeModelAction && !switchSession) {
+                renderModels();
+            }
+        }, REFRESH_INTERVAL);
         var btn = document.getElementById('gpuAutoRefreshBtn');
         if (btn) {
             btn.innerHTML = '<i class="fas fa-pause"></i> <span>停止刷新</span>';
