@@ -294,6 +294,133 @@
         }
     }
 
+    function connectSwitchWebSocket() {
+        if (switchWs && switchWs.readyState === WebSocket.OPEN) return;
+        try {
+            switchWs = new WebSocket(PYTHON_BACKEND_WS + '/ws/model-switch');
+            switchWs.onopen = function() {
+                switchWsConnected = true;
+            };
+            switchWs.onmessage = function(event) {
+                try {
+                    var msg = JSON.parse(event.data);
+                    if (msg.type === 'switch_progress') {
+                        updateForceRestartProgress(msg);
+                    } else if (msg.type === 'rollback_started') {
+                        updateForceRestartRollback(msg);
+                    } else if (msg.type === 'rollback_completed') {
+                        updateForceRestartRollbackDone(msg);
+                    }
+                } catch (e) {}
+            };
+            switchWs.onerror = function() {
+                switchWsConnected = false;
+            };
+            switchWs.onclose = function() {
+                switchWsConnected = false;
+                switchWs = null;
+            };
+        } catch (e) {
+            switchWsConnected = false;
+        }
+    }
+
+    function disconnectSwitchWebSocket() {
+        if (switchWs) {
+            try { switchWs.close(); } catch (e) {}
+            switchWs = null;
+            switchWsConnected = false;
+        }
+    }
+
+    function showForceRestartOverlay(modelName) {
+        var old = document.getElementById('gpu-switching-overlay');
+        if (old) old.remove();
+        var overlay = document.createElement('div');
+        overlay.id = 'gpu-switching-overlay';
+        overlay.innerHTML = '<div class="switching-overlay">' +
+            '<div class="switching-card">' +
+            '<div class="switching-spinner"></div>' +
+            '<div class="switching-title">正在强制重启模型</div>' +
+            '<div class="switching-model">' + escapeHtml(modelName) + '</div>' +
+            '<div class="switching-steps" id="force-restart-steps">' +
+            '<div class="switching-step active" id="fr-step-1"><span class="step-dot"></span><span class="step-text">更新配置并重启</span></div>' +
+            '<div class="switching-step" id="fr-step-2"><span class="step-dot"></span><span class="step-text">冒烟测试</span></div>' +
+            '</div>' +
+            '<div class="switching-status" id="switch-elapsed">准备中...</div>' +
+            '<div class="switching-progress-bar"><div class="switching-progress-fill" id="fr-progress-fill" style="width:0%"></div></div>' +
+            '<div class="switching-hint">请勿关闭页面或重复操作</div>' +
+            '<div class="switching-hint" style="margin-top:4px;color:#f59e0b;">出现问题将自动回滚到原模型</div>' +
+            '</div></div>';
+        document.body.appendChild(overlay);
+    }
+
+    function updateForceRestartProgress(msg) {
+        var session = msg.session;
+        if (!session || !session.phases) return;
+        var overallProgress = msg.overall_progress || session.overall_progress || 0;
+        var fill = document.getElementById('fr-progress-fill');
+        if (fill) fill.style.width = overallProgress + '%';
+        var statusEl = document.getElementById('switch-elapsed');
+        if (statusEl) statusEl.textContent = msg.log || '';
+        if (session.phases) {
+            session.phases.forEach(function(p) {
+                var el = document.getElementById('fr-step-' + p.phase);
+                if (!el) return;
+                el.classList.remove('active', 'done');
+                if (p.status === 'success' || p.status === 'skipped') {
+                    el.classList.add('done');
+                } else if (p.status === 'running') {
+                    el.classList.add('active');
+                } else if (p.status === 'failed') {
+                    el.classList.add('active');
+                    el.style.color = '#ef4444';
+                }
+            });
+        }
+        if (msg.final) {
+            if (msg.level === 'success') {
+                var fill2 = document.getElementById('fr-progress-fill');
+                if (fill2) fill2.style.background = '#22c55e';
+                if (statusEl) { statusEl.textContent = '模型强制重启成功'; statusEl.style.color = '#22c55e'; }
+                var spinner = document.querySelector('#gpu-switching-overlay .switching-spinner');
+                if (spinner) spinner.style.borderTopColor = '#22c55e';
+            }
+        }
+    }
+
+    function updateForceRestartRollback(msg) {
+        var statusEl = document.getElementById('switch-elapsed');
+        if (statusEl) {
+            statusEl.textContent = '⚠ 切换出现问题，正在回滚到原模型: ' + (msg.log || '');
+            statusEl.style.color = '#f59e0b';
+        }
+        var fill = document.getElementById('fr-progress-fill');
+        if (fill) {
+            fill.style.background = '#f59e0b';
+            fill.style.width = '50%';
+        }
+    }
+
+    function updateForceRestartRollbackDone(msg) {
+        var statusEl = document.getElementById('switch-elapsed');
+        if (statusEl) {
+            statusEl.textContent = '✗ 切换失败，已回滚到原模型: ' + (msg.log || '');
+            statusEl.style.color = '#ef4444';
+        }
+        var fill = document.getElementById('fr-progress-fill');
+        if (fill) {
+            fill.style.background = '#ef4444';
+            fill.style.width = '100%';
+        }
+        var spinner = document.querySelector('#gpu-switching-overlay .switching-spinner');
+        if (spinner) {
+            spinner.style.border = '3px solid #ef4444';
+            spinner.style.borderTopColor = 'transparent';
+            spinner.style.animationPlayState = 'paused';
+        }
+    }
+
     async function executeModelAction(action, name, successText) {
         if (activeModelAction) return;
         activeModelAction = action + ':' + name;
@@ -333,7 +460,7 @@
 
             updateSwitchingStep(1);
             var apiKey = localStorage.getItem('gpu_api_key') || '123456';
-            var response = await fetch('/v1/chat/completions', {
+            var response = await fetch('http://192.168.7.103:35001/v1/chat/completions', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

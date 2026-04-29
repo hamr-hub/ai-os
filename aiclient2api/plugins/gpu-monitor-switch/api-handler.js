@@ -106,8 +106,12 @@ export async function handlePluginStyles(method, urlPath, req, res, config) {
 }
 
 export async function handleGPUMonitorApiRoutes(method, path, req, res, config) {
-    if (path !== '/api/gpu-monitor' && path !== '/api/gpu-monitor/info' && path !== '/api/gpu-monitor/status' && path !== '/api/gpu-monitor/interval' && path !== '/api/gpu-monitor/start' && path !== '/api/gpu-monitor/stop' && path !== '/api/gpu-monitor/backend-status') return false;
+    if (path !== '/api/gpu-monitor' && path !== '/api/gpu-monitor/info' && path !== '/api/gpu-monitor/status' && path !== '/api/gpu-monitor/interval' && path !== '/api/gpu-monitor/start' && path !== '/api/gpu-monitor/stop' && path !== '/api/gpu-monitor/backend-status' && path !== '/api/gpu-monitor/config') return false;
     try {
+        if (path === '/api/gpu-monitor/config' && method === 'GET') {
+            sendJSONResponse(res, 200, { success: true, data: backendClient.getStatus() });
+            return true;
+        }
         if (path === '/api/gpu-monitor/backend-status' && method === 'GET') {
             sendJSONResponse(res, 200, { success: true, data: backendClient.getStatus() });
             return true;

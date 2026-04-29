@@ -489,13 +489,13 @@ export type { ChatMessage, ChatCompletionRequest, ChatCompletionResponse, AgentT
 
 export async function getSwitchStatus(): Promise<SwitchStatusResponse> {
   const { data } = await client.get<SwitchStatusResponse>(
-    '/switch/status',
+    '/model-switch/switch-status',
     silentRequestConfig()
   )
   return data
 }
 
 export async function cancelSwitch(): Promise<{ status: string }> {
-  const { data } = await client.delete<{ status: string }>('/switch/cancel')
+  const { data } = await client.delete<{ status: string }>('/model-switch/cancel')
   return data
 }

@@ -214,8 +214,9 @@ class ModelSwitchService {
 
     async switchModel(modelName) {
         try {
-            logger.info(`[Model Switch Service] Switching model via chat API: ${modelName}`);
-            const response = await fetch(`${backendClient.getBaseUrl()}/v1/chat/completions`, {
+            const baseUrl = backendClient.getBaseUrl();
+            logger.info(`[Model Switch Service] Switching model via chat API: ${modelName}, baseUrl: ${baseUrl}`);
+            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -226,6 +227,11 @@ class ModelSwitchService {
                 }),
                 signal: AbortSignal.timeout(180000)
             });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                logger.error(`[Model Switch Service] Model switch failed: ${response.status} - ${errorText}`);
+            }
 
             await this.fetchModelsFromBackend();
 
@@ -243,8 +249,9 @@ class ModelSwitchService {
 
     async startModel(modelName) {
         try {
-            logger.info(`[Model Switch Service] Starting model via chat API: ${modelName}`);
-            const response = await fetch(`${backendClient.getBaseUrl()}/v1/chat/completions`, {
+            const baseUrl = backendClient.getBaseUrl();
+            logger.info(`[Model Switch Service] Starting model via chat API: ${modelName}, baseUrl: ${baseUrl}`);
+            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -255,6 +262,11 @@ class ModelSwitchService {
                 }),
                 signal: AbortSignal.timeout(180000)
             });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                logger.error(`[Model Switch Service] Model start failed: ${response.status} - ${errorText}`);
+            }
 
             await this.fetchModelsFromBackend();
 
