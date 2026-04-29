@@ -11,6 +11,9 @@
     var gpuStatusRendered = false;
     var activeModelAction = null;
     var modelsRendered = false;
+    var switchWs = null;
+    var switchWsConnected = false;
+    var PYTHON_BACKEND_WS = 'ws://192.168.7.103:35000';
 
     var sectionHTML = `
 <div id="gpu-monitor" class="section" data-section="gpu-monitor" style="display: none;">
