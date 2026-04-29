@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 import asyncio
 import copy
+import os
 
 from core.vllm_manager import save_model_vllm_params, get_model_vllm_params
 from middleware.error_handler import ModelNotFoundException
