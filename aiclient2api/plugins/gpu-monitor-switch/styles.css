@@ -414,6 +414,31 @@
     background: #dc2626;
 }
 
+.btn-warning {
+    background: #f59e0b;
+    color: #fff;
+}
+
+.btn-warning:hover:not(:disabled) {
+    background: #d97706;
+}
+
+/* 切换进度条 */
+.switching-progress-bar {
+    height: 6px;
+    background: #e5e7eb;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 12px 0;
+}
+
+.switching-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: #6366f1;
+    transition: width 0.4s ease, background 0.3s ease;
+}
+
 /* 切换中遮罩层 */
 .switching-overlay {
     position: fixed;
