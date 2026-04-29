@@ -107,36 +107,61 @@ class Scheduler:
         return 'vllm'
     
     def get_available_models(self) -> List[str]:
-        return list(self.config.get('models', {}).keys())
-    
+        from core.vllm_manager import MODEL_BASE_PATH, get_available_models as _scan_models
+
+        config_models = list(self.config.get('models', {}).keys())
+
+        try:
+            scanned = _scan_models()
+            scanned_names = [m['name'] for m in scanned]
+        except Exception:
+            scanned_names = []
+
+        seen = set()
+        result = []
+        for name in config_models:
+            if name not in seen:
+                result.append(name)
+                seen.add(name)
+        for name in scanned_names:
+            if name not in seen:
+                result.append(name)
+                seen.add(name)
+        return result
+
     def _find_matching_model(self, model_name: str) -> Optional[str]:
-        """
-        根据输入的模型名称查找匹配的配置模型
-        支持模糊匹配：忽略大小写，支持简写名称匹配
-        """
         models = self.config.get('models', {})
-        
-        # 精确匹配
         if model_name in models:
             return model_name
-        
-        # 大小写不敏感匹配
         lower_input = model_name.lower()
         for config_name in models:
             if config_name.lower() == lower_input:
                 return config_name
-        
-        # 简写匹配：输入的简写名称是否是配置名称的一部分（忽略大小写）
         for config_name in models:
             if lower_input in config_name.lower() or config_name.lower() in lower_input:
                 return config_name
-        
-        # 尝试用输入名称查找最接近的匹配
         for config_name in models:
             config_lower = config_name.lower()
             if lower_input.replace('-', '') in config_lower.replace('-', ''):
                 return config_name
-        
+
+        from core.vllm_manager import get_available_models as _scan_models
+        try:
+            scanned = _scan_models()
+            scanned_names = [m['name'] for m in scanned]
+        except Exception:
+            scanned_names = []
+
+        if model_name in scanned_names:
+            return model_name
+        lower_input = model_name.lower()
+        for sname in scanned_names:
+            if sname.lower() == lower_input:
+                return sname
+        for sname in scanned_names:
+            if lower_input in sname.lower() or sname.lower() in lower_input:
+                return sname
+
         return None
 
     def is_model_available(self, model_name: str) -> bool:
@@ -146,7 +171,30 @@ class Scheduler:
         matched_name = self._find_matching_model(model_name)
         if matched_name:
             config = self.config.get('models', {}).get(matched_name)
-            return config
+            if config:
+                return config
+
+        from core.vllm_manager import get_available_models as _scan_models, MODEL_BASE_PATH
+        try:
+            scanned = _scan_models()
+            for m in scanned:
+                if m['name'] == matched_name or m['name'] == model_name:
+                    model_path = m.get('path', os.path.join(MODEL_BASE_PATH, m['name']))
+                    return {
+                        'service': 'vllm-aiclient',
+                        'model_path': model_path,
+                        'required_memory': str(m.get('required_memory_gb', 40)) + 'GB',
+                        'preload': False,
+                        'keep_alive': False,
+                        'port': 8000,
+                        'supports_images': m.get('multimodal', False),
+                        'supports_tool_calling': False,
+                        'supports_image_generation': False,
+                        'description': '',
+                        'vllm_params': {},
+                    }
+        except Exception:
+            pass
         return None
     
     def get_model_path(self, model_name: str) -> Optional[str]:

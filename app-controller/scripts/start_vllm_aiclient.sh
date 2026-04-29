@@ -123,7 +123,7 @@ wait_for_port_release() {
     local max_wait="${2:-60}"
     local waited=0
 
-    while ss -lntp 2>/dev/null | grep -q ":${port} "; do
+    while ss -lnptu 2>/dev/null | grep -q ":${port}\b"; do
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] 端口 ${port} 仍被占用，等待释放..." | tee -a "$LOG_FILE"
         sleep 1
         waited=$((waited + 1))
@@ -131,8 +131,9 @@ wait_for_port_release() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] 端口 ${port} 长时间未释放，强制清理占用进程" | tee -a "$LOG_FILE"
             if command -v fuser >/dev/null 2>&1; then
                 fuser -k "${port}/tcp" || true
+                fuser -k "${port}/udp" || true
             else
-                pkill -f "vllm serve "/mnt/pve_models/Gemma-4-31B-Abliterated" --port ${port}" || true
+                pkill -f "vllm serve .* --port ${port}" || true
             fi
             sleep 2
         fi

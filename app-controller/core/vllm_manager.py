@@ -65,6 +65,8 @@ VLLM_START_SCRIPT = _resolve_vllm_start_script(
     VLLM_SERVICE_NAME,
 )
 VLLM_DEFAULT_PORT = VLLM_CONFIG.get('default_port', 8000)
+VLLM_BACKEND_BASE_URL = VLLM_CONFIG.get('backend_base_url', '').rstrip('/')
+VLLM_HEALTH_URL = VLLM_CONFIG.get('health_url', '').rstrip('/')
 VLLM_MODEL_STATE_FILE = VLLM_CONFIG.get(
     'model_state_file',
     os.path.join(os.path.dirname(VLLM_START_SCRIPT), '.vllm_model_path'),
@@ -72,6 +74,18 @@ VLLM_MODEL_STATE_FILE = VLLM_CONFIG.get(
 
 _cached_vllm_port = None
 _port_discovery_time = None
+
+def _build_vllm_base_url(port: int) -> str:
+    if VLLM_BACKEND_BASE_URL:
+        return VLLM_BACKEND_BASE_URL
+    return f"http://localhost:{port}"
+
+
+def _build_vllm_health_url(port: int) -> str:
+    if VLLM_HEALTH_URL:
+        return VLLM_HEALTH_URL
+    return f"{_build_vllm_base_url(port)}/health"
+
 
 def discover_vllm_port() -> int:
     global _cached_vllm_port, _port_discovery_time
@@ -92,6 +106,16 @@ def discover_vllm_port() -> int:
             return result == 0
         except Exception:
             return False
+
+    def check_health(port, timeout=2):
+        health_url = _build_vllm_health_url(port)
+        try:
+            import httpx
+            with httpx.Client(timeout=timeout) as client:
+                response = client.get(health_url)
+                return response.status_code == 200
+        except Exception:
+            return False
     
     try:
         with open(VLLM_START_SCRIPT, 'r') as f:
@@ -100,7 +124,7 @@ def discover_vllm_port() -> int:
         port_match = re.search(r'--port\s+(\d+)', script_content)
         if port_match:
             port = int(port_match.group(1))
-            if check_port(port):
+            if check_port(port) and check_health(port):
                 logger.info("Discovered vLLM port from start script: %d", port)
                 _cached_vllm_port = port
                 _port_discovery_time = datetime.now()
@@ -120,7 +144,7 @@ def discover_vllm_port() -> int:
                 port_match = re.search(r'--port\s+(\d+)', exec_start_line)
                 if port_match:
                     port = int(port_match.group(1))
-                    if check_port(port):
+                    if check_port(port) and check_health(port):
                         logger.info("Discovered vLLM port from systemd service: %d", port)
                         _cached_vllm_port = port
                         _port_discovery_time = datetime.now()
@@ -160,23 +184,26 @@ def refresh_vllm_port_cache():
 # 格式：{"pattern": {"vram_gb": 数值, "multimodal": 布尔值}}
 MODEL_MEMORY_ESTIMATES = {
     "Gemma-4-31B": {"vram_gb": 40, "multimodal": False},
-    "Qwen3-235B": {"vram_gb": 120, "multimodal": False},
+    "Qwen3-235B": {"vram_gb": 48, "multimodal": False},
     "Qwen3.6-35B": {"vram_gb": 40, "multimodal": False},
     "deepseek-coder-v2": {"vram_gb": 80, "multimodal": False},
     "deepseek-r1-70b": {"vram_gb": 80, "multimodal": False},
-    "llama-3.3-70b": {"vram_gb": 80, "multimodal": False},
+    "llama-3.3-70b": {"vram_gb": 70, "multimodal": False},
     "midnight-miqu-103b": {"vram_gb": 100, "multimodal": False},
-    "qwen2.5-72b": {"vram_gb": 80, "multimodal": False},
+    "qwen2.5-72b": {"vram_gb": 70, "multimodal": False},
 }
 
 
 def get_available_models() -> List[Dict[str, Any]]:
     """
-    扫描可用模型目录，返回模型列表
+    扫描可用模型目录，返回模型列表。
+    config.yaml 中的 required_memory 优先于硬编码估算。
     """
     cached = cache_service.get("ai_controller:cache:model_list")
     if cached is not None:
         return cached
+
+    models_config = _load_models_config()
 
     models = []
     if not os.path.exists(MODEL_BASE_PATH):
@@ -191,6 +218,13 @@ def get_available_models() -> List[Dict[str, Any]]:
             continue
 
         memory_info = _estimate_memory(model_name)
+        config = models_config.get(model_name, {})
+        config_required_memory = _parse_config_memory(config.get('required_memory', ''))
+        if config_required_memory > 0:
+            memory_info = {
+                "vram_gb": config_required_memory,
+                "multimodal": config.get('supports_images', memory_info["multimodal"]),
+            }
 
         model_info = {
             "name": model_name,
@@ -208,38 +242,96 @@ def get_available_models() -> List[Dict[str, Any]]:
     return models
 
 
+def _load_models_config() -> Dict[str, Any]:
+    try:
+        import yaml
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            return config.get('models', {})
+    except Exception as exc:
+        logger.warning("Failed to load models config: %s", exc)
+    return {}
+
+
+def _parse_config_memory(value) -> int:
+    if not value:
+        return 0
+    s = str(value).strip().upper()
+    for suffix, factor in [('GB', 1), ('TB', 1024), ('MB', 0)]:
+        if s.endswith(suffix):
+            try:
+                return int(float(s[:-len(suffix)].strip()) * factor)
+            except ValueError:
+                return 0
+    try:
+        return int(s)
+    except ValueError:
+        return 0
+
+
+def _load_model_groups_config() -> Dict[str, str]:
+    try:
+        import yaml
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            groups = config.get('model_groups', {})
+            if groups:
+                return groups
+    except Exception as exc:
+        logger.warning("Failed to load model_groups config: %s", exc)
+    return {}
+
+
 def extract_base_model_name(model_name: str) -> str:
     """
-    从模型名称中提取基础模型名称，用于聚合
-    例如: Qwen3.6-35B-A3B-NVFP4 -> Qwen3.6-35B
+    从模型名称中提取基础模型名称，用于聚合分组。
+    策略优先级：
+    1. config.yaml 的 model_groups 显式规则
+    2. 去除量化/变体后缀（-Instruct/-AWQ/-GGUF/-mini 等）
+    3. 按参数量(B)截断（如 Qwen3.6-35B-xxx -> Qwen3.6-35B）
+    4. fallback 取前两段
     """
     import re
 
-    base_patterns = [
-        r'^(Gemma-4-31B)',
-        r'^(Qwen3-235B)',
-        r'^(Qwen3\.6-35B)',
-        r'^(Qwen2\.5-72B)',
-        r'^(deepseek-coder-v2)',
-        r'^(deepseek-r1-70b)',
-        r'^(deepseek-r1)',
-        r'^(llama-3\.3-70b)',
-        r'^(llama-3-8b)',
-        r'^(llama-3\.1-70b)',
-        r'^(midnight-miqu-103b)',
-        r'^(mistral-7b)',
-        r'^(mixtral-8x7b)',
-    ]
+    config_groups = _load_model_groups_config()
+    for group_name, pattern in config_groups.items():
+        if re.match(pattern, model_name, re.IGNORECASE):
+            return group_name
 
-    for pattern in base_patterns:
-        match = re.match(pattern, model_name, re.IGNORECASE)
-        if match:
-            return match.group(1)
+    variant_suffixes = [
+        '-Instruct', '-Chat', '-Uncensored', '-Abliterated',
+        '-AWQ', '-GPTQ', '-GGUF', '-EXL2', '-ExL2',
+        '-NVFP4', '-FP8', '-FP16', '-BF16',
+        '-Q4', '-Q4_K_M', '-Q5', '-Q5_K_M', '-Q8', '-Q8_0',
+        '-mini', '-base', '-it', '-vision',
+        '-5\\.0bpw', '-6\\.5bpw', '-8\\.0bpw', '-8_0',
+    ]
+    stripped = model_name
+    for suffix_pattern in variant_suffixes:
+        m = re.search(suffix_pattern, stripped, re.IGNORECASE)
+        if m and m.start() > 0:
+            stripped = stripped[:m.start()]
+            break
+
+    if stripped != model_name:
+        return stripped
 
     if '-' in model_name:
         parts = model_name.split('-')
+        for i, part in enumerate(parts):
+            if re.search(r'\d+[Bb]', part, re.IGNORECASE):
+                return '-'.join(parts[:i + 1])
+
+        if len(parts) >= 3 and not re.search(r'\d', parts[1], re.IGNORECASE):
+            return '-'.join(parts[:2])
+
         if len(parts) >= 2:
-            return parts[0]
+            return '-'.join(parts[:2])
+
     return model_name
 
 
@@ -847,7 +939,7 @@ async def _wait_for_vllm_ready(max_wait: int = 600, check_interval: int = 5) -> 
         elapsed = int(time.time() - start_time)
         # 每次循环都动态发现端口（因为端口可能会变化）
         vllm_port = discover_vllm_port()
-        health_url = f"http://localhost:{vllm_port}/health"
+        health_url = _build_vllm_health_url(vllm_port)
         
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -1131,7 +1223,7 @@ async def _test_vllm_model(model_name: str, max_retries: int = 5, retry_delay: i
     :return: 自测结果字典
     """
     vllm_port = discover_vllm_port()
-    vllm_url = f"http://localhost:{vllm_port}/v1/chat/completions"
+    vllm_url = f"{_build_vllm_base_url(vllm_port)}/v1/chat/completions"
 
     model_path = os.path.join(MODEL_BASE_PATH, model_name)
 

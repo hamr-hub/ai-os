@@ -373,7 +373,7 @@ class ModelSwitchOrchestrator:
         phase.progress = 10
         await self._broadcast(session, phase=1, progress=10, log="更新模型配置")
 
-        from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache
+        from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache, _build_vllm_health_url
         script_ok = _update_vllm_script(session.target_model_path, session.target_model)
         if not script_ok:
             error_msg = "更新模型路径配置失败"
@@ -415,7 +415,7 @@ class ModelSwitchOrchestrator:
 
             from core.vllm_manager import discover_vllm_port
             port = discover_vllm_port()
-            health_url = f"http://localhost:{port}/health"
+            health_url = _build_vllm_health_url(port)
             try:
                 async with httpx.AsyncClient(timeout=3) as client:
                     resp = await client.get(health_url)
@@ -452,14 +452,15 @@ class ModelSwitchOrchestrator:
         phase.progress = 10
         await self._broadcast(session, phase=2, progress=10, log="冒烟测试")
 
-        from core.vllm_manager import discover_vllm_port
+        from core.vllm_manager import discover_vllm_port, _build_vllm_base_url
         port = discover_vllm_port()
-        url = f"http://localhost:{port}/v1/chat/completions"
+        base_url = _build_vllm_base_url(port)
+        url = f"{base_url}/v1/chat/completions"
 
         actual_model_id = session.target_model_path
         try:
             async with httpx.AsyncClient(timeout=5) as client:
-                models_resp = await client.get(f"http://localhost:{port}/v1/models")
+                models_resp = await client.get(f"{base_url}/v1/models")
                 if models_resp.status_code == 200:
                     models_data = models_resp.json()
                     registered_ids = [m.get("id", "") for m in models_data.get("data", [])]
@@ -562,7 +563,7 @@ class ModelSwitchOrchestrator:
         await self._log(session, phase, f"启动目标模型: {session.target_model}")
         await self._broadcast(session, phase=3, progress=10, log="启动新服务")
 
-        from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache, start_vllm_service
+        from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache, start_vllm_service, _build_vllm_health_url
         script_ok = _update_vllm_script(session.target_model_path, session.target_model)
         if not script_ok:
             error_msg = "更新模型路径配置失败"
@@ -594,7 +595,7 @@ class ModelSwitchOrchestrator:
                 from core.vllm_manager import discover_vllm_port
                 port = discover_vllm_port()
                 async with httpx.AsyncClient(timeout=3) as client:
-                    resp = await client.get(f"http://localhost:{port}/health")
+                    resp = await client.get(_build_vllm_health_url(port))
                     if resp.status_code == 200:
                         phase.status = PhaseStatus.SUCCESS
                         phase.progress = 100
@@ -661,10 +662,10 @@ class ModelSwitchOrchestrator:
                 for _ in range(10):
                     await asyncio.sleep(3)
                     try:
-                        from core.vllm_manager import discover_vllm_port
+                        from core.vllm_manager import discover_vllm_port, _build_vllm_health_url
                         port = discover_vllm_port()
                         async with httpx.AsyncClient(timeout=3) as client:
-                            resp = await client.get(f"http://localhost:{port}/health")
+                            resp = await client.get(_build_vllm_health_url(port))
                             if resp.status_code == 200:
                                 await self._log(session, session.phases[0],
                                                "旧模型服务已恢复就绪")

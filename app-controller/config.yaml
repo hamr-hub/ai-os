@@ -1,3 +1,13 @@
+model_groups:
+  Gemma-4-31B: "^Gemma-4-31B"
+  Qwen3-235B: "^Qwen3-235B"
+  Qwen3.6-35B: "^Qwen3\\.6-35B"
+  Qwen2.5-72B: "^Qwen2\\.5-72B"
+  llama-3.3-70b: "^llama-3\\.3-70b"
+  midnight-miqu-103b: "^midnight-miqu-103b"
+  qwen2.5-72b: "^qwen2\\.5-72b"
+  deepseek-r1: "^deepseek-r1"
+
 models:
   Gemma-4-31B-Abliterated:
     service: vllm-aiclient
@@ -274,6 +284,8 @@ vllm:
   start_script: /root/ai-os/app-controller/scripts/start_vllm_aiclient.sh
   model_base_path: /mnt/pve_models
   default_port: 8000
+  backend_base_url: ""
+  health_url: ""
   default_gpu_memory_utilization: 0.92
   default_max_model_len: 32768
   model_state_file: /root/ai-os/app-controller/scripts/.vllm_model_path
