@@ -389,6 +389,7 @@
         } catch (e) {
             if (!isAutoRefreshing) {
                 el.innerHTML = '<div class="empty-state error"><i class="fas fa-exclamation-triangle"></i><p>加载失败: ' + e.message + '</p></div>';
+                gpuStatusRendered = false;
             }
         }
     }
