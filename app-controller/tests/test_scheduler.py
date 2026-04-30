@@ -211,7 +211,7 @@ class TestScheduler:
         count = scheduler.get_active_requests("Gemma-4-31B-Abliterated")
         assert count >= 0
 
-    def test_can_accept_request(self, scheduler):
+    def test_can_accept_request(self, scheduler, mock_gpu_monitor):
         with patch('core.vllm_manager.get_available_models', return_value=[]):
             with patch('core.scheduler.cache_service') as mock_cache:
                 mock_cache.get.return_value = None

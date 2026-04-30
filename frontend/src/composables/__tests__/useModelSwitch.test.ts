@@ -63,7 +63,16 @@ describe('useModelSwitch', () => {
       finished_at: null,
       overall_phase: 'phase1',
       overall_progress: 30,
-      phases: [{ name: 'phase1', progress: 30 }],
+      phases: [{
+        phase: 1,
+        name: 'phase1',
+        status: 'running',
+        progress: 30,
+        started_at: '2026-01-01',
+        finished_at: null,
+        logs: [],
+        error: null,
+      }],
       error: null,
       rollback_reason: null,
       completed_successfully: false,
@@ -71,7 +80,16 @@ describe('useModelSwitch', () => {
 
     expect(overallProgress.value).toBe(30)
     expect(overallPhase.value).toBe('phase1')
-    expect(phases.value).toEqual([{ name: 'phase1', progress: 30 }])
+    expect(phases.value).toEqual([{
+      phase: 1,
+      name: 'phase1',
+      status: 'running',
+      progress: 30,
+      started_at: '2026-01-01',
+      finished_at: null,
+      logs: [],
+      error: null,
+    }])
     expect(isCompleted.value).toBe(false)
     expect(isFailed.value).toBe(false)
   })

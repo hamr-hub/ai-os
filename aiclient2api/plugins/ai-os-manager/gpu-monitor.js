@@ -1,5 +1,6 @@
 import logger from '../../utils/logger.js';
 import { backendClient, GO_BACKEND_URL, PYTHON_BACKEND_URL } from './backend-client.js';
+import { normalizeBackendResult } from './api-handler.js';
 
 class GPUMonitorService {
     constructor() {
@@ -49,7 +50,7 @@ class GPUMonitorService {
                 return;
             }
 
-            const g = result.current || result.primary || (result.all_gpus && result.all_gpus[0]) || result;
+            const g = normalizeBackendResult(result);
             if (!g || !g.name) {
                 this.gpuData = [];
                 return;

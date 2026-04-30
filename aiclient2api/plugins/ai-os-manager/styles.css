@@ -50,3 +50,14 @@
 #aios-ratelimit .section-header h2::before {
     content: '📊 ';
 }
+
+.aios-refresh-indicator {
+    display: inline-block;
+    font-size: 11px;
+    color: #8b949e;
+    margin-left: 8px;
+}
+
+.aios-refresh-indicator.active {
+    color: #22c55e;
+}

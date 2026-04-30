@@ -56,15 +56,22 @@ const PROTECTED_API_PATHS = [
     '/v1/embeddings',
 ];
 
+let _staticInjected = false;
+
 async function ensureInjectedStaticIndex() {
+    if (_staticInjected) return;
     try {
         const indexPath = pathModule.resolve(process.cwd(), 'static', 'index.html');
         let html = await fs.readFile(indexPath, 'utf8');
-        if (html.includes(INJECT_SCRIPT_TAG)) return;
+        if (html.includes(INJECT_SCRIPT_TAG)) { _staticInjected = true; return; }
         html = html.includes('</body>') ? html.replace('</body>', INJECT_SCRIPT_TAG + '</body>') : html + INJECT_SCRIPT_TAG;
         await fs.writeFile(indexPath, html, 'utf8');
+        _staticInjected = true;
         logger.info('[AI-OS Manager] Injected script tag into static/index.html');
     } catch (error) {
+        logger.error('[AI-OS Manager] Failed to inject static index:', error.message);
+    }
+} catch (error) {
         logger.error('[AI-OS Manager] Failed to inject static index:', error.message);
     }
 }

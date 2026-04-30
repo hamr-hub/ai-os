@@ -12,17 +12,17 @@ vi.mock('@/api/client', () => ({
   updateSystemConfig: vi.fn(),
 }))
 
-import {
-  getVLLMDefaultConfig,
-  getEngineConfig,
-  updateEngineConfig,
-  getDefaultModel,
-  setDefaultModel,
-  clearDefaultModel,
-  getSystemConfig,
-  updateSystemConfig,
-} from '@/api/client'
+import * as apiClient from '@/api/client'
 import { useConfigManagement } from '@/composables/useConfigManagement'
+
+const getVLLMDefaultConfig = vi.mocked(apiClient.getVLLMDefaultConfig)
+const getEngineConfig = vi.mocked(apiClient.getEngineConfig)
+const updateEngineConfig = vi.mocked(apiClient.updateEngineConfig)
+const getDefaultModel = vi.mocked(apiClient.getDefaultModel)
+const setDefaultModel = vi.mocked(apiClient.setDefaultModel)
+const clearDefaultModel = vi.mocked(apiClient.clearDefaultModel)
+const getSystemConfig = vi.mocked(apiClient.getSystemConfig)
+const updateSystemConfig = vi.mocked(apiClient.updateSystemConfig)
 
 describe('useConfigManagement', () => {
   beforeEach(() => {
@@ -31,9 +31,19 @@ describe('useConfigManagement', () => {
   })
 
   it('fetchAll并行获取4种配置并赋值', async () => {
-    const vllmConf = { max_model_len: 4096 }
-    const engConf = { engine_type: 'vllm', port: 8000 }
-    const sysConf = { debug: false }
+    const vllmConf = { gpu_memory_utilization: 0.9, max_model_len: 4096, max_num_seqs: 16, max_num_batched_tokens: 8192, tensor_parallel_size: 1 }
+    const engConf = {
+      vllm: { command: 'python -m vllm.entrypoints.openai.api_server', default_params: {} },
+      sglang: { command: 'python -m sglang.launch_server', default_params: {} },
+      llama_cpp: { command: 'llama-server', default_params: {} },
+    }
+    const sysConf = {
+      health_check_interval_seconds: 30,
+      cache_ttl_seconds: 60,
+      log_level: 'info',
+      gpu_poll_interval_seconds: 5,
+      ws_push_interval_seconds: 2,
+    }
     getVLLMDefaultConfig.mockResolvedValue(vllmConf)
     getEngineConfig.mockResolvedValue(engConf)
     getSystemConfig.mockResolvedValue(sysConf)

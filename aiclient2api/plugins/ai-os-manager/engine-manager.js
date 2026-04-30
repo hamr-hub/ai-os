@@ -1,5 +1,6 @@
 import logger from '../../utils/logger.js';
 import { backendClient } from './backend-client.js';
+import { normalizeBackendResult } from './api-handler.js';
 
 class EngineManagerService {
     constructor() {
@@ -57,8 +58,7 @@ class EngineManagerService {
     }
 
     _normalizeResult(result) {
-        const field = result.current || result.primary || result.all?.[0] || result;
-        return { ...field, timestamp: new Date().toISOString() };
+        return normalizeBackendResult(result);
     }
 
     getLatestData() {

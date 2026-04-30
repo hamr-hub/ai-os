@@ -1045,6 +1045,20 @@
         };
         let gpuInterval;
 
+        function getAdminToken() {
+            try { return localStorage.getItem('aios_admin_token') || ''; } catch(e) { return ''; }
+        }
+
+        function adminFetch(url, options) {
+            options = options || {};
+            var token = getAdminToken();
+            if (token) {
+                options.headers = options.headers || {};
+                options.headers['X-Admin-Token'] = token;
+            }
+            return fetch(url, options);
+        }
+
         function switchTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -1076,13 +1090,13 @@
 
         function formatMemory(value) {
             const num = Number(value);
-            if (!Number.isFinite(num) || num <= 0) return 'N/A';
+            if (!Number.isFinite(num) || num <= 0) return '--';
             return (num / 1024 / 1024 / 1024).toFixed(1) + ' GB';
         }
 
         function formatMetricValue(value, unit = '') {
             const num = Number(value);
-            if (!Number.isFinite(num)) return 'N/A';
+            if (!Number.isFinite(num)) return '--';
             return num.toFixed(1) + unit;
         }
 
@@ -1215,7 +1229,7 @@
 
         async function loadGPUData() {
             try {
-                const response = await fetch('/api/gpu-monitor');
+                const response = await adminFetch('/api/gpu-monitor');
                 const result = await response.json();
                 if (!result.success) {
                     document.getElementById('gpu-error').innerHTML = `<div class="error">加载失败: ${result.error}</div>`;
@@ -1225,7 +1239,7 @@
                 refreshMonitorStatus(result);
                 const grid = document.getElementById('gpu-grid');
                 if (result.data.length === 0) {
-                    grid.innerHTML = '<div class="loading">未检测到 GPU 设备</div>';
+                    grid.innerHTML = '<div class="loading"><i class="fas fa-desktop" style="font-size: 2em; margin-bottom: 12px; display: block; opacity: 0.5;"></i>未检测到 GPU 设备</div>';
                     return;
                 }
                 const history = Array.isArray(result.history) ? result.history : [];
@@ -1241,7 +1255,7 @@
                         </h3>
                         <div class="metric">
                             <div class="metric-label">GPU 使用率</div>
-                            <div class="metric-value">${gpu.gpuUtilization !== null ? gpu.gpuUtilization.toFixed(1) + '%' : 'N/A'}</div>
+                            <div class="metric-value">${gpu.gpuUtilization !== null ? gpu.gpuUtilization.toFixed(1) + '%' : '--'}</div>
                             ${gpu.gpuUtilization !== null ? `
                                 <div class="progress-track">
                                     <div class="progress-fill ${getProgressColor(clampPercent(gpu.gpuUtilization))}" style="width: ${clampPercent(gpu.gpuUtilization)}%"></div>
@@ -1251,7 +1265,7 @@
                         <div class="metric">
                             <div class="metric-label">显存使用</div>
                             <div class="metric-value">
-                                ${gpu.memoryUsed !== null && gpu.memoryTotal !== null ? `${memoryUsed} / ${memoryTotal}` : 'N/A'}
+                                ${gpu.memoryUsed !== null && gpu.memoryTotal !== null ? `${memoryUsed} / ${memoryTotal}` : '--'}
                             </div>
                             ${gpu.memoryUsagePercent !== null ? `
                                 <div class="progress-track">
@@ -1261,7 +1275,7 @@
                         </div>
                         <div class="metric">
                             <div class="metric-label">温度</div>
-                            <div class="metric-value">${gpu.temperature !== null ? gpu.temperature + '°C' : 'N/A'}</div>
+                            <div class="metric-value">${gpu.temperature !== null ? gpu.temperature + '°C' : '--'}</div>
                             ${gpu.temperature !== null ? `
                                 <div class="progress-track">
                                     <div class="progress-fill ${getProgressColor(clampPercent(gpu.temperature))}" style="width: ${Math.min(gpu.temperature, 100)}%"></div>
@@ -1271,7 +1285,7 @@
                         <div class="metric">
                             <div class="metric-label">功耗</div>
                             <div class="metric-value">
-                                ${gpu.powerDraw !== null && gpu.powerLimit !== null ? gpu.powerDraw.toFixed(1) + 'W / ' + gpu.powerLimit.toFixed(1) + 'W' : 'N/A'}
+                                ${gpu.powerDraw !== null && gpu.powerLimit !== null ? gpu.powerDraw.toFixed(1) + 'W / ' + gpu.powerLimit.toFixed(1) + 'W' : '--'}
                             </div>
                             ${powerPercent !== null ? `
                                 <div class="progress-track">
@@ -1281,7 +1295,7 @@
                         </div>
                         <div class="metric">
                             <div class="metric-label">显存带宽使用率</div>
-                            <div class="metric-value">${gpu.memoryUtilization !== null ? gpu.memoryUtilization.toFixed(1) + '%' : 'N/A'}</div>
+                            <div class="metric-value">${gpu.memoryUtilization !== null ? gpu.memoryUtilization.toFixed(1) + '%' : '--'}</div>
                         </div>
                         ${buildChartSection(gpu, index, history)}
                     </div>
@@ -1299,7 +1313,7 @@
         async function updateInterval() {
             const interval = parseInt(document.getElementById('refresh-interval').value);
             try {
-                const response = await fetch('/api/gpu-monitor/interval', {
+                const response = await adminFetch('/api/gpu-monitor/interval', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ interval })
@@ -1318,7 +1332,7 @@
         }
 
         async function toggleMonitoring() {
-            const status = await fetch('/api/gpu-monitor/status').then(r => r.json());
+            const status = await adminFetch('/api/gpu-monitor/status').then(r => r.json());
             const isMonitoring = status.isMonitoring;
             try {
                 const endpoint = isMonitoring ? '/api/gpu-monitor/stop' : '/api/gpu-monitor/start';
@@ -1332,7 +1346,7 @@
 
         async function loadModelData() {
             try {
-                const response = await fetch('/api/model-switch/models');
+                const response = await adminFetch('/api/model-switch/models');
                 const result = await response.json();
                 if (!result.success) {
                     document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${result.error}</div>`;
@@ -1346,7 +1360,7 @@
                 document.getElementById('model-status-text').textContent = result.currentModel ? `当前模型: ${result.currentModel}` : '已加载模型数据';
 
                 if (!result.groups || result.groups.length === 0) {
-                    list.innerHTML = '<div class="loading">未找到模型</div>';
+                    list.innerHTML = '<div class="loading"><i class="fas fa-cube" style="font-size: 2em; margin-bottom: 12px; display: block; opacity: 0.5;"></i>暂无可用的模型</div>';
                     return;
                 }
 
@@ -1631,7 +1645,7 @@
                     return;
                 }
 
-                fetch('/api/model-switch/switch-status', { signal: pollingController.signal })
+                adminFetch('/api/model-switch/switch-status', { signal: pollingController.signal })
                     .then(r => r.json())
                     .then(result => {
                         if (result.success && result.data) {
@@ -1653,7 +1667,7 @@
                 return;
             }
 
-            fetch('/api/model-switch/cancel', {
+            adminFetch('/api/model-switch/cancel', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ session_id: currentSwitchSession.session_id })
@@ -1690,7 +1704,7 @@
             updateSwitchStep(1, 'active');
 
             try {
-                const response = await fetch('/api/model-switch/switch', {
+                const response = await adminFetch('/api/model-switch/switch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ modelName })
@@ -1717,7 +1731,7 @@
 
         async function loadProviderData() {
             try {
-                const response = await fetch('/api/model-switch/providers');
+                const response = await adminFetch('/api/model-switch/providers');
                 const result = await response.json();
                 if (!result.success) {
                     document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${result.error}</div>`;
@@ -1726,7 +1740,7 @@
                 document.getElementById('model-error').innerHTML = '';
                 const list = document.getElementById('provider-list');
                 if (result.data.length === 0) {
-                    list.innerHTML = '<div class="loading">未找到 Provider 配置</div>';
+                    list.innerHTML = '<div class="loading"><i class="fas fa-server" style="font-size: 2em; margin-bottom: 12px; display: block; opacity: 0.5;"></i>暂无 Provider 配置</div>';
                     return;
                 }
                 list.innerHTML = result.data.map(provider => {
@@ -1757,7 +1771,7 @@
                                 </div>
                                 <div class="detail-item">
                                     <div class="detail-label">最后健康检查</div>
-                                    <div class="detail-value">${provider.lastHealthCheck ? formatTimestamp(provider.lastHealthCheck) : 'N/A'}</div>
+                                    <div class="detail-value">${provider.lastHealthCheck ? formatTimestamp(provider.lastHealthCheck) : '从未'}</div>
                                 </div>
                                 <div class="detail-item">
                                     <div class="detail-label">UUID</div>
@@ -1785,7 +1799,7 @@
                 return;
             }
             try {
-                const response = await fetch('/api/model-switch/switch', {
+                const response = await adminFetch('/api/model-switch/switch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ provider, customName, newModel })
@@ -1807,7 +1821,7 @@
 
         async function refreshProvider(provider, customName) {
             try {
-                const response = await fetch('/api/model-switch/refresh', {
+                const response = await adminFetch('/api/model-switch/refresh', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ provider, customName })

@@ -112,6 +112,7 @@
                 var sectionId = navItem.dataset.section;
                 var section = document.getElementById(sectionId);
                 if (section) section.style.display = 'block';
+                _activeSection = sectionId;
                 loadData(sectionId);
             });
         });
@@ -129,6 +130,10 @@
             options.headers['X-Admin-Token'] = token;
         }
         return fetch(url, options);
+    }
+
+    function escapeHtml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     function loadData(sectionId) {
@@ -154,9 +159,9 @@
             return r.json();
         }).then(function(data) {
             if (!data) return;
-            el.innerHTML = '<pre class="aios-data-pre">' + JSON.stringify(data, null, 2) + '</pre>';
+            el.innerHTML = '<pre class="aios-data-pre">' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>';
         }).catch(function(err) {
-            el.innerHTML = '<p class="aios-error">错误: ' + err.message + '</p>';
+            el.innerHTML = '<p class="aios-error">错误: ' + escapeHtml(err.message) + '</p>';
         });
     }
 
@@ -168,11 +173,27 @@
         }
     }
 
+    var _activeSection = null;
+    var _refreshTimer = null;
+    var REFRESH_INTERVAL = 5000;
+
     function init() {
         injectStyles();
         if (injectMenuItems() && injectSections()) {
             initNavigation();
+            startAutoRefresh();
         }
+    }
+
+    function startAutoRefresh() {
+        stopAutoRefresh();
+        _refreshTimer = setInterval(function() {
+            if (_activeSection) loadData(_activeSection);
+        }, REFRESH_INTERVAL);
+    }
+
+    function stopAutoRefresh() {
+        if (_refreshTimer) { clearInterval(_refreshTimer); _refreshTimer = null; }
     }
 
     function tryInit() {

@@ -60,7 +60,7 @@ describe('useGPUMemoryCheck', () => {
   it('checkModel失败返回null并设置error', async () => {
     checkModelMemory.mockRejectedValue(new Error('显存不足'))
 
-    const { checkModel, error, checkResult: checkRef } = useGPUMemoryCheck()
+    const { checkModel, error } = useGPUMemoryCheck()
     const returned = await checkModel('huge-model')
 
     expect(returned).toBeNull()
