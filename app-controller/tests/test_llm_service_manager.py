@@ -41,9 +41,9 @@ class TestBuildCommandVLLM:
         cmd = mgr.build_command("Qwen3-235B", "vllm", 8000)
         assert cmd[0] == "vllm"
         assert "serve" in cmd
-        assert "vllm" in " ".join(cmd)
-        assert "/mnt/pve_models/Qwen3-235B" in " ".join(cmd)
-        assert "--port" in " ".join(cmd)
+        cmd_str = " ".join(cmd)
+        assert "/mnt/pve_models/Qwen3-235B" in cmd_str
+        assert "--port" in cmd_str
 
     def test_vllm_command_with_model_path(self):
         mgr = _make_manager()

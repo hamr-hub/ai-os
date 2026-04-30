@@ -114,10 +114,10 @@ const formatDefault = (param: EngineParamDef): string => {
         <span class="model-label">{{ modelName }}</span>
       </div>
       <div class="header-actions">
-        <button class="btn btn-ghost btn-sm" @click="resetToDefaults" title="重置为默认值">
+        <button class="btn btn-ghost btn-sm" title="重置为默认值" @click="resetToDefaults">
           <RotateCcw class="w-3.5 h-3.5" /> 默认值
         </button>
-        <button class="btn btn-ghost btn-sm" @click="resetParams" title="撤销修改">
+        <button class="btn btn-ghost btn-sm" title="撤销修改" @click="resetParams">
           <RotateCcw class="w-3.5 h-3.5" /> 撤销
         </button>
         <button class="btn btn-primary btn-sm" :disabled="!dirty || saving" @click="saveParams">
@@ -158,12 +158,12 @@ const formatDefault = (param: EngineParamDef): string => {
                 <Info v-if="param.note" class="w-3 h-3 text-muted inline" :title="param.note" />
               </label>
               <span class="param-desc">{{ param.description }}</span>
-              <span class="param-cli" v-if="param.cli_arg">CLI: {{ param.cli_arg }}</span>
+              <span v-if="param.cli_arg" class="param-cli">CLI: {{ param.cli_arg }}</span>
             </div>
 
             <div class="param-input">
               <template v-if="param.type === 'bool'">
-                <select :value="getParamValue(param)" @change="setParamValue(param, ($event.target as HTMLSelectElement).value === 'true')" class="param-select">
+                <select :value="getParamValue(param)" class="param-select" @change="setParamValue(param, ($event.target as HTMLSelectElement).value === 'true')">
                   <option value="undefined">默认({{ formatDefault(param) }})</option>
                   <option value="true">true</option>
                   <option value="false">false</option>
@@ -171,7 +171,7 @@ const formatDefault = (param: EngineParamDef): string => {
               </template>
 
               <template v-else-if="param.choices && param.choices.length > 0">
-                <select :value="getParamValue(param) ?? ''" @change="setParamValue(param, ($event.target as HTMLSelectElement).value || null)" class="param-select">
+                <select :value="getParamValue(param) ?? ''" class="param-select" @change="setParamValue(param, ($event.target as HTMLSelectElement).value || null)">
                   <option value="">默认({{ formatDefault(param) }})</option>
                   <option v-for="choice in param.choices" :key="choice" :value="choice">{{ choice }}</option>
                 </select>
@@ -184,9 +184,9 @@ const formatDefault = (param: EngineParamDef): string => {
                   :min="param.min"
                   :max="param.max"
                   :step="param.type === 'float' ? 0.01 : 1"
-                  @input="setParamValue(param, ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value))"
                   class="param-number"
                   placeholder="默认"
+                  @input="setParamValue(param, ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value))"
                 />
               </template>
 
@@ -194,9 +194,9 @@ const formatDefault = (param: EngineParamDef): string => {
                 <input
                   type="text"
                   :value="getParamValue(param) ?? ''"
-                  @input="setParamValue(param, ($event.target as HTMLInputElement).value === '' ? null : ($event.target as HTMLInputElement).value)"
                   class="param-text"
                   placeholder="默认"
+                  @input="setParamValue(param, ($event.target as HTMLInputElement).value === '' ? null : ($event.target as HTMLInputElement).value)"
                 />
               </template>
 

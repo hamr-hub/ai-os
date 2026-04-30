@@ -143,7 +143,7 @@ const poolStats = computed(() => {
     <div v-if="poolError || serviceError" class="error-banner">
       <AlertTriangle class="w-4 h-4" />
       {{ poolError || serviceError }}
-      <button class="btn btn-sm btn-ghost" @click="handleRefresh" style="margin-left:auto">
+      <button class="btn btn-sm btn-ghost" style="margin-left:auto" @click="handleRefresh">
         <RefreshCw class="w-3.5 h-3.5" /> 重试
       </button>
     </div>

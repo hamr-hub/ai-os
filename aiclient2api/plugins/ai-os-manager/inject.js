@@ -13,46 +13,48 @@
 
     var sectionHTML = '\
 <div id="aios-gpu" class="section" data-section="aios-gpu" style="display: none;">\
-    <div class="section-header"><h2>GPU Monitor</h2></div>\
+    <div class="section-header"><h2>GPU监控</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-gpu-content"><p>Loading GPU data...</p></div>\
+        <div id="aios-gpu-content"><p>正在加载GPU数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-switch" class="section" data-section="aios-switch" style="display: none;">\
-    <div class="section-header"><h2>Model Switch</h2></div>\
+    <div class="section-header"><h2>模型切换</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-switch-content"><p>Loading model data...</p></div>\
+        <div id="aios-switch-content"><p>正在加载模型数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-engine" class="section" data-section="aios-engine" style="display: none;">\
-    <div class="section-header"><h2>Engine Manager</h2></div>\
+    <div class="section-header"><h2>引擎管理</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-engine-content"><p>Loading engine data...</p></div>\
+        <div id="aios-engine-content"><p>正在加载引擎数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-config" class="section" data-section="aios-config" style="display: none;">\
-    <div class="section-header"><h2>Config Center</h2></div>\
+    <div class="section-header"><h2>配置中心</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-config-content"><p>Loading config data...</p></div>\
+        <div id="aios-config-content"><p>正在加载配置数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-health" class="section" data-section="aios-health" style="display: none;">\
-    <div class="section-header"><h2>Health Ops</h2></div>\
+    <div class="section-header"><h2>健康运维</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-health-content"><p>Loading health data...</p></div>\
+        <div id="aios-health-content"><p>正在加载健康数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-ratelimit" class="section" data-section="aios-ratelimit" style="display: none;">\
-    <div class="section-header"><h2>Rate Limit</h2></div>\
+    <div class="section-header"><h2>限流控制</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-ratelimit-content"><p>Loading rate limit data...</p></div>\
+        <div id="aios-ratelimit-content"><p>正在加载限流数据...</p></div>\
     </div>\
+</div>';'}]}]}]
 </div>';
+
 
     function injectStyles() {
         if (document.getElementById(STYLE_ID)) return true;
@@ -68,12 +70,12 @@
         if (!nav) return false;
 
         var items = [
-            { id: MENU_IDS.gpu, section: 'aios-gpu', icon: 'fa-microchip', label: 'GPU Monitor' },
-            { id: MENU_IDS.switch, section: 'aios-switch', icon: 'fa-exchange-alt', label: 'Model Switch' },
-            { id: MENU_IDS.engine, section: 'aios-engine', icon: 'fa-bolt', label: 'Engine Mgr' },
-            { id: MENU_IDS.config, section: 'aios-config', icon: 'fa-cog', label: 'Config' },
-            { id: MENU_IDS.health, section: 'aios-health', icon: 'fa-heartbeat', label: 'Health' },
-            { id: MENU_IDS.ratelimit, section: 'aios-ratelimit', icon: 'fa-tachometer-alt', label: 'Rate Limit' },
+            { id: MENU_IDS.gpu, section: 'aios-gpu', icon: 'fa-microchip', label: 'GPU监控' },
+            { id: MENU_IDS.switch, section: 'aios-switch', icon: 'fa-exchange-alt', label: '模型切换' },
+            { id: MENU_IDS.engine, section: 'aios-engine', icon: 'fa-bolt', label: '引擎管理' },
+            { id: MENU_IDS.config, section: 'aios-config', icon: 'fa-cog', label: '配置中心' },
+            { id: MENU_IDS.health, section: 'aios-health', icon: 'fa-heartbeat', label: '健康运维' },
+            { id: MENU_IDS.ratelimit, section: 'aios-ratelimit', icon: 'fa-tachometer-alt', label: '限流控制' },
         ];
 
         var anchor = document.getElementById('nav-plugins');

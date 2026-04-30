@@ -6,7 +6,12 @@ import pytest
 import requests
 import json
 import time
-import websocket as ws_lib
+
+try:
+    import websocket as ws_lib
+    HAS_WEBSOCKET = True
+except ImportError:
+    HAS_WEBSOCKET = False
 
 GO_BASE = "http://localhost:35001"
 PY_BASE = "http://localhost:35000"
@@ -78,6 +83,8 @@ class TestHealthCheck:
 
 class TestWebSocket:
     def test_ws_gpu_push(self):
+        if not HAS_WEBSOCKET:
+            pytest.skip("websocket-client module not installed")
         messages = []
         try:
             conn = ws_lib.create_connection(f"ws://localhost:35001/ws", timeout=15)

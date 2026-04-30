@@ -13,6 +13,8 @@ import {
   ChevronDown,
   Settings,
   Wrench,
+  Paperclip,
+  X,
 } from 'lucide-vue-next'
 import {
   chatCompletionStream,
@@ -22,19 +24,29 @@ import {
 } from '@/api/client'
 import { useModels } from '@/composables/useModels'
 import { useAppStore } from '@/stores/app'
-import { useAgentChatStore, type Message, type ToolInvocation } from '@/stores/agentChat'
+import {
+  useAgentChatStore,
+  type Message,
+  type ToolInvocation,
+} from '@/stores/agentChat'
 import { useServerStore } from '@/stores/server'
 import { renderMarkdown } from '@/composables/useMarkdown'
 import { getConnectionIssueMessage } from '@/utils/connection'
+import type { ChatContentPart, MessageAttachment } from '@/types'
 
 const { modelList, defaultModel } = useModels()
 const appStore = useAppStore()
 const agentChatStore = useAgentChatStore()
 const serverStore = useServerStore()
 
+const MAX_ATTACHMENTS = 4
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
 const inputMessage = ref('')
 const isLoading = ref(false)
 const chatContainer = ref<HTMLElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const streamingMessageId = ref<string | null>(null)
 const abortController = ref<AbortController | null>(null)
 const copiedId = ref<string | null>(null)
@@ -45,6 +57,9 @@ const systemPromptInput = ref('')
 const showScrollBottom = ref(false)
 const isAutoScrolling = ref(true)
 const enableTools = ref(false)
+const pendingAttachments = ref<MessageAttachment[]>([])
+const isDraggingOver = ref(false)
+const viewerImageUrl = ref<string | null>(null)
 
 const currentConv = computed(() => agentChatStore.currentConversation)
 const messages = computed(() => currentConv.value?.messages || [])
@@ -59,6 +74,7 @@ const activeModel = computed(
 )
 const activeModelInfo = computed(() => modelList.value.find((m) => m.name === activeModel.value) || null)
 const activeModelIsRunning = computed(() => activeModelInfo.value?.running ?? false)
+const activeModelSupportsImages = computed(() => activeModelInfo.value?.supports_images ?? false)
 const streamTarget = computed(() => (enableTools.value ? 'manage' : 'inference'))
 const streamConnectionIssue = computed(() =>
   getConnectionIssueMessage(
@@ -102,10 +118,8 @@ const handleScroll = () => {
   const { scrollTop, scrollHeight, clientHeight } = chatContainer.value
   const distanceToBottom = scrollHeight - scrollTop - clientHeight
 
-  // 向上滚动超过 200px 显示按钮
   showScrollBottom.value = distanceToBottom > 200
 
-  // 如果用户手动向上滚动，停止自动跟随
   if (isLoading.value && distanceToBottom > 20) {
     isAutoScrolling.value = false
   } else if (distanceToBottom < 10) {
@@ -240,11 +254,157 @@ const appendStreamingNote = (note: string) => {
   nextTick(() => scrollToBottom(true))
 }
 
+const triggerFileSelect = () => {
+  fileInputRef.value?.click()
+}
+
+const resetFileInput = () => {
+  if (fileInputRef.value) {
+    fileInputRef.value.value = ''
+  }
+}
+
+const formatAttachmentSize = (sizeBytes: number) => {
+  if (sizeBytes >= 1024 * 1024) {
+    return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
+  }
+  return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`
+}
+
+const fileToDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error(`读取文件失败：${file.name}`))
+    reader.readAsDataURL(file)
+  })
+
+const createThumbnail = (dataUrl: string, mimeType: string) =>
+  new Promise<string>((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const maxEdge = 240
+      const scale = Math.min(maxEdge / img.width, maxEdge / img.height, 1)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(img.width * scale))
+      canvas.height = Math.max(1, Math.round(img.height * scale))
+      const context = canvas.getContext('2d')
+      if (!context) {
+        resolve(dataUrl)
+        return
+      }
+      context.drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL(mimeType === 'image/png' ? 'image/png' : 'image/jpeg', 0.82))
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+
+const normalizeFiles = (files: FileList | File[] | null | undefined) =>
+  files ? Array.from(files).filter((file) => file.type.startsWith('image/')) : []
+
+const handleFilesSelected = async (files: FileList | File[] | null | undefined) => {
+  const selectedFiles = normalizeFiles(files)
+  if (!selectedFiles.length) {
+    resetFileInput()
+    return
+  }
+
+  const availableSlots = MAX_ATTACHMENTS - pendingAttachments.value.length
+  const filesToProcess = selectedFiles.slice(0, Math.max(availableSlots, 0))
+
+  if (availableSlots <= 0) {
+    appStore.warning(`最多上传 ${MAX_ATTACHMENTS} 张图片`)
+    resetFileInput()
+    return
+  }
+
+  if (selectedFiles.length > filesToProcess.length) {
+    appStore.warning(`最多上传 ${MAX_ATTACHMENTS} 张图片`)
+  }
+
+  for (const file of filesToProcess) {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      appStore.warning(`不支持的图片格式：${file.name}`)
+      continue
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      appStore.warning(`图片不能超过 10MB：${file.name}`)
+      continue
+    }
+
+    try {
+      const dataUrl = await fileToDataUrl(file)
+      const thumbnailUrl = await createThumbnail(dataUrl, file.type)
+      pendingAttachments.value.push({
+        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        dataUrl,
+        thumbnailUrl,
+        mimeType: file.type,
+        name: file.name,
+        sizeBytes: file.size,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `读取图片失败：${file.name}`
+      appStore.warning(message)
+    }
+  }
+
+  resetFileInput()
+}
+
+const removePendingAttachment = (id: string) => {
+  pendingAttachments.value = pendingAttachments.value.filter((attachment) => attachment.id !== id)
+}
+
+const openImageViewer = (url: string) => {
+  viewerImageUrl.value = url
+}
+
+const closeImageViewer = () => {
+  viewerImageUrl.value = null
+}
+
+const handlePaste = async (event: ClipboardEvent) => {
+  const items = event.clipboardData?.items
+  if (!items?.length) return
+
+  const files = Array.from(items).reduce<File[]>((acc, item) => {
+    if (item.kind !== 'file') return acc
+    const file = item.getAsFile()
+    if (file && file.type.startsWith('image/')) {
+      acc.push(file)
+    }
+    return acc
+  }, [])
+
+  if (!files.length) return
+
+  event.preventDefault()
+  await handleFilesSelected(files)
+}
+
+const handleDrop = async (event: DragEvent) => {
+  isDraggingOver.value = false
+  await handleFilesSelected(event.dataTransfer?.files)
+}
+
+const toMessageContent = (message: Message): string | ChatContentPart[] => {
+  return message.contentParts?.length ? message.contentParts : message.content
+}
+
 const handleSend = async () => {
-  if (!inputMessage.value.trim() || isLoading.value || !currentConv.value) return
+  const hasText = Boolean(inputMessage.value.trim())
+  const hasAttachments = pendingAttachments.value.length > 0
+  if ((!hasText && !hasAttachments) || isLoading.value || !currentConv.value) return
 
   if (!activeModel.value) {
     appStore.warning('当前没有可用模型，请先启动模型或设置默认模型')
+    return
+  }
+
+  if (hasAttachments && !activeModelSupportsImages.value) {
+    appStore.warning('当前模型不支持图片输入，请切换到多模态模型')
     return
   }
 
@@ -259,8 +419,11 @@ const handleSend = async () => {
   }
 
   const userMessage = inputMessage.value.trim()
+  const attachments = pendingAttachments.value.map((attachment) => ({ ...attachment }))
   inputMessage.value = ''
-  addMessage('user', userMessage)
+  pendingAttachments.value = []
+  agentChatStore.addMessageWithAttachments(currentConv.value.id, 'user', userMessage, attachments)
+  nextTick(() => scrollToBottom(true))
   isLoading.value = true
   isAutoScrolling.value = true
 
@@ -283,12 +446,12 @@ const handleSend = async () => {
       .filter((m) => m.role !== 'system')
       .slice(0, -1)
       .forEach((m) => {
-        apiMessages.push({ role: m.role, content: m.content })
-        agentMessages.push({ role: m.role, content: m.content })
+        const content = toMessageContent(m)
+        apiMessages.push({ role: m.role, content })
+        agentMessages.push({ role: m.role, content })
       })
 
     if (enableTools.value) {
-      // Agent mode with tool calling
       await agentChatStream(
         {
           model: activeModel.value || undefined,
@@ -297,7 +460,6 @@ const handleSend = async () => {
           auto_confirm: false,
         },
         (data) => {
-          // Handle different event types
           const typedData = data as Record<string, unknown>
           const type = typedData.type as string | undefined
 
@@ -353,7 +515,6 @@ const handleSend = async () => {
               }
             })
           } else if (typedData.choices && Array.isArray(typedData.choices)) {
-            // Regular streaming content
             const delta = typedData.choices[0]?.delta as { content?: string } | undefined
             if (delta?.content) {
               updateStreamingMessage((msg) => {
@@ -374,7 +535,6 @@ const handleSend = async () => {
         abortController.value.signal
       )
     } else {
-      // Normal chat mode
       await chatCompletionStream(
         {
           model: activeModel.value || undefined,
@@ -434,6 +594,7 @@ const formatTime = (date: Date) => {
 
 const handleNewChat = () => {
   agentChatStore.createConversation('新会话', activeModel.value || null)
+  pendingAttachments.value = []
   systemPromptInput.value = ''
 }
 
@@ -499,7 +660,10 @@ const autoResize = (event: Event) => {
               @click.stop="selectModel(m.name)"
             >
               <span class="picker-dot" :class="m.running ? 'online' : 'offline'"></span>
-              {{ m.name }}
+              <div class="picker-meta">
+                <span>{{ m.name }}</span>
+                <span v-if="m.supports_images" class="picker-tag">视觉</span>
+              </div>
               <Check v-if="m.name === activeModel" class="w-3.5 h-3.5" />
             </div>
             <div v-if="!selectableModelList.length" class="picker-empty">暂无可用模型</div>
@@ -548,11 +712,20 @@ const autoResize = (event: Event) => {
         <span class="banner-text">{{ streamConnectionIssue }}</span>
       </div>
 
-      <div ref="chatContainer" class="messages-area scrollbar-thin" @scroll="handleScroll">
+      <div
+        ref="chatContainer"
+        class="messages-area scrollbar-thin"
+        :class="{ 'drag-over': isDraggingOver }"
+        @scroll="handleScroll"
+        @dragover.prevent="isDraggingOver = true"
+        @dragleave.prevent="isDraggingOver = false"
+        @drop.prevent="handleDrop"
+      >
         <div v-if="messages.length === 0" class="msg-empty">
           <Bot class="w-8 h-8 opacity-40" />
           <p>发送消息开始对话</p>
           <p class="sub">支持多轮对话，Agent 会记住上下文</p>
+          <p class="sub">支持图片上传、拖拽和粘贴</p>
         </div>
 
         <div
@@ -583,12 +756,31 @@ const autoResize = (event: Event) => {
                 'bubble-sys': message.role === 'system',
               }"
             >
-              <div
-                v-if="message.role === 'assistant'"
-                class="msg-text markdown-body"
-                v-html="renderMarkdown(message.content)"
-              ></div>
-              <p v-else class="msg-text">{{ message.content }}</p>
+              <template v-if="message.role === 'assistant'">
+                <div
+                  class="msg-text markdown-body"
+                  v-html="renderMarkdown(message.content)"
+                ></div>
+              </template>
+              <template v-else>
+                <p v-if="message.content" class="msg-text">{{ message.content }}</p>
+                <div v-if="message.attachments?.length" class="message-attachments">
+                  <button
+                    v-for="attachment in message.attachments"
+                    :key="attachment.id"
+                    class="message-image-btn"
+                    type="button"
+                    @click="attachment.dataUrl && openImageViewer(attachment.dataUrl)"
+                  >
+                    <img
+                      :src="attachment.thumbnailUrl || attachment.dataUrl"
+                      :alt="attachment.name"
+                      class="message-image"
+                    />
+                    <span class="message-image-name">{{ attachment.name }}</span>
+                  </button>
+                </div>
+              </template>
 
               <div
                 v-if="message.toolInvocations?.length || (message.toolPhase && message.toolPhase !== 'idle')"
@@ -666,7 +858,6 @@ const autoResize = (event: Event) => {
           <span>正在思考...</span>
         </div>
 
-        <!-- 滚动到底部按钮 -->
         <Transition name="fade">
           <button
             v-if="showScrollBottom"
@@ -680,19 +871,58 @@ const autoResize = (event: Event) => {
       </div>
 
       <div class="input-area">
+        <div v-if="pendingAttachments.length" class="attachment-list">
+          <div
+            v-for="attachment in pendingAttachments"
+            :key="attachment.id"
+            class="attachment-chip"
+          >
+            <img
+              :src="attachment.thumbnailUrl || attachment.dataUrl"
+              :alt="attachment.name"
+              class="attachment-thumb"
+            />
+            <div class="attachment-meta">
+              <span class="attachment-name">{{ attachment.name }}</span>
+              <span class="attachment-size">{{ formatAttachmentSize(attachment.sizeBytes) }}</span>
+            </div>
+            <button class="attachment-remove" type="button" @click="removePendingAttachment(attachment.id)">
+              <X class="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
         <div class="input-row">
+          <input
+            ref="fileInputRef"
+            class="hidden-file-input"
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            multiple
+            @change="handleFilesSelected(($event.target as HTMLInputElement).files)"
+          />
+          <button
+            class="attach-btn"
+            type="button"
+            :disabled="isLoading"
+            title="上传图片"
+            @click="triggerFileSelect"
+          >
+            <Paperclip class="w-4 h-4" />
+          </button>
           <textarea
             v-model="inputMessage"
-            placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
+            placeholder="输入消息... (Enter 发送，Shift+Enter 换行，支持粘贴图片)"
             class="msg-input scrollbar-thin"
             :disabled="isLoading"
             rows="1"
             @keydown="handleKeyPress"
             @input="autoResize"
+            @paste="handlePaste"
           ></textarea>
           <button
             v-if="!isLoading"
-            :disabled="!inputMessage.trim()"
+            :disabled="!inputMessage.trim() && !pendingAttachments.length"
             class="send-btn"
             title="发送"
             @click="handleSend"
@@ -707,12 +937,23 @@ const autoResize = (event: Event) => {
           <span v-if="activeModel" class="model-info">
             <span class="model-dot" :class="activeModelIsRunning ? 'online' : 'offline'"></span>
             {{ activeModel }}
+            <span v-if="activeModelSupportsImages" class="image-capability">支持图片</span>
+            <span v-else>仅文本</span>
             <span v-if="!activeModelIsRunning">未运行</span>
           </span>
           <span v-else class="model-warn">请先选择或启动模型</span>
         </div>
       </div>
     </template>
+
+    <Teleport to="body">
+      <div v-if="viewerImageUrl" class="image-viewer" @click="closeImageViewer">
+        <button class="viewer-close" type="button" @click.stop="closeImageViewer">
+          <X class="w-5 h-5" />
+        </button>
+        <img :src="viewerImageUrl" alt="preview" class="viewer-image" @click.stop />
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -844,6 +1085,19 @@ const autoResize = (event: Event) => {
 }
 .picker-item.active {
   color: #6366f1;
+}
+.picker-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+.picker-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.14);
+  color: #60a5fa;
+  font-size: 10px;
 }
 .picker-dot {
   width: 6px;
@@ -998,6 +1252,12 @@ const autoResize = (event: Event) => {
   overflow-y: auto;
   padding: 16px;
   position: relative;
+  transition: background 0.2s, outline-color 0.2s;
+}
+.messages-area.drag-over {
+  background: rgba(99, 102, 241, 0.05);
+  outline: 2px dashed rgba(99, 102, 241, 0.45);
+  outline-offset: -6px;
 }
 
 .msg-empty {
@@ -1074,6 +1334,38 @@ const autoResize = (event: Event) => {
 
 .msg-text {
   white-space: pre-wrap;
+}
+.message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.message-image-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  color: inherit;
+}
+.message-image {
+  width: 112px;
+  height: 112px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.message-image-name {
+  max-width: 112px;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tool-calls-block {
@@ -1267,10 +1559,90 @@ const autoResize = (event: Event) => {
   border-top: 1px solid var(--border-primary);
   background: var(--bg-card);
 }
+.attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px 8px 8px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+}
+.attachment-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.attachment-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.attachment-name {
+  max-width: 180px;
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachment-size {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.attachment-remove {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.attachment-remove:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
 .input-row {
   display: flex;
   gap: 10px;
   align-items: flex-end;
+}
+.hidden-file-input {
+  display: none;
+}
+.attach-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.attach-btn:hover:not(:disabled) {
+  border-color: #6366f1;
+  color: #6366f1;
+}
+.attach-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .msg-input {
@@ -1339,8 +1711,47 @@ const autoResize = (event: Event) => {
   gap: 6px;
   color: var(--text-muted);
 }
+.image-capability {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.14);
+  color: #60a5fa;
+  font-size: 10px;
+}
 .model-warn {
   color: #f59e0b;
+}
+
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(15, 23, 42, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+.viewer-image {
+  max-width: min(92vw, 1200px);
+  max-height: 88vh;
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.45);
+}
+.viewer-close {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 :deep(.markdown-body) {

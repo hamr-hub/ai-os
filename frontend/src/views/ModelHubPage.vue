@@ -228,7 +228,7 @@ const sourceIcon = (source: string) => {
     <div v-if="searchError || downloadError || gpuError" class="error-banner">
       <AlertTriangle class="w-4 h-4" />
       {{ searchError || downloadError || gpuError }}
-      <button class="btn btn-sm btn-ghost" @click="handleSearch" style="margin-left:auto">
+      <button class="btn btn-sm btn-ghost" style="margin-left:auto" @click="handleSearch">
         <RefreshCw class="w-3.5 h-3.5" /> 重试
       </button>
     </div>
