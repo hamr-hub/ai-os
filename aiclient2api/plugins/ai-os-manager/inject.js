@@ -1162,10 +1162,11 @@
                     }
                 });
 
-                adminFetch('/manage/system/status').then(function(r) {
+                adminFetch('/api/health/system-status').then(function(r) {
                     if (!r.ok) return null;
                     return r.json();
-                }).then(function(data) {
+                }).then(function(result) {
+                    var data = result && result.data ? result.data : null;
                     if (data && data.cpu) {
                         var cpuP = data.cpu.percent || 0;
                         document.getElementById('aios-cpu-util').textContent = cpuP + '%';

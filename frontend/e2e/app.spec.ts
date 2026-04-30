@@ -162,27 +162,27 @@ test.describe('导航跳转', () => {
   })
 
   test('点击导航到Agent页面', async ({ page }) => {
-    await page.locator('.nav-item').filter({ hasText: 'Agent' }).click()
+    await page.locator('.nav-item').filter({ hasText: 'AI Agent' }).click()
     await expect(page).toHaveURL(/\/agent/, { timeout: 10000 })
     await expect(page.locator('.agent-view')).toBeVisible({ timeout: 10000 })
   })
 
-  test('点击导航到模型管理页面', async ({ page }) => {
-    await page.locator('.nav-item').filter({ hasText: '模型调度' }).click()
-    await expect(page).toHaveURL(/\/models/, { timeout: 10000 })
-    await expect(page.locator('.model-mgmt')).toBeVisible({ timeout: 10000 })
+  test('点击导航到模型中心页面', async ({ page }) => {
+    await page.locator('.nav-item').filter({ hasText: '模型中心' }).click()
+    await expect(page).toHaveURL(/\/modelcenter/, { timeout: 10000 })
+    await expect(page.locator('.model-center')).toBeVisible({ timeout: 10000 })
   })
 
-  test('点击导航到评测页面', async ({ page }) => {
-    await page.locator('.nav-item').filter({ hasText: '模型评测' }).click()
-    await expect(page).toHaveURL(/\/benchmarks/, { timeout: 10000 })
-    await expect(page.locator('.benchmarks-view')).toBeVisible({ timeout: 10000 })
+  test('点击导航到GPU监控页面', async ({ page }) => {
+    await page.locator('.nav-item').filter({ hasText: 'GPU监控' }).click()
+    await expect(page).toHaveURL(/\/gpumonitor/, { timeout: 10000 })
+    await expect(page.locator('.gpu-monitor')).toBeVisible({ timeout: 10000 })
   })
 
-  test('点击导航到实时监控页面', async ({ page }) => {
-    await page.locator('.nav-item').filter({ hasText: '实时性能' }).click()
-    await expect(page).toHaveURL(/\/monitor/, { timeout: 10000 })
-    await expect(page.locator('.monitor-view')).toBeVisible({ timeout: 10000 })
+  test('点击导航到系统运维页面', async ({ page }) => {
+    await page.locator('.nav-item').filter({ hasText: '系统运维' }).click()
+    await expect(page).toHaveURL(/\/systemops/, { timeout: 10000 })
+    await expect(page.locator('.system-ops')).toBeVisible({ timeout: 10000 })
   })
 
   test('点击导航到文档页面', async ({ page }) => {

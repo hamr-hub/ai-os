@@ -168,6 +168,14 @@ const handleScale = (cardId: string, delta: number) => {
             <HealthAlertCard :health-alert="healthAlert" />
           </div>
 
+          <div class="card queue-card card-glow-blue scale-in stagger-4-5">
+            <div class="scale-controls">
+              <button class="scale-btn" @click="handleScale('queue', 0.1)">+</button>
+              <button class="scale-btn" @click="handleScale('queue', -0.1)">−</button>
+            </div>
+            <RequestQueueCard :queue-status="queueStatus" />
+          </div>
+
           <div class="card gpu-card card-glow-cyan scale-in stagger-5 span-2">
             <div class="scale-controls">
               <button class="scale-btn" @click="handleScale('gpu', 0.1)">+</button>
