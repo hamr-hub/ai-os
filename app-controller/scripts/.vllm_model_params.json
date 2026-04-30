@@ -3,5 +3,7 @@
   "gpu_memory_utilization": 0.9,
   "max_model_len": 40960,
   "max_num_batched_tokens": 16384,
-  "enable_chunked_prefill": true
+  "enable_chunked_prefill": true,
+  "tool_call_parser": "gemma4",
+  "attention_backend": "TRITON_ATTN"
 }
