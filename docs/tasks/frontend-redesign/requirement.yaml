@@ -1,0 +1,146 @@
+taskId: frontend-redesign
+source: docs/agent/prd.md
+gate:
+  verdict: PASS
+  mode: standard
+  p0_missing: []
+  p1_missing:
+    - "灰度/开关策略未定义(内部工具,可接受)"
+    - "多语言支持未定义(内部工具,中文优先,可接受)"
+  open_questions: []
+  risks:
+    - "ModelManagement.vue已达3791行,新增功能可能加剧代码膨胀"
+    - "useGPUMemory composable返回的Ref在模板中需要解构才能正确类型推导"
+  figma_links: []
+  figma_status: not_found
+  ui_spec_source: text_only
+  ambiguity_score:
+    business_goal_clarity: 90
+    interaction_completeness: 85
+    ac_testability: 80
+    data_contract_certainty: 95
+    overall: 85
+
+implementation_context:
+  code_complete: true
+  test_complete: false
+  note: "大部分功能已有基础实现,本次重点是UI重设计+功能完善+TS类型修复"
+  missing_items:
+    - "引擎配置编辑UI(API已存在但无前端UI)"
+    - "SGLang/llama.cpp专项指标展示"
+    - "搜索结果高级过滤器"
+    - "模型池统计概览卡片"
+    - "下载完成→模型池→一键加载无缝流程UX"
+    - "Agent对话图片上传支持"
+
+intent_tree:
+  root: Vue3前端全功能升级
+  branches:
+    - id: intent-1
+      name: 多引擎管理可视化
+      priority: P1
+      acs: [AC-1, AC-6]
+    - id: intent-2
+      name: 模型搜索下载全流程
+      priority: P1
+      acs: [AC-2, AC-3]
+    - id: intent-3
+      name: 模型池统一管理
+      priority: P1
+      acs: [AC-4]
+    - id: intent-4
+      name: Dashboard增强
+      priority: P2
+      acs: [AC-5]
+    - id: intent-5
+      name: 模型调度页完善
+      priority: P1
+      acs: [AC-6]
+    - id: intent-6
+      name: Agent对话优化
+      priority: P2
+      acs: []
+
+acceptance_criteria:
+  - id: AC-1
+    given: "至少一个引擎(vLLM)正在运行模型"
+    when: "管理员在引擎面板点击切换到SGLang引擎"
+    then: "显示4阶段进度(含Phase2.5显存校验)，完成后SGLang引擎运行原模型"
+    testable: true
+  - id: AC-2
+    given: "GPU可用显存>0且后端服务正常运行"
+    when: "管理员输入关键词并选择搜索源"
+    then: "返回搜索结果列表含显存可行性徽章，下载时显示WS实时进度"
+    testable: true
+  - id: AC-3
+    given: "GPU可用显存已知且搜索结果>0"
+    when: "管理员点击显存优选按钮"
+    then: "系统筛选可运行模型并推荐最优，显示推荐模型+GPU信息+候选列表"
+    testable: true
+  - id: AC-4
+    given: "模型池有可用模型且GPU显存足够"
+    when: "管理员选择模型并点击一键加载"
+    then: "系统执行显存校验→引擎启动→就绪验证，成功后模型运行"
+    testable: true
+  - id: AC-5
+    given: "GPU利用率>85%"
+    when: "管理员查看Dashboard"
+    then: "GPU可用显存显示红色告警标识，可用显存数值醒目"
+    testable: true
+  - id: AC-6
+    given: "多引擎后端服务可用"
+    when: "管理员访问模型管理页面"
+    then: "显示当前引擎状态+切换面板+Phase2.5显存校验步骤"
+    testable: true
+
+implicit_requirements:
+  - id: IR-1
+    scenario: "模型下载中断"
+    requirement: "断点续传UI提示(已下载百分比+续传按钮)"
+    severity: P1
+  - id: IR-2
+    scenario: "GPU显存不足加载模型"
+    requirement: "拒绝加载+红色告警+建议可运行模型列表"
+    severity: P0
+  - id: IR-3
+    scenario: "WS连接断开"
+    requirement: "降级到3s轮询+状态指示灯切换(绿→黄→红)"
+    severity: P1
+  - id: IR-4
+    scenario: "后端不可用"
+    requirement: "引擎面板/搜索/下载优雅降级(空状态+错误提示)"
+    severity: P1
+  - id: IR-5
+    scenario: "多下载并行"
+    requirement: "下载队列管理(任务列表+取消+状态)"
+    severity: P2
+
+scope:
+  in_scope:
+    - "Vue3前端所有页面重新设计"
+    - "新增/修改composables"
+    - "新增/修改API client方法(仅前端调用层)"
+    - "路由和导航更新"
+    - "TypeScript类型定义补充"
+  out_of_scope:
+    - "Go后端代码改动"
+    - "Python后端核心逻辑改动"
+    - "aiclient2api插件改动"
+    - "Docker/部署配置改动"
+
+data_interfaces:
+  existing_apis:
+    - getEngineStatus: GET /manage/engine/status
+    - switchEngine: POST /manage/engine/switch
+    - searchModels: GET /manage/models/search
+    - recommendModel: GET /manage/gpu/recommend
+    - checkModelMemory: POST /manage/gpu/memory-check/:model
+    - startDownload: POST /manage/models/download
+    - getDownloadStatus: GET /manage/models/download/:taskId/status
+    - cancelDownload: DELETE /manage/models/download/:taskId
+    - listDownloads: GET /manage/models/downloads
+    - getPoolList: GET /manage/models/pool
+    - loadFromPool: POST /manage/models/pool/:key/load
+    - deleteFromPool: DELETE /manage/models/pool/:key
+    - getGPUSummary: GET /gpu/summary
+    - getGPUMemoryCheck: GET /gpu/memory-check

@@ -184,6 +184,7 @@ async def startup_event(app: FastAPI):
     model_hub.initialize()
     model_pool_manager.scan_and_sync()
     download_task_manager.initialize_semaphore()
+    model_engine_scheduler._sync_config_to_registry()
 
     await scheduler.preload_models()
 

@@ -171,6 +171,30 @@ class GPUMemoryManager:
         headroom = int(_HEADROOM_GB * 1024 ** 3)
         return self._checker.get_best_device_for_model(required_bytes + headroom)
 
+    def get_loaded_models_summary(self) -> List[Dict[str, Any]]:
+        result = []
+        for name, info in self._loaded_models.items():
+            result.append({
+                "name": name,
+                "device_id": info.get("device_id", 0),
+                "estimated_gb": info.get("estimated_gb", 0),
+                "quant": info.get("quant", "fp16"),
+            })
+        return result
+
+    def get_realtime_info(self, device_id: int = 0) -> Optional[Dict[str, Any]]:
+        info = self._checker.get_device_info(device_id)
+        if not info:
+            return None
+        eff_free = self.get_effective_free_bytes(device_id)
+        return {
+            **info.to_dict(),
+            "effective_free_gb": round(eff_free / (1024 ** 3), 2),
+            "loaded_models_count": len(self._loaded_models),
+            "loaded_models_memory_gb": round(self.get_loaded_memory_gb(device_id), 2),
+            "safety_ratio": _SAFETY_RATIO,
+        }
+
     def get_memory_summary(self) -> Dict[str, Any]:
         all_info = self._checker.get_all_devices_info()
         devices = []

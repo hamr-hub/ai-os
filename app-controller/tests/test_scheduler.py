@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from datetime import datetime
 from core.scheduler import Scheduler, _parse_memory_size
 from core.monitor import GPUMonitor
@@ -127,26 +127,38 @@ class TestScheduler:
         assert scheduler.get_model_port("unknown") is None
 
     def test_is_model_running(self, scheduler, mock_sys_controller):
-        mock_sys_controller.get_process_info.return_value = {"pid": 1234}
-        scheduler.running_models.clear()
-        assert scheduler.is_model_running("Gemma-4-31B-Abliterated") is True
-        
-        mock_sys_controller.get_process_info.return_value = None
-        scheduler.running_models.clear()
-        assert scheduler.is_model_running("Gemma-4-31B-Abliterated") is False
+        with patch('core.vllm_manager.get_current_model_info', return_value={'running': True, 'name': 'Gemma-4-31B-Abliterated'}):
+            with patch('core.scheduler.cache_service') as mock_cache:
+                mock_cache.get.return_value = None
+                mock_cache.set.return_value = None
+                scheduler.running_models.clear()
+                assert scheduler.is_model_running("Gemma-4-31B-Abliterated") is True
+
+        with patch('core.vllm_manager.get_current_model_info', return_value=None):
+            with patch('core.scheduler.cache_service') as mock_cache:
+                mock_cache.get.return_value = None
+                mock_cache.set.return_value = None
+                scheduler.running_models.clear()
+                assert scheduler.is_model_running("Gemma-4-31B-Abliterated") is False
 
     @pytest.mark.asyncio
     async def test_start_model_success(self, scheduler, mock_sys_controller, mock_gpu_monitor):
-        mock_sys_controller.is_service_running.side_effect = [False, True]
+        mock_sys_controller.is_service_running.return_value = False
+        mock_sys_controller.start_service.return_value = True
         mock_gpu_monitor.get_memory_usage.return_value = {
             "total": 128 * 1024 ** 3,
             "used": 40 * 1024 ** 3,
             "available": 88 * 1024 ** 3
         }
-        
-        result = await scheduler.start_model("Gemma-4-31B-Abliterated")
-        assert result is True
-        mock_sys_controller.start_service.assert_called_once_with("vllm")
+        with patch('core.vllm_manager.get_current_model_info', return_value=None):
+            with patch('core.scheduler.cache_service') as mock_cache:
+                mock_cache.get.return_value = None
+                mock_cache.set.return_value = None
+                with patch('core.vllm_manager._update_vllm_script', return_value=True):
+                    with patch.object(scheduler, '_wait_for_model_ready', new_callable=AsyncMock, return_value=True):
+                        result = await scheduler.start_model("Gemma-4-31B-Abliterated")
+                        assert result is True
+                        mock_sys_controller.start_service.assert_called_once_with("vllm")
 
     @pytest.mark.asyncio
     async def test_start_model_insufficient_memory(self, scheduler, mock_gpu_monitor):
@@ -182,12 +194,17 @@ class TestScheduler:
         scheduler.release_request("Gemma-4-31B-Abliterated")
 
     def test_get_current_model_name_prefers_latest_selected_running_model(self, scheduler):
-        scheduler.running_models["Gemma-4-31B-Abliterated"] = datetime(2026, 1, 1, 10, 0, 0)
-        scheduler.running_models["Qwen3-235B-A22B-Instruct-2507-AWQ"] = datetime(2026, 1, 1, 9, 0, 0)
-        scheduler.mark_model_selected("Qwen3-235B-A22B-Instruct-2507-AWQ")
-        scheduler.mark_model_selected("Gemma-4-31B-Abliterated")
-
-        assert scheduler.get_current_model_name() == "Gemma-4-31B-Abliterated"
+        with patch('core.vllm_manager.get_current_model_info') as mock_info:
+            with patch('core.scheduler.cache_service') as mock_cache:
+                mock_cache.get.return_value = None
+                mock_cache.set.return_value = None
+                mock_info.return_value = {'running': True, 'name': 'Gemma-4-31B-Abliterated'}
+                scheduler.running_models["Gemma-4-31B-Abliterated"] = datetime(2026, 1, 1, 10, 0, 0)
+                scheduler.running_models["Qwen3-235B-A22B-Instruct-2507-AWQ"] = datetime(2026, 1, 1, 9, 0, 0)
+                scheduler.mark_model_selected("Qwen3-235B-A22B-Instruct-2507-AWQ")
+                scheduler.mark_model_selected("Gemma-4-31B-Abliterated")
+                assert scheduler.get_current_model_name() == "Gemma-4-31B-Abliterated"
+                assert scheduler.get_current_model_name() == "Gemma-4-31B-Abliterated"
 
     def test_get_active_requests(self, scheduler):
         scheduler.acquire_request("Gemma-4-31B-Abliterated")

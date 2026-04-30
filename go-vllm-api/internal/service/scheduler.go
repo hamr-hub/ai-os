@@ -36,6 +36,8 @@ type Scheduler struct {
 	mu                  sync.RWMutex
 	rateLimiter         *RateLimiter
 	switchingInProgress bool
+	streamActive        map[string]int64
+	zombieCheckerCancel context.CancelFunc
 }
 
 func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig, llamaCppMgr *LlamaCppManager, vllmManager *VLLMManager, vllmProxy *proxy.VLLMProxy) *Scheduler {
@@ -53,6 +55,7 @@ func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemCont
 		modelLastUsed:   make(map[string]time.Time),
 		modelSwitchTime: make(map[string]time.Time),
 		rateLimiter:     NewRateLimiter(redis, logger),
+		streamActive:    make(map[string]int64),
 	}
 	s.initPreloaded()
 	return s
@@ -366,6 +369,100 @@ func (s *Scheduler) GetConcurrencyLimit() int {
 	return s.cfg.Settings.ConcurrencyLimit
 }
 
+func (s *Scheduler) GetStreamConcurrencyLimit() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.cfg.Settings.StreamConcurrencyLimit > 0 {
+		return s.cfg.Settings.StreamConcurrencyLimit
+	}
+	return s.cfg.Settings.ConcurrencyLimit
+}
+
+func (s *Scheduler) GetStreamMaxDuration() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.cfg.Settings.StreamMaxDuration > 0 {
+		return time.Duration(s.cfg.Settings.StreamMaxDuration) * time.Minute
+	}
+	return 30 * time.Minute
+}
+
+func (s *Scheduler) AcquireStreamSlot(model string) bool {
+	limit := s.GetStreamConcurrencyLimit()
+	s.mu.Lock()
+	s.streamActive[model]++
+	current := s.streamActive[model]
+	s.mu.Unlock()
+	if current > int64(limit) {
+		s.mu.Lock()
+		s.streamActive[model]--
+		s.mu.Unlock()
+		return false
+	}
+	return true
+}
+
+func (s *Scheduler) ReleaseStreamSlot(model string) {
+	s.mu.Lock()
+	if s.streamActive[model] > 0 {
+		s.streamActive[model]--
+	}
+	s.mu.Unlock()
+}
+
+func (s *Scheduler) GetStreamActiveCount(model string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return int(s.streamActive[model])
+}
+
+func (s *Scheduler) GetMaxQueueSize() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.cfg.Settings.MaxQueueSize > 0 {
+		return s.cfg.Settings.MaxQueueSize
+	}
+	return 100
+}
+
+func (s *Scheduler) StartZombieChecker(ctx context.Context) {
+	interval := 5 * time.Minute
+	idleTimeout := 5 * time.Minute
+	s.mu.RLock()
+	if s.cfg.Settings.ZombieCheckInterval > 0 {
+		interval = time.Duration(s.cfg.Settings.ZombieCheckInterval) * time.Second
+	}
+	if s.cfg.Settings.ZombieIdleTimeout > 0 {
+		idleTimeout = time.Duration(s.cfg.Settings.ZombieIdleTimeout) * time.Second
+	}
+	s.mu.RUnlock()
+
+	zombieCtx, cancel := context.WithCancel(ctx)
+	s.zombieCheckerCancel = cancel
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-zombieCtx.Done():
+			return
+		case <-ticker.C:
+			s.mu.Lock()
+			now := time.Now()
+			for model, lastUsed := range s.modelLastUsed {
+				if now.Sub(lastUsed) > idleTimeout {
+					active := s.rateLimiter.GetActiveRequests(model)
+					streamActive := s.streamActive[model]
+					if active == 0 && streamActive == 0 && s.IsModelRunning(model) && !s.preloaded[model] {
+						s.logger.Info("zombie checker: idle model detected", zap.String("model", model), zap.Duration("idle", now.Sub(lastUsed)))
+					}
+				}
+			}
+			s.mu.Unlock()
+		}
+	}
+}
+
 func (s *Scheduler) AcquireRequest(model string) bool {
 	limit := s.GetConcurrencyLimit()
 	return s.rateLimiter.AcquireRequest(model, limit)
@@ -398,7 +495,7 @@ func (s *Scheduler) CanAcceptRequest(model string) bool {
 }
 
 func (s *Scheduler) IsQueueAvailable(model string) bool {
-	return s.rateLimiter.GetTotalQueueLength(model) < 100
+	return s.rateLimiter.GetTotalQueueLength(model) < s.GetMaxQueueSize()
 }
 
 func (s *Scheduler) GetQueueLength(model string) int {

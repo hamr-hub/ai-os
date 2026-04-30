@@ -35,9 +35,10 @@ class TestSystemController:
                 controller = SystemController()
                 assert controller._use_sudo is False
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_start_service_success(self, mock_run, mock_which):
+    def test_start_service_success(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 0
         mock_run.return_value = mock_result
@@ -46,9 +47,10 @@ class TestSystemController:
         assert result is True
         mock_run.assert_called_once()
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_start_service_failure(self, mock_run, mock_which):
+    def test_start_service_failure(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 1
         mock_run.return_value = mock_result
@@ -56,9 +58,10 @@ class TestSystemController:
         result = controller.start_service("vllm")
         assert result is False
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_stop_service(self, mock_run, mock_which):
+    def test_stop_service(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 0
         mock_run.return_value = mock_result
@@ -66,9 +69,10 @@ class TestSystemController:
         result = controller.stop_service("vllm")
         assert result is True
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_restart_service(self, mock_run, mock_which):
+    def test_restart_service(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 0
         mock_run.return_value = mock_result
@@ -76,9 +80,10 @@ class TestSystemController:
         result = controller.restart_service("vllm")
         assert result is True
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_get_service_status_active(self, mock_run, mock_which):
+    def test_get_service_status_active(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = 'active\n'
@@ -107,24 +112,24 @@ class TestSystemController:
         # When systemctl is not available, returns 'inactive'
         assert status == "inactive"
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_is_service_running(self, mock_run, mock_which):
-        # Active case
+    def test_is_service_running(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = 'active\n'
         mock_run.return_value = mock_result
         controller = SystemController()
         assert controller.is_service_running("vllm") is True
-        
-        # Inactive case
+
         mock_result.returncode = 3
         assert controller.is_service_running("vllm") is False
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_enable_service(self, mock_run, mock_which):
+    def test_enable_service(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 0
         mock_run.return_value = mock_result
@@ -132,9 +137,10 @@ class TestSystemController:
         result = controller.enable_service("vllm")
         assert result is True
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_disable_service(self, mock_run, mock_which):
+    def test_disable_service(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 0
         mock_run.return_value = mock_result
@@ -142,9 +148,10 @@ class TestSystemController:
         result = controller.disable_service("vllm")
         assert result is True
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_get_service_info(self, mock_run, mock_which):
+    def test_get_service_info(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = '{"Id": "vllm.service", "ActiveState": "active"}'
@@ -154,9 +161,10 @@ class TestSystemController:
         assert info is not None
         assert info["Id"] == "vllm.service"
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_list_services(self, mock_run, mock_which):
+    def test_list_services(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = '[{"id": "vllm.service"}]'

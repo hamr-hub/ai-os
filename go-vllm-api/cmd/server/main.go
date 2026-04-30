@@ -141,6 +141,8 @@ func main() {
 		zapLogger.Info("cache updater starting")
 	}
 
+	go scheduler.StartZombieChecker(ctx)
+
 	configWatcher := config.NewConfigWatcher(*configPath, zapLogger)
 	configWatcher.RegisterCallback(func(newCfg *config.AppConfig) {
 		if err := applyRuntimeConfig(newCfg, scheduler, vllmManager, llamaCppMgr, zapLogger, "watcher"); err != nil {
@@ -162,10 +164,11 @@ func main() {
 	r.Use(gin.Recovery())
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
+	r.Use(middleware.NewTrustedProxyMiddleware(cfg.Settings.TrustedProxies).Handler())
 	r.Use(middleware.RequestTracking(zapLogger))
 	r.Use(middleware.ErrorHandler())
 
-	rateLimiter := middleware.NewRateLimitMiddlewareWithLimiter(100, 60, scheduler.GetRateLimiter())
+	rateLimiter := middleware.NewRateLimitMiddlewareWithGPU(100, 60, scheduler.GetRateLimiter(), gpuMonitor)
 	r.Use(rateLimiter.Handler())
 
 	v1Handler := v1handler.NewV1Handler(scheduler, gpuMonitor, vllmProxy, metricsCollector, cacheService)

@@ -16,6 +16,7 @@ import HealthAlertCard from '@/components/cards/HealthAlertCard.vue'
 import RunningModelsCard from '@/components/cards/RunningModelsCard.vue'
 import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server, Gpu, CircleDot, AlertTriangle, CheckCircle } from 'lucide-vue-next'
 import { formatBytes } from '@/utils/format'
+import type { EngineType } from '@/types'
 
 const {
   modelList,
@@ -29,7 +30,7 @@ const {
   isRefreshing: isRefreshingModels,
 } = useModels()
 const { gpuSummary, refresh: refreshGPU, isRefreshing: isRefreshingGPU } = useGPU()
-const gpuMemoryEngine = useGPUMemory()
+const { engineStatus: gpuEngineStatus, getEngines: gpuGetEngines } = useGPUMemory()
 const {
   gpuHistory,
   error: gpuHistoryError,
@@ -81,7 +82,7 @@ const refreshAll = () => {
   refreshTokens()
   refreshSystem()
   refreshGPUHistory()
-  gpuMemoryEngine.getEngines()
+  gpuGetEngines()
 }
 
 const engineLabels: Record<string, string> = {
@@ -327,19 +328,21 @@ const handleScale = (cardId: string, delta: number) => {
               <Gpu class="card-icon-inner" style="color:var(--accent-primary)" />
               <span class="card-title">推理引擎</span>
             </div>
-            <div v-if="gpuMemoryEngine.engineStatus" class="engine-card-content">
+            <div v-if="gpuEngineStatus" class="engine-card-content">
               <div class="engine-current-badge">
-                当前: {{ engineLabels[gpuMemoryEngine.engineStatus.current_engine] || gpuMemoryEngine.engineStatus.current_engine }}
-                <CircleDot v-if="gpuMemoryEngine.engineStatus[gpuMemoryEngine.engineStatus.current_engine]?.running" class="w-4 h-4" style="color:#4ade80" />
+                当前: {{ engineLabels[gpuEngineStatus.current_engine] || gpuEngineStatus.current_engine }}
+                <CircleDot v-if="gpuEngineStatus[gpuEngineStatus.current_engine]?.running" class="w-4 h-4" style="color:#4ade80" />
               </div>
               <div class="engine-list">
-                <div v-for="eng in ['vllm', 'sglang', 'llama_cpp']" :key="eng" class="engine-row">
-                  <span :class="gpuMemoryEngine.engineStatus[eng]?.running ? 'engine-dot running' : 'engine-dot stopped'"></span>
+                <div v-for="eng in (['vllm', 'sglang', 'llama_cpp'] as EngineType[])" :key="eng" class="engine-row">
+                  <span :class="gpuEngineStatus[eng]?.running ? 'engine-dot running' : 'engine-dot stopped'"></span>
                   <span class="engine-name">{{ engineLabels[eng] }}</span>
-                  <span :class="gpuMemoryEngine.engineStatus[eng]?.running ? 'engine-status running' : 'engine-status stopped'">
-                    {{ gpuMemoryEngine.engineStatus[eng]?.running ? '运行中' : '未运行' }}
+                  <span :class="gpuEngineStatus[eng]?.running ? 'engine-status running' : 'engine-status stopped'">
+                    {{ gpuEngineStatus[eng]?.running ? '运行中' : '未运行' }}
                   </span>
-                  <span v-if="gpuMemoryEngine.engineStatus[eng]?.model" class="engine-model">{{ gpuMemoryEngine.engineStatus[eng]?.model }}</span>
+                  <span v-if="gpuEngineStatus[eng]?.model" class="engine-model">{{ gpuEngineStatus[eng]?.model }}</span>
+                  <span v-if="gpuEngineStatus[eng]?.pid" class="engine-detail">PID {{ gpuEngineStatus[eng]?.pid }}</span>
+                  <span v-if="gpuEngineStatus[eng]?.port" class="engine-detail">:{{ gpuEngineStatus[eng]?.port }}</span>
                 </div>
               </div>
             </div>
@@ -781,6 +784,14 @@ const handleScale = (cardId: string, delta: number) => {
 .engine-model {
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+.engine-detail {
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 
 .engine-card-empty {

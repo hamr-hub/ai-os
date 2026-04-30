@@ -16,6 +16,7 @@ def _make_scheduler(**kwargs):
     scheduler._active_service = None
     scheduler._switch_history = []
     scheduler._max_history = 50
+    scheduler._engine_model_registry = {}
     return scheduler
 
 
@@ -260,3 +261,165 @@ class TestDeploymentSummary:
         assert "running_services" in summary
         assert "loaded_models" in summary
         assert "active_service" in summary
+
+
+class TestSwitchEngine:
+    def test_switch_engine_unsupported_engine(self):
+        scheduler = _make_scheduler(llm_mgr=MagicMock())
+        result = scheduler.switch_engine("model", "unknown_engine", 8000)
+        assert result["success"] is False
+        assert "unsupported" in result["reason"]
+
+    def test_switch_engine_no_llm_mgr(self):
+        scheduler = _make_scheduler(llm_mgr=None)
+        result = scheduler.switch_engine("model", "vllm", 8000)
+        assert result["success"] is False
+        assert result["reason"] == "no_llm_service_manager"
+
+    def test_switch_engine_insufficient_memory(self):
+        gpu_mgr = MagicMock()
+        gpu_mgr.check_model_feasibility.return_value = {"feasible": False, "available_gb": 4.0, "required_gb": 40.0}
+        scheduler = _make_scheduler(gpu_mgr=gpu_mgr, llm_mgr=MagicMock())
+        result = scheduler.switch_engine("big-model", "vllm", 8000)
+        assert result["success"] is False
+        assert result["reason"] == "insufficient_gpu_memory"
+
+    def test_switch_engine_already_same_engine(self):
+        llm_mgr = MagicMock()
+        llm_mgr.get_service_by_model.return_value = {"status": "running", "service_name": "vllm-model"}
+        gpu_mgr = MagicMock()
+        gpu_mgr.check_model_feasibility.return_value = {"feasible": True}
+        scheduler = _make_scheduler(llm_mgr=llm_mgr, gpu_mgr=gpu_mgr)
+        scheduler._engine_model_registry["model"] = {"engine": "vllm"}
+        result = scheduler.switch_engine("model", "vllm", 8000)
+        assert result["success"] is True
+        assert result["reason"] == "already_running_same_engine"
+
+    def test_switch_engine_initiates_async(self):
+        llm_mgr = MagicMock()
+        llm_mgr.get_service_by_model.return_value = None
+        gpu_mgr = MagicMock()
+        gpu_mgr.check_model_feasibility.return_value = {"feasible": True}
+        scheduler = _make_scheduler(llm_mgr=llm_mgr, gpu_mgr=gpu_mgr)
+        with patch('asyncio.get_running_loop', side_effect=RuntimeError("no loop")):
+            result = scheduler.switch_engine("model", "sglang", 8100)
+        assert result["success"] is True
+        assert result["status"] == "switching"
+        assert scheduler._engine_model_registry["model"]["engine"] == "sglang"
+
+
+class TestGetRealtimeGPU:
+    def test_get_realtime_no_gpu_mgr(self):
+        scheduler = _make_scheduler(gpu_mgr=None)
+        result = scheduler.get_realtime_gpu_info()
+        assert result["available"] is False
+
+    def test_get_realtime_with_gpu_mgr(self):
+        gpu_mgr = MagicMock()
+        gpu_mgr.get_realtime_info.return_value = {
+            "total_gb": 80.0, "used_gb": 40.0, "free_gb": 40.0,
+            "utilization_pct": 50.0, "backend": "pynvml",
+            "effective_free_gb": 35.0,
+        }
+        scheduler = _make_scheduler(gpu_mgr=gpu_mgr)
+        result = scheduler.get_realtime_gpu_info(0)
+        assert result["available"] is True
+        assert result["effective_free_gb"] == 35.0
+
+    def test_get_all_gpu_realtime(self):
+        gpu_mgr = MagicMock()
+        gpu_mgr.get_all_gpu_info.return_value = [{"device_id": 0}]
+        gpu_mgr.backend = "pynvml"
+        gpu_mgr.get_loaded_memory_gb.return_value = 10.0
+        scheduler = _make_scheduler(gpu_mgr=gpu_mgr)
+        result = scheduler.get_all_gpu_realtime()
+        assert result["available"] is True
+        assert result["device_count"] == 1
+
+
+class TestModelPool:
+    def test_build_model_pool_from_config(self):
+        from core.config import AppConfig, ModelConfig, SettingsConfig
+        config = AppConfig(
+            models={
+                "test-model": ModelConfig(
+                    service="svc", port=8000, engine_type="vllm",
+                    required_memory="40GB", model_path="/mnt/test"
+                )
+            },
+            settings=SettingsConfig(),
+        )
+        scheduler = _make_scheduler(config=config)
+        pool = scheduler._build_model_pool_from_config()
+        assert "test-model" in pool
+        assert pool["test-model"]["engine"] == "vllm"
+        assert pool["test-model"]["port"] == 8000
+
+    def test_get_model_pool_merges_registry(self):
+        from core.config import AppConfig, ModelConfig, SettingsConfig
+        config = AppConfig(
+            models={"config-model": ModelConfig(service="svc", port=8000, required_memory="8GB")},
+            settings=SettingsConfig(),
+        )
+        scheduler = _make_scheduler(config=config)
+        scheduler._engine_model_registry["runtime-model"] = {
+            "engine": "sglang", "port": 8100, "status": "running"
+        }
+        pool = scheduler.get_model_pool()
+        assert "config-model" in pool
+        assert "runtime-model" in pool
+
+    def test_empty_config_pool(self):
+        scheduler = _make_scheduler(config=None)
+        pool = scheduler._build_model_pool_from_config()
+        assert pool == {}
+
+
+class TestSchedulerStatus:
+    def test_get_scheduler_status(self):
+        gpu_mgr = MagicMock()
+        gpu_mgr.get_memory_summary.return_value = {"backend": "mock", "devices": []}
+        gpu_mgr.get_loaded_models.return_value = {}
+        llm_mgr = MagicMock()
+        llm_mgr.list_services.return_value = [{"status": "running", "model": "test"}]
+        scheduler = _make_scheduler(gpu_mgr=gpu_mgr, llm_mgr=llm_mgr)
+        status = scheduler.get_scheduler_status()
+        assert "active_service" in status
+        assert "gpu" in status
+        assert "running_services" in status
+        assert status["running_count"] == 1
+        assert "available_engines" in status
+
+
+class TestAutoDeployModel:
+    @pytest.mark.asyncio
+    async def test_auto_deploy_insufficient_memory(self):
+        gpu_mgr = MagicMock()
+        gpu_mgr.check_model_feasibility.return_value = {"feasible": False, "required_gb": 40, "available_gb": 4}
+        scheduler = _make_scheduler(gpu_mgr=gpu_mgr)
+        result = await scheduler.auto_deploy_model("huge-model")
+        assert result["success"] is False
+        assert result["stage"] == "memory_check"
+
+
+class TestSyncConfigToRegistry:
+    def test_sync_config_to_registry(self):
+        from core.config import AppConfig, ModelConfig, SettingsConfig
+        config = AppConfig(
+            models={
+                "preload-model": ModelConfig(
+                    service="svc", port=8000, required_memory="40GB",
+                    preload=True, engine_type="vllm"
+                ),
+                "no-preload-model": ModelConfig(
+                    service="svc", port=8000, required_memory="8GB",
+                    preload=False, engine_type="sglang"
+                ),
+            },
+            settings=SettingsConfig(),
+        )
+        scheduler = _make_scheduler(config=config)
+        scheduler._sync_config_to_registry()
+        assert "preload-model" in scheduler._engine_model_registry
+        assert scheduler._engine_model_registry["preload-model"]["preload_intended"] is True
+        assert "no-preload-model" in scheduler._engine_model_registry

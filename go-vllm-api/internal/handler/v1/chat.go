@@ -2,6 +2,7 @@ package v1
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -175,10 +176,14 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 	}
 
 	var promptTokens, completionTokens int64
+	streamSlotAcquired := false
 
 	defer func() {
 		if slotAcquired {
 			h.scheduler.ReleaseRequest(modelName)
+		}
+		if streamSlotAcquired {
+			h.scheduler.ReleaseStreamSlot(modelName)
 		}
 		duration := time.Since(start).Seconds()
 		h.metrics.RecordRequest("/v1/chat/completions", statusCode, duration,
@@ -254,12 +259,29 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 	payload["model"] = vllmModelName
 
 	if stream {
+		if !h.scheduler.AcquireStreamSlot(modelName) {
+			statusCode = 429
+			active := h.scheduler.GetStreamActiveCount(modelName)
+			limit := h.scheduler.GetStreamConcurrencyLimit()
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":          "Too many streaming requests",
+				"stream_active":  active,
+				"stream_limit":   limit,
+				"type":           "stream",
+			})
+			return
+		}
+		streamSlotAcquired = true
+
+		streamCtx, streamCancel := context.WithTimeout(c.Request.Context(), h.scheduler.GetStreamMaxDuration())
+		defer streamCancel()
+
 		// Automatically include usage in streams
 		if _, ok := payload["stream_options"]; !ok {
 			payload["stream_options"] = map[string]interface{}{"include_usage": true}
 		}
 
-		ch, err := h.proxy.StreamChatCompletion(c.Request.Context(), port, payload)
+		ch, err := h.proxy.StreamChatCompletion(streamCtx, port, payload)
 		if err != nil {
 			statusCode = 503
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})

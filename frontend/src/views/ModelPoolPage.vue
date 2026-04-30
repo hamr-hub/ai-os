@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useModelPool } from '@/composables/useModelPool'
 import { useLLMService } from '@/composables/useLLMService'
 import {
@@ -23,10 +23,14 @@ const poolFilter = ref('all')
 const showDeleteConfirm = ref<string | null>(null)
 const engineSelect = ref('vllm')
 const loadError = ref<string | null>(null)
+let poolWsTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   listPool(poolFilter.value)
   getServiceStatus()
+  poolWsTimer = setInterval(() => {
+    listPool(poolFilter.value)
+  }, 3000)
 })
 
 const handleRefresh = () => {
@@ -79,6 +83,13 @@ const sourceIcon = (source: string) => {
   return '📦'
 }
 
+onUnmounted(() => {
+  if (poolWsTimer) {
+    clearInterval(poolWsTimer)
+    poolWsTimer = null
+  }
+})
+
 const downloadStatusColor = (status: string) => {
   if (status === 'completed') return '#4ade80'
   if (status === 'downloading') return 'var(--color-primary-light)'
@@ -91,6 +102,28 @@ const runningStatusColor = (status: string) => {
   if (status === 'loading') return 'var(--color-primary-light)'
   return 'var(--text-muted)'
 }
+
+const poolStats = computed(() => {
+  const models = poolList.value ?? []
+  const totalSize = models.reduce((acc, m) => acc + (m.size_b ?? 0), 0)
+  const runningCount = models.filter(m => m.running_status === 'running').length
+  const downloadCompleted = models.filter(m => m.download_status === 'completed').length
+  const downloadFailed = models.filter(m => m.download_status === 'failed').length
+  const feasibleCount = models.filter(m => m.feasible === true).length
+  const notFeasibleCount = models.filter(m => m.feasible === false).length
+  const sourceMap: Record<string, number> = {}
+  models.forEach(m => { sourceMap[m.source] = (sourceMap[m.source] || 0) + 1 })
+  return {
+    total: models.length,
+    totalSize,
+    runningCount,
+    downloadCompleted,
+    downloadFailed,
+    feasibleCount,
+    notFeasibleCount,
+    sourceMap,
+  }
+})
 </script>
 
 <template>
@@ -110,6 +143,9 @@ const runningStatusColor = (status: string) => {
     <div v-if="poolError || serviceError" class="error-banner">
       <AlertTriangle class="w-4 h-4" />
       {{ poolError || serviceError }}
+      <button class="btn btn-sm btn-ghost" @click="handleRefresh" style="margin-left:auto">
+        <RefreshCw class="w-3.5 h-3.5" /> 重试
+      </button>
     </div>
 
     <div v-if="loadError" class="error-banner memory-warn">
@@ -130,6 +166,55 @@ const runningStatusColor = (status: string) => {
         <option value="sglang">SGLang</option>
       </select>
       <span class="total-count">共 {{ total }} 个模型</span>
+      <span class="ws-poll-badge">
+        <span class="ws-poll-dot"></span> 3s 自动刷新
+      </span>
+    </div>
+
+    <div v-if="poolList.length" class="stats-overview">
+      <div class="stat-card">
+        <Database class="w-4 h-4 stat-icon" />
+        <div class="stat-info">
+          <span class="stat-num">{{ poolStats.total }}</span>
+          <span class="stat-desc">总模型数</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <Cpu class="w-4 h-4 stat-icon" />
+        <div class="stat-info">
+          <span class="stat-num">{{ formatSize(poolStats.totalSize) }}</span>
+          <span class="stat-desc">总大小</span>
+        </div>
+      </div>
+      <div class="stat-card stat-green">
+        <CheckCircle class="w-4 h-4 stat-icon" />
+        <div class="stat-info">
+          <span class="stat-num">{{ poolStats.runningCount }}</span>
+          <span class="stat-desc">运行中</span>
+        </div>
+      </div>
+      <div class="stat-card stat-blue">
+        <Server class="w-4 h-4 stat-icon" />
+        <div class="stat-info">
+          <span class="stat-num">{{ poolStats.feasibleCount }}</span>
+          <span class="stat-desc">可运行</span>
+        </div>
+      </div>
+      <div class="stat-card stat-red">
+        <XCircle class="w-4 h-4 stat-icon" />
+        <div class="stat-info">
+          <span class="stat-num">{{ poolStats.notFeasibleCount }}</span>
+          <span class="stat-desc">显存不足</span>
+        </div>
+      </div>
+      <div class="stat-card source-distribution">
+        <span class="stat-label">来源分布</span>
+        <div class="source-bar">
+          <span v-for="(count, src) in poolStats.sourceMap" :key="src" class="source-seg" :style="{ width: (count / poolStats.total * 100) + '%' }">
+            {{ sourceIcon(src) }} {{ count }}
+          </span>
+        </div>
+      </div>
     </div>
 
     <div v-if="poolLoading" class="loading-state">
@@ -306,6 +391,30 @@ const runningStatusColor = (status: string) => {
 .total-count {
   color: var(--text-muted);
   font-size: 14px;
+}
+
+.ws-poll-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+}
+
+.ws-poll-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .loading-state,
@@ -498,5 +607,80 @@ const runningStatusColor = (status: string) => {
 
 .tech-border {
   border: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.stats-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stat-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.stat-card.stat-green .stat-icon { color: #4ade80; }
+.stat-card.stat-blue .stat-icon { color: var(--color-primary-light); }
+.stat-card.stat-red .stat-icon { color: #f87171; }
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-num {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stat-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.source-distribution {
+  grid-column: span 2;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.source-bar {
+  display: flex;
+  width: 100%;
+  height: 24px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.source-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-primary);
+  background: rgba(99, 102, 241, 0.15);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 </style>

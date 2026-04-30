@@ -428,6 +428,50 @@ class LLMServiceManager:
             pass
         return None
 
+    def update_config(
+        self, service_name: str,
+        engine_type: Optional[str] = None,
+        model_path: Optional[str] = None,
+        port: Optional[int] = None,
+        extra_params: Optional[Dict] = None,
+    ) -> Dict:
+        changed = {}
+        if service_name not in self._processes:
+            return {"success": False, "reason": "service_not_found"}
+        if engine_type and engine_type != self._engine_types.get(service_name):
+            self._engine_types[service_name] = engine_type
+            changed["engine_type"] = engine_type
+        if port and port != self._ports.get(service_name):
+            self._ports[service_name] = port
+            changed["port"] = port
+        model = self._models.get(service_name, "")
+        if model_path:
+            self._model_paths[model] = model_path
+            changed["model_path"] = model_path
+        logger.info("Service %s config updated: %s", service_name, changed)
+        return {"success": True, "service_name": service_name, "changes": changed}
+
+    def get_current_config(self, service_name: str) -> Optional[Dict]:
+        process = self._processes.get(service_name)
+        if not process:
+            return None
+        model = self._models.get(service_name, "")
+        return {
+            "service_name": service_name,
+            "engine_type": self._engine_types.get(service_name, "vllm"),
+            "model": model,
+            "model_path": self._get_model_path(model),
+            "port": self._ports.get(service_name, 8000),
+            "status": "running" if process.poll() is None else "stopped",
+            "pid": process.pid,
+            "uptime_seconds": round(time.time() - self._start_times.get(service_name, time.time()), 1),
+        }
+
+    def update_model_path(self, model_name: str, new_path: str) -> bool:
+        self._model_paths[model_name] = new_path
+        logger.info("Updated model path for %s: %s", model_name, new_path)
+        return True
+
     def cleanup_all(self):
         for name in list(self._processes.keys()):
             self.stop_service(name)

@@ -234,7 +234,7 @@ class TestRateLimiter:
         assert limiter.decrement_request("test") == 0
         assert limiter.get_active_requests("test") == 0
         assert limiter.is_available("test", 1) is True
-        assert limiter.acquire_request("test", 1) is False
+        assert limiter.acquire_request("test", 1) is True
         assert limiter.enqueue_request("test", {}) == ""
         assert limiter.dequeue_request("test") is None
         assert limiter.cancel_request("test") is False

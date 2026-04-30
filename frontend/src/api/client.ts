@@ -38,6 +38,11 @@ import type {
   EngineStatus,
   EngineConfig,
   GPUMemoryInfo,
+  RateLimitConfig,
+  RateLimitStats,
+  SystemConfig,
+  HealthDetail,
+  HealthHistoryEntry,
 } from '@/types'
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
@@ -644,5 +649,40 @@ export async function updateEngineConfig(
 
 export async function getGPUMemoryCheck(config: AxiosRequestConfig = {}): Promise<GPUMemoryInfo> {
   const { data } = await client.get<GPUMemoryInfo>('/gpu/memory-check', silentRequestConfig(config))
+  return data
+}
+
+export async function getRateLimitConfig(config: AxiosRequestConfig = {}): Promise<RateLimitConfig> {
+  const { data } = await client.get<RateLimitConfig>('/manage/ratelimit/config', silentRequestConfig(config))
+  return data
+}
+
+export async function updateRateLimitConfig(newConfig: Partial<RateLimitConfig>, config: AxiosRequestConfig = {}): Promise<RateLimitConfig> {
+  const { data } = await client.put<RateLimitConfig>('/manage/ratelimit/config', newConfig, config)
+  return data
+}
+
+export async function getRateLimitStats(config: AxiosRequestConfig = {}): Promise<RateLimitStats> {
+  const { data } = await client.get<RateLimitStats>('/manage/ratelimit/stats', silentRequestConfig(config))
+  return data
+}
+
+export async function getSystemConfig(config: AxiosRequestConfig = {}): Promise<SystemConfig> {
+  const { data } = await client.get<SystemConfig>('/manage/config/global', silentRequestConfig(config))
+  return data
+}
+
+export async function updateSystemConfig(newConfig: Partial<SystemConfig>, config: AxiosRequestConfig = {}): Promise<SystemConfig> {
+  const { data } = await client.put<SystemConfig>('/manage/config/global', newConfig, config)
+  return data
+}
+
+export async function getHealthDetailed(config: AxiosRequestConfig = {}): Promise<HealthDetail> {
+  const { data } = await client.get<HealthDetail>('/manage/health/detailed', silentRequestConfig(config))
+  return data
+}
+
+export async function getHealthHistory(config: AxiosRequestConfig = {}): Promise<HealthHistoryEntry[]> {
+  const { data } = await client.get<HealthHistoryEntry[]>('/manage/health/history', silentRequestConfig(config))
   return data
 }

@@ -22,6 +22,28 @@ type VLLMProxy struct {
 	cb            *CircuitBreaker
 }
 
+type contextKey string
+
+const requestIDKey contextKey = "request_id"
+
+func ContextWithRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, requestIDKey, requestID)
+}
+
+func requestIDFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(requestIDKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
+func attachRequestIDHeader(req *http.Request, ctx context.Context) {
+	rid := requestIDFromContext(ctx)
+	if rid != "" {
+		req.Header.Set("X-Request-ID", rid)
+	}
+}
+
 func NewVLLMProxy(logger *zap.Logger, vllmHost string) *VLLMProxy {
 	if vllmHost == "" {
 		vllmHost = "localhost"

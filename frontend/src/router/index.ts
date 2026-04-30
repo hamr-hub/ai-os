@@ -53,6 +53,31 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/ModelPoolPage.vue'),
   },
   {
+    path: '/engines',
+    name: 'engines',
+    component: () => import('@/views/EngineManagementPage.vue'),
+  },
+  {
+    path: '/ratelimit',
+    name: 'ratelimit',
+    component: () => import('@/views/RateLimitPage.vue'),
+  },
+  {
+    path: '/config',
+    name: 'config',
+    component: () => import('@/views/ConfigManagementPage.vue'),
+  },
+  {
+    path: '/health',
+    name: 'health',
+    component: () => import('@/views/HealthOpsPage.vue'),
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/AuthPage.vue'),
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/Dashboard.vue'),

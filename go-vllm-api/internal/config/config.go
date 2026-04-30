@@ -48,6 +48,11 @@ type ModelConfig struct {
 
 type SettingsConfig struct {
 	ConcurrencyLimit    int            `yaml:"concurrency_limit"`
+	StreamConcurrencyLimit int         `yaml:"stream_concurrency_limit"`
+	StreamMaxDuration   int            `yaml:"stream_max_duration"`
+	ZombieCheckInterval int            `yaml:"zombie_check_interval"`
+	ZombieIdleTimeout   int            `yaml:"zombie_idle_timeout"`
+	MaxQueueSize        int            `yaml:"max_queue_size"`
 	MinAvailableMemory  string         `yaml:"min_available_memory"`
 	RequestTimeout      int            `yaml:"request_timeout"`
 	ModelStartTimeout   int            `yaml:"model_start_timeout"`
@@ -62,6 +67,7 @@ type SettingsConfig struct {
 	Queue               QueueConfig    `yaml:"queue"`
 	Priority            PriorityConfig `yaml:"priority"`
 	Recovery            RecoveryConfig `yaml:"recovery"`
+	TrustedProxies      []string       `yaml:"trusted_proxies"`
 }
 
 type RedisConfig struct {

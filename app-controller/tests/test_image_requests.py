@@ -139,6 +139,8 @@ class TestImageUpload:
         assert data["success"] == False
         assert "Invalid image data" in data["message"]
 
+MULTIMODAL_MODEL = "gemma-4-31b-abliterated"
+
 class TestChatCompletionsWithImages:
     def test_chat_completions_with_image(self, client):
         image_data = create_test_image()
@@ -153,24 +155,24 @@ class TestChatCompletionsWithImages:
                 with patch('core.scheduler.Scheduler.is_model_running') as mock_running:
                     mock_running.return_value = True
                     
-                    with patch('httpx.AsyncClient') as mock_client:
+                    with patch('routes.v1.get_vllm_request_client') as mock_get_client:
+                        mock_httpx_client = AsyncMock()
                         mock_response = Mock()
                         mock_response.raise_for_status = Mock()
                         mock_response.json = Mock(return_value={
                             "id": "test-id",
                             "object": "chat.completion",
                             "created": 0,
-                            "model": "gemma-4-31b",
+                            "model": MULTIMODAL_MODEL,
                             "choices": [{"message": {"role": "assistant", "content": "This is a red image"}}]
                         })
-                        
-                        mock_post = AsyncMock(return_value=mock_response)
-                        mock_client.return_value.__aenter__.return_value.post = mock_post
+                        mock_httpx_client.post = AsyncMock(return_value=mock_response)
+                        mock_get_client.return_value = mock_httpx_client
                         
                         response = client.post(
                             "/v1/chat/completions",
                             json={
-                                "model": "gemma-4-31b",
+                                "model": MULTIMODAL_MODEL,
                                 "messages": [
                                     {
                                         "role": "user",
@@ -203,24 +205,24 @@ class TestChatCompletionsWithImages:
                 with patch('core.scheduler.Scheduler.is_model_running') as mock_running:
                     mock_running.return_value = True
                     
-                    with patch('httpx.AsyncClient') as mock_client:
+                    with patch('routes.v1.get_vllm_request_client') as mock_get_client:
+                        mock_httpx_client = AsyncMock()
                         mock_response = Mock()
                         mock_response.raise_for_status = Mock()
                         mock_response.json = Mock(return_value={
                             "id": "test-id",
                             "object": "chat.completion",
                             "created": 0,
-                            "model": "gemma-4-31b",
+                            "model": MULTIMODAL_MODEL,
                             "choices": [{"message": {"role": "assistant", "content": "Two red images"}}]
                         })
-                        
-                        mock_post = AsyncMock(return_value=mock_response)
-                        mock_client.return_value.__aenter__.return_value.post = mock_post
+                        mock_httpx_client.post = AsyncMock(return_value=mock_response)
+                        mock_get_client.return_value = mock_httpx_client
                         
                         response = client.post(
                             "/v1/chat/completions",
                             json={
-                                "model": "gemma-4-31b",
+                                "model": MULTIMODAL_MODEL,
                                 "messages": [
                                     {
                                         "role": "user",
@@ -243,7 +245,7 @@ class TestChatCompletionsWithImages:
             response = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "gemma-4-31b",
+                    "model": MULTIMODAL_MODEL,
                     "messages": [
                         {
                             "role": "user",
@@ -286,24 +288,24 @@ class TestImageMetrics:
                 with patch('core.scheduler.Scheduler.is_model_running') as mock_running:
                     mock_running.return_value = True
                     
-                    with patch('httpx.AsyncClient') as mock_client:
+                    with patch('routes.v1.get_vllm_request_client') as mock_get_client:
+                        mock_httpx_client = AsyncMock()
                         mock_response = Mock()
                         mock_response.raise_for_status = Mock()
                         mock_response.json = Mock(return_value={
                             "id": "test-id",
                             "object": "chat.completion",
                             "created": 0,
-                            "model": "gemma-4-31b",
+                            "model": MULTIMODAL_MODEL,
                             "choices": [{"message": {"role": "assistant", "content": "OK"}}]
                         })
-                        
-                        mock_post = AsyncMock(return_value=mock_response)
-                        mock_client.return_value.__aenter__.return_value.post = mock_post
+                        mock_httpx_client.post = AsyncMock(return_value=mock_response)
+                        mock_get_client.return_value = mock_httpx_client
                         
                         client.post(
                             "/v1/chat/completions",
                             json={
-                                "model": "gemma-4-31b",
+                                "model": MULTIMODAL_MODEL,
                                 "messages": [
                                     {
                                         "role": "user",

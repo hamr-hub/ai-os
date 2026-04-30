@@ -19,7 +19,12 @@ import type {
   ModelVariant,
   VLLMConfig,
   EngineType,
+  EngineConfig,
 } from '@/types'
+import {
+  getEngineConfig,
+  updateEngineConfig,
+} from '@/api/client'
 import {
   RefreshCw,
   Activity,
@@ -88,34 +93,22 @@ const {
 
 const poolStore = useModelPoolStore()
 const {
-  gpuInfo: gpuInfoRef,
-  recommendResult: gpuRecommendResult,
-  memoryCheckResult: gpuMemoryCheckResultRef,
   engineStatus: engineStatusRef,
   switchingEngine: switchingEngineRef,
-  loading: gpuLoading,
-  error: gpuError,
-  getGPU,
-  recommend: gpuRecommend,
-  checkMemory: gpuCheckMemory,
   getEngines,
   doSwitchEngine,
 } = useGPUMemory()
 const {
-  memoryInfo: gpuMemoryInfo,
   recommendation: gpuRecommendationRef,
   checkResult: gpuCheckResultRef,
   loading: gpuMemoryCheckLoading,
   error: gpuMemoryCheckError,
-  fetchMemoryInfo,
   getRecommendation: gpuGetRecommendation,
-  checkModel: gpuCheckModel,
+  checkModel: gpuCheckModelFn,
 } = useGPUMemoryCheck()
 
 const engineStatus = engineStatusRef
 const switchingEngine = switchingEngineRef
-const gpuInfo = gpuInfoRef
-const memoryCheckResult = gpuMemoryCheckResultRef
 const checkResult = gpuCheckResultRef
 const recommendation = gpuRecommendationRef
 
@@ -169,12 +162,12 @@ const handleSearch = () => {
 
 const handleRecommend = () => {
   if (!searchKeyword.value.trim()) return
-  gpuMemoryCheck.getRecommendation(searchKeyword.value, searchSource.value)
+  gpuGetRecommendation(searchKeyword.value, searchSource.value)
   searchSubTab.value = 'recommend'
 }
 
 const handleGPUMemoryCheck = (modelName: string) => {
-  gpuMemoryCheck.checkModel(modelName)
+  gpuCheckModelFn(modelName)
 }
 
 const handleDownloadModel = (modelName: string, source: string) => {
@@ -231,6 +224,10 @@ const selectedModelForConfig = ref<ModelVariant | null>(null)
 const vllmConfigModal = ref(false)
 const vllmConfig = ref<VLLMConfig | null>(null)
 const configSaving = ref(false)
+const engineConfigModal = ref(false)
+const engineConfigData = ref<EngineConfig | null>(null)
+const engineConfigSaving = ref(false)
+const engineConfigError = ref<string | null>(null)
 const viewMode = ref<'list' | 'grouped'>('grouped')
 
 const recommendedConfig = computed(() => {
@@ -303,6 +300,36 @@ async function saveVLLMConfig() {
     console.error('Failed to save vLLM config:', e)
   } finally {
     configSaving.value = false
+  }
+}
+
+async function openEngineConfig() {
+  engineConfigError.value = null
+  try {
+    engineConfigData.value = await getEngineConfig()
+    engineConfigModal.value = true
+  } catch (e: any) {
+    engineConfigError.value = e.message || '获取引擎配置失败'
+  }
+}
+
+function closeEngineConfig() {
+  engineConfigModal.value = false
+  engineConfigData.value = null
+}
+
+async function saveEngineConfig() {
+  if (!engineConfigData.value) return
+  engineConfigSaving.value = true
+  engineConfigError.value = null
+  try {
+    await updateEngineConfig(engineConfigData.value)
+    closeEngineConfig()
+    getEngines()
+  } catch (e: any) {
+    engineConfigError.value = e.message || '保存引擎配置失败'
+  } finally {
+    engineConfigSaving.value = false
   }
 }
 
@@ -998,25 +1025,28 @@ watch(
           <div class="card-header">
             <Gpu class="card-icon" />
             <span class="card-title">推理引擎与显存</span>
+            <button class="btn btn-sm btn-ghost" style="margin-left:auto" @click="openEngineConfig">
+              <Settings class="w-3.5 h-3.5" /> 引擎配置
+            </button>
           </div>
 
-          <div v-if="gpuMemory.engineStatus" class="engine-status-grid">
+          <div v-if="engineStatus" class="engine-status-grid">
             <div class="engine-current">
               <span class="engine-label">当前引擎</span>
-              <span class="engine-current-name">{{ engineLabels[gpuMemory.engineStatus.current_engine] }}</span>
-              <CircleDot v-if="gpuMemory.engineStatus[gpuMemory.engineStatus.current_engine]?.running" class="w-4 h-4" style="color:#4ade80" />
+              <span class="engine-current-name">{{ engineLabels[engineStatus.current_engine] }}</span>
+              <CircleDot v-if="engineStatus[engineStatus.current_engine]?.running" class="w-4 h-4" style="color:#4ade80" />
             </div>
             <div class="engine-switch-row">
               <button
                 v-for="eng in (['vllm', 'sglang', 'llama_cpp'] as EngineType[])"
                 :key="eng"
                 class="engine-btn"
-                :class="{ active: gpuMemory.engineStatus!.current_engine === eng, switching: engineSwitchTarget === eng }"
-                :disabled="gpuMemory.switchingEngine || gpuMemory.engineStatus!.current_engine === eng"
+                :class="{ active: engineStatus!.current_engine === eng, switching: engineSwitchTarget === eng }"
+                :disabled="switchingEngine || engineStatus!.current_engine === eng"
                 @click="handleSwitchEngine(eng)"
               >
                 <Loader2 v-if="engineSwitchTarget === eng" class="w-4 h-4 animate-spin" />
-                <CircleDot v-else-if="gpuMemory.engineStatus![eng]?.running" class="w-4 h-4" style="color:#4ade80" />
+                <CircleDot v-else-if="engineStatus![eng]?.running" class="w-4 h-4" style="color:#4ade80" />
                 <span v-else class="engine-off-dot"></span>
                 {{ engineLabels[eng] }}
               </button>
@@ -1024,33 +1054,33 @@ watch(
             <div class="engine-info-grid">
               <div v-for="eng in (['vllm', 'sglang', 'llama_cpp'] as EngineType[])" :key="eng" class="engine-info-item">
                 <span class="engine-info-label">{{ engineLabels[eng] }}</span>
-                <span class="engine-info-value" :class="gpuMemory.engineStatus![eng]?.running ? 'ok' : 'muted'">
-                  {{ gpuMemory.engineStatus![eng]?.running ? '运行中' : '未运行' }}
+                <span class="engine-info-value" :class="engineStatus![eng]?.running ? 'ok' : 'muted'">
+                  {{ engineStatus![eng]?.running ? '运行中' : '未运行' }}
                 </span>
-                <span v-if="gpuMemory.engineStatus![eng]?.model" class="engine-info-sub">{{ gpuMemory.engineStatus![eng]?.model }}</span>
-                <span v-if="gpuMemory.engineStatus![eng]?.port" class="engine-info-sub">端口 {{ gpuMemory.engineStatus![eng]?.port }}</span>
+                <span v-if="engineStatus![eng]?.model" class="engine-info-sub">{{ engineStatus![eng]?.model }}</span>
+                <span v-if="engineStatus![eng]?.port" class="engine-info-sub">端口 {{ engineStatus![eng]?.port }}</span>
               </div>
             </div>
           </div>
 
-          <div v-if="gpuMemory.gpuInfo?.current" class="gpu-memory-section">
+          <div v-if="gpuInfo?.current" class="gpu-memory-section">
             <h4 class="sub-title">GPU 显存</h4>
             <div class="gpu-mem-grid">
               <div class="gpu-mem-item">
                 <span class="gpu-mem-label">总显存</span>
-                <span class="gpu-mem-value">{{ formatMemory(gpuMemory.gpuInfo.current.total_memory) }}</span>
+                <span class="gpu-mem-value">{{ formatMemory(gpuInfo.current.total_memory) }}</span>
               </div>
               <div class="gpu-mem-item">
                 <span class="gpu-mem-label">已用</span>
-                <span class="gpu-mem-value warn">{{ formatMemory(gpuMemory.gpuInfo.current.used_memory) }}</span>
+                <span class="gpu-mem-value warn">{{ formatMemory(gpuInfo.current.used_memory) }}</span>
               </div>
               <div class="gpu-mem-item">
                 <span class="gpu-mem-label">可用</span>
-                <span class="gpu-mem-value ok">{{ formatMemory(gpuMemory.gpuInfo.current.available_memory) }}</span>
+                <span class="gpu-mem-value ok">{{ formatMemory(gpuInfo.current.available_memory) }}</span>
               </div>
               <div class="gpu-mem-item">
                 <span class="gpu-mem-label">利用率</span>
-                <span class="gpu-mem-value">{{ gpuMemory.gpuInfo.current.utilization_percent?.toFixed(1) ?? '--' }}%</span>
+                <span class="gpu-mem-value">{{ gpuInfo.current.utilization?.toFixed(1) ?? '--' }}%</span>
               </div>
             </div>
           </div>
@@ -1062,19 +1092,19 @@ watch(
                 <option value="" disabled>选择模型检测显存</option>
                 <option v-for="m in modelList" :key="m.name" :value="m.name">{{ m.name }}</option>
               </select>
-              <button class="btn btn-sm btn-accent" :disabled="!gpuCheckModel || gpuMemoryCheck.loading" @click="handleGPUMemoryCheck(gpuCheckModel)">
+              <button class="btn btn-sm btn-accent" :disabled="!gpuCheckModel || gpuMemoryCheckLoading" @click="handleGPUMemoryCheck(gpuCheckModel)">
                 <Cpu class="w-3.5 h-3.5" /> 检测
               </button>
             </div>
-            <div v-if="gpuMemoryCheck.loading" class="loading-state small">
+            <div v-if="gpuMemoryCheckLoading" class="loading-state small">
               <Loader2 class="w-4 h-4 animate-spin" />
             </div>
-            <div v-if="gpuMemoryCheck.checkResult" class="gpu-check-result">
-              <div v-if="gpuMemoryCheck.checkResult.feasible" class="check-pass">
-                <CheckCircle class="w-4 h-4" style="color:#4ade80" /> 可运行 (需要 {{ gpuMemoryCheck.checkResult.required_gb }} GB, 可用 {{ gpuMemoryCheck.checkResult.available_gb }} GB)
+            <div v-if="checkResult" class="gpu-check-result">
+              <div v-if="checkResult.feasible" class="check-pass">
+                <CheckCircle class="w-4 h-4" style="color:#4ade80" /> 可运行 (需要 {{ checkResult.required_gb }} GB, 可用 {{ checkResult.available_gb }} GB)
               </div>
               <div v-else class="check-fail">
-                <XCircle class="w-4 h-4" style="color:#f87171" /> 显存不足 (需要 {{ gpuMemoryCheck.checkResult.required_gb }} GB, 可用 {{ gpuMemoryCheck.checkResult.available_gb }} GB)
+                <XCircle class="w-4 h-4" style="color:#f87171" /> 显存不足 (需要 {{ checkResult.required_gb }} GB, 可用 {{ checkResult.available_gb }} GB)
               </div>
             </div>
           </div>
@@ -1386,7 +1416,7 @@ watch(
           <Search v-else class="w-4 h-4" />
           搜索
         </button>
-        <button class="btn btn-accent" :disabled="!searchKeyword.trim() || gpuMemoryCheck.loading" @click="handleRecommend">
+        <button class="btn btn-accent" :disabled="!searchKeyword.trim() || gpuMemoryCheckLoading" @click="handleRecommend">
           <Star class="w-4 h-4" />
           显存优选
         </button>
@@ -1405,9 +1435,9 @@ watch(
         </button>
       </div>
 
-      <div v-if="poolStore.error || gpuMemoryCheck.error" class="error-banner">
+      <div v-if="poolStore.error || gpuMemoryCheckError" class="error-banner">
         <AlertTriangle class="w-4 h-4" />
-        {{ poolStore.error || gpuMemoryCheck.error }}
+        {{ poolStore.error || gpuMemoryCheckError }}
       </div>
 
       <div v-if="searchSubTab === 'results'" class="search-results">
@@ -1450,51 +1480,51 @@ watch(
       </div>
 
       <div v-if="searchSubTab === 'recommend'" class="recommend-section">
-        <div v-if="gpuMemoryCheck.loading" class="loading-state">
+        <div v-if="gpuMemoryCheckLoading" class="loading-state">
           <Loader2 class="w-5 h-5 animate-spin" />
           <span>分析中...</span>
         </div>
-        <div v-else-if="!gpuMemoryCheck.recommendation" class="empty-state">
+        <div v-else-if="!recommendation" class="empty-state">
           <Cpu class="w-12 h-12" />
           <p>点击"显存优选"获取推荐</p>
         </div>
         <div v-else>
-          <div v-if="gpuMemoryCheck.recommendation.recommended" class="recommend-card">
+          <div v-if="recommendation.recommended" class="recommend-card">
             <div class="recommend-badge">
               <Star class="w-5 h-5" /> 最佳推荐
             </div>
-            <h3>{{ gpuMemoryCheck.recommendation.recommended.name }}</h3>
+            <h3>{{ recommendation.recommended.name }}</h3>
             <div class="result-meta">
-              <span v-if="gpuMemoryCheck.recommendation.recommended.required_gb">{{ gpuMemoryCheck.recommendation.recommended.required_gb }} GB</span>
-              <span v-if="gpuMemoryCheck.recommendation.recommended.quant">{{ gpuMemoryCheck.recommendation.recommended.quant }}</span>
-              <span>{{ sourceIcon(gpuMemoryCheck.recommendation.recommended.source) }} {{ gpuMemoryCheck.recommendation.recommended.source }}</span>
+              <span v-if="recommendation.recommended.required_gb">{{ recommendation.recommended.required_gb }} GB</span>
+              <span v-if="recommendation.recommended.quant">{{ recommendation.recommended.quant }}</span>
+              <span>{{ sourceIcon(recommendation.recommended.source) }} {{ recommendation.recommended.source }}</span>
             </div>
-            <button class="btn btn-primary" @click="handleDownloadModel(gpuMemoryCheck.recommendation.recommended!.name, gpuMemoryCheck.recommendation.recommended!.source)">
+            <button class="btn btn-primary" @click="handleDownloadModel(recommendation.recommended!.name, recommendation.recommended!.source)">
               <Download class="w-4 h-4" /> 下载推荐模型
             </button>
           </div>
-          <div v-if="gpuMemoryCheck.recommendation.gpu_info" class="gpu-info-card">
+          <div v-if="recommendation.gpu_info" class="gpu-info-card">
             <h4>GPU 信息</h4>
             <div class="gpu-stats">
-              <div class="stat-item"><span class="stat-label">名称</span><span class="stat-value">{{ gpuMemoryCheck.recommendation.gpu_info.name || '--' }}</span></div>
-              <div class="stat-item"><span class="stat-label">总显存</span><span class="stat-value">{{ gpuMemoryCheck.recommendation.gpu_info.total_gb?.toFixed(1) || '--' }} GB</span></div>
-              <div class="stat-item"><span class="stat-label">可用显存</span><span class="stat-value">{{ gpuMemoryCheck.recommendation.gpu_info.free_gb?.toFixed(1) || '--' }} GB</span></div>
-              <div class="stat-item"><span class="stat-label">安全可用</span><span class="stat-value">{{ gpuMemoryCheck.recommendation.gpu_info.safety_available_gb?.toFixed(1) || '--' }} GB</span></div>
+              <div class="stat-item"><span class="stat-label">名称</span><span class="stat-value">{{ recommendation.gpu_info.name || '--' }}</span></div>
+              <div class="stat-item"><span class="stat-label">总显存</span><span class="stat-value">{{ recommendation.gpu_info.total_gb?.toFixed(1) || '--' }} GB</span></div>
+              <div class="stat-item"><span class="stat-label">可用显存</span><span class="stat-value">{{ recommendation.gpu_info.free_gb?.toFixed(1) || '--' }} GB</span></div>
+              <div class="stat-item"><span class="stat-label">安全可用</span><span class="stat-value">{{ recommendation.gpu_info.safety_available_gb?.toFixed(1) || '--' }} GB</span></div>
             </div>
           </div>
-          <div v-if="gpuMemoryCheck.checkResult" class="memory-check-card">
+          <div v-if="checkResult" class="memory-check-card">
             <h4>显存校验结果</h4>
-            <div v-if="gpuMemoryCheck.checkResult.feasible" class="check-pass">
-              <CheckCircle class="w-6 h-6" style="color:#4ade80" /> 可运行 (需要 {{ gpuMemoryCheck.checkResult.required_gb }} GB, 可用 {{ gpuMemoryCheck.checkResult.available_gb }} GB)
+            <div v-if="checkResult.feasible" class="check-pass">
+              <CheckCircle class="w-6 h-6" style="color:#4ade80" /> 可运行 (需要 {{ checkResult.required_gb }} GB, 可用 {{ checkResult.available_gb }} GB)
             </div>
             <div v-else class="check-fail">
-              <XCircle class="w-6 h-6" style="color:#f87171" /> 显存不足 (需要 {{ gpuMemoryCheck.checkResult.required_gb }} GB, 可用 {{ gpuMemoryCheck.checkResult.available_gb }} GB)
+              <XCircle class="w-6 h-6" style="color:#f87171" /> 显存不足 (需要 {{ checkResult.required_gb }} GB, 可用 {{ checkResult.available_gb }} GB)
             </div>
           </div>
-          <div v-if="gpuMemoryCheck.recommendation.candidates?.length" class="candidates-section">
+          <div v-if="recommendation.candidates?.length" class="candidates-section">
             <h4>其他候选</h4>
             <div class="result-grid">
-              <div v-for="c in gpuMemoryCheck.recommendation.candidates" :key="c.name + c.source" class="result-card">
+              <div v-for="c in recommendation.candidates" :key="c.name + c.source" class="result-card">
                 <div class="card-top-row">
                   <span class="source-tag">{{ sourceIcon(c.source) }} {{ c.source }}</span>
                   <span v-if="c.feasible === true" class="feasible-tag feasible"><CheckCircle class="w-3.5 h-3.5" /> 可运行</span>
@@ -1566,7 +1596,7 @@ watch(
         <p>模型池为空</p>
       </div>
       <div v-else class="pool-grid">
-        <div v-for="entry in poolFilteredModels" :key="entry.config_key" class="pool-card">
+        <div v-for="entry in poolFilteredModels" :key="entry.config_key ?? entry.name" class="pool-card">
           <div class="pool-card-header">
             <span class="pool-model-name">{{ entry.name }}</span>
             <span class="pool-engine-badge">{{ entry.engine_type || 'vllm' }}</span>
@@ -1733,6 +1763,62 @@ watch(
             <Loader2 v-if="configSaving" class="w-4 h-4 animate-spin" />
             <Save v-else class="w-4 h-4" />
             {{ configSaving ? '保存中...' : '保存配置' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="engineConfigModal" class="modal-overlay" @click.self="closeEngineConfig">
+      <div class="modal-content vllm-config-modal">
+        <div class="modal-header">
+          <div class="modal-title">
+            <Settings class="w-5 h-5" />
+            <span>引擎全局配置</span>
+          </div>
+          <button class="modal-close" @click="closeEngineConfig">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+        <div v-if="engineConfigData" class="modal-body">
+          <div v-for="eng in (['vllm', 'sglang', 'llama_cpp'] as EngineType[])" :key="eng" class="engine-config-section">
+            <h4 class="engine-config-section-title">{{ engineLabels[eng] }} 引擎配置</h4>
+            <div class="config-row">
+              <label class="config-label">
+                <span class="label-text">启动命令</span>
+              </label>
+              <div class="config-input-wrap">
+                <input
+                  v-model="engineConfigData[eng].command"
+                  type="text"
+                  class="config-input"
+                />
+              </div>
+            </div>
+            <div v-for="(val, key) in engineConfigData[eng].default_params" :key="key" class="config-row">
+              <label class="config-label">
+                <span class="label-text">{{ key }}</span>
+              </label>
+              <div class="config-input-wrap">
+                <input
+                  :value="val"
+                  type="text"
+                  class="config-input"
+                  @input="engineConfigData![eng].default_params[key] = ($event.target as HTMLInputElement).value"
+                />
+              </div>
+            </div>
+          </div>
+          <div v-if="engineConfigError" class="error-text" style="margin-top:12px">{{ engineConfigError }}</div>
+        </div>
+        <div v-else-if="engineConfigError" class="modal-body">
+          <div class="error-text">{{ engineConfigError }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn secondary" @click="closeEngineConfig">取消</button>
+          <button class="btn primary" :disabled="engineConfigSaving" @click="saveEngineConfig">
+            <Loader2 v-if="engineConfigSaving" class="w-4 h-4 animate-spin" />
+            <Save v-else class="w-4 h-4" />
+            {{ engineConfigSaving ? '保存中...' : '保存配置' }}
           </button>
         </div>
       </div>
@@ -3134,6 +3220,20 @@ watch(
 
 .engine-switch-card {
   margin-bottom: 16px;
+}
+
+.engine-config-section {
+  margin-bottom: 20px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.engine-config-section-title {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  font-weight: 600;
 }
 
 .engine-status-grid {

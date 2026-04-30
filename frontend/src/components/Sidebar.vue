@@ -17,6 +17,10 @@ import {
   Cpu,
   Database,
   Search,
+  Gauge,
+  Settings,
+  Heart,
+  Shield,
 } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
 import { useGPU } from '@/composables/useGPU'
@@ -45,6 +49,21 @@ const groups = [
       { name: 'monitor', label: '实时性能', icon: Activity },
       { name: 'gpumanage', label: 'GPU 管理', icon: Cpu },
       { name: 'docs', label: '系统文档', icon: BookOpen },
+    ],
+  },
+  {
+    title: '系统管理',
+    items: [
+      { name: 'engines', label: '引擎管理', icon: Zap },
+      { name: 'ratelimit', label: '限流控制', icon: Gauge },
+      { name: 'config', label: '配置中心', icon: Settings },
+      { name: 'health', label: '健康运维', icon: Heart },
+    ],
+  },
+  {
+    title: '安全',
+    items: [
+      { name: 'login', label: '安全鉴权', icon: Shield },
     ],
   },
 ]

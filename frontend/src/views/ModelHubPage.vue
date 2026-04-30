@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useModelSearch } from '@/composables/useModelSearch'
 import { useModelDownload } from '@/composables/useModelDownload'
 import { useGPUMemory } from '@/composables/useGPUMemory'
@@ -23,13 +24,43 @@ const { recommendResult, memoryCheckResult, loading: gpuLoading, error: gpuError
 
 const searchKeyword = ref('')
 const searchSource = ref('all')
-const activeTab = ref<'search' | 'download' | 'recommend'>('search')
+const router = useRouter()
 const activeTab = ref<'search' | 'download' | 'recommend'>('search')
 const pollTimer = ref<ReturnType<typeof setInterval> | null>(null)
 const sortBy = ref<'default' | 'size' | 'quant' | 'memory' | 'feasible'>('default')
+const filterFeasible = ref<'all' | 'ok' | 'fail' | 'unknown'>('all')
+const filterQuant = ref<string>('all')
+const filterSource = ref<string>('all')
+const filterSizeRange = ref<'all' | 'small' | 'medium' | 'large' | 'xlarge'>('all')
 
-const sortedResults = computed(() => {
-  const r = [...results.value]
+const filteredAndSortedResults = computed(() => {
+  let r = [...results.value]
+
+  if (filterFeasible.value !== 'all') {
+    if (filterFeasible.value === 'ok') r = r.filter(i => i.feasible === true)
+    else if (filterFeasible.value === 'fail') r = r.filter(i => i.feasible === false)
+    else if (filterFeasible.value === 'unknown') r = r.filter(i => i.feasible === null)
+  }
+
+  if (filterQuant.value !== 'all') {
+    r = r.filter(i => i.quant === filterQuant.value)
+  }
+
+  if (filterSource.value !== 'all') {
+    r = r.filter(i => i.source === filterSource.value)
+  }
+
+  if (filterSizeRange.value !== 'all') {
+    const sizeRanges: Record<string, [number, number]> = {
+      small: [0, 7],
+      medium: [7, 14],
+      large: [14, 35],
+      xlarge: [35, Infinity],
+    }
+    const [min, max] = sizeRanges[filterSizeRange.value] ?? [0, Infinity]
+    r = r.filter(i => i.required_gb !== null && i.required_gb >= min && i.required_gb < max)
+  }
+
   switch (sortBy.value) {
     case 'size':
       return r.sort((a, b) => (b.required_gb ?? 0) - (a.required_gb ?? 0))
@@ -46,6 +77,18 @@ const sortedResults = computed(() => {
     default:
       return r
   }
+})
+
+const quantOptions = computed(() => {
+  const quants = new Set<string>()
+  results.value.forEach(i => { if (i.quant) quants.add(i.quant) })
+  return Array.from(quants)
+})
+
+const sourceOptions = computed(() => {
+  const sources = new Set<string>()
+  results.value.forEach(i => sources.add(i.source))
+  return Array.from(sources)
 })
 
 const feasibleBadgeLabel = (feasible: boolean | null, requiredGb: number | null) => {
@@ -185,6 +228,9 @@ const sourceIcon = (source: string) => {
     <div v-if="searchError || downloadError || gpuError" class="error-banner">
       <AlertTriangle class="w-4 h-4" />
       {{ searchError || downloadError || gpuError }}
+      <button class="btn btn-sm btn-ghost" @click="handleSearch" style="margin-left:auto">
+        <RefreshCw class="w-3.5 h-3.5" /> 重试
+      </button>
     </div>
 
     <div class="tab-content">
@@ -207,9 +253,31 @@ const sourceIcon = (source: string) => {
               <option value="memory">按显存需求</option>
               <option value="feasible">按显存可行性</option>
             </select>
+            <span class="filter-sep">|</span>
+            <select v-model="filterFeasible" class="sort-select">
+              <option value="all">可行性: 全部</option>
+              <option value="ok">可运行</option>
+              <option value="fail">显存不足</option>
+              <option value="unknown">未知</option>
+            </select>
+            <select v-model="filterQuant" class="sort-select">
+              <option value="all">量化: 全部</option>
+              <option v-for="q in quantOptions" :key="q" :value="q">{{ q }}</option>
+            </select>
+            <select v-model="filterSource" class="sort-select">
+              <option value="all">来源: 全部</option>
+              <option v-for="s in sourceOptions" :key="s" :value="s">{{ s }}</option>
+            </select>
+            <select v-model="filterSizeRange" class="sort-select">
+              <option value="all">大小: 全部</option>
+              <option value="small">&lt;7B</option>
+              <option value="medium">7-14B</option>
+              <option value="large">14-35B</option>
+              <option value="xlarge">&gt;35B</option>
+            </select>
           </div>
           <div class="result-grid">
-          <div v-for="item in sortedResults" :key="item.name + item.source" class="result-card tech-border">
+          <div v-for="item in filteredAndSortedResults" :key="item.name + item.source" class="result-card tech-border">
             <div class="card-header">
               <span class="source-tag">{{ sourceIcon(item.source) }} {{ item.source }}</span>
               <span :class="['feasible-badge', feasibleBadgeClass(item.feasible, item.required_gb)]">
@@ -273,6 +341,13 @@ const sourceIcon = (source: string) => {
                 @click="handleCancelDownload(task.task_id)"
               >
                 取消
+              </button>
+              <button
+                v-if="task.status === 'completed'"
+                class="btn btn-sm btn-primary"
+                @click="router.push('/modelpool')"
+              >
+                前往模型池加载
               </button>
             </div>
           </div>
@@ -404,6 +479,13 @@ const sourceIcon = (source: string) => {
   padding: 6px 10px;
   border-radius: 6px;
   background: var(--bg-secondary);
+  flex-wrap: wrap;
+}
+
+.filter-sep {
+  color: var(--text-muted);
+  opacity: 0.4;
+  font-size: 12px;
 }
 
 .sort-select {

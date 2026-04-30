@@ -684,3 +684,50 @@ export interface MemoryCheckResult {
   gpu_name?: string
   free_gb?: number
 }
+
+export interface RateLimitConfig {
+  ip_qps_limit: number
+  ip_qps_window_seconds: number
+  concurrency_limit: number
+  queue_timeout_seconds: number
+  whitelist_ips: string[]
+  rate_limited_paths: string[]
+}
+
+export interface RateLimitStats {
+  total_rejected: number
+  recent_429_count: number
+  rejection_by_ip: Record<string, number>
+  rejection_by_path: Record<string, number>
+  current_queue_depth: number
+  timestamp: string
+}
+
+export interface SystemConfig {
+  health_check_interval_seconds: number
+  cache_ttl_seconds: number
+  log_level: string
+  gpu_poll_interval_seconds: number
+  ws_push_interval_seconds: number
+}
+
+export interface HealthDetail {
+  overall_score: number
+  status: 'healthy' | 'degraded' | 'unhealthy'
+  checks: {
+    gpu: { available: boolean; utilization: number; temperature: number; memory_used_pct: number }
+    go_backend: { reachable: boolean; response_time_ms: number }
+    python_backend: { reachable: boolean; response_time_ms: number }
+    vllm_service: { running: boolean; active_requests: number }
+    redis: { available: boolean; connected: boolean }
+  }
+  alert_reasons: string[]
+  timestamp: string
+}
+
+export interface HealthHistoryEntry {
+  timestamp: string
+  health_score: number
+  status: string
+  alert_count: number
+}

@@ -1,0 +1,52 @@
+.aios-status-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.aios-data-pre {
+    background: rgba(0, 0, 0, 0.3);
+    color: #e0e0e0;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 12px;
+    font-family: monospace;
+    max-height: 500px;
+}
+
+.aios-error {
+    color: #f87171;
+    padding: 8px;
+}
+
+.section-header h2 {
+    color: #e0e0e0;
+    font-size: 16px;
+    margin-bottom: 8px;
+}
+
+#aios-gpu .section-header h2::before {
+    content: '🖥 ';
+}
+
+#aios-switch .section-header h2::before {
+    content: '🔄 ';
+}
+
+#aios-engine .section-header h2::before {
+    content: '⚡ ';
+}
+
+#aios-config .section-header h2::before {
+    content: '⚙ ';
+}
+
+#aios-health .section-header h2::before {
+    content: '❤ ';
+}
+
+#aios-ratelimit .section-header h2::before {
+    content: '📊 ';
+}

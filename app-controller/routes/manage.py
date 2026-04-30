@@ -1288,7 +1288,7 @@ async def get_gpu_memory_info():
         from core.gpu_memory_checker import GPUMemoryChecker
         checker = GPUMemoryChecker()
         gpu_info = checker.detect_all()
-    loaded_models = gpu_memory_manager.get_loaded_models_summary() if hasattr(gpu_memory_manager, 'get_loaded_models_summary') else []
+    loaded_models = gpu_memory_manager.get_loaded_models_summary()
     return {
         "gpu": gpu_info,
         "loaded_models": loaded_models,
@@ -1308,7 +1308,7 @@ async def check_model_memory(model_name: str):
     size_b = float(size_match.group(1))
     quant_match = re.search(r'(4bit|int4|8bit|int8|fp16|awq|gptq|gguf)', model_name, re.IGNORECASE)
     quant = quant_match.group(1).lower() if quant_match else None
-    result = gpu_memory_manager.check_model_feasibility(size_b, quant)
+    result = gpu_memory_manager.check_model_feasibility(model_name, size_b=size_b, quant=quant)
     if not result.get("gpu_available"):
         raise HTTPException(status_code=503, detail="GPU检测失败，无法校验显存")
     return result
@@ -1547,3 +1547,48 @@ async def comparative_benchmark(request: Request):
         return {"status": "completed", "analysis": analysis}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Comparative benchmark failed: {str(e)}")
+
+
+# ===== Scheduler 统一调度器路由 =====
+
+@manage_router.get("/scheduler/status")
+async def get_scheduler_status():
+    return model_engine_scheduler.get_scheduler_status()
+
+
+@manage_router.get("/scheduler/pool")
+async def get_scheduler_model_pool():
+    pool = model_engine_scheduler.get_model_pool()
+    return {"pool": pool, "total": len(pool)}
+
+
+@manage_router.get("/gpu/realtime")
+async def get_gpu_realtime(device_id: int = 0):
+    info = model_engine_scheduler.get_realtime_gpu_info(device_id)
+    if not info.get("available"):
+        raise HTTPException(status_code=503, detail=info.get("reason", "GPU不可用"))
+    return info
+
+
+@manage_router.post("/engines/deploy")
+async def deploy_model_endpoint(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    model_name = body.get("model_name")
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model_name required")
+    result = await model_engine_scheduler.auto_deploy_model(
+        model_name=model_name,
+        engine_type=body.get("engine_type"),
+        port=body.get("port"),
+        download_if_missing=body.get("download_if_missing", False),
+        source=body.get("source"),
+    )
+    if not result.get("success"):
+        stage = result.get("stage", "")
+        code_map = {"insufficient_gpu_memory": 409, "download": 502, "service_not_ready": 503}
+        code = code_map.get(stage, 500)
+        raise HTTPException(status_code=code, detail=result.get("reason", "deploy_failed"))
+    return result

@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU 监控与模型切换</title>
+    <style>
+        :root {
+            --bg-primary: #0f1419;
+            --bg-secondary: #1a1f26;
+            --bg-tertiary: #242a33;
+            --bg-card: #1c2128;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --border-primary: #30363d;
+            --border-card: #21262d;
+            --color-primary: #6366f1;
+            --color-primary-dark: #4f46e5;
+            --color-success: #22c55e;
+            --color-warning: #f59e0b;
+            --color-danger: #ef4444;
+            --color-secondary: #06b6d4;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+            --scrollbar-thumb: #484f58;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--color-primary-dark);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
+            padding: 25px 30px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .header h1 {
+            color: var(--text-primary);
+            font-size: 2em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header .subtitle {
+            color: var(--text-secondary);
+            font-size: 0.95em;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px 25px;
+            border: 1px solid var(--border-card);
+            border-radius: 12px;
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow);
+        }
+
+        .tab-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-color: var(--color-primary);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+            color: white;
+            border-color: var(--color-primary);
+            box-shadow: var(--shadow), var(--shadow-glow);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fade-in 0.25s ease-out;
+        }
+
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .status-bar {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .status-indicator.online {
+            background: var(--status-online);
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        .status-indicator.offline {
+            background: var(--status-error);
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.2); }
+        }
+
+        .refresh-interval {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .refresh-interval label {
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
+
+        .refresh-interval input {
+            width: 120px;
+            padding: 10px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            color: var(--text-primary);
+        }
+
+        .gpu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .gpu-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: var(--shadow);
+            transition: all 0.2s ease;
+        }
+
+        .gpu-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--color-primary-light);
+        }
+
+        .gpu-card h3 {
+            color: var(--text-primary);
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .gpu-card .gpu-index {
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+            color: white;
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9em;
+            font-weight: 700;
+            box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .metric {
+            margin-bottom: 18px;
+        }
+
+        .metric:last-child {
+            margin-bottom: 0;
+        }
+
+        .metric-label {
+            color: var(--text-secondary);
+            font-size: 0.9em;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            color: var(--text-primary);
+            font-size: 1.2em;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .progress-fill.green {
+            background: linear-gradient(90deg, var(--color-success) 0%, #16a34a 100%);
+        }
+
+        .progress-fill.yellow {
+            background: linear-gradient(90deg, var(--color-warning) 0%, #ea580c 100%);
+        }
+
+        .progress-fill.red {
+            background: linear-gradient(90deg, var(--color-danger) 0%, #dc2626 100%);
+        }
+
+        .chart-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        .chart-title {
+            color: var(--text-primary);
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .chart-card {
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid var(--border-primary);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .chart-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+        }
+
+        .chart-card-label {
+            color: var(--text-secondary);
+            font-size: 0.85em;
+        }
+
+        .chart-card-value {
+            color: var(--text-primary);
+            font-size: 0.9em;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        .chart-card canvas {
+            width: 100%;
+            height: 120px;
+            display: block;
+        }
+
+        .provider-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .provider-item {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            transition: all 0.2s ease;
+        }
+
+        .provider-item:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--color-primary);
+        }
+
+        .provider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .provider-name {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .provider-status {
+            padding: 5px 12px;
+            border-radius: 9999px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .status-healthy {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--color-success);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-unhealthy {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--color-danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .status-disabled {
+            background: rgba(100, 116, 139, 0.15);
+            color: var(--text-tertiary);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+        }
+
+        .provider-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-label {
+            color: var(--text-secondary);
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+
+        .detail-value {
+            color: var(--text-primary);
+            font-weight: 600;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        .model-switch-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .model-switch-form input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 15px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 1em;
+            transition: all 0.2s ease;
+        }
+
+        .model-switch-form input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.15);
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--color-primary-hover) 0%, var(--color-primary-dark) 100%);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--color-success) 0%, #16a34a 100%);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, var(--color-warning) 0%, #ea580c 100%);
+            color: white;
+        }
+
+        .loading {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 40px;
+            font-size: 1.1em;
+            grid-column: 1 / -1;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.12);
+            color: #fecaca;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+        }
+
+        .success-message {
+            background: rgba(34, 197, 94, 0.12);
+            color: #bbf7d0;
+            border: 1px solid rgba(34, 197, 94, 0.25);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+        }
+
+        .timestamp {
+            color: var(--text-secondary);
+            font-size: 0.9em;
+            margin-top: 14px;
+            text-align: right;
+        }
+
+        @media (max-width: 768px) {
+            .gpu-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-bar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .header h1 {
+                font-size: 1.5em;
+            }
+        }
+
+        .model-summary {
+            display: flex;
+            gap: 15px;
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
+
+        .model-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .model-group {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .model-group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: rgba(99, 102, 241, 0.08);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .model-group-header:hover {
+            background: rgba(99, 102, 241, 0.15);
+        }
+
+        .model-group-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .model-group-name {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .model-group-meta {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+        }
+
+        .model-group-toggle {
+            color: var(--text-secondary);
+            transition: transform 0.2s ease;
+        }
+
+        .model-group-toggle.expanded {
+            transform: rotate(90deg);
+        }
+
+        .model-variants {
+            display: none;
+            border-top: 1px solid var(--border-primary);
+        }
+
+        .model-variants.expanded {
+            display: block;
+        }
+
+        .model-variant {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border-primary);
+            transition: background 0.2s ease;
+            gap: 16px;
+        }
+
+        .model-variant:last-child {
+            border-bottom: none;
+        }
+
+        .model-variant:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .model-variant.running {
+            border-left: 3px solid var(--color-success);
+        }
+
+        .model-variant.current {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .model-variant-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .model-variant-main {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .model-variant-name {
+            font-size: 0.95em;
+            font-weight: 500;
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+
+        .model-variant-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.8em;
+            color: var(--text-secondary);
+            flex-wrap: wrap;
+        }
+
+        .model-variant-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .model-variant-config {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .model-variant-config-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 0.75em;
+            color: var(--text-secondary);
+            background: rgba(139, 148, 158, 0.12);
+            border: 1px solid rgba(139, 148, 158, 0.15);
+        }
+
+        .model-variant-badge {
+            font-size: 0.7em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .badge-running {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--color-success);
+        }
+
+        .badge-current {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--color-primary);
+        }
+
+        .badge-configured {
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--color-secondary);
+        }
+
+        .model-variant-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+            align-items: center;
+        }
+
+        .model-variant-actions .btn {
+            padding: 6px 12px;
+            font-size: 0.85em;
+        }
+
+        .path-missing-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 12px;
+            font-size: 12px;
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 6px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            cursor: default;
+        }
+
+        .switch-progress-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .switch-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .switch-spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--bg-tertiary);
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            flex-shrink: 0;
+        }
+
+        .switch-panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .switch-panel-model {
+            font-size: 14px;
+            color: var(--color-primary);
+            font-weight: 500;
+            margin-left: auto;
+            word-break: break-all;
+        }
+
+        .switch-cancel-btn {
+            padding: 6px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border-primary);
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .switch-cancel-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .switch-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .switch-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            transition: all 0.3s ease;
+        }
+
+        .switch-step.active {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .switch-step.completed {
+            background: rgba(34, 197, 94, 0.05);
+        }
+
+        .switch-step.failed {
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .step-indicator {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .step-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: all 0.3s ease;
+        }
+
+        .switch-step.active .step-dot {
+            background: var(--color-primary);
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+            animation: pulse-dot 1.5s ease infinite;
+        }
+
+        .switch-step.completed .step-dot {
+            background: var(--color-success);
+        }
+
+        .switch-step.failed .step-dot {
+            background: var(--color-danger);
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .step-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .switch-step.completed .step-title {
+            color: var(--color-success);
+        }
+
+        .switch-step.failed .step-title {
+            color: var(--color-danger);
+        }
+
+        .switch-log {
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            max-height: 60px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        .switch-monitor-mode {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>GPU 监控与模型切换</h1>
+            <p class="subtitle">实时监控 GPU 状态，管理 Provider 模型配置</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('gpu')">
+                GPU 监控
+            </button>
+            <button class="tab-btn" onclick="switchTab('model')">
+                模型列表
+            </button>
+        </div>
+
+        <div id="tab-gpu" class="tab-content active">
+            <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-indicator" id="monitor-status"></div>
+                    <span id="monitor-text">监控中</span>
+                </div>
+                <div class="refresh-interval">
+                    <label>刷新间隔 (ms):</label>
+                    <input type="number" id="refresh-interval" value="5000" min="1000" step="1000">
+                    <button class="btn btn-primary" onclick="updateInterval()">更新</button>
+                </div>
+                <div>
+                    <button class="btn btn-success" onclick="toggleMonitoring()" id="toggle-btn">停止监控</button>
+                </div>
+            </div>
+
+            <div id="gpu-error"></div>
+            <div id="gpu-grid" class="gpu-grid">
+                <div class="loading">加载中...</div>
+            </div>
+            <div class="timestamp" id="gpu-timestamp"></div>
+        </div>
+
+        <div id="tab-model" class="tab-content">
+            <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-indicator" id="model-status"></div>
+                    <span id="model-status-text">已加载模型数据</span>
+                </div>
+                <div class="model-summary">
+                    <span id="model-total-groups">0 组</span>
+                    <span id="model-total-variants">0 个模型</span>
+                </div>
+            </div>
+            <div id="model-error"></div>
+            <div id="model-success"></div>
+            <div id="switch-progress-panel" class="switch-progress-panel" style="display: none;">
+                <div class="switch-panel-header">
+                    <div class="switch-spinner"></div>
+                    <div class="switch-panel-title">
+                        <span id="switch-panel-status-text">正在切换模型</span>
+                    </div>
+                    <div class="switch-panel-model" id="switch-panel-model-name"></div>
+                    <button class="switch-cancel-btn" id="switch-cancel-btn" onclick="cancelSwitch()">取消</button>
+                </div>
+                <div class="switch-steps">
+                    <div class="switch-step" id="switch-step-1">
+                        <div class="step-indicator">
+                            <div class="step-dot"></div>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">发送切换请求</div>
+                            <div class="step-desc">正在停止当前模型并准备切换</div>
+                        </div>
+                    </div>
+                    <div class="switch-step" id="switch-step-2">
+                        <div class="step-indicator">
+                            <div class="step-dot"></div>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">后端加载模型</div>
+                            <div class="step-desc">vLLM 正在加载新模型到 GPU</div>
+                        </div>
+                    </div>
+                    <div class="switch-step" id="switch-step-3">
+                        <div class="step-indicator">
+                            <div class="step-dot"></div>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">验证模型就绪</div>
+                            <div class="step-desc">检查模型是否正常响应</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="switch-log" id="switch-log"></div>
+                <div class="switch-monitor-mode" id="switch-monitor-mode"></div>
+            </div>
+            <div id="model-list" class="model-list">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const VLLM_PARAM_FIELDS = [
+            { key: 'gpu_memory_utilization', label: 'GPU', format: value => Number(value).toFixed(2) },
+            { key: 'max_model_len', label: '上下文', format: value => Number(value).toLocaleString('zh-CN') },
+            { key: 'max_num_seqs', label: '并发', format: value => Number(value).toLocaleString('zh-CN') },
+            { key: 'max_num_batched_tokens', label: '批量Token', format: value => Number(value).toLocaleString('zh-CN') },
+            { key: 'tensor_parallel_size', label: 'TP', format: value => Number(value).toLocaleString('zh-CN') }
+        ];
+
+        function formatVLLMConfig(config) {
+            if (!config) return '';
+            return VLLM_PARAM_FIELDS
+                .filter(field => config[field.key] !== null && config[field.key] !== undefined)
+                .map(field => `<span class="model-variant-config-item">${field.label}: ${field.format(config[field.key])}</span>`)
+                .join('');
+        }
+
+        function buildVLLMSummary(config) {
+            if (!config || !config.has_custom_config) return '';
+            const content = formatVLLMConfig(config);
+            if (!content) return '<div class="model-variant-config"><span class="model-variant-config-item">已配置自定义参数</span></div>';
+            return `<div class="model-variant-config">${content}</div>`;
+        }
+
+        const chartStore = new Map();
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chartStore = new Map();
+        const lineColors = {
+            utilization: '#6366f1',
+            memory: '#06b6d4',
+            temperature: '#f59e0b'
+        };
+        let gpuInterval;
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            if (tab === 'gpu') {
+                loadGPUData();
+            } else if (tab === 'model') {
+                loadModelData();
+            } else {
+                loadProviderData();
+            }
+        }
+
+        function getProgressColor(value) {
+            if (value < 60) return 'green';
+            if (value < 80) return 'yellow';
+            return 'red';
+        }
+
+        function clampPercent(value) {
+            return Math.min(Math.max(Number(value) || 0, 0), 100);
+        }
+
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString('zh-CN');
+        }
+
+        function formatMemory(value) {
+            const num = Number(value);
+            if (!Number.isFinite(num) || num <= 0) return 'N/A';
+            return (num / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+        }
+
+        function formatMetricValue(value, unit = '') {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return 'N/A';
+            return num.toFixed(1) + unit;
+        }
+
+        function getHistorySeries(history, key) {
+            return (Array.isArray(history) ? history : [])
+                .map(item => Number(item?.[key]))
+                .filter(value => Number.isFinite(value));
+        }
+
+        function drawLineChart(canvasId, values, color, maxValue = 100) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const width = canvas.clientWidth || 320;
+            const height = canvas.clientHeight || 120;
+            if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+                canvas.width = width * dpr;
+                canvas.height = height * dpr;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            } else {
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
+
+            ctx.clearRect(0, 0, width, height);
+
+            if (!values.length) {
+                ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+                ctx.font = '12px sans-serif';
+                ctx.fillText('暂无数据', 12, height / 2);
+                return;
+            }
+
+            const safeMax = Math.max(maxValue, ...values, 1);
+            const padding = { top: 10, right: 8, bottom: 18, left: 8 };
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.16)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 2; i += 1) {
+                const y = padding.top + (chartHeight / 2) * i;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+            }
+
+            ctx.beginPath();
+            values.forEach((value, index) => {
+                const x = padding.left + (values.length === 1 ? chartWidth / 2 : (chartWidth / (values.length - 1)) * index);
+                const y = padding.top + chartHeight - (Math.min(value, safeMax) / safeMax) * chartHeight;
+                if (index === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            const lastValue = values[values.length - 1];
+            const lastX = padding.left + (values.length === 1 ? chartWidth / 2 : chartWidth);
+            const lastY = padding.top + chartHeight - (Math.min(lastValue, safeMax) / safeMax) * chartHeight;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function renderCharts(gpuIndex, history) {
+            const seriesMap = {
+                utilization: getHistorySeries(history, 'utilization').slice(-30),
+                memory: getHistorySeries(history, 'memory').slice(-30),
+                temperature: getHistorySeries(history, 'temperature').slice(-30)
+            };
+            chartStore.set(gpuIndex, seriesMap);
+            drawLineChart(`gpu-chart-util-${gpuIndex}`, seriesMap.utilization, lineColors.utilization, 100);
+            drawLineChart(`gpu-chart-mem-${gpuIndex}`, seriesMap.memory, lineColors.memory, 100);
+            drawLineChart(`gpu-chart-temp-${gpuIndex}`, seriesMap.temperature, lineColors.temperature, 100);
+        }
+
+        function buildChartSection(gpu, index, history) {
+            const utilSeries = getHistorySeries(history, 'utilization');
+            const memSeries = getHistorySeries(history, 'memory');
+            const tempSeries = getHistorySeries(history, 'temperature');
+            return `
+                <div class="chart-section">
+                    <div class="chart-title">最近 ${Math.max(utilSeries.length, memSeries.length, tempSeries.length, 0)} 次采样</div>
+                    <div class="chart-grid">
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <span class="chart-card-label">GPU 利用率</span>
+                                <span class="chart-card-value">${formatMetricValue(gpu.gpuUtilization, '%')}</span>
+                            </div>
+                            <canvas id="gpu-chart-util-${index}"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <span class="chart-card-label">显存占用率</span>
+                                <span class="chart-card-value">${formatMetricValue(gpu.memoryUsagePercent, '%')}</span>
+                            </div>
+                            <canvas id="gpu-chart-mem-${index}"></canvas>
+                        </div>
+                        <div class="chart-card" style="grid-column: 1 / -1;">
+                            <div class="chart-card-header">
+                                <span class="chart-card-label">温度趋势</span>
+                                <span class="chart-card-value">${formatMetricValue(gpu.temperature, '°C')}</span>
+                            </div>
+                            <canvas id="gpu-chart-temp-${index}"></canvas>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function refreshMonitorStatus(result) {
+            const indicator = document.getElementById('monitor-status');
+            const text = document.getElementById('monitor-text');
+            const toggleBtn = document.getElementById('toggle-btn');
+            const monitoring = Boolean(result?.isMonitoring);
+            indicator.classList.toggle('online', monitoring);
+            indicator.classList.toggle('offline', !monitoring);
+            text.textContent = monitoring ? '监控中' : '已停止';
+            toggleBtn.textContent = monitoring ? '停止监控' : '启动监控';
+            if (result?.backendStatus?.activeBackend) {
+                text.textContent += ` · ${result.backendStatus.activeBackend.toUpperCase()}`;
+            }
+        }
+
+        async function loadGPUData() {
+            try {
+                const response = await fetch('/api/gpu-monitor');
+                const result = await response.json();
+                if (!result.success) {
+                    document.getElementById('gpu-error').innerHTML = `<div class="error">加载失败: ${result.error}</div>`;
+                    return;
+                }
+                document.getElementById('gpu-error').innerHTML = '';
+                refreshMonitorStatus(result);
+                const grid = document.getElementById('gpu-grid');
+                if (result.data.length === 0) {
+                    grid.innerHTML = '<div class="loading">未检测到 GPU 设备</div>';
+                    return;
+                }
+                const history = Array.isArray(result.history) ? result.history : [];
+                grid.innerHTML = result.data.map((gpu, index) => {
+                    const memoryUsed = formatMemory(gpu.memoryUsed);
+                    const memoryTotal = formatMemory(gpu.memoryTotal);
+                    const powerPercent = gpu.powerLimit ? clampPercent((gpu.powerDraw / gpu.powerLimit) * 100) : null;
+                    return `
+                    <div class="gpu-card">
+                        <h3>
+                            <span class="gpu-index">${gpu.index}</span>
+                            ${gpu.name}
+                        </h3>
+                        <div class="metric">
+                            <div class="metric-label">GPU 使用率</div>
+                            <div class="metric-value">${gpu.gpuUtilization !== null ? gpu.gpuUtilization.toFixed(1) + '%' : 'N/A'}</div>
+                            ${gpu.gpuUtilization !== null ? `
+                                <div class="progress-track">
+                                    <div class="progress-fill ${getProgressColor(clampPercent(gpu.gpuUtilization))}" style="width: ${clampPercent(gpu.gpuUtilization)}%"></div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">显存使用</div>
+                            <div class="metric-value">
+                                ${gpu.memoryUsed !== null && gpu.memoryTotal !== null ? `${memoryUsed} / ${memoryTotal}` : 'N/A'}
+                            </div>
+                            ${gpu.memoryUsagePercent !== null ? `
+                                <div class="progress-track">
+                                    <div class="progress-fill ${getProgressColor(clampPercent(gpu.memoryUsagePercent))}" style="width: ${clampPercent(gpu.memoryUsagePercent)}%"></div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">温度</div>
+                            <div class="metric-value">${gpu.temperature !== null ? gpu.temperature + '°C' : 'N/A'}</div>
+                            ${gpu.temperature !== null ? `
+                                <div class="progress-track">
+                                    <div class="progress-fill ${getProgressColor(clampPercent(gpu.temperature))}" style="width: ${Math.min(gpu.temperature, 100)}%"></div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">功耗</div>
+                            <div class="metric-value">
+                                ${gpu.powerDraw !== null && gpu.powerLimit !== null ? gpu.powerDraw.toFixed(1) + 'W / ' + gpu.powerLimit.toFixed(1) + 'W' : 'N/A'}
+                            </div>
+                            ${powerPercent !== null ? `
+                                <div class="progress-track">
+                                    <div class="progress-fill ${getProgressColor(powerPercent)}" style="width: ${powerPercent}%"></div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">显存带宽使用率</div>
+                            <div class="metric-value">${gpu.memoryUtilization !== null ? gpu.memoryUtilization.toFixed(1) + '%' : 'N/A'}</div>
+                        </div>
+                        ${buildChartSection(gpu, index, history)}
+                    </div>
+                `;
+                }).join('');
+                result.data.forEach((gpu, index) => {
+                    renderCharts(index, history);
+                });
+                document.getElementById('gpu-timestamp').textContent = '最后更新: ' + formatTimestamp(result.timestamp);
+            } catch (error) {
+                document.getElementById('gpu-error').innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
+            }
+        }
+
+        async function updateInterval() {
+            const interval = parseInt(document.getElementById('refresh-interval').value);
+            try {
+                const response = await fetch('/api/gpu-monitor/interval', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ interval })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    if (gpuInterval) clearInterval(gpuInterval);
+                    gpuInterval = setInterval(loadGPUData, interval);
+                    alert('刷新间隔已更新为 ' + interval + 'ms');
+                } else {
+                    alert('更新失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('更新失败: ' + error.message);
+            }
+        }
+
+        async function toggleMonitoring() {
+            const status = await fetch('/api/gpu-monitor/status').then(r => r.json());
+            const isMonitoring = status.isMonitoring;
+            try {
+                const endpoint = isMonitoring ? '/api/gpu-monitor/stop' : '/api/gpu-monitor/start';
+                await fetch(endpoint, { method: 'POST' });
+                document.getElementById('toggle-btn').textContent = isMonitoring ? '启动监控' : '停止监控';
+                loadGPUData();
+            } catch (error) {
+                alert('操作失败: ' + error.message);
+            }
+        }
+
+        async function loadModelData() {
+            try {
+                const response = await fetch('/api/model-switch/models');
+                const result = await response.json();
+                if (!result.success) {
+                    document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${result.error}</div>`;
+                    return;
+                }
+                document.getElementById('model-error').innerHTML = '';
+                const list = document.getElementById('model-list');
+
+                document.getElementById('model-total-groups').textContent = `${result.totalGroups || 0} 组`;
+                document.getElementById('model-total-variants').textContent = `${result.totalVariants || 0} 个模型`;
+                document.getElementById('model-status-text').textContent = result.currentModel ? `当前模型: ${result.currentModel}` : '已加载模型数据';
+
+                if (!result.groups || result.groups.length === 0) {
+                    list.innerHTML = '<div class="loading">未找到模型</div>';
+                    return;
+                }
+
+                list.innerHTML = result.groups.map(group => {
+                    const variants = group.variants || [];
+                    const variantsHtml = variants.map(variant => {
+                        const statusClass = variant.running ? 'running' : '';
+                        const currentClass = variant.isCurrent ? 'current' : '';
+                        const sizeStr = formatMemorySize(variant.sizeMB || variant.size_mb);
+                        const memStr = variant.requiredMemory || (variant.memoryGB ? `${variant.memoryGB}GB` : '');
+                        const vllmSummary = buildVLLMSummary(variant.vllmConfig || variant.vllm_config);
+                        return `
+                            <div class="model-variant ${statusClass} ${currentClass}">
+                                <div class="model-variant-info">
+                                    <div class="model-variant-main">
+                                        <div class="model-variant-name">${variant.name}</div>
+                                        ${(variant.vllmConfig || variant.vllm_config) && (variant.vllmConfig || variant.vllm_config).has_custom_config ? '<span class="model-variant-badge badge-configured">已配置</span>' : ''}
+                                    </div>
+                                    <div class="model-variant-meta">
+                                        <span>📦 ${sizeStr}</span>
+                                        ${memStr ? `<span>💾 ${memStr}</span>` : ''}
+                                        ${variant.multimodal ? '<span>🖼️ 多模态</span>' : ''}
+                                    </div>
+                                    ${vllmSummary}
+                                </div>
+                                <div class="model-variant-actions">
+                                    ${variant.isCurrent ? '<span class="model-variant-badge badge-current">当前</span>' : ''}
+                                    ${variant.running ? '<span class="model-variant-badge badge-running">运行中</span>' : ''}
+                                    ${!variant.running && variant.pathExists ? `<button class="btn btn-primary" onclick="switchToModel('${variant.name}')">切换</button>` : ''}
+                                    ${!variant.running && !variant.pathExists ? `<span class="path-missing-tag" title="模型文件目录不存在: ${variant.modelPath || variant.name}"><i class="fas fa-exclamation-triangle"></i> 路径不存在</span>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    return `
+                        <div class="model-group" data-group="${group.base_name}">
+                            <div class="model-group-header" onclick="toggleModelGroup('${group.base_name}')">
+                                <div class="model-group-info">
+                                    <span class="model-group-name">${group.base_name}</span>
+                                    <span class="model-group-meta">${group.variant_count} 个变体 · ${formatMemorySize(group.total_size_mb)}</span>
+                                </div>
+                                <span class="model-group-toggle">▶</span>
+                            </div>
+                            <div class="model-variants" id="group-${group.base_name}">
+                                ${variantsHtml}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                    return `
+                        <div class="model-group" data-group="${group.base_name}">
+                            <div class="model-group-header" onclick="toggleModelGroup('${group.base_name}')">
+                                <div class="model-group-info">
+                                    <span class="model-group-name">${group.base_name}</span>
+                                    <span class="model-group-meta">${group.variant_count} 个变体 · ${formatMemorySize(group.total_size_mb)}</span>
+                                </div>
+                                <span class="model-group-toggle">▶</span>
+                            </div>
+                            <div class="model-variants" id="group-${group.base_name}">
+                                ${variantsHtml}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                if (result.groups.length === 1) {
+                    toggleModelGroup(result.groups[0].base_name);
+                }
+            } catch (error) {
+                document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
+            }
+        }
+
+        function formatMemorySize(sizeMB) {
+            if (!sizeMB || sizeMB <= 0) return 'N/A';
+            if (sizeMB >= 1024) {
+                return (sizeMB / 1024).toFixed(1) + ' GB';
+            }
+            return sizeMB.toFixed(0) + ' MB';
+        }
+
+        function toggleModelGroup(baseName) {
+            const variantsEl = document.getElementById(`group-${baseName}`);
+            const groupEl = document.querySelector(`[data-group="${baseName}"]`);
+            const toggleEl = groupEl.querySelector('.model-group-toggle');
+
+            if (variantsEl.classList.contains('expanded')) {
+                variantsEl.classList.remove('expanded');
+                toggleEl.classList.remove('expanded');
+                toggleEl.textContent = '▶';
+            } else {
+                variantsEl.classList.add('expanded');
+                toggleEl.classList.add('expanded');
+                toggleEl.textContent = '▼';
+            }
+        }
+
+        let switchPollingInterval = null;
+        let switchStatusInterval = null;
+        let switchPollingController = null;
+        let switchWs = null;
+        let currentSwitchSession = null;
+        let isSwitching = false;
+        const SWITCH_POLL_TIMEOUT = 180000;
+
+        function showSwitchProgressPanel(modelName) {
+            const panel = document.getElementById('switch-progress-panel');
+            if (!panel) return;
+            panel.style.display = 'block';
+            document.getElementById('switch-panel-model-name').textContent = modelName;
+            document.getElementById('switch-panel-status-text').textContent = '正在切换模型';
+            document.getElementById('switch-cancel-btn').style.display = 'block';
+            document.getElementById('switch-log').textContent = '准备中...';
+            document.getElementById('switch-monitor-mode').textContent = '监控方式：轮询中';
+
+            for (let i = 1; i <= 3; i++) {
+                const step = document.getElementById(`switch-step-${i}`);
+                step.classList.remove('active', 'completed', 'failed');
+            }
+        }
+
+        function hideSwitchProgressPanel() {
+            const panel = document.getElementById('switch-progress-panel');
+            if (panel) panel.style.display = 'none';
+        }
+
+        function updateSwitchStep(step, status) {
+            const el = document.getElementById(`switch-step-${step}`);
+            if (!el) return;
+            el.classList.remove('active', 'completed', 'failed');
+            if (status) el.classList.add(status);
+
+            const statusTexts = {
+                1: '正在发送切换请求...',
+                2: '后端正在加载模型，预计需要 1-2 分钟...',
+                3: '正在验证模型是否就绪...'
+            };
+            const log = document.getElementById('switch-log');
+            if (log && statusTexts[step]) {
+                log.textContent = statusTexts[step];
+            }
+        }
+
+        function stopSwitchPolling() {
+            if (switchPollingInterval) {
+                clearInterval(switchPollingInterval);
+                switchPollingInterval = null;
+            }
+            if (switchStatusInterval) {
+                clearInterval(switchStatusInterval);
+                switchStatusInterval = null;
+            }
+            if (switchPollingController) {
+                switchPollingController.abort();
+                switchPollingController = null;
+            }
+        }
+
+        function ensureSwitchWebSocket() {
+            if (switchWs && (switchWs.readyState === WebSocket.OPEN || switchWs.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            try {
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                switchWs = new WebSocket(wsProtocol + '//' + window.location.host + '/ws/model-switch');
+                switchWs.onmessage = function(event) {
+                    try {
+                        const payload = JSON.parse(event.data);
+                        if (payload.session) {
+                            renderSwitchSessionState(payload.session);
+                        }
+                    } catch (e) {
+                        console.error('[SwitchWS] Parse error:', e);
+                    }
+                };
+                switchWs.onclose = function() {
+                    switchWs = null;
+                };
+                switchWs.onerror = function() {
+                    if (switchWs) switchWs.close();
+                };
+            } catch (e) {
+                console.error('[SwitchWS] Connect error:', e);
+            }
+        }
+
+        function renderSwitchSessionState(session) {
+            currentSwitchSession = session || null;
+            if (!session) return;
+
+            const runningPhase = session.phases && session.phases.find(p => p.status === 'running');
+            if (runningPhase) {
+                updateSwitchStep(runningPhase.phase, 'active');
+            }
+
+            const log = document.getElementById('switch-log');
+            if (log) {
+                const latestPhase = runningPhase || 
+                    (session.phases && session.phases.find(p => p.status === 'failed')) || 
+                    session.phases[session.phases.length - 1];
+                const latestLog = latestPhase && latestPhase.logs && latestPhase.logs.length > 0
+                    ? latestPhase.logs[latestPhase.logs.length - 1]
+                    : '模型切换进行中';
+                log.textContent = latestLog;
+            }
+
+            const statusText = document.getElementById('switch-panel-status-text');
+            if (session.completed_successfully || session.overall_phase === 'completed') {
+                stopSwitchPolling();
+                if (statusText) statusText.textContent = '切换完成';
+                document.getElementById('switch-cancel-btn').style.display = 'none';
+
+                for (let i = 1; i <= 3; i++) {
+                    const step = document.getElementById(`switch-step-${i}`);
+                    step.classList.remove('active', 'failed');
+                    step.classList.add('completed');
+                }
+
+                setTimeout(() => {
+                    hideSwitchProgressPanel();
+                    document.getElementById('model-success').innerHTML = `<div class="success-message">切换成功: ${session.target_model}</div>`;
+                    loadModelData();
+                    loadGPUData();
+                }, 1500);
+
+                isSwitching = false;
+                return;
+            }
+
+            if (session.overall_phase === 'rolled_back' || session.overall_phase === 'failed') {
+                stopSwitchPolling();
+                if (statusText) statusText.textContent = '切换失败';
+                document.getElementById('switch-cancel-btn').style.display = 'none';
+
+                const failedPhase = session.phases && session.phases.find(p => p.status === 'failed');
+                if (failedPhase) {
+                    updateSwitchStep(failedPhase.phase, 'failed');
+                }
+
+                const errorMsg = session.rollback_reason || session.error || '未知错误';
+                document.getElementById('switch-log').textContent = '错误: ' + errorMsg;
+
+                setTimeout(() => {
+                    hideSwitchProgressPanel();
+                    document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${errorMsg}</div>`;
+                }, 3000);
+
+                isSwitching = false;
+            }
+        }
+
+        function startSwitchPolling(modelName) {
+            stopSwitchPolling();
+            ensureSwitchWebSocket();
+
+            const startTime = Date.now();
+            const pollingController = new AbortController();
+            switchPollingController = pollingController;
+
+            switchStatusInterval = setInterval(() => {
+                if (pollingController.signal.aborted) return;
+                const elapsed = Date.now() - startTime;
+                const log = document.getElementById('switch-log');
+                if (log) {
+                    log.textContent = `已等待 ${Math.floor(elapsed / 1000)} 秒...`;
+                }
+            }, 1000);
+
+            switchPollingInterval = setInterval(() => {
+                if (pollingController.signal.aborted) {
+                    stopSwitchPolling();
+                    return;
+                }
+
+                if (Date.now() - startTime > SWITCH_POLL_TIMEOUT) {
+                    stopSwitchPolling();
+                    hideSwitchProgressPanel();
+                    document.getElementById('model-error').innerHTML = `<div class="error">切换超时：模型 ${modelName} 在 ${Math.floor(SWITCH_POLL_TIMEOUT / 1000)} 秒内未完成，请手动刷新检查状态</div>`;
+                    isSwitching = false;
+                    return;
+                }
+
+                fetch('/api/model-switch/switch-status', { signal: pollingController.signal })
+                    .then(r => r.json())
+                    .then(result => {
+                        if (result.success && result.data) {
+                            renderSwitchSessionState(result.data.session);
+                        }
+                    })
+                    .catch(e => {
+                        if (e.name !== 'AbortError') {
+                            console.error('[Polling] Error:', e);
+                        }
+                    });
+            }, 3000);
+        }
+
+        function cancelSwitch() {
+            if (!currentSwitchSession || !currentSwitchSession.session_id) {
+                hideSwitchProgressPanel();
+                isSwitching = false;
+                return;
+            }
+
+            fetch('/api/model-switch/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: currentSwitchSession.session_id })
+            })
+            .then(r => r.json())
+            .then(result => {
+                stopSwitchPolling();
+                hideSwitchProgressPanel();
+                if (result.success) {
+                    document.getElementById('model-success').innerHTML = `<div class="success-message">切换已取消</div>`;
+                } else {
+                    document.getElementById('model-error').innerHTML = `<div class="error">取消失败: ${result.error}</div>`;
+                }
+                setTimeout(() => {
+                    document.getElementById('model-success').innerHTML = '';
+                    document.getElementById('model-error').innerHTML = '';
+                }, 3000);
+                isSwitching = false;
+                loadModelData();
+            })
+            .catch(e => {
+                console.error('Cancel switch error:', e);
+            });
+        }
+
+        async function switchToModel(modelName) {
+            if (isSwitching) {
+                document.getElementById('model-error').innerHTML = '<div class="error">正在切换中，请稍后再试</div>';
+                return;
+            }
+
+            isSwitching = true;
+            showSwitchProgressPanel(modelName);
+            updateSwitchStep(1, 'active');
+
+            try {
+                const response = await fetch('/api/model-switch/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ modelName })
+                });
+                const result = await response.json();
+                
+                if (!result.success) {
+                    hideSwitchProgressPanel();
+                    document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${result.error}</div>`;
+                    isSwitching = false;
+                    return;
+                }
+
+                updateSwitchStep(1, 'completed');
+                updateSwitchStep(2, 'active');
+                startSwitchPolling(modelName);
+
+            } catch (error) {
+                hideSwitchProgressPanel();
+                document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${error.message}</div>`;
+                isSwitching = false;
+            }
+        }
+
+        async function loadProviderData() {
+            try {
+                const response = await fetch('/api/model-switch/providers');
+                const result = await response.json();
+                if (!result.success) {
+                    document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${result.error}</div>`;
+                    return;
+                }
+                document.getElementById('model-error').innerHTML = '';
+                const list = document.getElementById('provider-list');
+                if (result.data.length === 0) {
+                    list.innerHTML = '<div class="loading">未找到 Provider 配置</div>';
+                    return;
+                }
+                list.innerHTML = result.data.map(provider => {
+                    const statusClass = provider.isDisabled ? 'status-disabled' : (provider.isHealthy ? 'status-healthy' : 'status-unhealthy');
+                    const statusText = provider.isDisabled ? '已禁用' : (provider.isHealthy ? '健康' : '不健康');
+                    return `
+                        <div class="provider-item">
+                            <div class="provider-header">
+                                <div class="provider-name">${provider.customName}</div>
+                                <div class="provider-status ${statusClass}">${statusText}</div>
+                            </div>
+                            <div class="provider-details">
+                                <div class="detail-item">
+                                    <div class="detail-label">Base URL</div>
+                                    <div class="detail-value">${provider.baseUrl}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">当前模型</div>
+                                    <div class="detail-value">${provider.currentModel}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">调用次数</div>
+                                    <div class="detail-value">${provider.usageCount}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">错误次数</div>
+                                    <div class="detail-value">${provider.errorCount}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">最后健康检查</div>
+                                    <div class="detail-value">${provider.lastHealthCheck ? formatTimestamp(provider.lastHealthCheck) : 'N/A'}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">UUID</div>
+                                    <div class="detail-value">${provider.uuid}</div>
+                                </div>
+                            </div>
+                            <div class="model-switch-form">
+                                <input type="text" id="model-input-${provider.uuid}" placeholder="输入新模型名称" value="${provider.currentModel}">
+                                <button class="btn btn-primary" onclick="switchModel('${provider.providerName}', '${provider.uuid}')">切换模型</button>
+                                <button class="btn btn-warning" onclick="refreshProvider('${provider.providerName}', '${provider.uuid}')">刷新</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                document.getElementById('model-error').innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
+            }
+        }
+
+        async function switchModel(provider, customName) {
+            const input = document.getElementById(`model-input-${customName}`);
+            const newModel = input.value.trim();
+            if (!newModel) {
+                alert('请输入模型名称');
+                return;
+            }
+            try {
+                const response = await fetch('/api/model-switch/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ provider, customName, newModel })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('model-success').innerHTML = `<div class="success-message">模型切换成功: ${result.data.oldModel} -> ${result.data.newModel}</div>`;
+                    setTimeout(() => {
+                        document.getElementById('model-success').innerHTML = '';
+                    }, 3000);
+                    loadProviderData();
+                } else {
+                    document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${result.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('model-error').innerHTML = `<div class="error">切换失败: ${error.message}</div>`;
+            }
+        }
+
+        async function refreshProvider(provider, customName) {
+            try {
+                const response = await fetch('/api/model-switch/refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ provider, customName })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Provider 刷新成功');
+                    loadProviderData();
+                } else {
+                    alert('刷新失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('刷新失败: ' + error.message);
+            }
+        }
+
+        async function init() {
+            await loadGPUData();
+            gpuInterval = setInterval(loadGPUData, parseInt(document.getElementById('refresh-interval').value, 10) || 5000);
+        }
+
+        init();
+    </script>
+</body>
+</html>
