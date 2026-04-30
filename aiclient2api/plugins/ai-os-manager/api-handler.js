@@ -114,16 +114,15 @@ export async function handleGPUMonitorApiRoutes(method, urlPath, req, res, confi
     if (!urlPath.startsWith('/api/gpu-monitor')) return false;
     try {
         if (urlPath === '/api/gpu-monitor' && method === 'GET') {
-            sendJSONResponse(res, 200, gpuMonitorService.getLatestData());
+            sendJSONResponse(res, 200, gpuMonitorService.getLatestGPUData());
             return true;
         }
         if (urlPath === '/api/gpu-monitor/info' && method === 'GET') {
-            await gpuMonitorService.updateGPUData();
-            sendJSONResponse(res, 200, { success: true, data: gpuMonitorService.getLatestGPUData() });
+            sendJSONResponse(res, 200, await gpuMonitorService.getGPUInfoSync());
             return true;
         }
         if (urlPath === '/api/gpu-monitor/status' && method === 'GET') {
-            sendJSONResponse(res, 200, gpuMonitorService.getStatus());
+            sendJSONResponse(res, 200, gpuMonitorService.getMonitoringStatus());
             return true;
         }
         if (urlPath === '/api/gpu-monitor/backend-status' && method === 'GET') {
@@ -135,20 +134,19 @@ export async function handleGPUMonitorApiRoutes(method, urlPath, req, res, confi
             return true;
         }
         if (urlPath === '/api/gpu-monitor/start' && method === 'POST') {
-            gpuMonitorService.startAutoMonitor();
+            gpuMonitorService.startMonitoring();
             sendJSONResponse(res, 200, { success: true, message: 'Auto-monitoring started' });
             return true;
         }
         if (urlPath === '/api/gpu-monitor/stop' && method === 'POST') {
-            gpuMonitorService.stopAutoMonitor();
+            gpuMonitorService.stopMonitoring();
             sendJSONResponse(res, 200, { success: true, message: 'Auto-monitoring stopped' });
             return true;
         }
         if (urlPath === '/api/gpu-monitor/interval' && method === 'POST') {
             const body = await parseRequestBody(req);
             if (body.interval && typeof body.interval === 'number' && body.interval >= 1000) {
-                gpuMonitorService.setInterval(body.interval);
-                sendJSONResponse(res, 200, { success: true, interval: body.interval });
+                sendJSONResponse(res, 200, gpuMonitorService.setMonitoringInterval(body.interval));
             } else {
                 sendJSONResponse(res, 400, { success: false, error: 'Invalid interval' });
             }
@@ -166,15 +164,15 @@ export async function handleModelSwitchApiRoutes(method, urlPath, req, res, conf
     if (!urlPath.startsWith('/api/model-switch')) return false;
     try {
         if (urlPath === '/api/model-switch/models' && method === 'GET') {
-            sendJSONResponse(res, 200, await modelSwitchService.getModels());
+            sendJSONResponse(res, 200, await modelSwitchService.getModelsList());
             return true;
         }
         if (urlPath === '/api/model-switch/status' && method === 'GET') {
-            sendJSONResponse(res, 200, await modelSwitchService.getModelStatus());
+            sendJSONResponse(res, 200, await modelSwitchService.getStatusFromBackend());
             return true;
         }
         if (urlPath === '/api/model-switch/switch-status' && method === 'GET') {
-            sendJSONResponse(res, 200, modelSwitchService.getSwitchStatus());
+            sendJSONResponse(res, 200, await modelSwitchService.getSwitchStatus());
             return true;
         }
         if (urlPath === '/api/model-switch/aggregated' && method === 'GET') {
@@ -184,25 +182,28 @@ export async function handleModelSwitchApiRoutes(method, urlPath, req, res, conf
         }
         if (urlPath.match(/^\/api\/model-switch\/vllm-params\/[^/]+$/) && method === 'GET') {
             const modelName = urlPath.split('/api/model-switch/vllm-params/')[1];
-            sendJSONResponse(res, 200, await modelSwitchService.getVLLMParams(modelName));
+            sendJSONResponse(res, 200, await modelSwitchService.getModelVLLMParams(modelName));
             return true;
         }
         if (urlPath.match(/^\/api\/model-switch\/vllm-params\/[^/]+$/) && method === 'PUT') {
             const modelName = urlPath.split('/api/model-switch/vllm-params/')[1];
             const body = await parseRequestBody(req);
-            sendJSONResponse(res, 200, await modelSwitchService.updateVLLMParams(modelName, body));
+            sendJSONResponse(res, 200, await modelSwitchService.updateModelVLLMParams(modelName, body));
             return true;
         }
         if (urlPath === '/api/model-switch/switch' && method === 'POST') {
             const body = await parseRequestBody(req);
             if (!body.modelName) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelName' }); return true; }
-            sendJSONResponse(res, 200, await modelSwitchService.switchModel(body));
+            const options = {};
+            if (body.engineType) options.engineType = body.engineType;
+            if (body.port) options.port = body.port;
+            sendJSONResponse(res, 200, await modelSwitchService.switchModel(body.modelName, body.async !== false, options));
             return true;
         }
         if (urlPath === '/api/model-switch/task-status' && method === 'GET') {
             const taskId = new URL(urlPath, 'http://localhost').searchParams.get('taskId');
             if (!taskId) { sendJSONResponse(res, 400, { success: false, error: 'Missing taskId' }); return true; }
-            sendJSONResponse(res, 200, modelSwitchService.getTaskStatus(taskId));
+            sendJSONResponse(res, 200, modelSwitchService.getSwitchTaskStatus(taskId));
             return true;
         }
         if (urlPath === '/api/model-switch/cancel' && method === 'POST') {
@@ -211,17 +212,17 @@ export async function handleModelSwitchApiRoutes(method, urlPath, req, res, conf
         }
         if (urlPath === '/api/model-switch/force-restart' && method === 'POST') {
             const body = await parseRequestBody(req);
-            sendJSONResponse(res, 200, await modelSwitchService.forceRestart(body));
+            sendJSONResponse(res, 200, await modelSwitchService.forceRestartModel(body.modelName, body.modelPath));
             return true;
         }
         if (urlPath === '/api/model-switch/start' && method === 'POST') {
             const body = await parseRequestBody(req);
-            sendJSONResponse(res, 200, await modelSwitchService.startModel(body));
+            sendJSONResponse(res, 200, await modelSwitchService.startModel(body.modelName));
             return true;
         }
         if (urlPath === '/api/model-switch/stop' && method === 'POST') {
             const body = await parseRequestBody(req);
-            sendJSONResponse(res, 200, await modelSwitchService.stopModel(body));
+            sendJSONResponse(res, 200, await modelSwitchService.stopModel(body.modelName));
             return true;
         }
         return false;

@@ -147,27 +147,25 @@ def test_redis_config():
     
     # 测试配置加载
     try:
-        sys.path.insert(0, "/Users/hyx/codespace/ai-os/app-controller")
-        from core.config import load_config, RedisConfig
+        # 动态获取当前文件所在的目录并添加到路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        app_controller_dir = os.path.dirname(current_dir)
+        sys.path.insert(0, app_controller_dir)
+        from core.config import load_app_config
         
-        # 测试环境变量
+        # 测试环境变量配置
+        from core.config import RedisConfig
         os.environ["REDIS_HOST"] = "test.redis.host"
         os.environ["REDIS_PORT"] = "6380"
         
-        # 重新加载配置
-        config = load_config("app-controller/config.yaml")
+        redis_config = RedisConfig.from_env()
+        host = redis_config.host
+        port = redis_config.port
+        passed = host == "test.redis.host" and port == 6380
+        results.append(("环境变量配置", passed, f"host={host}, port={port}"))
+        print_test("环境变量配置", passed, f"host={host}, port={port}")
         
-        if config.settings and config.settings.redis:
-            host = config.settings.redis.host
-            port = config.settings.redis.port
-            passed = host == "test.redis.host" and port == 6380
-            results.append(("环境变量配置", passed, f"host={host}, port={port}"))
-            print_test("环境变量配置", passed, f"host={host}, port={port}")
-        else:
-            results.append(("环境变量配置", False, "Redis 配置未加载"))
-            print_test("环境变量配置", False, "Redis 配置未加载")
-        
-        # 清理环境变量，测试配置文件
+        # 清理环境变量
         del os.environ["REDIS_HOST"]
         del os.environ["REDIS_PORT"]
         
@@ -205,11 +203,11 @@ def main():
     
     all_results = []
     
-    # 运行所有测试
-    all_results.extend(test_mock_vllm_service())
-    all_results.extend(test_backend_service())
-    all_results.extend(test_redis_config())
-    all_results.extend(test_frontend())
+    # 运行所有检查
+    all_results.extend(check_mock_vllm_service())
+    all_results.extend(check_backend_service())
+    all_results.extend(check_redis_config())
+    all_results.extend(check_frontend())
     
     # 汇总结果
     print_header("测试汇总")

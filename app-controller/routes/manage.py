@@ -607,6 +607,37 @@ async def get_queue_status():
     return queue_info
 
 
+# --- 限流管理接口 ---
+_rate_limit_config = {
+    "max_requests": 500,
+    "window_seconds": 60
+}
+_rate_limit_stats = {
+    "total_requests": 0,
+    "rate_limited_requests": 0
+}
+
+
+@manage_router.get("/ratelimit/config")
+async def get_rate_limit_config():
+    return _rate_limit_config
+
+
+@manage_router.put("/ratelimit/config")
+async def update_rate_limit_config(new_config: dict):
+    global _rate_limit_config
+    if "max_requests" in new_config:
+        _rate_limit_config["max_requests"] = new_config["max_requests"]
+    if "window_seconds" in new_config:
+        _rate_limit_config["window_seconds"] = new_config["window_seconds"]
+    return _rate_limit_config
+
+
+@manage_router.get("/ratelimit/stats")
+async def get_rate_limit_stats():
+    return _rate_limit_stats
+
+
 @manage_router.get("/preload")
 async def get_preload():
     cache_key = "api:manage:preload:status"

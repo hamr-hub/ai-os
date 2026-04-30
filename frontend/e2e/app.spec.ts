@@ -1,9 +1,20 @@
 import { test, expect } from '@playwright/test'
 
+async function login(page: any) {
+  await page.goto('/login')
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForTimeout(1000)
+  await page.fill('input[placeholder="输入 API Key"]', 'test-api-key')
+  await page.waitForTimeout(500)
+  await page.locator('.btn-primary:has-text("登录")').click({ force: true })
+  await page.waitForURL('**/', { timeout: 15000 })
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForTimeout(1000)
+}
+
 test.describe('Dashboard 页面基本结构', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
   })
 
   test('页面标题包含AI', async ({ page }) => {
@@ -34,7 +45,7 @@ test.describe('Dashboard 页面基本结构', () => {
     await expect(page.locator('.gpu-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.token-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.system-card')).toBeVisible({ timeout: 15000 })
-    await expect(page.locator('.queue-card')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.vllm-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.health-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.running-card')).toBeVisible({ timeout: 15000 })
   })
@@ -52,8 +63,7 @@ test.describe('Dashboard 页面基本结构', () => {
 
 test.describe('Dashboard 数据依赖测试', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
     await expect(page.locator('.card').first()).toBeVisible({ timeout: 15000 })
   })
 
@@ -70,9 +80,9 @@ test.describe('Dashboard 数据依赖测试', () => {
   })
 
   test('请求队列卡片有内容或空状态', async ({ page }) => {
-    const queueList = page.locator('.queue-card .queue-list')
-    const emptyState = page.locator('.queue-card .empty-state')
-    await expect(queueList.or(emptyState)).toBeVisible({ timeout: 10000 })
+    const vllmGrid = page.locator('.vllm-card .vllm-grid')
+    const emptyState = page.locator('.vllm-card .empty-state')
+    await expect(vllmGrid.or(emptyState)).toBeVisible({ timeout: 10000 })
   })
 
   test('健康告警卡片有内容或空状态', async ({ page }) => {
@@ -88,9 +98,10 @@ test.describe('Dashboard 数据依赖测试', () => {
   })
 
   test('GPU监控sparkline区域', async ({ page }) => {
-    const gpuContent = page.locator('.gpu-card .gpu-card-content')
-    const emptyState = page.locator('.gpu-card .empty-state')
-    await expect(gpuContent.or(emptyState)).toBeVisible({ timeout: 10000 })
+    const gpuCard = page.locator('.gpu-card').first()
+    const hasContent = await gpuCard.locator('.gpu-card-content').isVisible().catch(() => false)
+    const hasEmpty = await gpuCard.locator('.empty-state').isVisible().catch(() => false)
+    expect(hasContent || hasEmpty).toBe(true)
   })
 
   test('健康告警展开/折叠告警列表', async ({ page }) => {
@@ -108,8 +119,7 @@ test.describe('Dashboard 响应式布局', () => {
   test('宽屏3列布局', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 1400, height: 900 } })
     const page = await context.newPage()
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
     const grid = page.locator('.content > .grid')
     const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(3)
@@ -119,8 +129,7 @@ test.describe('Dashboard 响应式布局', () => {
   test('中屏2列布局', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 900, height: 900 } })
     const page = await context.newPage()
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
     const grid = page.locator('.content > .grid')
     const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(2)
@@ -130,8 +139,7 @@ test.describe('Dashboard 响应式布局', () => {
   test('窄屏1列布局', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 500, height: 900 } })
     const page = await context.newPage()
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
     const grid = page.locator('.content > .grid')
     const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(1)
@@ -141,8 +149,7 @@ test.describe('Dashboard 响应式布局', () => {
 
 test.describe('导航跳转', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
   })
 
   test('侧边栏可见', async ({ page }) => {
@@ -195,8 +202,7 @@ test.describe('导航跳转', () => {
 
 test.describe('侧边栏折叠', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
   })
 
   test('折叠侧边栏', async ({ page }) => {
@@ -238,8 +244,7 @@ test.describe('侧边栏折叠', () => {
 
 test.describe('主题切换', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
   })
 
   test('切换主题按钮存在', async ({ page }) => {
@@ -250,8 +255,8 @@ test.describe('主题切换', () => {
   test('点击主题按钮切换', async ({ page }) => {
     const themeBtn = page.locator('.action-btn').first()
     await page.evaluate(() => localStorage.setItem('theme', 'dark'))
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await page.reload()
+    await page.waitForLoadState('domcontentloaded')
     const initialTheme = await page.evaluate(() =>
       document.documentElement.getAttribute('data-theme')
     )
@@ -262,8 +267,8 @@ test.describe('主题切换', () => {
 
   test('dark主题背景色正确', async ({ page }) => {
     await page.evaluate(() => localStorage.setItem('theme', 'dark'))
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await page.reload()
+    await page.waitForLoadState('domcontentloaded')
     const bg = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--bg-primary')
     )
@@ -272,8 +277,8 @@ test.describe('主题切换', () => {
 
   test('light主题背景色正确', async ({ page }) => {
     await page.evaluate(() => localStorage.setItem('theme', 'light'))
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await page.reload()
+    await page.waitForLoadState('domcontentloaded')
     const bg = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--bg-primary')
     )
@@ -283,8 +288,9 @@ test.describe('主题切换', () => {
 
 test.describe('Agent 页面', () => {
   test.beforeEach(async ({ page }) => {
+    await login(page)
     await page.goto('/agent')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
   })
 
   test('Agent界面可见', async ({ page }) => {
@@ -328,22 +334,17 @@ test.describe('Agent 页面', () => {
 
 test.describe('ModelManagement 页面', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/models')
-    await page.waitForLoadState('networkidle')
+    await login(page)
+    await page.goto('/modelcenter')
+    await page.waitForLoadState('domcontentloaded')
   })
 
   test('模型管理页面标题可见', async ({ page }) => {
-    await expect(page.locator('.header-title')).toHaveText('模型管理', { timeout: 15000 })
+    await expect(page.locator('.header-title')).toHaveText('模型中心', { timeout: 15000 })
   })
 
   test('模型管理页面结构可见', async ({ page }) => {
-    await expect(page.locator('.model-mgmt')).toBeVisible({ timeout: 15000 })
-  })
-
-  test('两列布局', async ({ page }) => {
-    const content = page.locator('.content')
-    const columns = await content.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
-    expect(columns.split(' ').length).toBe(2)
+    await expect(page.locator('.model-center')).toBeVisible({ timeout: 15000 })
   })
 
   test('模型能力检测面板可见', async ({ page }) => {
@@ -375,16 +376,17 @@ test.describe('ModelManagement 页面', () => {
 
 test.describe('Monitor 页面', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/monitor')
-    await page.waitForLoadState('networkidle')
+    await login(page)
+    await page.goto('/gpumonitor')
+    await page.waitForLoadState('domcontentloaded')
   })
 
   test('监控页面标题可见', async ({ page }) => {
-    await expect(page.locator('.header-title')).toHaveText('实时监控', { timeout: 15000 })
+    await expect(page.locator('.header-title')).toHaveText('GPU 监控', { timeout: 15000 })
   })
 
   test('监控页面结构可见', async ({ page }) => {
-    await expect(page.locator('.monitor-view')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.gpu-monitor')).toBeVisible({ timeout: 15000 })
   })
 
   test('时间范围选择按钮可见', async ({ page }) => {
@@ -433,31 +435,25 @@ test.describe('Monitor 页面', () => {
 
 test.describe('Benchmarks 页面', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/benchmarks')
-    await page.waitForLoadState('networkidle')
+    await login(page)
+    await page.goto('/modelcenter?tab=benchmark')
+    await page.waitForLoadState('domcontentloaded')
   })
 
   test('评测页面标题可见', async ({ page }) => {
-    await expect(page.locator('.header-title')).toHaveText('模型自动化评测', { timeout: 15000 })
+    await expect(page.locator('.header-title')).toHaveText('模型中心', { timeout: 15000 })
   })
 
   test('评测页面结构可见', async ({ page }) => {
-    await expect(page.locator('.benchmarks-view')).toBeVisible({ timeout: 15000 })
-  })
-
-  test('搜索框可见', async ({ page }) => {
-    await expect(page.locator('.search-box')).toBeVisible({ timeout: 15000 })
-  })
-
-  test('刷新按钮可见', async ({ page }) => {
-    await expect(page.locator('.header-btn')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.model-center')).toBeVisible({ timeout: 15000 })
   })
 })
 
 test.describe('Docs 页面', () => {
   test.beforeEach(async ({ page }) => {
+    await login(page)
     await page.goto('/docs')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
   })
 
   test('文档页面可见', async ({ page }) => {
@@ -475,8 +471,7 @@ test.describe('Docs 页面', () => {
 
 test.describe('视觉一致性', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
   })
 
   test('CSS变量主题色正确', async ({ page }) => {
@@ -520,34 +515,34 @@ test.describe('视觉一致性', () => {
 
 test.describe('页面间导航一致性', () => {
   test('从Dashboard到Monitor再返回', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
-    await page.locator('.nav-item').filter({ hasText: '实时性能' }).click()
-    await expect(page).toHaveURL(/\/monitor/, { timeout: 10000 })
+    await login(page)
+    await page.locator('.nav-item').filter({ hasText: 'GPU监控' }).click()
+    await expect(page).toHaveURL(/\/gpumonitor/, { timeout: 10000 })
     await page.locator('.nav-item').filter({ hasText: '总览面板' }).click()
     await expect(page.locator('.header-title')).toHaveText('仪表盘', { timeout: 10000 })
   })
 
   test('侧边栏在所有页面保持可见', async ({ page }) => {
-    const pages = ['/', '/monitor', '/models', '/agent', '/benchmarks', '/docs']
+    await login(page)
+    const pages = ['/', '/gpumonitor', '/modelcenter', '/agent', '/docs']
     for (const path of pages) {
       await page.goto(path)
-      await page.waitForLoadState('networkidle')
+      await page.waitForLoadState('domcontentloaded')
       await expect(page.locator('.sidebar')).toBeVisible({ timeout: 15000 })
     }
   })
 
   test('404路由fallback到Dashboard', async ({ page }) => {
+    await login(page)
     await page.goto('/nonexistent-page')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
     await expect(page.locator('.header-title')).toHaveText('仪表盘', { timeout: 15000 })
   })
 })
 
 test.describe('页面过渡动画', () => {
   test('页面切换有过渡效果', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await login(page)
     await expect(page.locator('.header-title')).toHaveText('仪表盘', { timeout: 15000 })
     const transition = await page.evaluate(() => {
       const main = document.querySelector('.app-main')

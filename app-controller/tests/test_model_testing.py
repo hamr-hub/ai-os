@@ -3,9 +3,9 @@ import asyncio
 from unittest.mock import Mock, AsyncMock, patch
 from core.model_testing import (
     ModelTestingFramework,
-    TestStatus,
+    ModelTestStatus,
     FeatureType,
-    TestResult,
+    ModelTestResult,
     ModelTestReport
 )
 
@@ -98,7 +98,7 @@ class TestModelTestingFramework:
         
         assert result.test_name == "test_name"
         assert result.feature_type == FeatureType.CHAT
-        assert result.status == TestStatus.SKIPPED
+        assert result.status == ModelTestStatus.SKIPPED
         assert result.duration == 0.0
         assert result.details == "Skipped: Test reason"
     
@@ -147,31 +147,31 @@ class TestModelTestingFramework:
     
     def test_calculate_performance_metrics(self, framework):
         test_results = [
-            TestResult(
+            ModelTestResult(
                 test_name="chat_basic",
                 feature_type=FeatureType.CHAT,
-                status=TestStatus.PASSED,
+                status=ModelTestStatus.PASSED,
                 duration=0.5,
                 metrics={"tps": 10, "token_count": 5, "response_length": 20}
             ),
-            TestResult(
+            ModelTestResult(
                 test_name="chat_streaming",
                 feature_type=FeatureType.CHAT,
-                status=TestStatus.PASSED,
+                status=ModelTestStatus.PASSED,
                 duration=1.0,
                 metrics={"tps": 8, "token_count": 8, "chunks_received": 8}
             ),
-            TestResult(
+            ModelTestResult(
                 test_name="tool_integration",
                 feature_type=FeatureType.TOOLS,
-                status=TestStatus.PASSED,
+                status=ModelTestStatus.PASSED,
                 duration=0.3,
                 metrics={"tool_calls_count": 1}
             ),
-            TestResult(
+            ModelTestResult(
                 test_name="image_processing",
                 feature_type=FeatureType.IMAGE,
-                status=TestStatus.SKIPPED,
+                status=ModelTestStatus.SKIPPED,
                 duration=0.0,
                 metrics={},
                 details="Skipped"
@@ -189,19 +189,19 @@ class TestModelTestingFramework:
     
     def test_determine_overall_status(self, framework):
         test_results_passed = [
-            TestResult("test1", FeatureType.CHAT, TestStatus.PASSED, 1.0, {}),
-            TestResult("test2", FeatureType.TOOLS, TestStatus.PASSED, 1.0, {})
+            ModelTestResult("test1", FeatureType.CHAT, ModelTestStatus.PASSED, 1.0, {}),
+            ModelTestResult("test2", FeatureType.TOOLS, ModelTestStatus.PASSED, 1.0, {})
         ]
         assert framework._determine_overall_status(test_results_passed, []) == "passed"
         
         test_results_failed = [
-            TestResult("test1", FeatureType.CHAT, TestStatus.FAILED, 1.0, {}, error="Error"),
-            TestResult("test2", FeatureType.TOOLS, TestStatus.PASSED, 1.0, {})
+            ModelTestResult("test1", FeatureType.CHAT, ModelTestStatus.FAILED, 1.0, {}, error="Error"),
+            ModelTestResult("test2", FeatureType.TOOLS, ModelTestStatus.PASSED, 1.0, {})
         ]
         assert framework._determine_overall_status(test_results_failed, []) == "degraded"
         
         test_results_with_errors = [
-            TestResult("test1", FeatureType.CHAT, TestStatus.PASSED, 1.0, {})
+            ModelTestResult("test1", FeatureType.CHAT, ModelTestStatus.PASSED, 1.0, {})
         ]
         assert framework._determine_overall_status(test_results_with_errors, ["Fatal error"]) == "failed"
     

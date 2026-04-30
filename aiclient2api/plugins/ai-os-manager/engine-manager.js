@@ -36,7 +36,7 @@ class EngineManagerService {
 
     async updateData() {
         try {
-            const response = await backendClient.fetchWithFallback('/manage/engine/status');
+            const response = await backendClient.fetchWithFallback('/manage/engines/status');
             if (!response.ok) return;
             const result = await response.json();
             this.dataCache = this._normalizeResult(result);
@@ -48,7 +48,7 @@ class EngineManagerService {
 
     async updateConfig() {
         try {
-            const response = await backendClient.fetchWithFallback('/engines/config');
+            const response = await backendClient.fetchWithFallback('/manage/engines/config');
             if (!response.ok) return;
             const result = await response.json();
             this.configCache = result;
@@ -72,7 +72,7 @@ class EngineManagerService {
 
     async switchEngine(modelName, engineType, port) {
         try {
-            const response = await backendClient.postWithFallback('/manage/engine/switch', {
+            const response = await backendClient.postWithFallback('/manage/engines/switch', {
                 model_name: modelName,
                 engine_type: engineType,
                 port: port || 8000
@@ -87,7 +87,7 @@ class EngineManagerService {
 
     async updateEngineConfig(newConfig) {
         try {
-            const response = await backendClient.fetchWithFallback('/engines/config', {
+            const response = await backendClient.fetchWithFallback('/manage/engines/config', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newConfig)

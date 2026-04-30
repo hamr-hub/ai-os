@@ -832,6 +832,8 @@ func (h *ManageHandler) UpdateConfig(c *gin.Context) {
 	}
 
 	h.scheduler.SetConfig(cfg)
+	h.vllmManager.SetConfig(&cfg.VLLM)
+	h.llamaCppMgr.RegisterModelsFromConfig(cfg)
 	c.JSON(http.StatusOK, gin.H{"status": "updated", "message": "Config saved and applied"})
 }
 
@@ -842,6 +844,8 @@ func (h *ManageHandler) ReloadConfig(c *gin.Context) {
 		return
 	}
 	h.scheduler.SetConfig(cfg)
+	h.vllmManager.SetConfig(&cfg.VLLM)
+	h.llamaCppMgr.RegisterModelsFromConfig(cfg)
 	c.JSON(http.StatusOK, gin.H{"status": "reloaded", "models_count": len(cfg.Models)})
 }
 

@@ -11,7 +11,7 @@ from .logger import setup_logger
 
 logger = setup_logger()
 
-class TestStatus(Enum):
+class ModelTestStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
     PASSED = "passed"
@@ -24,10 +24,10 @@ class FeatureType(Enum):
     CHAT = "chat"
 
 @dataclass
-class TestResult:
+class ModelTestResult:
     test_name: str
     feature_type: FeatureType
-    status: TestStatus
+    status: ModelTestStatus
     duration: float
     metrics: Dict[str, Any]
     error: Optional[str] = None
@@ -42,7 +42,7 @@ class ModelTestReport:
     feature_support: Dict[str, bool]
     performance_metrics: Dict[str, Any]
     resource_utilization: Dict[str, Any]
-    test_results: List[TestResult]
+    test_results: List[ModelTestResult]
     errors: List[str]
     warnings: List[str]
 
@@ -87,7 +87,7 @@ class ModelTestingFramework:
 
     async def _execute_tests(self, model_name: str) -> ModelTestReport:
         start_time = datetime.now()
-        test_results: List[TestResult] = []
+        test_results: List[ModelTestResult] = []
         errors: List[str] = []
         warnings: List[str] = []
         feature_support: Dict[str, bool] = {}
@@ -158,16 +158,16 @@ class ModelTestingFramework:
             test_results.append(self._create_skipped_test("image_processing", FeatureType.IMAGE, "Model does not support images"))
         
         feature_support = {
-            "chat": any(r.status == TestStatus.PASSED for r in test_results if r.feature_type == FeatureType.CHAT),
+            "chat": any(r.status == ModelTestStatus.PASSED for r in test_results if r.feature_type == FeatureType.CHAT),
             "tool_calling": any(
-                r.status == TestStatus.PASSED for r in test_results if r.feature_type == FeatureType.TOOLS
+                r.status == ModelTestStatus.PASSED for r in test_results if r.feature_type == FeatureType.TOOLS
             ),
             "image": supports_images and any(
-                r.status == TestStatus.PASSED for r in test_results 
+                r.status == ModelTestStatus.PASSED for r in test_results 
                 if r.feature_type == FeatureType.IMAGE
             ),
             "multimodal": supports_images and any(
-                r.status == TestStatus.PASSED for r in test_results
+                r.status == ModelTestStatus.PASSED for r in test_results
                 if r.feature_type == FeatureType.IMAGE
             ),
             # 目前图片生成功能尚未做主动自测，先展示配置层声明能力。
@@ -181,7 +181,7 @@ class ModelTestingFramework:
         
         overall_status = self._determine_overall_status(test_results, errors)
         
-        if any(r.status == TestStatus.FAILED for r in test_results):
+        if any(r.status == ModelTestStatus.FAILED for r in test_results):
             warnings.append("Some tests failed, check details")
         
         report = ModelTestReport(
@@ -261,7 +261,7 @@ class ModelTestingFramework:
 
         return runtime_status
 
-    async def _test_chat_basic(self, model_name: str) -> TestResult:
+    async def _test_chat_basic(self, model_name: str) -> ModelTestResult:
         start_time = time.time()
         test_name = "chat_basic"
         
@@ -288,35 +288,35 @@ class ModelTestingFramework:
             tps = token_count / duration if duration > 0 else 0
             
             if not content.strip():
-                return TestResult(
+                return ModelTestResult(
                     test_name=test_name,
                     feature_type=FeatureType.CHAT,
-                    status=TestStatus.FAILED,
+                    status=ModelTestStatus.FAILED,
                     duration=duration,
                     metrics={"tps": tps, "token_count": token_count},
                     error="Empty response content"
                 )
             
-            return TestResult(
+            return ModelTestResult(
                 test_name=test_name,
                 feature_type=FeatureType.CHAT,
-                status=TestStatus.PASSED,
+                status=ModelTestStatus.PASSED,
                 duration=duration,
                 metrics={"tps": tps, "token_count": token_count, "response_length": len(content)}
             )
         
         except Exception as e:
             duration = time.time() - start_time
-            return TestResult(
+            return ModelTestResult(
                 test_name=test_name,
                 feature_type=FeatureType.CHAT,
-                status=TestStatus.FAILED,
+                status=ModelTestStatus.FAILED,
                 duration=duration,
                 metrics={},
                 error=str(e)
             )
 
-    async def _test_chat_streaming(self, model_name: str) -> TestResult:
+    async def _test_chat_streaming(self, model_name: str) -> ModelTestResult:
         start_time = time.time()
         test_name = "chat_streaming"
         
@@ -361,35 +361,35 @@ class ModelTestingFramework:
             tps = token_count / duration if duration > 0 else 0
             
             if chunks_received == 0:
-                return TestResult(
+                return ModelTestResult(
                     test_name=test_name,
                     feature_type=FeatureType.CHAT,
-                    status=TestStatus.FAILED,
+                    status=ModelTestStatus.FAILED,
                     duration=duration,
                     metrics={"tps": tps, "chunks_received": chunks_received},
                     error="No streaming chunks received"
                 )
             
-            return TestResult(
+            return ModelTestResult(
                 test_name=test_name,
                 feature_type=FeatureType.CHAT,
-                status=TestStatus.PASSED,
+                status=ModelTestStatus.PASSED,
                 duration=duration,
                 metrics={"tps": tps, "token_count": token_count, "chunks_received": chunks_received, "response_length": len(content)}
             )
         
         except Exception as e:
             duration = time.time() - start_time
-            return TestResult(
+            return ModelTestResult(
                 test_name=test_name,
                 feature_type=FeatureType.CHAT,
-                status=TestStatus.FAILED,
+                status=ModelTestStatus.FAILED,
                 duration=duration,
                 metrics={},
                 error=str(e)
             )
 
-    async def _test_tool_integration(self, model_name: str) -> TestResult:
+    async def _test_tool_integration(self, model_name: str) -> ModelTestResult:
         start_time = time.time()
         test_name = "tool_integration"
         
@@ -433,18 +433,18 @@ class ModelTestingFramework:
             tool_calls = message.get("tool_calls", [])
             
             if tool_calls:
-                return TestResult(
+                return ModelTestResult(
                     test_name=test_name,
                     feature_type=FeatureType.TOOLS,
-                    status=TestStatus.PASSED,
+                    status=ModelTestStatus.PASSED,
                     duration=duration,
                     metrics={"tool_calls_count": len(tool_calls), "tool_name": tool_calls[0].get("function", {}).get("name")}
                 )
             else:
-                return TestResult(
+                return ModelTestResult(
                     test_name=test_name,
                     feature_type=FeatureType.TOOLS,
-                    status=TestStatus.PASSED,
+                    status=ModelTestStatus.PASSED,
                     duration=duration,
                     metrics={"tool_calls_count": 0},
                     details="Model responded without tool call (valid behavior)"
@@ -452,16 +452,16 @@ class ModelTestingFramework:
         
         except Exception as e:
             duration = time.time() - start_time
-            return TestResult(
+            return ModelTestResult(
                 test_name=test_name,
                 feature_type=FeatureType.TOOLS,
-                status=TestStatus.FAILED,
+                status=ModelTestStatus.FAILED,
                 duration=duration,
                 metrics={},
                 error=str(e)
             )
 
-    async def _test_image_processing(self, model_name: str) -> TestResult:
+    async def _test_image_processing(self, model_name: str) -> ModelTestResult:
         start_time = time.time()
         test_name = "image_processing"
         
@@ -496,39 +496,39 @@ class ModelTestingFramework:
             tps = token_count / duration if duration > 0 else 0
             
             if not content.strip():
-                return TestResult(
+                return ModelTestResult(
                     test_name=test_name,
                     feature_type=FeatureType.IMAGE,
-                    status=TestStatus.FAILED,
+                    status=ModelTestStatus.FAILED,
                     duration=duration,
                     metrics={"tps": tps, "token_count": token_count},
                     error="Empty response content for image prompt"
                 )
             
-            return TestResult(
+            return ModelTestResult(
                 test_name=test_name,
                 feature_type=FeatureType.IMAGE,
-                status=TestStatus.PASSED,
+                status=ModelTestStatus.PASSED,
                 duration=duration,
                 metrics={"tps": tps, "token_count": token_count, "response_length": len(content)}
             )
         
         except Exception as e:
             duration = time.time() - start_time
-            return TestResult(
+            return ModelTestResult(
                 test_name=test_name,
                 feature_type=FeatureType.IMAGE,
-                status=TestStatus.FAILED,
+                status=ModelTestStatus.FAILED,
                 duration=duration,
                 metrics={},
                 error=str(e)
             )
 
-    def _create_skipped_test(self, test_name: str, feature_type: FeatureType, reason: str) -> TestResult:
-        return TestResult(
+    def _create_skipped_test(self, test_name: str, feature_type: FeatureType, reason: str) -> ModelTestResult:
+        return ModelTestResult(
             test_name=test_name,
             feature_type=feature_type,
-            status=TestStatus.SKIPPED,
+            status=ModelTestStatus.SKIPPED,
             duration=0.0,
             metrics={},
             details=f"Skipped: {reason}"
@@ -590,15 +590,15 @@ class ModelTestingFramework:
             } if start["gpu"] else {"available": False}
         }
 
-    def _calculate_performance_metrics(self, test_results: List[TestResult]) -> Dict[str, Any]:
-        chat_tests = [r for r in test_results if r.feature_type == FeatureType.CHAT and r.status == TestStatus.PASSED]
-        image_tests = [r for r in test_results if r.feature_type == FeatureType.IMAGE and r.status == TestStatus.PASSED]
+    def _calculate_performance_metrics(self, test_results: List[ModelTestResult]) -> Dict[str, Any]:
+        chat_tests = [r for r in test_results if r.feature_type == FeatureType.CHAT and r.status == ModelTestStatus.PASSED]
+        image_tests = [r for r in test_results if r.feature_type == FeatureType.IMAGE and r.status == ModelTestStatus.PASSED]
         
         all_tps_values = []
         all_latencies = []
         
         for result in test_results:
-            if result.status == TestStatus.PASSED:
+            if result.status == ModelTestStatus.PASSED:
                 if "tps" in result.metrics:
                     all_tps_values.append(result.metrics["tps"])
                 if result.duration > 0:
@@ -619,18 +619,18 @@ class ModelTestingFramework:
             "overall": {
                 "avg_tps": sum(all_tps_values) / len(all_tps_values) if all_tps_values else 0,
                 "avg_latency": sum(all_latencies) / len(all_latencies) if all_latencies else 0,
-                "tests_passed": len([r for r in test_results if r.status == TestStatus.PASSED]),
+                "tests_passed": len([r for r in test_results if r.status == ModelTestStatus.PASSED]),
                 "tests_total": len(test_results),
-                "pass_rate": (len([r for r in test_results if r.status == TestStatus.PASSED]) / len(test_results)) * 100 if test_results else 0
+                "pass_rate": (len([r for r in test_results if r.status == ModelTestStatus.PASSED]) / len(test_results)) * 100 if test_results else 0
             }
         }
 
-    def _determine_overall_status(self, test_results: List[TestResult], errors: List[str]) -> str:
+    def _determine_overall_status(self, test_results: List[ModelTestResult], errors: List[str]) -> str:
         if errors:
             return "failed"
         
-        passed = sum(1 for r in test_results if r.status == TestStatus.PASSED)
-        failed = sum(1 for r in test_results if r.status == TestStatus.FAILED)
+        passed = sum(1 for r in test_results if r.status == ModelTestStatus.PASSED)
+        failed = sum(1 for r in test_results if r.status == ModelTestStatus.FAILED)
         
         if failed > 0:
             return "degraded"

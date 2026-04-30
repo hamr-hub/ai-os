@@ -11,11 +11,41 @@ class RateLimitMiddleware:
         self.window_seconds = window_seconds
         self.clients: Dict[str, Dict[str, int]] = {}
         self.allowed_ips = {"127.0.0.1", "localhost", "::1"}
+        self.exempt_paths = {
+            "/manage/switch/status",
+            "/manage/gpu",
+            "/manage/gpu/summary",
+            "/manage/models",
+            "/manage/models/summary",
+            "/manage/queue",
+            "/manage/preload/status",
+            "/manage/health/alert",
+            "/manage/metrics",
+            "/manage/token/stats",
+            "/manage/cache/status",
+            "/manage/system/status",
+            "/manage/service/status",
+            "/manage/monitor/all",
+            "/manage/websocket/connections",
+            "/manage/gpu/realtime",
+            "/manage/gpu/processes",
+            "/manage/gpu/enhanced",
+            "/manage/vllm/metrics",
+            "/manage/scheduler/status",
+            "/manage/engines/status",
+            "/api/v1/status",
+            "/health",
+            "/health/detailed",
+        }
     
     async def __call__(self, request: Request, call_next):
         client_ip = request.client.host if request.client else "unknown"
         
         if client_ip in self.allowed_ips:
+            response = await call_next(request)
+            return response
+
+        if request.url.path in self.exempt_paths:
             response = await call_next(request)
             return response
         

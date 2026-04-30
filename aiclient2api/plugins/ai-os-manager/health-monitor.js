@@ -61,7 +61,7 @@ class HealthMonitorService {
 
     async fetchDetail() {
         try {
-            const response = await backendClient.fetchWithFallback('/manage/health/detailed');
+            const response = await backendClient.fetchWithFallback('/manage/metrics/health-detail');
             if (!response.ok) return;
             this.detailCache = await response.json();
         } catch (error) {
@@ -97,11 +97,10 @@ class HealthMonitorService {
 
     async runCheck() {
         try {
-            const response = await backendClient.fetchWithFallback('/manage/health/check', { method: 'POST' });
-            const result = await response.json();
+            await backendClient.fetchWithFallback('/manage/cache/refresh?endpoint=health', { method: 'POST' });
             await this.fetchAlert();
             await this.fetchDetail();
-            return { success: response.ok, data: result };
+            return { success: true };
         } catch (error) {
             logger.error('[HealthMonitor] Check error:', error.message);
             return { success: false, error: error.message };

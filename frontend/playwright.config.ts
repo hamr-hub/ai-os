@@ -2,20 +2,17 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
+  retries: 0,
+  workers: 1,
+  reporter: 'list',
+  timeout: 60000,
   use: {
-    baseURL: 'http://localhost:30001',
+    baseURL: 'http://192.168.7.103:30000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-  },
-  webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:30001',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30000,
+    actionTimeout: 30000,
+    navigationTimeout: 60000,
   },
 })

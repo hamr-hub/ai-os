@@ -48,7 +48,7 @@ class RateLimiterService {
 
     async fetchQueue() {
         try {
-            const response = await backendClient.fetchWithFallback('/manage/queue/status');
+            const response = await backendClient.fetchWithFallback('/manage/queue');
             if (!response.ok) return;
             this.queueCache = await response.json();
         } catch (error) {

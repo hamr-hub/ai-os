@@ -62,7 +62,10 @@ class LLMServiceManager:
         if not self._config:
             return {}
         if hasattr(self._config, 'vllm'):
-            return self._config.vllm or {}
+            val = self._config.vllm
+            if val is None:
+                return {}
+            return val if isinstance(val, dict) else val.model_dump()
         elif isinstance(self._config, dict):
             return self._config.get('vllm', {})
         return {}
@@ -71,7 +74,10 @@ class LLMServiceManager:
         if not self._config:
             return {}
         if hasattr(self._config, 'settings'):
-            return self._config.settings or {}
+            val = self._config.settings
+            if val is None:
+                return {}
+            return val if isinstance(val, dict) else val.model_dump()
         elif isinstance(self._config, dict):
             return self._config.get('settings', {})
         return {}
@@ -85,10 +91,10 @@ class LLMServiceManager:
             return self._model_paths[model_name]
         model_cfg = self._get_model_config(model_name)
         if model_cfg:
-            if hasattr(model_cfg, 'model_path'):
+            if hasattr(model_cfg, 'model_path') and model_cfg.model_path:
                 return model_cfg.model_path
             elif isinstance(model_cfg, dict):
-                return model_cfg.get("model_path", os.path.join(self._get_model_base_path(), model_name))
+                return model_cfg.get("model_path") or os.path.join(self._get_model_base_path(), model_name)
         return os.path.join(self._get_model_base_path(), model_name)
 
     def _get_vllm_env(self, model_name: str) -> Dict[str, str]:

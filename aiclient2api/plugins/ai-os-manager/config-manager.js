@@ -49,7 +49,7 @@ class ConfigManagerService {
 
     async fetchGlobalConfig() {
         try {
-            const response = await backendClient.fetchWithFallback('/manage/config/global');
+            const response = await backendClient.fetchWithFallback('/manage/config');
             if (response.ok) {
                 this.globalConfigCache = await response.json();
             }
@@ -95,7 +95,7 @@ class ConfigManagerService {
 
     async updateGlobalConfig(newConfig) {
         try {
-            const response = await backendClient.fetchWithFallback('/manage/config/global', {
+            const response = await backendClient.fetchWithFallback('/manage/config', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newConfig)
@@ -110,7 +110,9 @@ class ConfigManagerService {
 
     async setDefaultModel(modelName) {
         try {
-            const response = await backendClient.postWithFallback('/manage/default-model', { model: modelName });
+            const response = await backendClient.fetchWithFallback(`/manage/default-model/${encodeURIComponent(modelName)}`, {
+                method: 'POST',
+            });
             const result = await response.json();
             this.defaultModelCache = result;
             return { success: response.ok, data: result };

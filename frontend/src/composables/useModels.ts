@@ -6,7 +6,7 @@ import {
   clearDefaultModel,
   getAggregatedModels,
   updateModelVLLMConfig,
-  chatCompletion,
+  atomicSwitchModel,
 } from '@/api/client'
 import type { ModelStatus, AggregatedModelsResponse, VLLMConfigUpdateRequest } from '@/types'
 import { isAbortError } from '@/utils/request'
@@ -170,16 +170,10 @@ export function useModels() {
     switchingModel.value = modelName
     error.value = null
     try {
-      await chatCompletion({
-        model: modelName,
-        messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: 1,
-      })
+      await atomicSwitchModel(modelName, setAsDefault, 'switch')
       if (setAsDefault) {
-        await setDefaultModel(modelName)
         defaultModel.value = modelName
       }
-      await fetchModelStatus(true)
     } catch (err) {
       error.value = err instanceof Error ? err.message : `切换失败`
       console.error('Failed to switch model:', err)
@@ -191,6 +185,24 @@ export function useModels() {
 
   const handleSwitchAndSetDefault = async (modelName: string) => {
     await handleSwitchModel(modelName, true)
+  }
+
+  const handleTogglePreload = async (modelName: string, enabled: boolean) => {
+    actionLoading.value = modelName
+    error.value = null
+    try {
+      if (enabled) {
+        await enablePreload(modelName)
+      } else {
+        await disablePreload(modelName)
+      }
+      await fetchModelStatus(true)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : `预加载设置失败`
+      console.error('Failed to toggle preload:', err)
+    } finally {
+      actionLoading.value = null
+    }
   }
 
   const startAutoRefresh = () => {
@@ -269,6 +281,7 @@ export function useModels() {
     handleSwitchAndSetDefault,
     handleSetDefaultModel,
     handleClearDefaultModel,
+    handleTogglePreload,
     runningModelsCount,
   }
 }

@@ -281,10 +281,13 @@ class ModelEngineScheduler:
                 model_path = None
                 if self._model_hub:
                     model_path = self._model_hub.get_model_local_path(model_name)
-                if not model_path and self._config and hasattr(self._config, 'get_model'):
-                    cfg = self._config.get_model(model_name)
-                    if cfg and cfg.model_path:
-                        model_path = cfg.model_path
+                if not model_path and self._config:
+                    if hasattr(self._config, 'get_model'):
+                        cfg = self._config.get_model(model_name)
+                        if cfg and hasattr(cfg, 'model_path') and cfg.model_path:
+                            model_path = cfg.model_path
+                        elif isinstance(cfg, dict) and cfg.get("model_path"):
+                            model_path = cfg.get("model_path")
                 service_name = f"{engine_type}-{model_name.split('/')[-1]}"
                 result = self._llm_mgr.start_service(
                     service_name, model_name, engine_type, port,

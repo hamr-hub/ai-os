@@ -1,10 +1,23 @@
 import { test, expect } from '@playwright/test'
 
+async function login(page: any) {
+  await page.goto('/login')
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForTimeout(500)
+  await page.fill('input[placeholder="输入 API Key"]', 'test-api-key')
+  await page.waitForTimeout(300)
+  await page.locator('button.btn-primary:has-text("登录")').click({ force: true, timeout: 10000 })
+  await page.waitForURL('**/', { timeout: 15000 })
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForTimeout(500)
+}
+
 const CARD_TIMEOUT = 15000
 const ACTION_TIMEOUT = 5000
 
 test.describe('模型切换功能', () => {
   test.beforeEach(async ({ page }) => {
+    await login(page)
     await page.goto('/')
     await page.waitForLoadState('domcontentloaded')
     await expect(page.locator('.running-card')).toBeVisible({ timeout: CARD_TIMEOUT })

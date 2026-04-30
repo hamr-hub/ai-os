@@ -59,6 +59,7 @@ const {
   handleStopModel,
   handleSwitchAndSetDefault,
   handleSetDefaultModel,
+  handleTogglePreload,
 } = useModels()
 
 const runningModels = computed(() => modelList.value.filter((m) => m.running))
@@ -694,6 +695,15 @@ watch(
                   </span>
                 </div>
                 <div class="card-actions">
+                  <label class="preload-toggle" :title="model.preloaded ? '关闭预加载' : '开启预加载'">
+                    <input
+                      type="checkbox"
+                      :checked="model.preloaded"
+                      :disabled="!!actionLoading || !!switchingModel"
+                      @change="handleTogglePreload(model.name, ($event.target as HTMLInputElement).checked)"
+                    />
+                    <span class="toggle-slider"></span>
+                  </label>
                   <button
                     class="action-btn"
                     :disabled="!!actionLoading || !!switchingModel"
@@ -744,6 +754,15 @@ watch(
                 </span>
               </div>
               <div class="item-actions">
+                <label class="preload-toggle" :title="model.preloaded ? '关闭预加载' : '开启预加载'">
+                  <input
+                    type="checkbox"
+                    :checked="model.preloaded"
+                    :disabled="!!actionLoading || !!switchingModel"
+                    @change="handleTogglePreload(model.name, ($event.target as HTMLInputElement).checked)"
+                  />
+                  <span class="toggle-slider"></span>
+                </label>
                 <button
                   class="action-btn primary"
                   :disabled="!!actionLoading || !!switchingModel"

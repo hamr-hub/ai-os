@@ -168,8 +168,12 @@ class TestScheduler:
             "available": 1 * 1024 ** 3
         }
         
-        result = await scheduler.start_model("Qwen3-235B-A22B-Instruct-2507-AWQ")
-        assert result is False
+        with patch('core.vllm_manager.get_current_model_info', return_value=None):
+            with patch('core.scheduler.cache_service') as mock_cache:
+                mock_cache.get.return_value = None
+                mock_cache.set.return_value = None
+                result = await scheduler.start_model("Qwen3-235B-A22B-Instruct-2507-AWQ")
+                assert result is False
 
     @pytest.mark.asyncio
     async def test_stop_model(self, scheduler, mock_sys_controller):
@@ -212,6 +216,7 @@ class TestScheduler:
         assert count >= 0
 
     def test_can_accept_request(self, scheduler, mock_gpu_monitor):
+        scheduler.rate_limiter.reset_counter("Gemma-4-31B-Abliterated")
         with patch('core.scheduler.cache_service') as mock_cache:
             mock_cache.get.return_value = None
             mock_cache.set.return_value = None

@@ -261,6 +261,16 @@ export async function atomicSwitchModel(
   return data
 }
 
+export async function enablePreload(name: string): Promise<ActionResponse> {
+  const { data } = await client.post<ActionResponse>(`/preload/${encodeURIComponent(name)}/enable`)
+  return data
+}
+
+export async function disablePreload(name: string): Promise<ActionResponse> {
+  const { data } = await client.post<ActionResponse>(`/preload/${encodeURIComponent(name)}/disable`)
+  return data
+}
+
 export async function runModelTest(name: string): Promise<TestResponse> {
   const { data } = await v1Client.post<TestResponse>(
     `/test/model/${name}`,

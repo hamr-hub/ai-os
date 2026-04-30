@@ -82,14 +82,18 @@ class ModelSwitchService {
     async warmupModel(modelName) {
         try {
             const baseUrl = backendClient.getBaseUrl();
+            const switchBody = {
+                action: 'switch',
+                model_name: modelName,
+                set_as_default: false
+            };
+            if (options.engineType) switchBody.engine_type = options.engineType;
+            if (options.port) switchBody.port = options.port;
+
             const response = await fetch(`${baseUrl}/manage/switch/atomic`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'switch',
-                    model_name: modelName,
-                    set_as_default: false
-                }),
+                body: JSON.stringify(switchBody),
                 signal: AbortSignal.timeout(30000)
             });
             const text = await response.text();
@@ -242,7 +246,7 @@ class ModelSwitchService {
         }
     }
 
-    async switchModel(modelName, async = true) {
+    async switchModel(modelName, async = true, options = {}) {
         const mode = async ? 'warm' : 'cold';
         const taskId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
@@ -254,7 +258,7 @@ class ModelSwitchService {
             });
 
             setImmediate(() => {
-                this._executeSwitch(taskId, modelName, mode).catch(err => {
+                this._executeSwitch(taskId, modelName, mode, options).catch(err => {
                     logger.error('[Model Switch Service] Async switch task failed:', err.message);
                     this.switchTasks.set(taskId, {
                         modelName,
@@ -282,10 +286,10 @@ class ModelSwitchService {
             };
         }
 
-        return this._executeSwitch(taskId, modelName, mode);
+        return this._executeSwitch(taskId, modelName, mode, options);
     }
 
-    async _executeSwitch(taskId, modelName, mode = 'warm') {
+    async _executeSwitch(taskId, modelName, mode = 'warm', options = {}) {
         try {
             this.switchTasks.set(taskId, {
                 modelName,
@@ -469,11 +473,15 @@ class ModelSwitchService {
 
     async startModel(modelName) {
         try {
-            logger.info(`[Model Switch Service] Starting model via manage API: ${modelName}`);
-            const response = await backendClient.fetchWithFallback('/manage/start', {
+            logger.info(`[Model Switch Service] Starting model via atomic switch: ${modelName}`);
+            const baseUrl = backendClient.getBaseUrl();
+            const response = await fetch(`${baseUrl}/manage/switch/atomic`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model_name: modelName }),
+                body: JSON.stringify({
+                    action: 'start',
+                    model_name: modelName,
+                }),
                 signal: AbortSignal.timeout(180000)
             });
 
@@ -497,10 +505,24 @@ class ModelSwitchService {
 
     async stopModel(modelName) {
         try {
-            logger.info(`[Model Switch Service] Stop model not supported via chat API: ${modelName}`);
+            logger.info(`[Model Switch Service] Stopping model via atomic switch: ${modelName}`);
+            const baseUrl = backendClient.getBaseUrl();
+            const response = await fetch(`${baseUrl}/manage/switch/atomic`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'stop',
+                    model_name: modelName,
+                }),
+                signal: AbortSignal.timeout(180000)
+            });
+
+            await this.fetchModelsFromBackend();
+
             return {
-                success: false,
-                error: 'Stop model operation is not supported in auto-switch mode',
+                success: response.ok,
+                data: { modelName, status: response.ok ? 'completed' : 'failed' },
+                timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };
         } catch (error) {

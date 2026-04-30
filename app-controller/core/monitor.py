@@ -863,7 +863,7 @@ class GPUMonitor:
                 }
             }
             ttl_1_hour = 60 * 60
-            self._redis_client.set("gpu:summary", json.dumps(summary_data), ex=ttl_1_hour)
+            self._redis_client.set("gpu:summary", json.dumps(summary_data), expire=ttl_1_hour)
             if datetime.now() - self._last_history_cleanup >= self._history_cleanup_interval:
                 self._clean_old_history()
                 self._last_history_cleanup = datetime.now()

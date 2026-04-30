@@ -1,6 +1,6 @@
 import { ref, computed, onUnmounted } from 'vue'
 import type { SwitchSession, SwitchProgressMessage, SwitchLogLevel } from '@/types'
-import { getSwitchStatus } from '@/api/client'
+import { getSwitchStatus, atomicSwitchModel, cancelSwitch } from '@/api/client'
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
 
@@ -186,11 +186,18 @@ export function useModelSwitch() {
     setAsDefault = false,
     action: 'switch' | 'start' | 'stop' = 'switch'
   ) => {
-    void modelName
-    void setAsDefault
-    void action
     error.value = null
     isSwitching.value = true
+
+    try {
+      await atomicSwitchModel(modelName, setAsDefault, action)
+    } catch (err) {
+      isSwitching.value = false
+      const errMsg = err instanceof Error ? err.message : '切换请求失败'
+      error.value = errMsg
+      appStore.error(`模型切换请求失败: ${errMsg}`)
+      return
+    }
 
     connectWS()
     startPolling()
@@ -198,6 +205,11 @@ export function useModelSwitch() {
 
   const triggerCancel = async () => {
     error.value = null
+    try {
+      await cancelSwitch()
+    } catch (err) {
+      console.warn('[useModelSwitch] Cancel request failed:', err)
+    }
     isSwitching.value = false
     stopPolling()
     disconnectWS()

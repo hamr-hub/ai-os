@@ -168,7 +168,7 @@ func (p *VLLMProxy) StreamChatCompletion(ctx context.Context, port int, payload 
 	}
 
 	ch := make(chan StreamEvent, 256)
-	go p.streamReader(resp, ch)
+	go p.streamReader(ctx, resp, ch)
 	return ch, nil
 }
 
@@ -178,7 +178,7 @@ type StreamEvent struct {
 	Error error
 }
 
-func (p *VLLMProxy) streamReader(resp *http.Response, ch chan<- StreamEvent) {
+func (p *VLLMProxy) streamReader(ctx context.Context, resp *http.Response, ch chan<- StreamEvent) {
 	defer close(ch)
 	defer resp.Body.Close()
 
@@ -220,6 +220,9 @@ func (p *VLLMProxy) streamReader(resp *http.Response, ch chan<- StreamEvent) {
 		case <-heartbeatTicker.C:
 			ch <- StreamEvent{Data: ": heartbeat\n\n"}
 		case <-scanDone:
+			return
+		case <-ctx.Done():
+			p.logger.Debug("stream reader context cancelled, closing upstream connection")
 			return
 		}
 	}
