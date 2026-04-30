@@ -7,8 +7,13 @@ vi.mock('@/api/client', () => ({
   updateEngineConfig: vi.fn(),
 }))
 
-import { getEngineStatus, switchEngine, getEngineConfig, updateEngineConfig } from '@/api/client'
+import * as apiClient from '@/api/client'
 import { useEngineManagement } from '@/composables/useEngineManagement'
+
+const getEngineStatus = vi.mocked(apiClient.getEngineStatus)
+const switchEngine = vi.mocked(apiClient.switchEngine)
+const getEngineConfig = vi.mocked(apiClient.getEngineConfig)
+const updateEngineConfig = vi.mocked(apiClient.updateEngineConfig)
 
 describe('useEngineManagement', () => {
   beforeEach(() => {
@@ -16,7 +21,12 @@ describe('useEngineManagement', () => {
   })
 
   it('fetchStatus填充engineStatus', async () => {
-    const status = { current_engine: 'vllm', available_engines: ['vllm', 'trt'] }
+    const status = {
+      vllm: { running: true, pid: 123, port: 8000, model: 'llama', uptime: 10 },
+      sglang: { running: false, pid: null, port: null, model: null, uptime: null },
+      llama_cpp: { running: false, pid: null, port: null, model: null, uptime: null },
+      current_engine: 'vllm' as const,
+    }
     getEngineStatus.mockResolvedValue(status)
 
     const { fetchStatus, engineStatus, loading, error } = useEngineManagement()
@@ -38,7 +48,11 @@ describe('useEngineManagement', () => {
   })
 
   it('fetchConfig填充engineConfig', async () => {
-    const config = { engine_type: 'vllm', port: 8000 }
+    const config = {
+      vllm: { command: 'python -m vllm', default_params: {} },
+      sglang: { command: 'python -m sglang', default_params: {} },
+      llama_cpp: { command: 'llama-server', default_params: {} },
+    }
     getEngineConfig.mockResolvedValue(config)
 
     const { fetchConfig, engineConfig } = useEngineManagement()
@@ -48,7 +62,7 @@ describe('useEngineManagement', () => {
   })
 
   it('doSwitchEngine成功返回session_id时构造SwitchSession', async () => {
-    const result = { session_id: 'sess-123' }
+    const result = { status: 'ok', session_id: 'sess-123' }
     switchEngine.mockResolvedValue(result)
 
     const { doSwitchEngine, switchSession, switching, error } = useEngineManagement()
