@@ -14,8 +14,8 @@ class TestAuth:
     def test_no_auth_current_state(self):
         resp = requests.post(
             f"{GO_BASE}/v1/chat/completions",
-            json={"model": "default", "messages": [{"role": "user", "content": "auth test"}]},
-            timeout=30,
+            json={"model": "default", "messages": [{"role": "user", "content": "auth test"}], "stream": False},
+            timeout=10,
         )
         assert resp.status_code in [200, 429, 503], "Currently no auth - this is a security risk"
         if resp.status_code == 200:
@@ -85,11 +85,8 @@ class TestInputValidation:
     def test_xss_in_content(self):
         resp = requests.post(
             f"{GO_BASE}/v1/chat/completions",
-            json={
-                "model": "default",
-                "messages": [{"role": "user", "content": "<script>alert('xss')</script>"}],
-            },
-            timeout=30,
+            json={"model": "default", "messages": [{"role": "user", "content": "<script>alert('xss')</script>"}], "stream": False},
+            timeout=10,
         )
         assert resp.status_code in [200, 503, 429], "XSS in content should not crash server"
 
@@ -97,10 +94,7 @@ class TestInputValidation:
         huge_content = "A" * 1000000
         resp = requests.post(
             f"{GO_BASE}/v1/chat/completions",
-            json={
-                "model": "default",
-                "messages": [{"role": "user", "content": huge_content}],
-            },
-            timeout=30,
+            json={"model": "default", "messages": [{"role": "user", "content": huge_content}], "stream": False},
+            timeout=10,
         )
-        assert resp.status_code in [200, 400, 429, 503], "Server should handle oversized request gracefully"
+        assert resp.status_code in [200, 429, 503], f"Unexpected: {resp.status_code}"

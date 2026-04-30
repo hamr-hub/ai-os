@@ -14,9 +14,7 @@ class ConfigManagerService {
     }
 
     async init() {
-        logger.info('[ConfigManager] Initializing...');
-        this.startPolling();
-        await this.fetchAllConfigs();
+        logger.info('[ConfigManager] Initialized (polling deferred, starts on first data request)');
     }
 
     async destroy() {
@@ -83,6 +81,7 @@ class ConfigManagerService {
     }
 
     getGlobalConfig() {
+        if (!this.isPolling) this.startPolling();
         return { success: true, data: this.globalConfigCache, timestamp: new Date().toISOString(), backendStatus: backendClient.getStatus() };
     }
 

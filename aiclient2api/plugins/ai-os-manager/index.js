@@ -27,13 +27,6 @@ import {
 const INJECT_SCRIPT_TAG = '<script src="/plugins/ai-os-manager/inject.js" defer></script>';
 
 const EXEMPT_PATHS = [
-    '/api/gpu-monitor',
-    '/api/model-switch',
-    '/api/engine',
-    '/api/config',
-    '/api/health',
-    '/api/ratelimit',
-    '/api/ws',
     '/plugins/ai-os-manager/inject.js',
     '/plugins/ai-os-manager/styles.css',
     '/gpu-admin',
@@ -44,9 +37,16 @@ const EXEMPT_PATHS = [
     '/index.html',
     '/login.html',
     '/v1/models',
-    '/v1/chat/completions',
-    '/v1/completions',
-    '/v1/embeddings',
+];
+
+const ADMIN_API_PREFIXES = [
+    '/api/gpu-monitor',
+    '/api/model-switch',
+    '/api/engine',
+    '/api/config',
+    '/api/health',
+    '/api/ratelimit',
+    '/api/ws',
 ];
 
 const API_PATHS = ['/v1/', '/openai/'];
@@ -86,7 +86,7 @@ const aiOsManagerPlugin = {
         await configManager.init();
         await healthMonitor.init();
         await rateLimiter.init();
-        logger.info('[AI-OS Manager] Initialized successfully');
+        logger.info('[AI-OS Manager] Initialized successfully (services ready, polling deferred until first API request)');
     },
 
     async destroy() {
@@ -126,6 +126,21 @@ const aiOsManagerPlugin = {
             }
         }
 
+        for (const prefix of ADMIN_API_PREFIXES) {
+            if (pathname.startsWith(prefix)) {
+                const authHeader = req.headers['authorization'] || '';
+                const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-admin-token'] || null;
+                const expectedToken = config.ADMIN_TOKEN || config.REQUIRED_API_KEY;
+                if (!expectedToken) return { handled: false, authorized: true };
+                if (!token || token !== expectedToken) {
+                    res.writeHead(401, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: { message: 'Unauthorized - admin token required', type: 'authentication_error', code: 'authentication_error' } }));
+                    return { handled: true, authorized: false };
+                }
+                return { handled: false, authorized: true };
+            }
+        }
+
         let isProtectedPath = false;
         for (const apiPath of PROTECTED_API_PATHS) {
             if (pathname === apiPath || pathname.startsWith(apiPath + '/')) {
@@ -138,8 +153,9 @@ const aiOsManagerPlugin = {
             if (pathname.startsWith(apiPath)) {
                 const authHeader = req.headers['authorization'] || '';
                 const apiKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-                const expectedApiKey = config.REQUIRED_API_KEY || '123456';
+                const expectedApiKey = config.REQUIRED_API_KEY;
 
+                if (!expectedApiKey) return { handled: false, authorized: true };
                 if (apiKey && apiKey === expectedApiKey) {
                     return { handled: false, authorized: true };
                 } else {

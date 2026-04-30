@@ -15,6 +15,11 @@ const __dirname = pathModule.dirname(__filename);
 const pluginDir = __dirname;
 const staticDir = pathModule.resolve(process.cwd(), 'static');
 
+export function normalizeBackendResult(result) {
+    const field = result.current || result.primary || result.all?.[0] || result.all_gpus?.[0] || result;
+    return { ...field, timestamp: new Date().toISOString() };
+}
+
 function parseRequestBody(req) {
     return new Promise((resolve, reject) => {
         let body = '';
@@ -27,13 +32,19 @@ function parseRequestBody(req) {
     });
 }
 
-function sendJSONResponse(res, statusCode, data) {
-    res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+function sendJSONResponse(res, statusCode, data, config) {
+    const headers = { 'Content-Type': 'application/json' };
+    const origin = config?.CORS_ALLOWED_ORIGINS || '';
+    if (origin) headers['Access-Control-Allow-Origin'] = origin;
+    res.writeHead(statusCode, headers);
     res.end(JSON.stringify(data));
 }
 
-function sendHTMLResponse(res, html) {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+function sendHTMLResponse(res, html, config) {
+    const headers = { 'Content-Type': 'text/html; charset=utf-8' };
+    const origin = config?.CORS_ALLOWED_ORIGINS || '';
+    if (origin) headers['Access-Control-Allow-Origin'] = origin;
+    res.writeHead(200, headers);
     res.end(html);
 }
 

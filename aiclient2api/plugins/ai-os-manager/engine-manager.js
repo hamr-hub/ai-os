@@ -12,8 +12,7 @@ class EngineManagerService {
     }
 
     async init() {
-        logger.info('[EngineManager] Initializing...');
-        this.startPolling();
+        logger.info('[EngineManager] Initialized (polling deferred, starts on first data request)');
     }
 
     async destroy() {
@@ -63,6 +62,7 @@ class EngineManagerService {
     }
 
     getLatestData() {
+        if (!this.isPolling) this.startPolling();
         return { success: true, data: this.dataCache, timestamp: new Date().toISOString(), backendStatus: backendClient.getStatus() };
     }
 

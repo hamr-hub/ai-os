@@ -177,7 +177,6 @@ class ConfigWatcher:
                 self._last_error = "; ".join(errors)
                 logger.error("Refusing to save invalid config for %s: %s", self.config_path, self._last_error)
                 return False
-
             raw_config = {}
             if os.path.exists(self.config_path):
                 with open(self.config_path, "r") as f:

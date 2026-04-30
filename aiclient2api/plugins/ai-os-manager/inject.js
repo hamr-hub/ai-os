@@ -13,44 +13,44 @@
 
     var sectionHTML = '\
 <div id="aios-gpu" class="section" data-section="aios-gpu" style="display: none;">\
-    <div class="section-header"><h2>GPU Monitor</h2></div>\
+    <div class="section-header"><h2>GPU监控</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-gpu-content"><p>Loading GPU data...</p></div>\
+        <div id="aios-gpu-content"><p>正在加载GPU数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-switch" class="section" data-section="aios-switch" style="display: none;">\
-    <div class="section-header"><h2>Model Switch</h2></div>\
+    <div class="section-header"><h2>模型切换</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-switch-content"><p>Loading model data...</p></div>\
+        <div id="aios-switch-content"><p>正在加载模型数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-engine" class="section" data-section="aios-engine" style="display: none;">\
-    <div class="section-header"><h2>Engine Manager</h2></div>\
+    <div class="section-header"><h2>引擎管理</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-engine-content"><p>Loading engine data...</p></div>\
+        <div id="aios-engine-content"><p>正在加载引擎数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-config" class="section" data-section="aios-config" style="display: none;">\
-    <div class="section-header"><h2>Config Center</h2></div>\
+    <div class="section-header"><h2>配置中心</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-config-content"><p>Loading config data...</p></div>\
+        <div id="aios-config-content"><p>正在加载配置数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-health" class="section" data-section="aios-health" style="display: none;">\
-    <div class="section-header"><h2>Health Ops</h2></div>\
+    <div class="section-header"><h2>健康运维</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-health-content"><p>Loading health data...</p></div>\
+        <div id="aios-health-content"><p>正在加载健康数据...</p></div>\
     </div>\
 </div>\
 \
 <div id="aios-ratelimit" class="section" data-section="aios-ratelimit" style="display: none;">\
-    <div class="section-header"><h2>Rate Limit</h2></div>\
+    <div class="section-header"><h2>限流控制</h2></div>\
     <div class="card aios-status-card">\
-        <div id="aios-ratelimit-content"><p>Loading rate limit data...</p></div>\
+        <div id="aios-ratelimit-content"><p>正在加载限流数据...</p></div>\
     </div>\
 </div>';
 
@@ -68,12 +68,12 @@
         if (!nav) return false;
 
         var items = [
-            { id: MENU_IDS.gpu, section: 'aios-gpu', icon: 'fa-microchip', label: 'GPU Monitor' },
-            { id: MENU_IDS.switch, section: 'aios-switch', icon: 'fa-exchange-alt', label: 'Model Switch' },
-            { id: MENU_IDS.engine, section: 'aios-engine', icon: 'fa-bolt', label: 'Engine Mgr' },
-            { id: MENU_IDS.config, section: 'aios-config', icon: 'fa-cog', label: 'Config' },
-            { id: MENU_IDS.health, section: 'aios-health', icon: 'fa-heartbeat', label: 'Health' },
-            { id: MENU_IDS.ratelimit, section: 'aios-ratelimit', icon: 'fa-tachometer-alt', label: 'Rate Limit' },
+            { id: MENU_IDS.gpu, section: 'aios-gpu', icon: 'fa-microchip', label: 'GPU监控' },
+            { id: MENU_IDS.switch, section: 'aios-switch', icon: 'fa-exchange-alt', label: '模型切换' },
+            { id: MENU_IDS.engine, section: 'aios-engine', icon: 'fa-bolt', label: '引擎管理' },
+            { id: MENU_IDS.config, section: 'aios-config', icon: 'fa-cog', label: '配置中心' },
+            { id: MENU_IDS.health, section: 'aios-health', icon: 'fa-heartbeat', label: '健康运维' },
+            { id: MENU_IDS.ratelimit, section: 'aios-ratelimit', icon: 'fa-tachometer-alt', label: '限流控制' },
         ];
 
         var anchor = document.getElementById('nav-plugins');
@@ -84,7 +84,7 @@
             navItem.className = 'nav-item';
             navItem.id = item.id;
             navItem.dataset.section = item.section;
-            navItem.innerHTML = '<i class="fas ' + item.icon + '"></i> <span>' + item.label + '</span>';
+            navItem.innerHTML = '<i class="fas ' + item.icon + '" aria-hidden="true"></i> <span>' + item.label + '</span>';
             if (anchor) anchor.after(navItem);
             else nav.appendChild(navItem);
             anchor = navItem;
@@ -117,6 +117,20 @@
         });
     }
 
+    function getAdminToken() {
+        try { return localStorage.getItem('aios_admin_token') || ''; } catch(e) { return ''; }
+    }
+
+    function adminFetch(url, options) {
+        options = options || {};
+        var token = getAdminToken();
+        if (token) {
+            options.headers = options.headers || {};
+            options.headers['X-Admin-Token'] = token;
+        }
+        return fetch(url, options);
+    }
+
     function loadData(sectionId) {
         var urlMap = {
             'aios-gpu': '/api/gpu-monitor/info',
@@ -131,11 +145,27 @@
         var contentId = sectionId + '-content';
         var el = document.getElementById(contentId);
         if (!el) return;
-        fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+        adminFetch(url).then(function(r) {
+            if (r.status === 401) {
+                el.innerHTML = '<p class="aios-error">需要管理员令牌，请点击右上角设置令牌</p>';
+                promptForToken();
+                return null;
+            }
+            return r.json();
+        }).then(function(data) {
+            if (!data) return;
             el.innerHTML = '<pre class="aios-data-pre">' + JSON.stringify(data, null, 2) + '</pre>';
         }).catch(function(err) {
-            el.innerHTML = '<p class="aios-error">Error: ' + err.message + '</p>';
+            el.innerHTML = '<p class="aios-error">错误: ' + err.message + '</p>';
         });
+    }
+
+    function promptForToken() {
+        var existing = getAdminToken();
+        var token = window.prompt('请输入管理员令牌 (Admin Token):', existing);
+        if (token) {
+            try { localStorage.setItem('aios_admin_token', token); } catch(e) {}
+        }
     }
 
     function init() {

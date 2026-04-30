@@ -38,8 +38,7 @@ class TestRedisFailure:
         if not redis_connected:
             resp = requests.post(
                 f"{GO_BASE}/v1/chat/completions",
-                json={"model": "default", "messages": [{"role": "user", "content": "test"}]},
-                "stream": False,
+                json={"model": "default", "messages": [{"role": "user", "content": "test"}], "stream": False},
                 timeout=30,
             )
             assert resp.status_code in [200, 503, 429], "Service should still work without Redis"
@@ -107,8 +106,7 @@ class TestFaultRecovery:
 
         resp = requests.post(
             f"{GO_BASE}/v1/chat/completions",
-            json={"model": "default", "messages": [{"role": "user", "content": "test go alone"}]},
-            "stream": False,
+            json={"model": "default", "messages": [{"role": "user", "content": "test go alone"}], "stream": False},
             timeout=30,
         )
         assert resp.status_code in [200, 503, 429], "Go gateway should handle requests independently"

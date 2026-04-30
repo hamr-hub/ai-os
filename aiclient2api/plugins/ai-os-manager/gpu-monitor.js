@@ -12,8 +12,7 @@ class GPUMonitorService {
     }
 
     async init() {
-        logger.info('[GPU Monitor Service] Initializing GPU monitor (with Go/Python fallback)...');
-        this.startMonitoring();
+        logger.info('[GPU Monitor Service] Initialized (monitoring deferred, starts on first data request)');
     }
 
     async destroy() {
@@ -107,6 +106,7 @@ class GPUMonitorService {
     }
 
     getLatestGPUData() {
+        if (!this.isMonitoring) this.startMonitoring();
         return {
             success: true,
             data: this.gpuData,
