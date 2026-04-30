@@ -88,7 +88,7 @@
 
 ## Go 后端资产
 
-go-vllm-api: Gin 框架，vLLM 代理 + OpenAI 兼容接口 + WebSocket
+go-vllm-api: Gin 框架，vLLM 限流代理 + OpenAI 兼容接口 + WebSocket。接收来自 aiclient2api Node 后端的 provider 路由流量。
 
 ```
 internal/
