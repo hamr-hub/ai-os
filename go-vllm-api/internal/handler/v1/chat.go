@@ -242,17 +242,39 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 	}
 
 	modelReadyStart := time.Now()
-	if err := h.ensureModelReady(c, modelName); err != nil {
-		statusCode = 503
-		if h.scheduler.IsSwitchingInProgress() {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error": "Model switch in progress, please wait",
-				"retry_after": 5,
-			})
-		} else {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+	maxRetries := 3
+	if stream {
+		maxRetries = 0
+	}
+	retryDelays := []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if err := h.ensureModelReady(c, modelName); err != nil {
+			statusCode = 503
+			if h.scheduler.IsSwitchingInProgress() && attempt < maxRetries {
+				middleware.RecordTiming(c, fmt.Sprintf("retry_wait_%d", attempt+1), retryDelays[attempt])
+				select {
+				case <-c.Request.Context().Done():
+					c.JSON(http.StatusServiceUnavailable, gin.H{
+						"error": "request cancelled during model switch retry",
+						"retry_after": int(retryDelays[attempt].Seconds()),
+					})
+					return
+				case <-time.After(retryDelays[attempt]):
+					continue
+				}
+			}
+			if h.scheduler.IsSwitchingInProgress() {
+				c.JSON(http.StatusServiceUnavailable, gin.H{
+					"error": "Model switch in progress, please wait",
+					"retry_after": 10,
+				})
+			} else {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			}
+			return
 		}
-		return
+		break
 	}
 	middleware.RecordTiming(c, "model_ready", time.Since(modelReadyStart))
 

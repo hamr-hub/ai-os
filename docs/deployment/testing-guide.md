@@ -105,10 +105,10 @@ curl -s http://localhost:35000/manage/gpu | python -m json.tool
 curl -s "http://localhost:35000/manage/gpu/history?count=120" | python -m json.tool
 ```
 
-### 3. 聊天补全接口 (Go 后端 35001)
+### 3. 聊天补全接口 (Go vLLM限流代理 35001)
 
 ```bash
-# 通过 Go 后端直接调用
+# 通过 Go 限流代理直接调用
 curl http://localhost:35001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -117,7 +117,7 @@ curl http://localhost:35001/v1/chat/completions \
     "max_tokens": 50
   }'
 
-# 通过 aiclient2api 网关调用
+# 通过 aiclient2api Node后端调用 (provider路由到Go限流代理)
 curl http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{

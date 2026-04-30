@@ -77,7 +77,7 @@ model_tester = ModelTestingFramework(scheduler, gpu_monitor)  # 模型测试框�
 cache_updater = CacheUpdater(gpu_monitor, scheduler)    # 缓存更新器（定时刷新缓存）
 
 from core.model_switch_orchestrator import ModelSwitchOrchestrator
-_engine_manager_mode = config.get("vllm", {}).get("engine_manager_mode", "systemd")
+_engine_manager_mode = config.get("vllm", {}).get("engine_manager_mode", "subprocess")
 model_switch_orchestrator = ModelSwitchOrchestrator(
     ws_manager=ws_manager,
     vllm_service_name=VLLM_SERVICE_NAME,
