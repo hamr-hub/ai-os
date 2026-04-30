@@ -8,19 +8,21 @@ import (
 )
 
 type CacheUpdater struct {
-	logger      *zap.Logger
-	gpuMonitor  *GPUMonitor
-	scheduler   *Scheduler
-	cache       *CacheService
-	cancel      context.CancelFunc
+	logger       *zap.Logger
+	gpuMonitor   *GPUMonitor
+	scheduler    *Scheduler
+	cache        *CacheService
+	sysCollector *SystemStatusCollector
+	cancel       context.CancelFunc
 }
 
-func NewCacheUpdater(gpuMonitor *GPUMonitor, scheduler *Scheduler, cache *CacheService, logger *zap.Logger) *CacheUpdater {
+func NewCacheUpdater(gpuMonitor *GPUMonitor, scheduler *Scheduler, cache *CacheService, sysCollector *SystemStatusCollector, logger *zap.Logger) *CacheUpdater {
 	return &CacheUpdater{
-		logger:     logger,
-		gpuMonitor: gpuMonitor,
-		scheduler:  scheduler,
-		cache:      cache,
+		logger:       logger,
+		gpuMonitor:   gpuMonitor,
+		scheduler:    scheduler,
+		cache:        cache,
+		sysCollector: sysCollector,
 	}
 }
 
@@ -129,9 +131,8 @@ func (cu *CacheUpdater) updateQueueStatus() {
 }
 
 func (cu *CacheUpdater) updateSystemStatus() {
-	cu.cache.Set("api:manage:system:status", map[string]interface{}{
-		"timestamp": time.Now().Format(time.RFC3339),
-	}, 10)
+	status := cu.sysCollector.GetSystemStatus()
+	cu.cache.Set("api:manage:system:status", status, 10)
 }
 
 func (cu *CacheUpdater) updateHealth() {

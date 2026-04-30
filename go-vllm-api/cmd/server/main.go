@@ -123,7 +123,8 @@ func main() {
 	metricsCollector := service.NewMetricsCollector(redisRepo, zapLogger)
 	promExporter := prometheus.NewPrometheusExporter()
 	wsManager := service.NewWSManager(zapLogger)
-	cacheUpdater := service.NewCacheUpdater(gpuMonitor, scheduler, cacheService, zapLogger)
+	sysCollector := service.NewSystemStatusCollector(zapLogger, redisRepo)
+	cacheUpdater := service.NewCacheUpdater(gpuMonitor, scheduler, cacheService, sysCollector, zapLogger)
 
 	modelTesting := service.NewModelTestingFramework(zapLogger)
 
@@ -156,7 +157,6 @@ func main() {
 	go scheduler.PreloadModels(ctx)
 	go scheduler.PreloadWatcherLoop(ctx)
 
-	sysCollector := service.NewSystemStatusCollector(zapLogger, redisRepo)
 	go broadcastStatusLoop(ctx, gpuMonitor, scheduler, wsManager, metricsCollector, sysCollector, zapLogger)
 
 	gin.SetMode(gin.ReleaseMode)

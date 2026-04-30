@@ -215,6 +215,9 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.GET("/models/:model_name/vllm-config", h.ProxyModelVLLMConfig)
 		m.PUT("/models/:model_name/vllm-params", h.ProxyUpdateModelVLLMParams)
 		m.GET("/vllm/default-config", h.ProxyVLLMDefaultConfig)
+		m.GET("/ratelimit/config", h.ProxyRateLimitConfig)
+		m.PUT("/ratelimit/config", h.ProxyUpdateRateLimitConfig)
+		m.GET("/ratelimit/stats", h.ProxyRateLimitStats)
 	}
 
 	v1 := rg.Group("/v1")
@@ -1556,6 +1559,15 @@ func (h *ManageHandler) proxyPythonManageGet(c *gin.Context, path string) {
 	h.proxyPythonManage(c, "GET", path, nil)
 }
 
+func (h *ManageHandler) proxyPythonManagePut(c *gin.Context, path string) {
+	var body interface{}
+	if err := c.ShouldBindJSON(&body); err == nil {
+		h.proxyPythonManage(c, "PUT", path, body)
+	} else {
+		h.proxyPythonManage(c, "PUT", path, nil)
+	}
+}
+
 func (h *ManageHandler) proxyPythonManageDelete(c *gin.Context, path string) {
 	h.proxyPythonManage(c, "DELETE", path, nil)
 }
@@ -1676,4 +1688,16 @@ func (h *ManageHandler) ProxyUpdateModelVLLMParams(c *gin.Context) {
 
 func (h *ManageHandler) ProxyVLLMDefaultConfig(c *gin.Context) {
 	h.proxyPythonManageGet(c, "/manage/vllm/default-config")
+}
+
+func (h *ManageHandler) ProxyRateLimitConfig(c *gin.Context) {
+	h.proxyPythonManageGet(c, "/manage/ratelimit/config")
+}
+
+func (h *ManageHandler) ProxyUpdateRateLimitConfig(c *gin.Context) {
+	h.proxyPythonManagePut(c, "/manage/ratelimit/config")
+}
+
+func (h *ManageHandler) ProxyRateLimitStats(c *gin.Context) {
+	h.proxyPythonManageGet(c, "/manage/ratelimit/stats")
 }

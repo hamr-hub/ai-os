@@ -564,17 +564,20 @@ watch(
 
     <div class="content">
       <div class="left-col">
-        <section v-if="viewMode === 'grouped' && aggregatedModels?.groups?.length" class="card">
+        <section v-if="viewMode === 'grouped'" class="card">
           <div class="card-header">
             <HardDrive class="card-icon" />
             <span class="card-title">模型列表</span>
-            <span class="section-count">
+            <span v-if="aggregatedModels" class="section-count">
               {{ aggregatedModels.total_variants }} 个模型 / {{ aggregatedModels.groups.length }} 组
             </span>
           </div>
           <div v-if="loading" class="loading-state">
             <Loader2 class="w-5 h-5 animate-spin" />
             <span>加载中...</span>
+          </div>
+          <div v-else-if="!aggregatedModels?.groups?.length" class="empty-state">
+            暂无可用模型
           </div>
           <div v-else class="model-groups">
             <div
