@@ -118,8 +118,8 @@ export async function handleGPUMonitorApiRoutes(method, urlPath, req, res, confi
             return true;
         }
         if (urlPath === '/api/gpu-monitor/info' && method === 'GET') {
-            const data = await gpuMonitorService.forceUpdate();
-            sendJSONResponse(res, 200, data || gpuMonitorService.getLatestData());
+            await gpuMonitorService.updateGPUData();
+            sendJSONResponse(res, 200, { success: true, data: gpuMonitorService.getLatestGPUData() });
             return true;
         }
         if (urlPath === '/api/gpu-monitor/status' && method === 'GET') {
@@ -179,7 +179,7 @@ export async function handleModelSwitchApiRoutes(method, urlPath, req, res, conf
         }
         if (urlPath === '/api/model-switch/aggregated' && method === 'GET') {
             const refresh = urlPath.includes('refresh=true');
-            sendJSONResponse(res, 200, await modelSwitchService.getAggregated(refresh));
+            sendJSONResponse(res, 200, await modelSwitchService.getAggregatedModels(refresh));
             return true;
         }
         if (urlPath.match(/^\/api\/model-switch\/vllm-params\/[^/]+$/) && method === 'GET') {

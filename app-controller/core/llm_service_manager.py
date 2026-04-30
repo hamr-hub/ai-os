@@ -52,7 +52,10 @@ class LLMServiceManager:
 
     def _get_model_config(self, model_name: str) -> Optional[ModelConfig]:
         if self._config:
-            return self._config.get_model(model_name)
+            if hasattr(self._config, 'get_model'):
+                return self._config.get_model(model_name)
+            elif isinstance(self._config, dict):
+                return self._config.get('models', {}).get(model_name)
         return None
 
     def _get_model_base_path(self) -> str:

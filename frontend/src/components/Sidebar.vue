@@ -166,7 +166,7 @@ const toggleCollapse = () => {
             <PanelLeftOpen v-if="store.sidebarCollapsed" class="w-4.5 h-4.5" />
             <PanelLeftClose v-else class="w-4.5 h-4.5" />
           </button>
-          <button class="action-btn" title="系统安全">
+          <button class="action-btn" title="系统安全" @click="navigateTo('login')">
             <ShieldCheck class="w-4.5 h-4.5" />
           </button>
         </div>

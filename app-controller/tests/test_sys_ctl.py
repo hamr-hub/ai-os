@@ -92,24 +92,23 @@ class TestSystemController:
         status = controller.get_service_status("vllm")
         assert status == "active"
 
+    @patch('os.path.exists', return_value=True)
     @patch('shutil.which', return_value='/bin/systemctl')
     @patch('core.sys_ctl.subprocess.run')
-    def test_get_service_status_inactive(self, mock_run, mock_which):
-        # When returncode is not 0, status should be 'inactive'
+    def test_get_service_status_inactive(self, mock_run, mock_which, mock_exists):
         mock_result = Mock()
         mock_result.returncode = 3
         mock_result.stdout = 'inactive\n'
         mock_run.return_value = mock_result
         controller = SystemController()
-        status = controller.get_service_status("vllm")
-        # When returncode != 0, implementation returns 'inactive'
+        status = controller.get_service_status("vllm", use_cache=False)
         assert status == "inactive"
 
+    @patch('os.path.exists', return_value=False)
     @patch('shutil.which', return_value=None)
-    def test_get_service_status_without_systemctl(self, mock_which):
+    def test_get_service_status_without_systemctl(self, mock_which, mock_exists):
         controller = SystemController()
-        status = controller.get_service_status("vllm")
-        # When systemctl is not available, returns 'inactive'
+        status = controller.get_service_status("vllm", use_cache=False)
         assert status == "inactive"
 
     @patch('os.path.exists', return_value=True)

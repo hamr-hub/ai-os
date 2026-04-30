@@ -76,7 +76,17 @@
             { id: MENU_IDS.ratelimit, section: 'aios-ratelimit', icon: 'fa-tachometer-alt', label: '限流控制' },
         ];
 
-        var anchor = document.getElementById('nav-plugins');
+        var pluginDivider = document.getElementById('nav-plugins-divider');
+        if (!pluginDivider) {
+            pluginDivider = document.createElement('div');
+            pluginDivider.id = 'nav-plugins-divider';
+            pluginDivider.className = 'nav-divider';
+            pluginDivider.style.cssText = 'margin: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.1);';
+            var anchor = document.getElementById('nav-plugins');
+            if (anchor) anchor.before(pluginDivider);
+            else nav.appendChild(pluginDivider);
+        }
+
         items.forEach(function(item) {
             if (document.getElementById(item.id)) return;
             var navItem = document.createElement('a');
@@ -85,9 +95,7 @@
             navItem.id = item.id;
             navItem.dataset.section = item.section;
             navItem.innerHTML = '<i class="fas ' + item.icon + '" aria-hidden="true"></i> <span>' + item.label + '</span>';
-            if (anchor) anchor.after(navItem);
-            else nav.appendChild(navItem);
-            anchor = navItem;
+            pluginDivider.after(navItem);
         });
         return true;
     }

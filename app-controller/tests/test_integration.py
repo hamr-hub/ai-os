@@ -54,8 +54,8 @@ class TestIntegration:
             assert response.status_code in (404, 500)
 
     def test_chat_completions_too_many_requests(self, client):
-        with patch('core.rate_limiter.RateLimiter.is_available') as mock_is_available:
-            mock_is_available.return_value = False
+        with patch('core.scheduler.Scheduler.acquire_request') as mock_acquire:
+            mock_acquire.return_value = False
             
             response = client.post(
                 "/v1/chat/completions",
