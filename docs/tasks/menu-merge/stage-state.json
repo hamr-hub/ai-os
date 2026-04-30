@@ -1,0 +1,73 @@
+{
+  "task_id": "menu-merge",
+  "updated_at": "2026-04-30T08:56:49.537Z",
+  "status": "IN_PROGRESS",
+  "is_multi_repo": false,
+  "last_passed_stage": {
+    "name": "plan-from-tech-solution",
+    "number": 5
+  },
+  "blocked_stage": null,
+  "stages_summary": [
+    {
+      "name": "ai-flow-preflight-check",
+      "number": 0,
+      "verdict": "PENDING"
+    },
+    {
+      "name": "requirement-quality-gate",
+      "number": 1,
+      "verdict": "PASS"
+    },
+    {
+      "name": "figma-schema-extractor",
+      "number": 1.5,
+      "verdict": "PENDING"
+    },
+    {
+      "name": "planning-with-files",
+      "number": 1.6,
+      "verdict": "PENDING"
+    },
+    {
+      "name": "prototype-generator",
+      "number": 1.7,
+      "verdict": "PENDING"
+    },
+    {
+      "name": "docs-recursive-read",
+      "number": 2,
+      "verdict": "PENDING"
+    },
+    {
+      "name": "tech-solution",
+      "number": 3,
+      "verdict": "PASS"
+    },
+    {
+      "name": "impact-analysis",
+      "number": 4,
+      "verdict": "PENDING"
+    },
+    {
+      "name": "plan-from-tech-solution",
+      "number": 5,
+      "verdict": "PASS"
+    },
+    {
+      "name": "verify-from-tech-solution",
+      "number": 6,
+      "verdict": "PENDING"
+    },
+    {
+      "name": "iterate-from-plan-and-tests",
+      "number": 7,
+      "verdict": "PENDING"
+    },
+    {
+      "name": "file-change-monitor",
+      "number": 7.6,
+      "verdict": "PENDING"
+    }
+  ]
+}

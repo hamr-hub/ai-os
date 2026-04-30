@@ -1,0 +1,83 @@
+taskId: menu-merge
+title: 前端菜单合并优化技术方案
+riskLevel: MEDIUM
+
+fileChanges:
+  - path: frontend/src/components/Sidebar.vue
+    action: modify
+    reason: 菜单从13项缩减为6项，4组改为3组
+  - path: frontend/src/router/index.ts
+    action: modify
+    reason: 新增3个合并路由，旧路由redirect到新路由
+  - path: frontend/src/views/ModelCenter.vue
+    action: create
+    reason: 模型中心Tab容器页面，整合调度/搜索/池/评测
+  - path: frontend/src/views/GPUMonitor.vue
+    action: create
+    reason: GPU监控Tab容器页面，整合实时性能/GPU管理
+  - path: frontend/src/views/SystemOps.vue
+    action: create
+    reason: 系统运维Tab容器页面，整合引擎/限流/配置/健康
+  - path: frontend/src/views/Dashboard.vue
+    action: modify
+    reason: 去掉模型启停操作按钮，保留状态展示+引导链接
+
+architecture:
+  mergeStrategy: TabContainer
+  description: |
+    采用Tab容器页面策略合并相似功能。每个合并页面是一个轻量容器组件，
+    内部通过Tab切换展示原有子页面内容。不改动子页面组件本身，
+    只将它们作为子组件嵌入容器页面。使用v-show代替v-if实现Tab切换，
+    避免组件重新挂载/销毁导致状态丢失。
+
+  newRoutes:
+    - path: /modelcenter
+      name: modelcenter
+      tabs: [调度, 搜索, 池, 评测]
+      tabComponents: [ModelManagement, ModelHubPage, ModelPoolPage, ModelBenchmarks]
+    - path: /gpumonitor
+      name: gpumonitor
+      tabs: [实时性能, GPU管理]
+      tabComponents: [MonitorView, GPUManage]
+    - path: /systemops
+      name: systemops
+      tabs: [引擎, 限流, 配置, 健康]
+      tabComponents: [EngineManagementPage, RateLimitPage, ConfigManagementPage, HealthOpsPage]
+
+  redirects:
+    /models -> /modelcenter?tab=schedule
+    /modelhub -> /modelcenter?tab=search
+    /modelpool -> /modelcenter?tab=pool
+    /benchmarks -> /modelcenter?tab=benchmark
+    /monitor -> /gpumonitor?tab=performance
+    /gpumanage -> /gpumonitor?tab=manage
+    /engines -> /systemops?tab=engine
+    /ratelimit -> /systemops?tab=ratelimit
+    /config -> /systemops?tab=config
+    /health -> /systemops?tab=health
+
+  sidebarGroups:
+    - title: 核心控制
+      items:
+        - { name: dashboard, label: 总览面板, icon: LayoutDashboard }
+        - { name: modelcenter, label: 模型中心, icon: Server }
+    - title: 监控运维
+      items:
+        - { name: gpumonitor, label: GPU监控, icon: Activity }
+        - { name: systemops, label: 系统运维, icon: Settings }
+    - title: 工具
+      items:
+        - { name: agent, label: AI Agent, icon: Bot }
+        - { name: docs, label: 系统文档, icon: BookOpen }
+
+  dashboardChanges:
+    - 去掉模型启停操作按钮(handleStartModel/handleStopModel/handleSwitchAndSetDefault)
+    - 保留模型状态展示卡片
+    - 添加"前往模型中心"引导链接按钮
+    - 保留GPU状态展示和引擎状态卡片(无操作按钮)
+
+rollbackPlan: |
+  1. 所有旧路由保留redirect，不会404
+  2. 旧页面组件不删除，只是不再出现在菜单
+  3. 如需回滚：恢复Sidebar.vue的groups数组、删除redirect路由即可
+  4. Tab容器页面可以随时移除，不影响原有子页面

@@ -1,0 +1,132 @@
+plan:
+  meta:
+    source_tech_doc: "docs/tasks/menu-merge/tech-solution.md"
+    scope: "P0"
+    test_coverage_target: 80
+    min_tests_per_feature: 1
+
+  tasks:
+    - id: "T0-1"
+      priority: "P0"
+      type: "test"
+      title: "为路由redirect和Tab容器编写测试"
+      test_type: "component"
+      file: "frontend/src/views/__tests__/merge-pages.spec.ts"
+      given: "用户访问旧路由/models或/modelhub"
+      when: "路由守卫处理redirect"
+      then:
+        - "访问/models应重定向到/modelcenter?tab=schedule"
+        - "访问/modelhub应重定向到/modelcenter?tab=search"
+        - "访问/monitor应重定向到/gpumonitor?tab=performance"
+        - "访问/engines应重定向到/systemops?tab=engine"
+        - "Tab容器页面渲染4个子组件(v-show控制显示)"
+        - "Tab切换时activeTab更新且URL query同步"
+      depends_on: []
+
+    - id: "T0-2"
+      priority: "P0"
+      type: "test"
+      title: "为Sidebar菜单缩减编写测试"
+      test_type: "component"
+      file: "frontend/src/components/__tests__/sidebar-merge.spec.ts"
+      given: "Sidebar组件渲染"
+      when: "用户查看菜单结构"
+      then:
+        - "菜单应有3组"
+        - "每组不超过2个菜单项"
+        - "总菜单项应为6个"
+        - "不应包含login/security菜单项"
+        - "应包含modelcenter/gpumonitor/systemops路由"
+      depends_on: []
+
+    - id: "P0-1"
+      priority: "P0"
+      type: "code"
+      title: "创建ModelCenter.vue Tab容器页面"
+      files:
+        - "frontend/src/views/ModelCenter.vue"
+      depends_on: ["T0-1"]
+      definition_of_done:
+        - "ModelCenter.vue包含4个Tab(调度/搜索/池/评测)"
+        - "使用v-show切换子组件显示"
+        - "Tab状态与URL query param同步"
+        - "子组件为ModelManagement/ModelHubPage/ModelPoolPage/ModelBenchmarks"
+        - "Tab切换不触发组件重挂载"
+
+    - id: "P0-2"
+      priority: "P0"
+      type: "code"
+      title: "创建GPUMonitor.vue Tab容器页面"
+      files:
+        - "frontend/src/views/GPUMonitor.vue"
+      depends_on: ["T0-1"]
+      definition_of_done:
+        - "GPUMonitor.vue包含2个Tab(实时性能/GPU管理)"
+        - "使用v-show切换MonitorView/GPUManage组件"
+        - "Tab状态与URL query param同步"
+
+    - id: "P0-3"
+      priority: "P0"
+      type: "code"
+      title: "创建SystemOps.vue Tab容器页面"
+      files:
+        - "frontend/src/views/SystemOps.vue"
+      depends_on: ["T0-1"]
+      definition_of_done:
+        - "SystemOps.vue包含4个Tab(引擎/限流/配置/健康)"
+        - "使用v-show切换4个子组件"
+        - "Tab状态与URL query param同步"
+
+    - id: "P0-4"
+      priority: "P0"
+      type: "code"
+      title: "更新路由配置 — 新增合并路由和redirect"
+      files:
+        - "frontend/src/router/index.ts"
+      depends_on: ["T0-1", "P0-1", "P0-2", "P0-3"]
+      definition_of_done:
+        - "新增/modelcenter/gpumonitor/systemops路由"
+        - "旧路由/models等添加redirect到对应新路由"
+        - "保留/login和/blocked路由不变"
+        - "所有redirect携带正确的tab query param"
+
+    - id: "P0-5"
+      priority: "P0"
+      type: "code"
+      title: "更新Sidebar菜单 — 缩减为3组6项"
+      files:
+        - "frontend/src/components/Sidebar.vue"
+      depends_on: ["T0-2", "P0-4"]
+      definition_of_done:
+        - "groups从4组13项改为3组6项"
+        - "移除安全鉴权(login)菜单项"
+        - "新增modelcenter/gpumonitor/systemops菜单项"
+        - "图标和标签与tech方案一致"
+
+    - id: "P0-6"
+      priority: "P0"
+      type: "code"
+      title: "改造Dashboard — 去掉启停操作，添加引导链接"
+      files:
+        - "frontend/src/views/Dashboard.vue"
+      depends_on: ["P0-4", "P0-5"]
+      definition_of_done:
+        - "移除handleStartModel/handleStopModel/handleSwitchAndSetDefault操作按钮"
+        - "保留模型状态展示卡片"
+        - "添加'前往模型中心'引导按钮(router.push)"
+        - "GPU卡片和引擎卡片仅展示状态无操作按钮"
+
+    - id: "P1-1"
+      priority: "P1"
+      type: "code"
+      title: "构建验证 — pnpm build和TypeScript检查"
+      files: []
+      depends_on: ["P0-6"]
+      definition_of_done:
+        - "pnpm build通过"
+        - "无TypeScript编译错误"
+
+  commands:
+    test: "cd frontend && npx vitest run src/views/__tests__/ src/components/__tests__/"
+    lint: "cd frontend && npx eslint src/views/ModelCenter.vue src/views/GPUMonitor.vue src/views/SystemOps.vue src/components/Sidebar.vue src/router/index.ts src/views/Dashboard.vue --ext .ts,.vue"
+    typecheck: "cd frontend && npx vue-tsc --noEmit"

@@ -1,0 +1,36 @@
+taskId: menu-merge
+title: 前端菜单合并优化 — 相似功能整合，简化菜单
+source: 用户反馈菜单选项过多，不知道怎么操作
+priority: P0
+complexity: medium
+
+problemStatement: |
+  当前前端侧边栏菜单包含13个菜单项分4组，功能重叠严重：
+  - 模型启停/切换在4个页面(Dashboard/ModelManagement/GPUManage/EngineManagement)都能操作
+  - GPU数据显示在3个地方(Dashboard/MonitorView/GPUManage)
+  - 引擎配置在2个页面(ConfigManagement/EngineManagement)可编辑
+  - 健康状态在Dashboard和HealthOpsPage都显示
+  - 登录页不应出现在侧边栏菜单(已登录用户不需要)
+  用户面对过多选项不知所措，需要合并相似功能、简化菜单结构
+
+currentMenuStructure: |
+  核心控制(6项): 总览面板、模型调度、模型搜索、模型池、模型评测、AI Agent
+  数据监控(3项): 实时性能、GPU管理、系统文档
+  系统管理(4项): 引擎管理、限流控制、配置中心、健康运维
+  安全(1项): 安全鉴权
+
+targetMenuStructure: |
+  核心控制(2项): 总览面板、模型中心(合并搜索+池+调度+评测为Tab)
+  监控运维(2项): GPU监控(合并性能+GPU管理为Tab)、系统运维(合并引擎+限流+配置+健康为Tab)
+  工具(2项): AI Agent、系统文档
+
+acceptanceCriteria:
+  - ac1: 菜单项从13个减少到6个，每组不超过2项
+  - ac2: 模型中心页面包含4个Tab(调度/搜索/池/评测)，保留原有各页面的核心功能
+  - ac3: GPU监控页面包含2个Tab(实时性能/GPU管理)，保留原有功能
+  - ac4: 系统运维页面包含4个Tab(引擎/限流/配置/健康)，保留原有功能
+  - ac5: 总览面板(Dashboard)去掉模型启停操作按钮，只保留状态展示，操作引导到模型中心
+  - ac6: 移除侧边栏"安全鉴权"菜单项，登录页只通过路由守卫自动跳转
+  - ac7: 所有原有路由仍然可用(通过redirect指向合并后的新路由)
+  - ac8: 页面切换体验流畅，Tab切换不重新加载组件(使用keep-alive或v-show)
+  - ac9: TypeScript编译和pnpm build通过
