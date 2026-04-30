@@ -84,8 +84,7 @@ class TestBuildCommandSGLang:
     def test_sglang_basic_command(self):
         mgr = _make_manager()
         cmd = mgr.build_command("Qwen3-235B", "sglang", 8100)
-        assert cmd[0] == "vllm"
-        assert "serve" in cmd
+        assert cmd[0] == "python"
         assert "sglang" in " ".join(cmd)
         assert "--port" in " ".join(cmd)
         assert "--model-path" in " ".join(cmd)
@@ -153,8 +152,10 @@ class TestGetModelPath:
 
 
 class TestStartService:
+    @patch("core.llm_service_manager.os.getpgid", return_value=12345)
+    @patch("core.llm_service_manager.os.setsid", return_value=0)
     @patch("core.llm_service_manager.subprocess.Popen")
-    def test_start_service_success(self, mock_popen):
+    def test_start_service_success(self, mock_popen, mock_setsid, mock_getpgid):
         mock_process = MagicMock()
         mock_process.pid = 12345
         mock_popen.return_value = mock_process
@@ -166,8 +167,10 @@ class TestStartService:
         assert mgr._engine_types["vllm-test"] == "vllm"
         assert mgr._health_status["vllm-test"] == "starting"
 
+    @patch("core.llm_service_manager.os.getpgid", return_value=12345)
+    @patch("core.llm_service_manager.os.setsid", return_value=0)
     @patch("core.llm_service_manager.subprocess.Popen")
-    def test_start_service_with_model_path(self, mock_popen):
+    def test_start_service_with_model_path(self, mock_popen, mock_setsid, mock_getpgid):
         mock_process = MagicMock()
         mock_process.pid = 12345
         mock_popen.return_value = mock_process
@@ -301,11 +304,13 @@ class TestAutoRestart:
         mgr._engine_types["test"] = "vllm"
         mgr._ports["test"] = 8000
         mgr._restart_counts["test"] = 0
-        with patch("core.llm_service_manager.subprocess.Popen") as mock_popen:
-            mock_process = MagicMock()
-            mock_process.pid = 12346
-            mock_popen.return_value = mock_process
-            result = mgr.auto_restart("test")
+        with patch("core.llm_service_manager.os.getpgid", return_value=12346):
+            with patch("core.llm_service_manager.os.setsid", return_value=0):
+                with patch("core.llm_service_manager.subprocess.Popen") as mock_popen:
+                    mock_process = MagicMock()
+                    mock_process.pid = 12346
+                    mock_popen.return_value = mock_process
+                    result = mgr.auto_restart("test")
         assert result["status"] == "started"
         assert mgr._restart_counts["test"] == 0
 

@@ -27,7 +27,7 @@ from core.deps import (
     agent_session_manager,
     VLLM_REQUEST_TIMEOUT, VLLM_STREAM_TIMEOUT, VLLM_CLIENT_LIMITS,
     _background_tasks, _on_config_changed,
-    config,, config
+    config,
 )
 from core.vllm_manager import switch_vllm_model_with_test
 from middleware.error_handler import (

@@ -52,9 +52,7 @@
     <div class="card aios-status-card">\
         <div id="aios-ratelimit-content"><p>正在加载限流数据...</p></div>\
     </div>\
-</div>';'}]}]}]
 </div>';
-
 
     function injectStyles() {
         if (document.getElementById(STYLE_ID)) return true;
@@ -86,7 +84,7 @@
             navItem.className = 'nav-item';
             navItem.id = item.id;
             navItem.dataset.section = item.section;
-            navItem.innerHTML = '<i class="fas ' + item.icon + '"></i> <span>' + item.label + '</span>';
+            navItem.innerHTML = '<i class="fas ' + item.icon + '" aria-hidden="true"></i> <span>' + item.label + '</span>';
             if (anchor) anchor.after(navItem);
             else nav.appendChild(navItem);
             anchor = navItem;
@@ -119,6 +117,20 @@
         });
     }
 
+    function getAdminToken() {
+        try { return localStorage.getItem('aios_admin_token') || ''; } catch(e) { return ''; }
+    }
+
+    function adminFetch(url, options) {
+        options = options || {};
+        var token = getAdminToken();
+        if (token) {
+            options.headers = options.headers || {};
+            options.headers['X-Admin-Token'] = token;
+        }
+        return fetch(url, options);
+    }
+
     function loadData(sectionId) {
         var urlMap = {
             'aios-gpu': '/api/gpu-monitor/info',
@@ -133,11 +145,27 @@
         var contentId = sectionId + '-content';
         var el = document.getElementById(contentId);
         if (!el) return;
-        fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+        adminFetch(url).then(function(r) {
+            if (r.status === 401) {
+                el.innerHTML = '<p class="aios-error">需要管理员令牌，请点击右上角设置令牌</p>';
+                promptForToken();
+                return null;
+            }
+            return r.json();
+        }).then(function(data) {
+            if (!data) return;
             el.innerHTML = '<pre class="aios-data-pre">' + JSON.stringify(data, null, 2) + '</pre>';
         }).catch(function(err) {
-            el.innerHTML = '<p class="aios-error">Error: ' + err.message + '</p>';
+            el.innerHTML = '<p class="aios-error">错误: ' + err.message + '</p>';
         });
+    }
+
+    function promptForToken() {
+        var existing = getAdminToken();
+        var token = window.prompt('请输入管理员令牌 (Admin Token):', existing);
+        if (token) {
+            try { localStorage.setItem('aios_admin_token', token); } catch(e) {}
+        }
     }
 
     function init() {

@@ -13,9 +13,7 @@ class RateLimiterService {
     }
 
     async init() {
-        logger.info('[RateLimiter] Initializing...');
-        this.startPolling();
-        await this.fetchConfig();
+        logger.info('[RateLimiter] Initialized (polling deferred, starts on first data request)');
     }
 
     async destroy() {
@@ -95,6 +93,7 @@ class RateLimiterService {
     }
 
     getQueueStatus() {
+        if (!this.isPolling) this.startPolling();
         return { success: true, data: this.queueCache, timestamp: new Date().toISOString(), backendStatus: backendClient.getStatus() };
     }
 

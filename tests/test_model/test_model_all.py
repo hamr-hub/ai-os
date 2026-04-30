@@ -14,10 +14,10 @@ PY_BASE = "http://localhost:35000"
 
 class TestModelScan:
     def test_local_model_scan(self):
-        resp = requests.get(f"{GO_BASE}/manage/scan", timeout=15)
+        resp = requests.get(f"{GO_BASE}/manage/models", timeout=15)
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data, (dict, list)), "Scan should return model data"
+        assert isinstance(data, dict), "Models should return dict"
 
     def test_scan_empty_directory(self):
         resp = requests.get(f"{GO_BASE}/manage/models", timeout=10)

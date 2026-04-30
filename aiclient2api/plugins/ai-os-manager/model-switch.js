@@ -469,17 +469,11 @@ class ModelSwitchService {
 
     async startModel(modelName) {
         try {
-            const baseUrl = backendClient.getBaseUrl();
-            logger.info(`[Model Switch Service] Starting model via chat API: ${modelName}, baseUrl: ${baseUrl}`);
-            const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+            logger.info(`[Model Switch Service] Starting model via manage API: ${modelName}`);
+            const response = await backendClient.fetchWithFallback('/manage/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: modelName,
-                    messages: [{ role: 'user', content: 'hi' }],
-                    max_tokens: 8,
-                    temperature: 0
-                }),
+                body: JSON.stringify({ model_name: modelName }),
                 signal: AbortSignal.timeout(180000)
             });
 

@@ -14,8 +14,7 @@ class HealthMonitorService {
     }
 
     async init() {
-        logger.info('[HealthMonitor] Initializing...');
-        this.startPolling();
+        logger.info('[HealthMonitor] Initialized (polling deferred, starts on first data request)');
     }
 
     async destroy() {
@@ -84,6 +83,7 @@ class HealthMonitorService {
     }
 
     getAlert() {
+        if (!this.isPolling) this.startPolling();
         return { success: true, data: this.alertCache, timestamp: new Date().toISOString(), backendStatus: backendClient.getStatus() };
     }
 

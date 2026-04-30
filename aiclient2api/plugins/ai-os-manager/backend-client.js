@@ -11,6 +11,12 @@ class BackendClient {
         this.lastGoCheck = 0;
         this.lastPythonCheck = 0;
         this.healthCheckInterval = 30000;
+        this._consecutiveGoFailures = 0;
+        this._consecutivePythonFailures = 0;
+        this._failThreshold = 3;
+        this._goCoolingUntil = 0;
+        this._pythonCoolingUntil = 0;
+        this._coolingDuration = 60000;
         this._startHealthChecks();
     }
 
@@ -26,6 +32,34 @@ class BackendClient {
     async _checkGoHealth() {
         try {
             const response = await fetch(`${GO_BACKEND_URL}/manage/gpu/summary`, { signal: AbortSignal.timeout(5000) });
+            if (response.ok) {
+                this.goAvailable = true;
+                this._consecutiveGoFailures = 0;
+                this._goCoolingUntil = 0;
+            } else {
+                this._consecutiveGoFailures++;
+                this.goAvailable = this._consecutiveGoFailures < this._failThreshold;
+            }
+            this.lastGoCheck = Date.now();
+            if (!this.goAvailable && this.activeBackend === 'go') {
+                logger.warn('[BackendClient] Go backend unavailable after %d consecutive failures, falling back to Python', this._consecutiveGoFailures);
+                this.activeBackend = 'python';
+                this._goCoolingUntil = Date.now() + this._coolingDuration;
+            } else if (this.goAvailable && this.activeBackend !== 'go' && Date.now() > this._goCoolingUntil) {
+                logger.info('[BackendClient] Go backend recovered, switching to Go');
+                this.activeBackend = 'go';
+            }
+        } catch (e) {
+            this._consecutiveGoFailures++;
+            this.goAvailable = false;
+            this.lastGoCheck = Date.now();
+            if (this.activeBackend === 'go') {
+                logger.warn('[BackendClient] Go backend unreachable (failure %d), falling back to Python', this._consecutiveGoFailures);
+                this.activeBackend = 'python';
+                this._goCoolingUntil = Date.now() + this._coolingDuration;
+            }
+        }
+    }/manage/gpu/summary`, { signal: AbortSignal.timeout(5000) });
             if (response.ok) {
                 this.goAvailable = true;
             } else {
@@ -52,6 +86,24 @@ class BackendClient {
     async _checkPythonHealth() {
         try {
             const response = await fetch(`${PYTHON_BACKEND_URL}/manage/gpu/summary`, { signal: AbortSignal.timeout(5000) });
+            if (response.ok) {
+                this.pythonAvailable = true;
+                this._consecutivePythonFailures = 0;
+                this._pythonCoolingUntil = 0;
+            } else {
+                this._consecutivePythonFailures++;
+                this.pythonAvailable = this._consecutivePythonFailures < this._failThreshold;
+            }
+            this.lastPythonCheck = Date.now();
+        } catch (e) {
+            this._consecutivePythonFailures++;
+            this.pythonAvailable = false;
+            this.lastPythonCheck = Date.now();
+            if (this.activeBackend === 'python') {
+                logger.warn('[BackendClient] Python backend unreachable (failure %d)', this._consecutivePythonFailures);
+            }
+        }
+    }/manage/gpu/summary`, { signal: AbortSignal.timeout(5000) });
             this.pythonAvailable = response.ok;
             this.lastPythonCheck = Date.now();
         } catch (e) {
@@ -164,17 +216,18 @@ class BackendClient {
         }
 
         if (this.pythonAvailable) {
-            this.activeBackend = 'python';
             try {
                 const response = await fetch(pythonUrl, { ...options, signal: timeoutSignal });
-                if (response.ok) return response;
+                if (response.ok) {
+                    if (this.activeBackend === 'go') this._consecutiveGoFailures++;
+                    return response;
+                }
             } catch (error) {
                 logger.warn('[BackendClient] Python backend request failed:', error.message);
             }
         }
 
         if (this.goAvailable) {
-            this.activeBackend = 'go';
             try {
                 const response = await fetch(goUrl, { ...options, signal: timeoutSignal });
                 if (response.ok) return response;
