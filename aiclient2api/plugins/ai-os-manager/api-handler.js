@@ -15,6 +15,11 @@ const __dirname = pathModule.dirname(__filename);
 const pluginDir = __dirname;
 const staticDir = pathModule.resolve(process.cwd(), 'static');
 
+export function normalizeBackendResult(result) {
+    const field = result.current || result.primary || result.all?.[0] || result.all_gpus?.[0] || result;
+    return { ...field, timestamp: new Date().toISOString() };
+}
+
 function parseRequestBody(req) {
     return new Promise((resolve, reject) => {
         let body = '';
