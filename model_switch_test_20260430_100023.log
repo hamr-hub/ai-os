@@ -1,0 +1,233 @@
+2026-04-30 10:00:24,089 [INFO] 检查服务健康状态...
+2026-04-30 10:00:27,195 [INFO]   app-controller (35000): OK
+2026-04-30 10:00:27,202 [INFO]   gateway (3000): OK
+2026-04-30 10:00:29,240 [INFO]   vLLM: FAIL - All connection attempts failed
+2026-04-30 10:00:29,240 [INFO] ================================================================================
+2026-04-30 10:00:29,240 [INFO] 模型切换测试开始
+2026-04-30 10:00:29,240 [INFO] ================================================================================
+2026-04-30 10:00:29,241 [INFO] 正在获取模型列表...
+2026-04-30 10:00:33,013 [INFO] 获取到 15 个模型，已按大小排序
+2026-04-30 10:00:33,013 [INFO]   1. llama-3.3-70b-8.0bpw [1MB]
+2026-04-30 10:00:33,013 [INFO]   2. deepseek-coder-v2-gguf [1MB]
+2026-04-30 10:00:33,013 [INFO]   3. Qwen3.6-35B-A3B-NVFP4 [23915MB]
+2026-04-30 10:00:33,014 [INFO]   4. Qwen3.6-35B-A3B-Uncensored [41586MB]
+2026-04-30 10:00:33,014 [INFO]   5. llama-3.3-70b-exl2-6_5 [53532MB]
+2026-04-30 10:00:33,014 [INFO]   6. Gemma-4-31B-Abliterated [59680MB] (运行中)
+2026-04-30 10:00:33,014 [INFO]   7. llama-3.3-70b-exl2-8_0 [61323MB]
+2026-04-30 10:00:33,015 [INFO]   8. qwen2.5-72b-exl2-8_0 [64196MB]
+2026-04-30 10:00:33,015 [INFO]   9. Qwen3.6-35B-A3B [68596MB]
+2026-04-30 10:00:33,015 [INFO]   10. llama-3.3-70b-abliterated-gguf [71502MB]
+2026-04-30 10:00:33,016 [INFO]   11. deepseek-r1-70b-gguf [71502MB]
+2026-04-30 10:00:33,016 [INFO]   12. Qwen3-235B-A22B-Instruct-2507-AWQ [117477MB]
+2026-04-30 10:00:33,016 [INFO]   13. midnight-miqu-103b-5.0bpw [196847MB]
+2026-04-30 10:00:33,016 [INFO]   14. Gemma-4-31B-GGUF-Q4 [未知]
+2026-04-30 10:00:33,017 [INFO]   15. Qwen3.6-35B-GGUF-Q4 [未知]
+2026-04-30 10:00:33,031 [INFO] 
+开始测试 15 个模型...
+2026-04-30 10:00:33,031 [INFO] 
+============================================================
+2026-04-30 10:00:33,032 [INFO] [1/15] 测试模型: llama-3.3-70b-8.0bpw (大小: 1MB, 后端: vllm)
+2026-04-30 10:00:33,032 [INFO] ============================================================
+2026-04-30 10:00:33,489 [INFO] 正在切换到模型: llama-3.3-70b-8.0bpw
+2026-04-30 10:00:42,420 [INFO] 切换请求完成，耗时: 8.9秒, HTTP状态: 410
+2026-04-30 10:00:42,420 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-8.0bpw', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:40.352828', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-8.0bpw/switch?test_enabled=false'}
+2026-04-30 10:00:42,421 [ERROR] 模型 llama-3.3-70b-8.0bpw 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-8.0bpw', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:40.352828', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-8.0bpw/switch?test_enabled=false'}
+2026-04-30 10:00:42,472 [INFO] 
+============================================================
+2026-04-30 10:00:42,472 [INFO] [2/15] 测试模型: deepseek-coder-v2-gguf (大小: 1MB, 后端: vllm)
+2026-04-30 10:00:42,473 [INFO] ============================================================
+2026-04-30 10:00:42,514 [INFO] 正在切换到模型: deepseek-coder-v2-gguf
+2026-04-30 10:00:42,568 [INFO] 切换请求完成，耗时: 0.1秒, HTTP状态: 410
+2026-04-30 10:00:42,568 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'deepseek-coder-v2-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.538043', 'path': 'http://localhost:35000/manage/models/deepseek-coder-v2-gguf/switch?test_enabled=false'}
+2026-04-30 10:00:42,569 [ERROR] 模型 deepseek-coder-v2-gguf 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'deepseek-coder-v2-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.538043', 'path': 'http://localhost:35000/manage/models/deepseek-coder-v2-gguf/switch?test_enabled=false'}
+2026-04-30 10:00:42,609 [INFO] 
+============================================================
+2026-04-30 10:00:42,609 [INFO] [3/15] 测试模型: Qwen3.6-35B-A3B-NVFP4 (大小: 23915MB, 后端: vllm)
+2026-04-30 10:00:42,609 [INFO] ============================================================
+2026-04-30 10:00:42,649 [INFO] 正在切换到模型: Qwen3.6-35B-A3B-NVFP4
+2026-04-30 10:00:42,781 [INFO] 切换请求完成，耗时: 0.1秒, HTTP状态: 410
+2026-04-30 10:00:42,781 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B-NVFP4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.765180', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-A3B-NVFP4/switch?test_enabled=false'}
+2026-04-30 10:00:42,781 [ERROR] 模型 Qwen3.6-35B-A3B-NVFP4 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B-NVFP4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.765180', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-A3B-NVFP4/switch?test_enabled=false'}
+2026-04-30 10:00:42,820 [INFO] 
+============================================================
+2026-04-30 10:00:42,820 [INFO] [4/15] 测试模型: Qwen3.6-35B-A3B-Uncensored (大小: 41586MB, 后端: vllm)
+2026-04-30 10:00:42,820 [INFO] ============================================================
+2026-04-30 10:00:42,860 [INFO] 正在切换到模型: Qwen3.6-35B-A3B-Uncensored
+2026-04-30 10:00:42,882 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:42,882 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B-Uncensored', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.865980', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-A3B-Uncensored/switch?test_enabled=false'}
+2026-04-30 10:00:42,882 [ERROR] 模型 Qwen3.6-35B-A3B-Uncensored 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B-Uncensored', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.865980', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-A3B-Uncensored/switch?test_enabled=false'}
+2026-04-30 10:00:42,922 [INFO] 
+============================================================
+2026-04-30 10:00:42,923 [INFO] [5/15] 测试模型: llama-3.3-70b-exl2-6_5 (大小: 53532MB, 后端: vllm)
+2026-04-30 10:00:42,923 [INFO] ============================================================
+2026-04-30 10:00:42,965 [INFO] 正在切换到模型: llama-3.3-70b-exl2-6_5
+2026-04-30 10:00:42,982 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:42,983 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-exl2-6_5', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.969167', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-exl2-6_5/switch?test_enabled=false'}
+2026-04-30 10:00:42,983 [ERROR] 模型 llama-3.3-70b-exl2-6_5 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-exl2-6_5', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.969167', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-exl2-6_5/switch?test_enabled=false'}
+2026-04-30 10:00:43,022 [INFO] 
+============================================================
+2026-04-30 10:00:43,022 [INFO] [6/15] 测试模型: Gemma-4-31B-Abliterated (大小: 59680MB, 后端: vllm)
+2026-04-30 10:00:43,022 [INFO] ============================================================
+2026-04-30 10:00:43,056 [INFO] 正在切换到模型: Gemma-4-31B-Abliterated
+2026-04-30 10:00:43,074 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:43,075 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Gemma-4-31B-Abliterated', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.061667', 'path': 'http://localhost:35000/manage/models/Gemma-4-31B-Abliterated/switch?test_enabled=false'}
+2026-04-30 10:00:43,075 [ERROR] 模型 Gemma-4-31B-Abliterated 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Gemma-4-31B-Abliterated', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.061667', 'path': 'http://localhost:35000/manage/models/Gemma-4-31B-Abliterated/switch?test_enabled=false'}
+2026-04-30 10:00:43,113 [INFO] 
+============================================================
+2026-04-30 10:00:43,113 [INFO] [7/15] 测试模型: llama-3.3-70b-exl2-8_0 (大小: 61323MB, 后端: vllm)
+2026-04-30 10:00:43,113 [INFO] ============================================================
+2026-04-30 10:00:43,148 [INFO] 正在切换到模型: llama-3.3-70b-exl2-8_0
+2026-04-30 10:00:43,780 [INFO] 切换请求完成，耗时: 0.6秒, HTTP状态: 410
+2026-04-30 10:00:43,780 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-exl2-8_0', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.765533', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-exl2-8_0/switch?test_enabled=false'}
+2026-04-30 10:00:43,780 [ERROR] 模型 llama-3.3-70b-exl2-8_0 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-exl2-8_0', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.765533', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-exl2-8_0/switch?test_enabled=false'}
+2026-04-30 10:00:43,815 [INFO] 
+============================================================
+2026-04-30 10:00:43,815 [INFO] [8/15] 测试模型: qwen2.5-72b-exl2-8_0 (大小: 64196MB, 后端: vllm)
+2026-04-30 10:00:43,816 [INFO] ============================================================
+2026-04-30 10:00:43,855 [INFO] 正在切换到模型: qwen2.5-72b-exl2-8_0
+2026-04-30 10:00:43,873 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:43,873 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'qwen2.5-72b-exl2-8_0', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.859484', 'path': 'http://localhost:35000/manage/models/qwen2.5-72b-exl2-8_0/switch?test_enabled=false'}
+2026-04-30 10:00:43,874 [ERROR] 模型 qwen2.5-72b-exl2-8_0 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'qwen2.5-72b-exl2-8_0', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.859484', 'path': 'http://localhost:35000/manage/models/qwen2.5-72b-exl2-8_0/switch?test_enabled=false'}
+2026-04-30 10:00:43,912 [INFO] 
+============================================================
+2026-04-30 10:00:43,912 [INFO] [9/15] 测试模型: Qwen3.6-35B-A3B (大小: 68596MB, 后端: vllm)
+2026-04-30 10:00:43,913 [INFO] ============================================================
+2026-04-30 10:00:43,949 [INFO] 正在切换到模型: Qwen3.6-35B-A3B
+2026-04-30 10:00:43,965 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:43,966 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.952092', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-A3B/switch?test_enabled=false'}
+2026-04-30 10:00:43,966 [ERROR] 模型 Qwen3.6-35B-A3B 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.952092', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-A3B/switch?test_enabled=false'}
+2026-04-30 10:00:44,000 [INFO] 
+============================================================
+2026-04-30 10:00:44,000 [INFO] [10/15] 测试模型: llama-3.3-70b-abliterated-gguf (大小: 71502MB, 后端: vllm)
+2026-04-30 10:00:44,001 [INFO] ============================================================
+2026-04-30 10:00:44,041 [INFO] 正在切换到模型: llama-3.3-70b-abliterated-gguf
+2026-04-30 10:00:44,058 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:44,058 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-abliterated-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.044795', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-abliterated-gguf/switch?test_enabled=false'}
+2026-04-30 10:00:44,058 [ERROR] 模型 llama-3.3-70b-abliterated-gguf 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-abliterated-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.044795', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-abliterated-gguf/switch?test_enabled=false'}
+2026-04-30 10:00:44,092 [INFO] 
+============================================================
+2026-04-30 10:00:44,092 [INFO] [11/15] 测试模型: deepseek-r1-70b-gguf (大小: 71502MB, 后端: vllm)
+2026-04-30 10:00:44,093 [INFO] ============================================================
+2026-04-30 10:00:44,135 [INFO] 正在切换到模型: deepseek-r1-70b-gguf
+2026-04-30 10:00:44,157 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:44,157 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'deepseek-r1-70b-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.138959', 'path': 'http://localhost:35000/manage/models/deepseek-r1-70b-gguf/switch?test_enabled=false'}
+2026-04-30 10:00:44,158 [ERROR] 模型 deepseek-r1-70b-gguf 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'deepseek-r1-70b-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.138959', 'path': 'http://localhost:35000/manage/models/deepseek-r1-70b-gguf/switch?test_enabled=false'}
+2026-04-30 10:00:44,197 [INFO] 
+============================================================
+2026-04-30 10:00:44,197 [INFO] [12/15] 测试模型: Qwen3-235B-A22B-Instruct-2507-AWQ (大小: 117477MB, 后端: vllm)
+2026-04-30 10:00:44,197 [INFO] ============================================================
+2026-04-30 10:00:44,235 [INFO] 正在切换到模型: Qwen3-235B-A22B-Instruct-2507-AWQ
+2026-04-30 10:00:44,255 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:44,255 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3-235B-A22B-Instruct-2507-AWQ', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.239358', 'path': 'http://localhost:35000/manage/models/Qwen3-235B-A22B-Instruct-2507-AWQ/switch?test_enabled=false'}
+2026-04-30 10:00:44,255 [ERROR] 模型 Qwen3-235B-A22B-Instruct-2507-AWQ 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3-235B-A22B-Instruct-2507-AWQ', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.239358', 'path': 'http://localhost:35000/manage/models/Qwen3-235B-A22B-Instruct-2507-AWQ/switch?test_enabled=false'}
+2026-04-30 10:00:44,288 [INFO] 
+============================================================
+2026-04-30 10:00:44,288 [INFO] [13/15] 测试模型: midnight-miqu-103b-5.0bpw (大小: 196847MB, 后端: vllm)
+2026-04-30 10:00:44,288 [INFO] ============================================================
+2026-04-30 10:00:44,333 [INFO] 正在切换到模型: midnight-miqu-103b-5.0bpw
+2026-04-30 10:00:44,352 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:44,353 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'midnight-miqu-103b-5.0bpw', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.336143', 'path': 'http://localhost:35000/manage/models/midnight-miqu-103b-5.0bpw/switch?test_enabled=false'}
+2026-04-30 10:00:44,353 [ERROR] 模型 midnight-miqu-103b-5.0bpw 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'midnight-miqu-103b-5.0bpw', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.336143', 'path': 'http://localhost:35000/manage/models/midnight-miqu-103b-5.0bpw/switch?test_enabled=false'}
+2026-04-30 10:00:44,390 [INFO] 
+============================================================
+2026-04-30 10:00:44,390 [INFO] [14/15] 测试模型: Gemma-4-31B-GGUF-Q4 (大小: 0MB, 后端: vllm)
+2026-04-30 10:00:44,390 [INFO] ============================================================
+2026-04-30 10:00:44,425 [INFO] 正在切换到模型: Gemma-4-31B-GGUF-Q4
+2026-04-30 10:00:44,443 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:44,444 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Gemma-4-31B-GGUF-Q4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.429200', 'path': 'http://localhost:35000/manage/models/Gemma-4-31B-GGUF-Q4/switch?test_enabled=false'}
+2026-04-30 10:00:44,444 [ERROR] 模型 Gemma-4-31B-GGUF-Q4 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Gemma-4-31B-GGUF-Q4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.429200', 'path': 'http://localhost:35000/manage/models/Gemma-4-31B-GGUF-Q4/switch?test_enabled=false'}
+2026-04-30 10:00:44,478 [INFO] 
+============================================================
+2026-04-30 10:00:44,479 [INFO] [15/15] 测试模型: Qwen3.6-35B-GGUF-Q4 (大小: 0MB, 后端: vllm)
+2026-04-30 10:00:44,479 [INFO] ============================================================
+2026-04-30 10:00:44,515 [INFO] 正在切换到模型: Qwen3.6-35B-GGUF-Q4
+2026-04-30 10:00:44,561 [INFO] 切换请求完成，耗时: 0.0秒, HTTP状态: 410
+2026-04-30 10:00:44,561 [ERROR] 模型切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-GGUF-Q4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.547639', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-GGUF-Q4/switch?test_enabled=false'}
+2026-04-30 10:00:44,561 [ERROR] 模型 Qwen3.6-35B-GGUF-Q4 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-GGUF-Q4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.547639', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-GGUF-Q4/switch?test_enabled=false'}
+2026-04-30 10:00:44,596 [INFO] 
+================================================================================
+2026-04-30 10:00:44,596 [INFO] 测试汇总
+2026-04-30 10:00:44,596 [INFO] ================================================================================
+2026-04-30 10:00:44,596 [INFO] 
+切换失败的模型 (15):
+2026-04-30 10:00:44,597 [INFO]   llama-3.3-70b-8.0bpw: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,597 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-8.0bpw', 'set_as_default': False}}, 'code': 410, 'timestamp': '
+2026-04-30 10:00:44,597 [INFO]   deepseek-coder-v2-gguf: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,597 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'deepseek-coder-v2-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp':
+2026-04-30 10:00:44,597 [INFO]   Qwen3.6-35B-A3B-NVFP4: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,598 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B-NVFP4', 'set_as_default': False}}, 'code': 410, 'timestamp': 
+2026-04-30 10:00:44,598 [INFO]   Qwen3.6-35B-A3B-Uncensored: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,598 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B-Uncensored', 'set_as_default': False}}, 'code': 410, 'timesta
+2026-04-30 10:00:44,598 [INFO]   llama-3.3-70b-exl2-6_5: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,599 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-exl2-6_5', 'set_as_default': False}}, 'code': 410, 'timestamp':
+2026-04-30 10:00:44,599 [INFO]   Gemma-4-31B-Abliterated: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,599 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Gemma-4-31B-Abliterated', 'set_as_default': False}}, 'code': 410, 'timestamp'
+2026-04-30 10:00:44,599 [INFO]   llama-3.3-70b-exl2-8_0: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,599 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-exl2-8_0', 'set_as_default': False}}, 'code': 410, 'timestamp':
+2026-04-30 10:00:44,600 [INFO]   qwen2.5-72b-exl2-8_0: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,600 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'qwen2.5-72b-exl2-8_0', 'set_as_default': False}}, 'code': 410, 'timestamp': '
+2026-04-30 10:00:44,600 [INFO]   Qwen3.6-35B-A3B: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,600 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-
+2026-04-30 10:00:44,601 [INFO]   llama-3.3-70b-abliterated-gguf: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,601 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-abliterated-gguf', 'set_as_default': False}}, 'code': 410, 'tim
+2026-04-30 10:00:44,601 [INFO]   deepseek-r1-70b-gguf: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,601 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'deepseek-r1-70b-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '
+2026-04-30 10:00:44,601 [INFO]   Qwen3-235B-A22B-Instruct-2507-AWQ: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,602 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3-235B-A22B-Instruct-2507-AWQ', 'set_as_default': False}}, 'code': 410, '
+2026-04-30 10:00:44,602 [INFO]   midnight-miqu-103b-5.0bpw: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,602 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'midnight-miqu-103b-5.0bpw', 'set_as_default': False}}, 'code': 410, 'timestam
+2026-04-30 10:00:44,602 [INFO]   Gemma-4-31B-GGUF-Q4: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,602 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Gemma-4-31B-GGUF-Q4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2
+2026-04-30 10:00:44,603 [INFO]   Qwen3.6-35B-GGUF-Q4: 切换=FAIL, 网关=FAIL, vLLM直接=FAIL, 端口=None, 就绪时间=0.0s
+2026-04-30 10:00:44,603 [INFO]     错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-GGUF-Q4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2
+2026-04-30 10:00:44,603 [INFO] 
+成功率: 0/15 (0.0%)
+2026-04-30 10:00:44,603 [INFO] 
+================================================================================
+2026-04-30 10:00:44,603 [INFO] 失败原因深度分析
+2026-04-30 10:00:44,604 [INFO] ================================================================================
+2026-04-30 10:00:44,604 [INFO] 
+--- llama-3.3-70b-8.0bpw ---
+2026-04-30 10:00:44,604 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-8.0bpw', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:40.352828', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-8.0bpw/switch?test_enabled=false'}
+2026-04-30 10:00:44,604 [INFO] 
+--- deepseek-coder-v2-gguf ---
+2026-04-30 10:00:44,605 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'deepseek-coder-v2-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.538043', 'path': 'http://localhost:35000/manage/models/deepseek-coder-v2-gguf/switch?test_enabled=false'}
+2026-04-30 10:00:44,605 [INFO] 
+--- Qwen3.6-35B-A3B-NVFP4 ---
+2026-04-30 10:00:44,605 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B-NVFP4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.765180', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-A3B-NVFP4/switch?test_enabled=false'}
+2026-04-30 10:00:44,605 [INFO] 
+--- Qwen3.6-35B-A3B-Uncensored ---
+2026-04-30 10:00:44,606 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B-Uncensored', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.865980', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-A3B-Uncensored/switch?test_enabled=false'}
+2026-04-30 10:00:44,606 [INFO] 
+--- llama-3.3-70b-exl2-6_5 ---
+2026-04-30 10:00:44,606 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-exl2-6_5', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:42.969167', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-exl2-6_5/switch?test_enabled=false'}
+2026-04-30 10:00:44,606 [INFO] 
+--- Gemma-4-31B-Abliterated ---
+2026-04-30 10:00:44,606 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Gemma-4-31B-Abliterated', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.061667', 'path': 'http://localhost:35000/manage/models/Gemma-4-31B-Abliterated/switch?test_enabled=false'}
+2026-04-30 10:00:44,607 [INFO] 
+--- llama-3.3-70b-exl2-8_0 ---
+2026-04-30 10:00:44,607 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-exl2-8_0', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.765533', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-exl2-8_0/switch?test_enabled=false'}
+2026-04-30 10:00:44,607 [INFO] 
+--- qwen2.5-72b-exl2-8_0 ---
+2026-04-30 10:00:44,607 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'qwen2.5-72b-exl2-8_0', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.859484', 'path': 'http://localhost:35000/manage/models/qwen2.5-72b-exl2-8_0/switch?test_enabled=false'}
+2026-04-30 10:00:44,608 [INFO] 
+--- Qwen3.6-35B-A3B ---
+2026-04-30 10:00:44,608 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-A3B', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:43.952092', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-A3B/switch?test_enabled=false'}
+2026-04-30 10:00:44,608 [INFO] 
+--- llama-3.3-70b-abliterated-gguf ---
+2026-04-30 10:00:44,608 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'llama-3.3-70b-abliterated-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.044795', 'path': 'http://localhost:35000/manage/models/llama-3.3-70b-abliterated-gguf/switch?test_enabled=false'}
+2026-04-30 10:00:44,609 [INFO] 
+--- deepseek-r1-70b-gguf ---
+2026-04-30 10:00:44,609 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'deepseek-r1-70b-gguf', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.138959', 'path': 'http://localhost:35000/manage/models/deepseek-r1-70b-gguf/switch?test_enabled=false'}
+2026-04-30 10:00:44,609 [INFO] 
+--- Qwen3-235B-A22B-Instruct-2507-AWQ ---
+2026-04-30 10:00:44,609 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3-235B-A22B-Instruct-2507-AWQ', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.239358', 'path': 'http://localhost:35000/manage/models/Qwen3-235B-A22B-Instruct-2507-AWQ/switch?test_enabled=false'}
+2026-04-30 10:00:44,610 [INFO] 
+--- midnight-miqu-103b-5.0bpw ---
+2026-04-30 10:00:44,610 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'midnight-miqu-103b-5.0bpw', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.336143', 'path': 'http://localhost:35000/manage/models/midnight-miqu-103b-5.0bpw/switch?test_enabled=false'}
+2026-04-30 10:00:44,610 [INFO] 
+--- Gemma-4-31B-GGUF-Q4 ---
+2026-04-30 10:00:44,610 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Gemma-4-31B-GGUF-Q4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.429200', 'path': 'http://localhost:35000/manage/models/Gemma-4-31B-GGUF-Q4/switch?test_enabled=false'}
+2026-04-30 10:00:44,611 [INFO] 
+--- Qwen3.6-35B-GGUF-Q4 ---
+2026-04-30 10:00:44,611 [INFO] 错误: 切换失败: {'error': {'error': '此接口已废弃', 'replacement': '/manage/switch/atomic', 'example': {'action': 'switch', 'model_name': 'Qwen3.6-35B-GGUF-Q4', 'set_as_default': False}}, 'code': 410, 'timestamp': '2026-04-30T10:00:44.547639', 'path': 'http://localhost:35000/manage/models/Qwen3.6-35B-GGUF-Q4/switch?test_enabled=false'}
