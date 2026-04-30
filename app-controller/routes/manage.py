@@ -1457,7 +1457,7 @@ async def engine_switch(request: Request):
 async def engine_status():
     services = llm_service_manager.list_services()
     return {
-        "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "systemd"),
+        "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "subprocess"),
         "services": services,
         "active_count": len([s for s in services if s.get("status") == "running"]),
     }
@@ -1507,7 +1507,7 @@ async def update_engines_config(request: Request):
         _on_config_changed(persisted)
         return {"status": "success", "engines_config": {
             "default_engine": os.environ.get("DEFAULT_ENGINE", "vllm"),
-            "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "systemd"),
+            "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "subprocess"),
         }}
     raise HTTPException(status_code=500, detail="Failed to persist engines config")
 

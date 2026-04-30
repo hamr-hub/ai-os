@@ -1,5 +1,15 @@
 # AI-OS 系统架构优化方案
 
+> ⚠️ **本文档已被新架构取代**。当前架构采用双路径分层设计：
+> - **C端推理**: aiclient2api(Node后端) → provider → go-vllm-api → 推理引擎
+> - **B端管控**: Frontend/插件 → Python → 引擎启停/模型管理
+> 
+> 详见 [docs/agent/architecture.md](../agent/architecture.md) 的最新架构设计。
+> 
+> 以下内容为历史方案参考，不再作为当前实施计划。
+
+---
+
 > 当前问题：服务过重、资源冗余、架构复杂
 
 ---

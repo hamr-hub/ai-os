@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from core.model_engine_scheduler import ModelEngineScheduler
 from core.model_hub import SearchResult
+from core.llm_service_manager import LLMServiceManager
 
 
 def _make_scheduler(**kwargs):

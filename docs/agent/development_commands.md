@@ -36,12 +36,13 @@ cd go-vllm-api
 go run cmd/server/main.go --port 35001    # 启动 http://localhost:35001
 ```
 
-## API 网关
+## aiclient2api (开源项目+GPU插件)
 
 ```bash
 cd aiclient2api
-docker compose up -d                      # 启动 http://localhost:3000
+docker compose up -d                      # 启动 http://localhost:3000 (Node后端)
 docker compose logs -f                    # 查看日志
+# provider_pools.json 中 OPENAI_BASE_URL 指向 go-vllm-api:35001/v1
 ```
 
 ## Docker 全栈
