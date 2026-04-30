@@ -253,11 +253,13 @@ class TestV1API:
         assert resp.status_code in [400, 404, 503]
 
     def test_no_messages_field(self):
-        resp = requests.post(
+        resp = _safe_inference(
             f"{GO_BASE}/v1/chat/completions",
-            json={"model": "default"},
+            {"model": "default"},
             timeout=10,
         )
+        if resp is None:
+            pytest.skip("Go gateway timed out (engine unavailable)")
         if resp.status_code == 200:
             pytest.skip("Go currently accepts requests without messages (engine handling)")
         assert resp.status_code in [400, 404, 503]
