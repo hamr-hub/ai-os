@@ -156,6 +156,7 @@ func (sc *SystemController) RestartService(name string) bool {
 	defer sc.mu.Unlock()
 
 	sc.clearModelPathEnv(name)
+	sc.clearOverrideFile(name)
 
 	cmd := sc.command("systemctl", "stop", name)
 	if cmd == nil {
@@ -168,29 +169,51 @@ func (sc *SystemController) RestartService(name string) bool {
 	}
 
 	waited := 0
-	for waited < 30 {
+	maxWait := 60
+	for waited < maxWait {
 		status := sc.getServiceStatusLocked(name)
 		if status != "active" && status != "deactivating" {
 			break
+		}
+		if waited%10 == 0 && waited > 0 {
+			sc.logger.Info("waiting for service to stop", zap.String("service", name), zap.Int("waited_seconds", waited))
 		}
 		time.Sleep(1 * time.Second)
 		waited++
 	}
 
-	if waited >= 30 {
-		sc.logger.Warn("service stop timeout, forcing kill", zap.String("service", name))
+	if waited >= maxWait {
+		sc.logger.Warn("service stop timeout, forcing kill", zap.String("service", name), zap.Int("waited_seconds", waited))
 		
-		killCmd := sc.command("systemctl", "kill", name)
+		killCmd := sc.command("systemctl", "kill", "-s", "SIGTERM", name)
 		if killCmd != nil {
-			killCmd.Run()
-			time.Sleep(2 * time.Second)
+			if err := killCmd.Run(); err != nil {
+				sc.logger.Warn("systemctl kill SIGTERM failed", zap.String("service", name), zap.Error(err))
+			} else {
+				sc.logger.Info("sent SIGTERM to service", zap.String("service", name))
+			}
+			time.Sleep(3 * time.Second)
 		}
 
 		status := sc.getServiceStatusLocked(name)
 		if status == "active" || status == "deactivating" {
+			sc.logger.Warn("service still not stopped after SIGTERM, trying SIGKILL", zap.String("service", name))
+			killCmd = sc.command("systemctl", "kill", "-s", "SIGKILL", name)
+			if killCmd != nil {
+				if err := killCmd.Run(); err != nil {
+					sc.logger.Warn("systemctl kill SIGKILL failed", zap.String("service", name), zap.Error(err))
+				} else {
+					sc.logger.Info("sent SIGKILL to service", zap.String("service", name))
+				}
+				time.Sleep(3 * time.Second)
+			}
+		}
+
+		status = sc.getServiceStatusLocked(name)
+		if status == "active" || status == "deactivating" {
 			sc.logger.Warn("systemctl kill failed, using pkill", zap.String("service", name))
 			sc.forceKillProcess(name, false)
-			time.Sleep(2 * time.Second)
+			time.Sleep(3 * time.Second)
 		}
 	}
 
@@ -212,6 +235,18 @@ func (sc *SystemController) clearModelPathEnv(name string) {
 	if cmd != nil {
 		if err := cmd.Run(); err != nil {
 			sc.logger.Debug("clear VLLM_MODEL_PATH env failed", zap.Error(err))
+		}
+	}
+}
+
+func (sc *SystemController) clearOverrideFile(name string) {
+	overrideDir := fmt.Sprintf("/etc/systemd/system/%s.service.d", name)
+	cmd := sc.command("rm", "-rf", overrideDir)
+	if cmd != nil {
+		if err := cmd.Run(); err != nil {
+			sc.logger.Debug("clear override file failed", zap.String("service", name), zap.Error(err))
+		} else {
+			sc.logger.Info("override file cleared", zap.String("service", name))
 		}
 	}
 }

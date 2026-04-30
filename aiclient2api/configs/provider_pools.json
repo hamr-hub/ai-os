@@ -19,10 +19,10 @@
       "isDisabled": false,
       "needsRefresh": false,
       "refreshCount": 0,
-      "lastHealthCheckTime": "2026-04-27T15:44:03.629Z",
+      "lastHealthCheckTime": "2026-04-29T14:33:36.586Z",
       "lastHealthCheckModel": "Gemma-4-31B-Abliterated",
       "lastErrorMessage": null,
-      "lastRefreshTime": 1777334083984,
+      "lastRefreshTime": 1777473216586,
       "_lastSelectionSeq": 0,
       "lastModelSwitchTime": "2026-04-29T04:51:41.923Z"
     }

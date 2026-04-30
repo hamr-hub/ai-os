@@ -646,81 +646,147 @@ func (s *Scheduler) StartModel(ctx context.Context, name string) (bool, error) {
 	backendType := s.GetModelBackendType(matched)
 
 	if backendType == "llama_cpp" {
-		if s.llamaCppMgr.IsServerRunning(matched) {
-			s.mu.Lock()
-			s.runningModels[matched] = time.Now()
-			s.mu.Unlock()
-			return true, nil
-		}
+		return s.startLlamaCppModel(ctx, matched, mc)
+	}
 
-		mem := s.gpuMonitor.GetMemoryUsage()
-		if mem != nil {
-			requiredMem := config.ParseMemorySize(mc.RequiredMemory)
-			if mem.Available < requiredMem+s.GetMinAvailableMemory() {
-				ok, err := s.freeUpMemory(ctx, matched)
-				if !ok {
-					return false, fmt.Errorf("insufficient memory: %w", err)
-				}
-			}
-		}
+	return s.startVLLMModel(ctx, matched, mc)
+}
 
-		err := s.llamaCppMgr.StartServerByName(ctx, matched)
-		if err != nil {
-			s.logger.Error("failed to start llama_cpp model", zap.String("model", matched), zap.Error(err))
-			return false, err
-		}
+func (s *Scheduler) startLlamaCppModel(ctx context.Context, matched string, mc *config.ModelConfig) (bool, error) {
+	if s.llamaCppMgr.IsServerRunning(matched) {
 		s.mu.Lock()
 		s.runningModels[matched] = time.Now()
 		s.mu.Unlock()
-		s.logger.Info("llama_cpp model started", zap.String("model", matched))
+		s.logger.Info("llama_cpp model already running", zap.String("model", matched))
 		return true, nil
 	}
 
+	if err := s.ensureMemoryAvailable(ctx, matched); err != nil {
+		return false, fmt.Errorf("memory check failed: %w", err)
+	}
+
+	err := s.llamaCppMgr.StartServerByName(ctx, matched)
+	if err != nil {
+		s.logger.Error("failed to start llama_cpp model", zap.String("model", matched), zap.Error(err))
+		return false, err
+	}
+
+	s.mu.Lock()
+	s.runningModels[matched] = time.Now()
+	s.modelLastUsed[matched] = time.Now()
+	s.modelSwitchTime[matched] = time.Now()
+	s.mu.Unlock()
+	s.logger.Info("llama_cpp model started", zap.String("model", matched))
+	return true, nil
+}
+
+func (s *Scheduler) startVLLMModel(ctx context.Context, matched string, mc *config.ModelConfig) (bool, error) {
 	if s.sysCtl.IsServiceRunning(mc.Service) {
 		currentModelPath := s.getCurrentVLLMModelPath()
 		if currentModelPath == "" || currentModelPath == mc.ModelPath {
 			s.mu.Lock()
 			s.runningModels[matched] = time.Now()
 			s.mu.Unlock()
+			s.logger.Info("vllm service running with correct model", zap.String("model", matched))
 			return true, nil
 		}
 
-		if s.vllmManager == nil {
-			return false, fmt.Errorf("vllm manager unavailable for model switch")
-		}
-		if err := s.vllmManager.SwitchModel(ctx, mc.ModelPath); err != nil {
-			return false, fmt.Errorf("switch vllm model state: %w", err)
-		}
-		if !s.sysCtl.RestartService(mc.Service) {
-			return false, fmt.Errorf("restart service %s after switching model", mc.Service)
-		}
-		s.mu.Lock()
-		s.runningModels[matched] = time.Now()
-		s.modelLastUsed[matched] = time.Now()
-		s.mu.Unlock()
-		s.logger.Info("vllm model switched via restart", zap.String("model", matched), zap.String("path", mc.ModelPath))
-		return true, nil
+		return s.switchVLLMModel(ctx, matched, mc)
 	}
-	mem := s.gpuMonitor.GetMemoryUsage()
-	if mem != nil {
-		requiredMem := config.ParseMemorySize(mc.RequiredMemory)
-		if mem.Available < requiredMem+s.GetMinAvailableMemory() {
-			ok, err := s.freeUpMemory(ctx, matched)
-			if !ok {
-				return false, fmt.Errorf("insufficient memory: %w", err)
-			}
-		}
+
+	if err := s.ensureMemoryAvailable(ctx, matched); err != nil {
+		return false, fmt.Errorf("memory check failed: %w", err)
 	}
+
 	success := s.sysCtl.StartService(mc.Service)
 	if success {
 		s.mu.Lock()
 		s.runningModels[matched] = time.Now()
+		s.modelLastUsed[matched] = time.Now()
+		s.modelSwitchTime[matched] = time.Now()
 		s.mu.Unlock()
-		s.logger.Info("model started", zap.String("model", matched))
+		s.logger.Info("vllm model started", zap.String("model", matched), zap.String("service", mc.Service))
 		return true, nil
 	}
-	s.logger.Error("failed to start model", zap.String("model", matched))
+
+	s.logger.Error("failed to start vllm service", zap.String("model", matched), zap.String("service", mc.Service))
 	return false, fmt.Errorf("failed to start service %s for model %s", mc.Service, matched)
+}
+
+func (s *Scheduler) ensureMemoryAvailable(ctx context.Context, modelName string) error {
+	mem := s.gpuMonitor.GetMemoryUsage()
+	if mem == nil {
+		s.logger.Warn("GPU memory info unavailable, skipping memory check", zap.String("model", modelName))
+		return nil
+	}
+
+	mc := s.GetModelConfig(modelName)
+	if mc == nil {
+		return nil
+	}
+
+	requiredMem := config.ParseMemorySize(mc.RequiredMemory)
+	if mem.Available >= requiredMem+s.GetMinAvailableMemory() {
+		return nil
+	}
+
+	s.logger.Warn("insufficient memory for model", 
+		zap.String("model", modelName),
+		zap.Int64("available", mem.Available),
+		zap.Int64("required", requiredMem))
+
+	ok, err := s.freeUpMemory(ctx, modelName)
+	if !ok {
+		return fmt.Errorf("could not free enough memory: %w", err)
+	}
+
+	s.logger.Info("memory freed successfully", zap.String("model", modelName))
+	return nil
+}
+
+func (s *Scheduler) switchVLLMModel(ctx context.Context, matched string, mc *config.ModelConfig) (bool, error) {
+	if s.vllmManager == nil {
+		return false, fmt.Errorf("vllm manager unavailable for model switch")
+	}
+
+	s.logger.Info("starting vllm model switch", zap.String("model", matched), zap.String("path", mc.ModelPath))
+
+	if err := s.vllmManager.SwitchModel(ctx, mc.ModelPath); err != nil {
+		s.logger.Error("failed to prepare model switch", zap.String("model", matched), zap.Error(err))
+		return false, fmt.Errorf("prepare model switch: %w", err)
+	}
+
+	if err := s.waitForActiveRequestsToComplete(matched, 30); err != nil {
+		s.logger.Warn("active requests did not complete in time", zap.String("model", matched), zap.Error(err))
+	}
+
+	if !s.sysCtl.RestartService(mc.Service) {
+		s.logger.Error("failed to restart vllm service", zap.String("service", mc.Service))
+		return false, fmt.Errorf("restart service %s failed", mc.Service)
+	}
+
+	s.mu.Lock()
+	s.runningModels[matched] = time.Now()
+	s.modelLastUsed[matched] = time.Now()
+	s.modelSwitchTime[matched] = time.Now()
+	s.currentModel = matched
+	s.mu.Unlock()
+
+	s.logger.Info("vllm model switched successfully", zap.String("model", matched), zap.String("path", mc.ModelPath))
+	return true, nil
+}
+
+func (s *Scheduler) waitForActiveRequestsToComplete(modelName string, timeoutSeconds int) error {
+	deadline := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
+	
+	for time.Now().Before(deadline) {
+		if s.GetActiveRequests(modelName) == 0 {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	
+	return fmt.Errorf("timeout waiting for active requests to complete")
 }
 
 func (s *Scheduler) StopModel(ctx context.Context, name string) bool {
@@ -1082,7 +1148,11 @@ func (s *Scheduler) SwitchModelWithFallback(ctx context.Context, target string, 
 }
 
 func (s *Scheduler) waitForServiceReady(ctx context.Context, serviceName string, timeoutSeconds int) error {
-	for i := 0; i < timeoutSeconds; i++ {
+	checkInterval := 2 * time.Second
+	maxWait := time.Duration(timeoutSeconds) * time.Second
+	startTime := time.Now()
+
+	for time.Since(startTime) < maxWait {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -1091,12 +1161,43 @@ func (s *Scheduler) waitForServiceReady(ctx context.Context, serviceName string,
 
 		status := s.sysCtl.GetServiceStatus(serviceName)
 		if status == "active" {
-			return nil
+			s.logger.Info("service is active, verifying readiness", zap.String("service", serviceName))
+			
+			if s.isVLLMServiceReady() {
+				return nil
+			}
+			s.logger.Info("service active but vLLM not ready yet", zap.String("service", serviceName))
 		}
 
-		time.Sleep(1 * time.Second)
+		elapsed := int(time.Since(startTime).Seconds())
+		if elapsed%10 == 0 {
+			s.logger.Info("waiting for service to become ready", zap.String("service", serviceName), zap.Int("elapsed_seconds", elapsed))
+		}
+
+		time.Sleep(checkInterval)
 	}
 	return fmt.Errorf("service %s did not become ready within %d seconds", serviceName, timeoutSeconds)
+}
+
+func (s *Scheduler) isVLLMServiceReady() bool {
+	if s.vllmManager == nil {
+		return true
+	}
+	
+	port := s.vllmManager.GetCurrentPort()
+	if port == 0 {
+		port = 8000
+	}
+	
+	url := fmt.Sprintf("http://localhost:%d/v1/models", port)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	
+	return resp.StatusCode == http.StatusOK
 }
 
 func (s *Scheduler) FlushCache() {

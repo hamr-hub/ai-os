@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -258,14 +259,67 @@ func (vm *VLLMManager) SwitchModel(ctx context.Context, modelPath string) error 
 		scriptPath = "/root/ai-suite/start_vllm.sh"
 	}
 
-	stateFile := filepath.Join(filepath.Dir(scriptPath), ".vllm_model_path")
-	if err := os.WriteFile(stateFile, []byte(modelPath+"\n"), 0644); err == nil {
-		vm.logger.Info("vllm model state updated", zap.String("path", modelPath), zap.String("state_file", stateFile))
-		return nil
-	} else {
-		vm.logger.Warn("write model state file failed, falling back to start script update", zap.String("state_file", stateFile), zap.Error(err))
+	vm.clearUserStateFiles(scriptPath)
+
+	if err := vm.updateModelStateFile(scriptPath, modelPath); err != nil {
+		vm.logger.Warn("failed to update model state file, trying script update", zap.Error(err))
 	}
 
+	if err := vm.updateStartScript(scriptPath, modelPath); err != nil {
+		return fmt.Errorf("update start script: %w", err)
+	}
+
+	if err := vm.updateSystemdEnvironment(modelPath); err != nil {
+		vm.logger.Warn("failed to update systemd environment", zap.Error(err))
+	}
+
+	vm.logger.Info("model switch preparation completed", zap.String("path", modelPath))
+	return nil
+}
+
+func (vm *VLLMManager) clearUserStateFiles(scriptPath string) {
+	scriptDir := filepath.Dir(scriptPath)
+	
+	filesToRemove := []string{
+		filepath.Join(scriptDir, ".vllm_model_params.json"),
+	}
+
+	serviceName := vm.cfg.ServiceName
+	if serviceName == "" {
+		serviceName = "vllm-aiclient"
+	}
+	overrideConf := fmt.Sprintf("/etc/systemd/system/%s.service.d/override.conf", serviceName)
+	filesToRemove = append(filesToRemove, overrideConf)
+
+	for _, filePath := range filesToRemove {
+		if err := os.Remove(filePath); err != nil {
+			if !os.IsNotExist(err) {
+				vm.logger.Debug("failed to clear user state file", zap.String("file", filePath), zap.Error(err))
+			}
+		} else {
+			vm.logger.Info("cleared user state file", zap.String("file", filePath))
+		}
+	}
+}
+
+func (vm *VLLMManager) updateModelStateFile(scriptPath, modelPath string) error {
+	stateFile := filepath.Join(filepath.Dir(scriptPath), ".vllm_model_path")
+	
+	for attempt := 1; attempt <= 3; attempt++ {
+		if err := os.WriteFile(stateFile, []byte(modelPath+"\n"), 0644); err == nil {
+			vm.logger.Info("vllm model state updated", zap.String("path", modelPath), zap.String("state_file", stateFile))
+			return nil
+		}
+		
+		if attempt < 3 {
+			time.Sleep(time.Duration(attempt) * 100 * time.Millisecond)
+		}
+	}
+	
+	return fmt.Errorf("failed to write state file after 3 attempts")
+}
+
+func (vm *VLLMManager) updateStartScript(scriptPath, modelPath string) error {
 	content, err := os.ReadFile(scriptPath)
 	if err != nil {
 		return fmt.Errorf("read start script: %w", err)
@@ -273,59 +327,136 @@ func (vm *VLLMManager) SwitchModel(ctx context.Context, modelPath string) error 
 
 	newContent := vm.replaceModelPath(string(content), modelPath)
 	if newContent == string(content) {
-		vm.logger.Info("model path unchanged", zap.String("path", modelPath))
+		vm.logger.Info("model path unchanged in script", zap.String("path", modelPath))
 		return nil
 	}
 
-	if err := os.WriteFile(scriptPath, []byte(newContent), 0755); err != nil {
-		return fmt.Errorf("write start script: %w", err)
+	for attempt := 1; attempt <= 3; attempt++ {
+		if err := os.WriteFile(scriptPath, []byte(newContent), 0755); err == nil {
+			vm.logger.Info("start script updated", zap.String("path", modelPath), zap.String("script", scriptPath))
+			return nil
+		}
+		
+		if attempt < 3 {
+			time.Sleep(time.Duration(attempt) * 100 * time.Millisecond)
+		}
 	}
+	
+	return fmt.Errorf("failed to write start script after 3 attempts")
+}
 
-	vm.logger.Info("start script updated", zap.String("path", modelPath))
+func (vm *VLLMManager) updateSystemdEnvironment(modelPath string) error {
+	serviceName := vm.cfg.ServiceName
+	if serviceName == "" {
+		serviceName = "vllm-aiclient"
+	}
+	
+	serviceFile := fmt.Sprintf("/etc/systemd/system/%s.service", serviceName)
+	content, err := os.ReadFile(serviceFile)
+	if err != nil {
+		return fmt.Errorf("read service file: %w", err)
+	}
+	
+	contentStr := string(content)
+	if strings.Contains(contentStr, "VLLM_MODEL_PATH=") {
+		newContent := regexp.MustCompile(`VLLM_MODEL_PATH=[^\n]*`).ReplaceAllString(contentStr, "VLLM_MODEL_PATH="+modelPath)
+		if newContent != contentStr {
+			if err := os.WriteFile(serviceFile, []byte(newContent), 0644); err != nil {
+				return fmt.Errorf("write service file: %w", err)
+			}
+			vm.logger.Info("systemd service environment updated", zap.String("service", serviceName))
+		}
+	}
+	
 	return nil
 }
 
 func (vm *VLLMManager) replaceModelPath(content string, newPath string) string {
 	lines := strings.Split(content, "\n")
 	modified := false
+
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, "--model") || strings.Contains(trimmed, "-m ") {
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		if strings.Contains(trimmed, "--model") {
+			modified = vm.replaceInLineWithFlag(&lines[i], "--model", newPath) || modified
+		} else if strings.Contains(trimmed, "-m ") {
+			modified = vm.replaceInLineWithFlag(&lines[i], "-m", newPath) || modified
+		} else if strings.Contains(trimmed, "MODEL_PATH=") {
+			modified = vm.replaceInLineWithEnv(&lines[i], "MODEL_PATH", newPath) || modified
+		} else if strings.Contains(trimmed, "VLLM_MODEL=") {
+			modified = vm.replaceInLineWithEnv(&lines[i], "VLLM_MODEL", newPath) || modified
+		}
+	}
+
+	if !modified {
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
 			if strings.HasPrefix(trimmed, "#") {
 				continue
 			}
-			parts := strings.Fields(trimmed)
-			for j, p := range parts {
-				if p == "--model" && j+1 < len(parts) {
-					oldPath := strings.Trim(parts[j+1], "\"")
-					if oldPath != newPath {
-						parts[j+1] = fmt.Sprintf("\"%s\"", newPath)
-						lines[i] = strings.Join(parts, " ")
-						modified = true
-					}
-				}
+			
+			if strings.Contains(line, "/mnt/pve_models/") {
+				lines[i] = vm.replaceModelPathInLine(line, "/mnt/pve_models/", newPath)
+				modified = true
+				break
+			} else if strings.Contains(line, "/models/") {
+				lines[i] = vm.replaceModelPathInLine(line, "/models/", newPath)
+				modified = true
+				break
 			}
 		}
 	}
-	if !modified {
-		for i, line := range lines {
-			if strings.Contains(line, "/mnt/pve_models/") && !strings.HasPrefix(strings.TrimSpace(line), "#") {
-				parts := strings.Fields(line)
-				for j, p := range parts {
-					if strings.HasPrefix(p, "/mnt/pve_models/") {
-						parts[j] = fmt.Sprintf("\"%s\"", newPath)
-						lines[i] = strings.Join(parts, " ")
-						modified = true
-						break
-					}
-				}
-				if modified {
-					break
-				}
-			}
-		}
-	}
+
 	return strings.Join(lines, "\n")
+}
+
+func (vm *VLLMManager) replaceInLineWithFlag(line *string, flag string, newPath string) bool {
+	parts := strings.Fields(*line)
+	for j, p := range parts {
+		if p == flag && j+1 < len(parts) {
+			oldPath := strings.Trim(parts[j+1], "\"'")
+			if oldPath != newPath {
+				parts[j+1] = fmt.Sprintf("\"%s\"", newPath)
+				*line = strings.Join(parts, " ")
+				return true
+			}
+			break
+		}
+	}
+	return false
+}
+
+func (vm *VLLMManager) replaceInLineWithEnv(line *string, envVar string, newPath string) bool {
+	pattern := regexp.MustCompile(envVar + `=[^\s]*`)
+	oldValue := pattern.FindString(*line)
+	if oldValue == "" {
+		return false
+	}
+	
+	oldPath := strings.TrimPrefix(oldValue, envVar+"=")
+	oldPath = strings.Trim(oldPath, "\"'")
+	
+	if oldPath == newPath {
+		return false
+	}
+	
+	*line = pattern.ReplaceAllString(*line, envVar+"=\""+newPath+"\"")
+	return true
+}
+
+func (vm *VLLMManager) replaceModelPathInLine(line, prefix, newPath string) string {
+	parts := strings.Fields(line)
+	for j, p := range parts {
+		if strings.HasPrefix(p, prefix) {
+			parts[j] = fmt.Sprintf("\"%s\"", newPath)
+			return strings.Join(parts, " ")
+		}
+	}
+	return line
 }
 
 func (vm *VLLMManager) SwitchModelWithTest(ctx context.Context, modelPath string, modelName string, port int) error {

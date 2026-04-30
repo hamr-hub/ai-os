@@ -1078,10 +1078,30 @@ async def wait_for_vllm_model_ready_and_test(model_name: str, test_enabled: bool
     }
 
 
+def _cleanup_etc_override() -> bool:
+    """Remove any stale /etc/systemd override to prevent conflicts with runtime overrides."""
+    try:
+        override_dir = f"/etc/systemd/system/{VLLM_SERVICE_NAME}.service.d"
+        override_file = os.path.join(override_dir, "override.conf")
+        if os.path.exists(override_file):
+            os.remove(override_file)
+            logger.info("Removed /etc systemd service override file")
+            result = subprocess.run([SYSTEMCTL_BIN, 'daemon-reload'], capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                logger.warning("daemon-reload failed after /etc override cleanup: %s", (result.stderr or '').strip())
+        return True
+    except Exception as exc:
+        logger.warning("Failed to cleanup /etc systemd override: %s", exc)
+        return False
+
+
 def _write_runtime_service_override(model_path: str) -> bool:
     """Write a runtime override to /run/systemd so model switching works even when /etc is read-only.
     /run is always writable (tmpfs), while /etc may be read-only on some systems.
     """
+    # 先清理 /etc 下的 override，避免冲突
+    _cleanup_etc_override()
+
     try:
         override_dir = f"/run/systemd/system/{VLLM_SERVICE_NAME}.service.d"
         override_file = os.path.join(override_dir, "override.conf")
