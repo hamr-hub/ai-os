@@ -2,14 +2,10 @@ import pytest
 from unittest.mock import MagicMock, patch
 from starlette.testclient import TestClient
 from fastapi import FastAPI, Request, Response
+from middleware.admin_whitelist import AdminWhitelistMiddleware
 
 
 class TestAdminWhitelistMiddleware:
-    def _create_middleware(self, trusted_proxies=None):
-        from middleware.admin_whitelist import AdminWhitelistMiddleware
-        mw = AdminWhitelistMiddleware(trusted_proxies=trusted_proxies or [])
-        return mw
-
     def _create_app_with_middleware(self, trusted_proxies=None):
         app = FastAPI()
 
@@ -33,7 +29,6 @@ class TestAdminWhitelistMiddleware:
         async def manage_head():
             return Response(status_code=200)
 
-        mw = self._create_middleware(trusted_proxies=trusted_proxies)
         app.add_middleware(AdminWhitelistMiddleware, trusted_proxies=trusted_proxies or [])
 
         return app
