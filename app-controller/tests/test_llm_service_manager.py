@@ -39,7 +39,8 @@ class TestBuildCommandVLLM:
     def test_vllm_basic_command(self):
         mgr = _make_manager()
         cmd = mgr.build_command("Qwen3-235B", "vllm", 8000)
-        assert "python" in cmd[0] or "-m" in cmd
+        assert cmd[0] == "vllm"
+        assert "serve" in cmd
         assert "vllm" in " ".join(cmd)
         assert "/mnt/pve_models/Qwen3-235B" in " ".join(cmd)
         assert "--port" in " ".join(cmd)
@@ -76,14 +77,15 @@ class TestBuildCommandVLLM:
         cmd = mgr.build_command("Qwen3-235B", "vllm", 8000)
         cmd_str = " ".join(cmd)
         assert "--tool-call-parser" in cmd_str
-        assert "--enable-tool-call" in cmd_str
+        assert "--enable-auto-tool-choice" in cmd_str
 
 
 class TestBuildCommandSGLang:
     def test_sglang_basic_command(self):
         mgr = _make_manager()
         cmd = mgr.build_command("Qwen3-235B", "sglang", 8100)
-        assert "python" in cmd[0] or "-m" in cmd
+        assert cmd[0] == "vllm"
+        assert "serve" in cmd
         assert "sglang" in " ".join(cmd)
         assert "--port" in " ".join(cmd)
         assert "--model-path" in " ".join(cmd)

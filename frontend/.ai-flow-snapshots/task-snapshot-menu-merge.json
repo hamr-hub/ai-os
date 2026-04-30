@@ -1,0 +1,30 @@
+{
+  "taskId": "menu-merge",
+  "timestamp": "2026-04-30T09:03:07.057Z",
+  "expectedFiles": [],
+  "gitStatus": {
+    "modified": [
+      "app-controller/tests/test_llm_service_manager.py",
+      "docs/tasks/menu-merge/execution-trace.md",
+      "docs/tasks/menu-merge/plan.yaml",
+      "docs/tasks/menu-merge/stage-state.json",
+      "frontend/src/components/Sidebar.vue",
+      "frontend/src/router/index.ts",
+      "frontend/src/stores/agentChat.ts",
+      "frontend/src/types/index.ts",
+      "frontend/src/views/Dashboard.vue"
+    ],
+    "added": [],
+    "deleted": [],
+    "renamed": [],
+    "untracked": [
+      "docs/tasks/menu-merge/verification-report.md",
+      "frontend/docs/tasks/menu-merge/",
+      "frontend/src/views/GPUMonitor.vue",
+      "frontend/src/views/ModelCenter.vue",
+      "frontend/src/views/SystemOps.vue"
+    ]
+  },
+  "branch": "main",
+  "commit": "bf3dab41c61a558f53d59938ebb32fe5df3db976"
+}

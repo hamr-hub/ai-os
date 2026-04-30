@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import type { ChatContentPart, MessageAttachment } from '@/types'
 
 export interface ToolInvocation {
   id: string
@@ -16,6 +17,8 @@ export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  contentParts?: ChatContentPart[]
+  attachments?: MessageAttachment[]
   timestamp: Date
   toolCalls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>
   toolInvocations?: ToolInvocation[]
@@ -34,6 +37,27 @@ export interface Conversation {
 }
 
 const STORAGE_KEY = 'agent-conversations'
+const STORAGE_SIZE_LIMIT = 4 * 1024 * 1024
+const PRESERVE_MESSAGE_COUNT = 8
+
+const pruneMessageForStorage = (message: Message): Message => {
+  if (!message.attachments?.length && !message.contentParts?.some((part) => part.type === 'image_url')) {
+    return message
+  }
+
+  const prunedAttachments = message.attachments?.map((attachment) => ({
+    ...attachment,
+    dataUrl: '',
+  }))
+
+  const prunedContentParts = message.contentParts?.filter((part) => part.type !== 'image_url')
+
+  return {
+    ...message,
+    attachments: prunedAttachments,
+    contentParts: prunedContentParts?.length ? prunedContentParts : undefined,
+  }
+}
 
 export const useAgentChatStore = defineStore('agentChat', () => {
   const conversations = ref<Conversation[]>([])
@@ -107,6 +131,25 @@ export const useAgentChatStore = defineStore('agentChat', () => {
     }
   }
 
+  const buildContentParts = (content: string, attachments: MessageAttachment[] = []) => {
+    const parts: ChatContentPart[] = []
+
+    if (content.trim()) {
+      parts.push({ type: 'text', text: content })
+    }
+
+    attachments.forEach((attachment) => {
+      if (attachment.dataUrl) {
+        parts.push({
+          type: 'image_url',
+          image_url: { url: attachment.dataUrl, detail: 'auto' },
+        })
+      }
+    })
+
+    return parts
+  }
+
   const addMessage = (conversationId: string, role: Message['role'], content: string) => {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (conv) {
@@ -127,6 +170,36 @@ export const useAgentChatStore = defineStore('agentChat', () => {
       return message
     }
     return null
+  }
+
+  const addMessageWithAttachments = (
+    conversationId: string,
+    role: Message['role'],
+    content: string,
+    attachments: MessageAttachment[] = []
+  ) => {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (!conv) return null
+
+    const contentParts = buildContentParts(content, attachments)
+    const message: Message = {
+      id: generateId(),
+      role,
+      content,
+      contentParts: contentParts.length ? contentParts : undefined,
+      attachments: attachments.length ? attachments : undefined,
+      timestamp: new Date(),
+    }
+
+    conv.messages.push(message)
+    conv.updatedAt = new Date()
+
+    if (conv.title === '新会话' && role === 'user') {
+      conv.title = content.slice(0, 20) || (attachments.length ? '[图片]' : '新会话')
+    }
+
+    saveToStorage()
+    return message
   }
 
   const updateMessage = (
@@ -156,7 +229,21 @@ export const useAgentChatStore = defineStore('agentChat', () => {
   }
 
   const saveToStorage = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations.value))
+    const serialized = JSON.stringify(conversations.value)
+    if (serialized.length <= STORAGE_SIZE_LIMIT) {
+      localStorage.setItem(STORAGE_KEY, serialized)
+      return
+    }
+
+    const prunedConversations = conversations.value.map((conversation) => ({
+      ...conversation,
+      messages: conversation.messages.map((message, index, messages) => {
+        const preserve = index >= messages.length - PRESERVE_MESSAGE_COUNT
+        return preserve ? message : pruneMessageForStorage(message)
+      }),
+    }))
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(prunedConversations))
   }
 
   const loadFromStorage = () => {
@@ -172,6 +259,8 @@ export const useAgentChatStore = defineStore('agentChat', () => {
           updatedAt: new Date(c.updatedAt),
           messages: c.messages.map((m: Message) => ({
             ...m,
+            contentParts: m.contentParts ?? undefined,
+            attachments: m.attachments ?? undefined,
             toolCalls: m.toolCalls ?? [],
             toolInvocations: (m.toolInvocations ?? []).map((tool) => ({
               ...tool,
@@ -203,6 +292,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
     setConversationModel,
     setConversationSystemPrompt,
     addMessage,
+    addMessageWithAttachments,
     updateMessage,
     clearMessages,
   }

@@ -13,19 +13,16 @@ import VLLMMetricsCard from '@/components/cards/VLLMMetricsCard.vue'
 import SystemStatusCard from '@/components/cards/SystemStatusCard.vue'
 import TokenUsageCard from '@/components/cards/TokenUsageCard.vue'
 import HealthAlertCard from '@/components/cards/HealthAlertCard.vue'
-import RunningModelsCard from '@/components/cards/RunningModelsCard.vue'
-import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server, Gpu, CircleDot, AlertTriangle, CheckCircle } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
+import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server, Gpu, CircleDot, AlertTriangle, CheckCircle, ArrowRight, Layers, Star } from 'lucide-vue-next'
 import { formatBytes } from '@/utils/format'
 import type { EngineType } from '@/types'
+
+const router = useRouter()
 
 const {
   modelList,
   defaultModel,
-  actionLoading,
-  switchingModel,
-  handleStartModel,
-  handleStopModel,
-  handleSwitchAndSetDefault,
   refresh: refreshModels,
   isRefreshing: isRefreshingModels,
 } = useModels()
@@ -312,15 +309,26 @@ const handleScale = (cardId: string, delta: number) => {
               <button class="scale-btn" @click="handleScale('models', 0.1)">+</button>
               <button class="scale-btn" @click="handleScale('models', -0.1)">−</button>
             </div>
-            <RunningModelsCard
-              :model-list="modelList"
-              :default-model="defaultModel"
-              :action-loading="actionLoading"
-              :switching-model="switchingModel"
-              :handle-start-model="handleStartModel"
-              :handle-stop-model="handleStopModel"
-              :handle-switch-and-set-default="handleSwitchAndSetDefault"
-            />
+            <div class="card-header">
+              <div class="icon-wrap green"><Layers class="card-icon-inner" /></div>
+              <span class="card-title">运行模型</span>
+              <span class="count-badge">{{ modelList.filter(m => m.running).length }} / {{ modelList.length }}</span>
+              <button class="goto-btn" @click="router.push('/modelcenter')">
+                <ArrowRight class="w-4 h-4" /> 前往模型中心
+              </button>
+            </div>
+            <div v-if="modelList.filter(m => m.running).length" class="running-list">
+              <div v-for="model in modelList.filter(m => m.running)" :key="model.name" class="model-row">
+                <div class="model-info">
+                  <span class="model-name">{{ model.name }}</span>
+                  <span class="model-meta">端口 {{ model.port }} · {{ model.active_requests }} 请求</span>
+                </div>
+                <span v-if="defaultModel === model.name" class="default-tag">
+                  <Star class="default-icon" /> 默认
+                </span>
+              </div>
+            </div>
+            <div v-else class="empty-state">暂无运行模型</div>
           </div>
 
           <div class="card engine-card card-glow-primary scale-in stagger-7">
@@ -479,6 +487,11 @@ const handleScale = (cardId: string, delta: number) => {
 .icon-wrap.cyan {
   background: rgba(6, 182, 212, 0.15);
   color: #06b6d4;
+}
+
+.icon-wrap.green {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
 }
 
 .card-icon-inner {
@@ -799,5 +812,83 @@ const handleScale = (cardId: string, delta: number) => {
   font-size: 13px;
   text-align: center;
   padding: 20px;
+}
+
+.goto-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-primary-light);
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+
+.goto-btn:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.running-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border-left: 3px solid #22c55e;
+}
+
+.model-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.model-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.default-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.default-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.count-badge {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 2px 8px;
+  border-radius: 10px;
 }
 </style>

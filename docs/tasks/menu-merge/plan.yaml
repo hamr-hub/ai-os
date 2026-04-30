@@ -103,13 +103,28 @@ plan:
         - "新增modelcenter/gpumonitor/systemops菜单项"
         - "图标和标签与tech方案一致"
 
+    - id: "T0-3"
+      priority: "P0"
+      type: "test"
+      title: "为Dashboard改造编写测试"
+      test_type: "component"
+      file: "frontend/src/views/__tests__/dashboard-merge.spec.ts"
+      given: "Dashboard页面渲染，模型状态卡片可见"
+      when: "用户查看Dashboard操作区域"
+      then:
+        - "不应存在模型启停操作按钮(start/stop/switch)"
+        - "应存在'前往模型中心'引导按钮"
+        - "GPU卡片和引擎卡片无操作按钮"
+        - "模型状态展示卡片仅显示running/stopped状态"
+      depends_on: []
+
     - id: "P0-6"
       priority: "P0"
       type: "code"
       title: "改造Dashboard — 去掉启停操作，添加引导链接"
       files:
         - "frontend/src/views/Dashboard.vue"
-      depends_on: ["P0-4", "P0-5"]
+      depends_on: ["T0-3", "P0-4", "P0-5"]
       definition_of_done:
         - "移除handleStartModel/handleStopModel/handleSwitchAndSetDefault操作按钮"
         - "保留模型状态展示卡片"

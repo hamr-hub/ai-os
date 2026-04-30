@@ -9,24 +9,24 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Dashboard.vue'),
   },
   {
-    path: '/monitor',
-    name: 'monitor',
-    component: () => import('@/views/MonitorView.vue'),
+    path: '/modelcenter',
+    name: 'modelcenter',
+    component: () => import('@/views/ModelCenter.vue'),
   },
   {
-    path: '/models',
-    name: 'models',
-    component: () => import('@/views/ModelManagement.vue'),
+    path: '/gpumonitor',
+    name: 'gpumonitor',
+    component: () => import('@/views/GPUMonitor.vue'),
+  },
+  {
+    path: '/systemops',
+    name: 'systemops',
+    component: () => import('@/views/SystemOps.vue'),
   },
   {
     path: '/agent',
     name: 'agent',
     component: () => import('@/views/AgentView.vue'),
-  },
-  {
-    path: '/benchmarks',
-    name: 'benchmarks',
-    component: () => import('@/views/ModelBenchmarks.vue'),
   },
   {
     path: '/docs',
@@ -39,39 +39,44 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/DocsView.vue'),
   },
   {
-    path: '/gpumanage',
-    name: 'gpumanage',
-    component: () => import('@/views/GPUManage.vue'),
+    path: '/models',
+    redirect: { name: 'modelcenter', query: { tab: 'schedule' } },
   },
   {
     path: '/modelhub',
-    name: 'modelhub',
-    component: () => import('@/views/ModelHubPage.vue'),
+    redirect: { name: 'modelcenter', query: { tab: 'search' } },
   },
   {
     path: '/modelpool',
-    name: 'modelpool',
-    component: () => import('@/views/ModelPoolPage.vue'),
+    redirect: { name: 'modelcenter', query: { tab: 'pool' } },
+  },
+  {
+    path: '/benchmarks',
+    redirect: { name: 'modelcenter', query: { tab: 'benchmark' } },
+  },
+  {
+    path: '/monitor',
+    redirect: { name: 'gpumonitor', query: { tab: 'performance' } },
+  },
+  {
+    path: '/gpumanage',
+    redirect: { name: 'gpumonitor', query: { tab: 'manage' } },
   },
   {
     path: '/engines',
-    name: 'engines',
-    component: () => import('@/views/EngineManagementPage.vue'),
+    redirect: { name: 'systemops', query: { tab: 'engine' } },
   },
   {
     path: '/ratelimit',
-    name: 'ratelimit',
-    component: () => import('@/views/RateLimitPage.vue'),
+    redirect: { name: 'systemops', query: { tab: 'ratelimit' } },
   },
   {
     path: '/config',
-    name: 'config',
-    component: () => import('@/views/ConfigManagementPage.vue'),
+    redirect: { name: 'systemops', query: { tab: 'config' } },
   },
   {
     path: '/health',
-    name: 'health',
-    component: () => import('@/views/HealthOpsPage.vue'),
+    redirect: { name: 'systemops', query: { tab: 'health' } },
   },
   {
     path: '/login',
@@ -88,7 +93,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
-    component: () => import('@/views/Dashboard.vue'),
+    redirect: { name: 'dashboard' },
   },
 ]
 

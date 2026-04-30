@@ -335,9 +335,22 @@ export interface TokenStats {
   timestamp: string
 }
 
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+
+export interface MessageAttachment {
+  id: string
+  dataUrl: string
+  mimeType: string
+  name: string
+  sizeBytes: number
+  thumbnailUrl?: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
-  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>
+  content: string | ChatContentPart[]
 }
 
 export interface ChatCompletionRequest {
@@ -369,7 +382,7 @@ export interface AgentToolCall {
 
 export interface AgentMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
-  content: string
+  content: string | ChatContentPart[]
   tool_calls?: Array<{
     id: string
     type: 'function'

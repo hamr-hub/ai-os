@@ -15,12 +15,7 @@ import {
   BookOpen,
   ShieldCheck,
   Cpu,
-  Database,
-  Search,
-  Gauge,
   Settings,
-  Heart,
-  Shield,
 } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
 import { useGPU } from '@/composables/useGPU'
@@ -36,34 +31,21 @@ const groups = [
     title: '核心控制',
     items: [
       { name: 'dashboard', label: '总览面板', icon: LayoutDashboard },
-      { name: 'models', label: '模型调度', icon: Server },
-      { name: 'modelhub', label: '模型搜索', icon: Search },
-      { name: 'modelpool', label: '模型池', icon: Database },
-      { name: 'benchmarks', label: '模型评测', icon: ShieldCheck },
+      { name: 'modelcenter', label: '模型中心', icon: Server },
+    ],
+  },
+  {
+    title: '监控运维',
+    items: [
+      { name: 'gpumonitor', label: 'GPU监控', icon: Activity },
+      { name: 'systemops', label: '系统运维', icon: Settings },
+    ],
+  },
+  {
+    title: '工具',
+    items: [
       { name: 'agent', label: 'AI Agent', icon: Bot },
-    ],
-  },
-  {
-    title: '数据监控',
-    items: [
-      { name: 'monitor', label: '实时性能', icon: Activity },
-      { name: 'gpumanage', label: 'GPU 管理', icon: Cpu },
       { name: 'docs', label: '系统文档', icon: BookOpen },
-    ],
-  },
-  {
-    title: '系统管理',
-    items: [
-      { name: 'engines', label: '引擎管理', icon: Zap },
-      { name: 'ratelimit', label: '限流控制', icon: Gauge },
-      { name: 'config', label: '配置中心', icon: Settings },
-      { name: 'health', label: '健康运维', icon: Heart },
-    ],
-  },
-  {
-    title: '安全',
-    items: [
-      { name: 'login', label: '安全鉴权', icon: Shield },
     ],
   },
 ]
