@@ -10,8 +10,8 @@
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "97c731f8-8290-4959-8c4f-960fb4b3184c",
       "isHealthy": true,
-      "lastUsed": "2026-04-30T10:00:38.066Z",
-      "usageCount": 1,
+      "lastUsed": "2026-04-30T10:03:05.011Z",
+      "usageCount": 2,
       "errorCount": 0,
       "lastErrorTime": null,
       "supportedModels": [],
@@ -22,7 +22,7 @@
       "lastHealthCheckTime": "2026-04-29T14:33:36.586Z",
       "lastHealthCheckModel": "Gemma-4-31B-Abliterated",
       "lastErrorMessage": null,
-      "lastRefreshTime": 1777543238066,
+      "lastRefreshTime": 1777543385011,
       "_lastSelectionSeq": 0,
       "lastModelSwitchTime": "2026-04-29T04:51:41.923Z"
     }

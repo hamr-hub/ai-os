@@ -71,9 +71,6 @@ async function ensureInjectedStaticIndex() {
     } catch (error) {
         logger.error('[AI-OS Manager] Failed to inject static index:', error.message);
     }
-} catch (error) {
-        logger.error('[AI-OS Manager] Failed to inject static index:', error.message);
-    }
 }
 
 const aiOsManagerPlugin = {
