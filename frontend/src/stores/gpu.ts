@@ -1,9 +1,27 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getGPUSummary } from '@/api/client'
-import type { GPUSummary } from '@/types'
+import type { GPUSummary, GPUStatus } from '@/types'
 import { isAbortError } from '@/utils/request'
 import { useMonitorWS } from '@/utils/monitorWebSocket'
+
+const toSummaryCurrent = (gpu: GPUStatus): GPUSummary['current'] => ({
+  name: gpu.name,
+  gpu_count: gpu.all_gpus?.length || gpu.gpu_count || 1,
+  utilization: gpu.utilization,
+  temperature: gpu.temperature,
+  power_draw: gpu.power_draw,
+  power_limit: gpu.power_limit,
+  power_percent: gpu.power_percent,
+  memory_utilization: gpu.memory_utilization,
+  used_memory: gpu.used_memory,
+  available_memory: gpu.available_memory,
+  total_memory: gpu.total_memory,
+  fan_speed: gpu.fan_speed,
+  clock_sm: gpu.clock_sm,
+  clock_mem: gpu.clock_mem,
+  vllm_metrics: gpu.vllm_metrics,
+})
 
 export const useGPUStore = defineStore('gpu', () => {
   const gpuSummary = ref<GPUSummary | null>(null)
@@ -40,19 +58,16 @@ export const useGPUStore = defineStore('gpu', () => {
     }
   }
 
-  const handleWSMessage = (data: any) => {
-    if (data.gpu) {
-      gpuSummary.value = {
-        current: data.gpu,
-        status: data.gpu.status || 'available',
-        history: gpuSummary.value?.history || [],
-        models: data.models || gpuSummary.value?.models,
-        current_model: data.current_model || gpuSummary.value?.current_model,
-        default_model: data.default_model || gpuSummary.value?.default_model,
-      }
-      loading.value = false
-      error.value = null
+  const handleWSMessage = (data: { gpu?: GPUStatus }) => {
+    if (!data.gpu) return
+
+    gpuSummary.value = {
+      status: data.gpu.status || 'available',
+      current: toSummaryCurrent(data.gpu),
+      history: gpuSummary.value?.history || [],
     }
+    loading.value = false
+    error.value = null
   }
 
   const startPolling = () => {
