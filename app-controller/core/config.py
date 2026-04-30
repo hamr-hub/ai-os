@@ -41,6 +41,10 @@ class ModelConfig(BaseModel):
     n_threads: Optional[int] = None
     host: str = "0.0.0.0"
     extra_args: List[str] = Field(default_factory=list)
+    engine_type: str = "vllm"
+    vllm_params: Dict[str, Any] = Field(default_factory=dict)
+    sglang_params: Dict[str, Any] = Field(default_factory=dict)
+    llamacpp_params: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator('required_memory')
     @classmethod
@@ -52,6 +56,14 @@ class ModelConfig(BaseModel):
         has_valid_suffix = any(v.endswith(suffix) for suffix in valid_suffixes)
         if not has_valid_suffix:
             raise ValueError(f"Invalid memory format: {v}. Use format like '8GB', '16GB', etc.")
+        return v
+
+    @field_validator('engine_type')
+    @classmethod
+    def validate_engine_type(cls, v):
+        valid_types = ['vllm', 'sglang', 'llamacpp']
+        if v not in valid_types:
+            raise ValueError(f"engine_type must be one of {valid_types}, got {v!r}")
         return v
 
 class QueueConfig(BaseModel):
@@ -97,6 +109,9 @@ class AppConfig(BaseModel):
     models: Dict[str, ModelConfig] = Field(default_factory=dict)
     settings: SettingsConfig = Field(default_factory=SettingsConfig)
     vllm: Optional[Dict[str, Any]] = None
+    engines: Dict[str, Any] = Field(default_factory=dict)
+    model_groups: Dict[str, Any] = Field(default_factory=dict)
+    feature_flags: Dict[str, Any] = Field(default_factory=dict)
 
     def get_model(self, model_name: str) -> Optional[ModelConfig]:
         return self.models.get(model_name)
@@ -114,6 +129,10 @@ class AppConfig(BaseModel):
 
     def get_min_available_memory(self) -> str:
         return self.settings.min_available_memory
+
+    def get_engine_type(self, model_name: str) -> str:
+        model = self.get_model(model_name)
+        return model.engine_type if model else "vllm"
 
 def parse_memory_size(size_str: str) -> int:
     if not size_str:

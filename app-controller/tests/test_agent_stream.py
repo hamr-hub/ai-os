@@ -1,10 +1,10 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from routes.agent import _stream_agent_completion
+from routes.agent import _agent_stream
 
 
 class DummyResponse:
@@ -32,7 +32,7 @@ class DummyResponse:
 
 
 @pytest.mark.asyncio
-async def test_stream_agent_completion_emits_tool_calls_end(monkeypatch):
+async def test_stream_agent_completion_emits_tool_calls_end():
     fake_client = SimpleNamespace(
         post=AsyncMock(return_value=DummyResponse()),
     )
@@ -41,24 +41,24 @@ async def test_stream_agent_completion_emits_tool_calls_end(monkeypatch):
         if False:
             yield None
 
-    monkeypatch.setattr("routes.agent.httpx.AsyncClient", lambda *args, **kwargs: fake_client)
     fake_client.stream = _fake_stream
 
     executor = SimpleNamespace(
         execute=AsyncMock(return_value=SimpleNamespace(success=True, result={"ok": True}, error=None))
     )
 
-    events = []
-    async for chunk in _stream_agent_completion(
-        backend_url="http://localhost:35000",
-        model_name="demo",
-        messages=[],
-        tools=[],
-        executor=executor,
-        max_iterations=1,
-        auto_confirm=False,
-    ):
-        events.append(chunk)
+    with patch("httpx.AsyncClient", return_value=fake_client):
+        events = []
+        async for chunk in _agent_stream(
+            backend_url="http://localhost:35000",
+            model_name="demo",
+            messages=[],
+            tools=[],
+            executor=executor,
+            max_iterations=1,
+            auto_confirm=False,
+        ):
+            events.append(chunk)
 
     joined = "".join(events)
     assert '"type": "tool_calls_start"' in joined

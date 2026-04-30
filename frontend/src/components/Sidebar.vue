@@ -15,6 +15,8 @@ import {
   BookOpen,
   ShieldCheck,
   Cpu,
+  Database,
+  Search,
 } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
 import { useGPU } from '@/composables/useGPU'
@@ -31,6 +33,8 @@ const groups = [
     items: [
       { name: 'dashboard', label: '总览面板', icon: LayoutDashboard },
       { name: 'models', label: '模型调度', icon: Server },
+      { name: 'modelhub', label: '模型搜索', icon: Search },
+      { name: 'modelpool', label: '模型池', icon: Database },
       { name: 'benchmarks', label: '模型评测', icon: ShieldCheck },
       { name: 'agent', label: 'AI Agent', icon: Bot },
     ],

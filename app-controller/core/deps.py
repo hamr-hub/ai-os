@@ -77,12 +77,54 @@ model_tester = ModelTestingFramework(scheduler, gpu_monitor)  # 模型测试框�
 cache_updater = CacheUpdater(gpu_monitor, scheduler)    # 缓存更新器（定时刷新缓存）
 
 from core.model_switch_orchestrator import ModelSwitchOrchestrator
+_engine_manager_mode = config.get("vllm", {}).get("engine_manager_mode", "systemd")
 model_switch_orchestrator = ModelSwitchOrchestrator(
     ws_manager=ws_manager,
     vllm_service_name=VLLM_SERVICE_NAME,
     vllm_port=VLLM_DEFAULT_PORT,
     model_base_path=MODEL_BASE_PATH,
+    gpu_memory_manager=None,
+    engine_manager_mode=_engine_manager_mode,
 )
+
+from core.gpu_memory_manager import GPUMemoryManager
+gpu_memory_manager = GPUMemoryManager(config)
+
+model_switch_orchestrator._gpu_memory_manager = gpu_memory_manager
+
+from core.sse_push import sse_push_manager
+sse_push_manager = sse_push_manager
+
+from core.llm_service_manager import LLMServiceManager
+llm_service_manager = LLMServiceManager(config)
+
+model_switch_orchestrator._llm_service_manager = llm_service_manager
+
+from core.model_hub import MultiSourceModelHub
+model_hub = MultiSourceModelHub(config, gpu_memory_manager=gpu_memory_manager)
+
+from core.model_pool import ModelPoolManager
+model_pool_manager = ModelPoolManager(
+    config, gpu_memory_manager=gpu_memory_manager,
+    llm_service_manager=llm_service_manager, model_hub=model_hub,
+)
+
+from core.download_manager import DownloadTaskManager
+download_task_manager = DownloadTaskManager(
+    config, model_hub=model_hub, model_pool=model_pool_manager,
+    ws_manager=ws_manager, sse_push=sse_push_manager,
+)
+
+from core.model_engine_scheduler import ModelEngineScheduler
+model_engine_scheduler = ModelEngineScheduler(
+    config, gpu_memory_manager=gpu_memory_manager, model_hub=model_hub,
+    download_manager=download_task_manager, model_pool=model_pool_manager,
+    llm_service_manager=llm_service_manager,
+)
+
+from core.agent_system import AgentSystem, AgentSessionManager
+agent_system = AgentSystem(config, sse_push=sse_push_manager)
+agent_session_manager = AgentSessionManager()
 
 # HTTP 客户端超时配置（用于代理请求到 vLLM）
 VLLM_REQUEST_TIMEOUT = httpx.Timeout(60.0, connect=10.0)          # 普通请求：60 秒总超时，10 秒连接超时

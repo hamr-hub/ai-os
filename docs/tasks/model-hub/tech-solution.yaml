@@ -1,0 +1,446 @@
+meta:
+  title: "多源下载+模型搜索+显存优选+引擎管理+模型池"
+  platform: "backend_python+frontend_vue"
+  version: "1.0"
+  requirement_version: "1.3"
+  requirement_confidence: "high"
+  business_goal: "实现大模型全生命周期管理: 从搜索发现→显存优选→多源下载→引擎加载→统一调度"
+
+scope:
+  in_scope:
+    - "6个Python核心模块(GPUMemoryManager/MultiSourceModelHub/DownloadTaskManager/ModelPoolManager/LLMServiceManager/ModelEngineScheduler)"
+    - "11个新增API路由(搜索/下载/模型池/显存优选)"
+    - "Go网关11个代理路由"
+    - "2个前端新页面(ModelSearchView/ModelPoolView)+7组件+3composables"
+    - "WebSocket /ws/download 频道"
+    - "config.yaml engines/download配置段扩展"
+    - "model_switch_orchestrator Phase2.5显存校验集成"
+  out_of_scope:
+    - "JWT鉴权/RBAC(已在PRD第7.6节规划,本次不实现)"
+    - "OpenTelemetry对接(已在架构风险规划)"
+    - "Go多实例+Nginx负载均衡(高可用规划)"
+    - "删除旧模块sys_ctl.py(Phase 12,低优先级)"
+    - "SGLang引擎命令行参数详细适配(Phase 6,基础支持先实现)"
+
+global_constraints:
+  - "torch.cuda优先,不可用时降级nvidia-smi(误差<5%)"
+  - "subprocess.Popen进程管理,可降级回systemd(config开关)"
+  - "ModelScope首选下载源(国内速度最快)"
+  - "新增模块独立可插拔,旧模块保留,config开关降级"
+  - "85%显存安全水位线,启动前校验"
+  - "85%磁盘水位告警,95%终止下载"
+  - "max_concurrent_downloads=3并发下载限制"
+
+file_changes:
+  - path: "app-controller/core/gpu_memory_manager.py"
+    change: "add"
+    summary: "GPU显存精准检测+模型显存估算+可行性校验(torch.cuda+nvidia-smi降级)"
+    risk: "low"
+    depends_on: ["app-controller/core/monitor.py"]
+
+  - path: "app-controller/core/model_hub.py"
+    change: "add"
+    summary: "多源模型搜索+下载(HuggingFace/ModelScope/OpenXLab)"
+    risk: "medium"
+    depends_on: ["app-controller/core/gpu_memory_manager.py"]
+
+  - path: "app-controller/core/download_manager.py"
+    change: "add"
+    summary: "下载任务生命周期管理(创建/进度/取消/完成回调/磁盘校验)"
+    risk: "medium"
+    depends_on: ["app-controller/core/model_hub.py", "app-controller/core/model_pool.py"]
+
+  - path: "app-controller/core/model_pool.py"
+    change: "add"
+    summary: "模型池统一管理(下载入库/本地扫描同步/查询/加载/删除/配置同步)"
+    risk: "medium"
+    depends_on: ["app-controller/core/gpu_memory_manager.py"]
+
+  - path: "app-controller/core/llm_service_manager.py"
+    change: "add"
+    summary: "统一引擎进程管理(subprocess.Popen替代systemd,支持vLLM+SGLang)"
+    risk: "high"
+    implementation_notes:
+      - "进程管理稳定性不如systemd,需3次自动重启兜底"
+      - "config开关engine_manager_mode可降级回systemd"
+
+  - path: "app-controller/core/model_engine_scheduler.py"
+    change: "add"
+    summary: "终极调度中心(显存优选+搜索下载+模型池+引擎切换统一入口)"
+    risk: "medium"
+    depends_on: ["app-controller/core/gpu_memory_manager.py", "app-controller/core/model_hub.py", "app-controller/core/model_pool.py", "app-controller/core/llm_service_manager.py"]
+
+  - path: "app-controller/routes/manage.py"
+    change: "modify"
+    summary: "新增11个管理路由(搜索/下载/模型池/显存优选/显存校验)"
+    risk: "low"
+
+  - path: "app-controller/routes/websocket.py"
+    change: "modify"
+    summary: "新增/ws/download WebSocket频道"
+    risk: "low"
+
+  - path: "app-controller/core/deps.py"
+    change: "modify"
+    summary: "注册6个新模块单例(GPUMemoryManager/MultiSourceModelHub/DownloadTaskManager/ModelPoolManager/LLMServiceManager/ModelEngineScheduler)"
+    risk: "low"
+
+  - path: "app-controller/requirements.txt"
+    change: "modify"
+    summary: "新增5个依赖(huggingface-hub/modelscope/openxlab/torch/psutil)"
+    risk: "medium"
+
+  - path: "app-controller/core/model_switch_orchestrator.py"
+    change: "modify"
+    summary: "新增Phase2.5显存校验(GPUMemoryManager.check_model_feasibility),调用LLMServiceManager替代sys_ctl"
+    risk: "high"
+    implementation_notes:
+      - "修改核心切换流程,需确保回滚机制不受影响"
+
+  - path: "app-controller/core/scheduler.py"
+    change: "modify"
+    summary: "调用ModelPoolManager获取模型信息,与模型池协调"
+    risk: "medium"
+
+  - path: "app-controller/config.yaml"
+    change: "modify"
+    summary: "新增engines/download配置段,模型增加engine_type/source字段"
+    risk: "low"
+
+  - path: "go-vllm-api/internal/handler/manage/manage.go"
+    change: "modify"
+    summary: "新增11个代理路由(搜索/下载/模型池/显存优选/显存校验→转发Python)"
+    risk: "low"
+
+  - path: "go-vllm-api/internal/config/config.go"
+    change: "modify"
+    summary: "新增EnginesConfig/DownloadConfig结构体"
+    risk: "low"
+
+  - path: "frontend/src/views/ModelSearchView.vue"
+    change: "add"
+    summary: "模型搜索+下载+显存优选页面(搜索输入/结果列表/推荐面板/下载进度)"
+    risk: "medium"
+    depends_on: ["frontend/src/api/client.ts", "frontend/src/types/index.ts"]
+
+  - path: "frontend/src/views/ModelPoolView.vue"
+    change: "add"
+    summary: "模型池管理页面(列表/详情/加载/删除)"
+    risk: "medium"
+    depends_on: ["frontend/src/api/client.ts"]
+
+  - path: "frontend/src/components/SearchBar.vue"
+    change: "add"
+    summary: "搜索输入+平台选择+limit设置组件"
+    risk: "low"
+
+  - path: "frontend/src/components/SearchResultList.vue"
+    change: "add"
+    summary: "搜索结果列表(含显存可行性标注✅❌)"
+    risk: "low"
+
+  - path: "frontend/src/components/RecommendPanel.vue"
+    change: "add"
+    summary: "显存优选推荐面板(可用显存+推荐最优模型)"
+    risk: "low"
+
+  - path: "frontend/src/components/DownloadProgress.vue"
+    change: "add"
+    summary: "下载进度条(百分比/速度/ETA/取消)"
+    risk: "low"
+
+  - path: "frontend/src/components/ModelPoolPanel.vue"
+    change: "add"
+    summary: "模型池面板(已下载模型+加载状态)"
+    risk: "low"
+
+  - path: "frontend/src/composables/useModelSearch.ts"
+    change: "add"
+    summary: "搜索+显存优选推荐composable"
+    risk: "low"
+
+  - path: "frontend/src/composables/useModelDownload.ts"
+    change: "add"
+    summary: "下载任务管理composable(创建/进度/取消)"
+    risk: "low"
+
+  - path: "frontend/src/composables/useModelPool.ts"
+    change: "add"
+    summary: "模型池composable(列表/加载/删除)"
+    risk: "low"
+
+  - path: "frontend/src/api/client.ts"
+    change: "modify"
+    summary: "新增11个API方法(searchModels/recommendModel/checkModelMemory/startDownload/getDownloadStatus/cancelDownload/listDownloads/getPoolList/getPoolDetail/loadFromPool/deleteFromPool)"
+    risk: "low"
+
+  - path: "frontend/src/types/index.ts"
+    change: "modify"
+    summary: "新增4个类型定义(SearchResult/RecommendResult/DownloadTask/PoolEntry)"
+    risk: "low"
+
+  - path: "frontend/src/router/index.ts"
+    change: "modify"
+    summary: "新增/search和/pool路由"
+    risk: "low"
+
+  - path: "frontend/src/components/Sidebar.vue"
+    change: "modify"
+    summary: "新增2个菜单项(模型搜索/模型池)"
+    risk: "low"
+
+api:
+  - name: "searchModels"
+    layer: "backend"
+    endpoint: "/manage/models/search"
+    method: "GET"
+    request_schema:
+      keyword: "string"
+      source: "string"  # modelscope/huggingface/openxlab/all
+      limit: "number?"
+    response_schema:
+      results: "SearchResult[]"
+      total: "number"
+    error_codes:
+      - code: "400"
+        meaning: "缺少keyword参数"
+        handling: "返回错误提示"
+      - code: "503"
+        meaning: "指定平台SDK不可用"
+        handling: "返回降级提示,建议切换平台"
+
+  - name: "recommendModel"
+    layer: "backend"
+    endpoint: "/manage/gpu/recommend"
+    method: "GET"
+    request_schema:
+      keyword: "string"
+      source: "string?"
+    response_schema:
+      recommended: "SearchResult"
+      gpu_info: "GPUInfo"
+      candidates: "SearchResult[]"
+    error_codes:
+      - code: "400"
+        meaning: "缺少keyword参数"
+        handling: "返回错误提示"
+      - code: "503"
+        meaning: "GPU不可用(torch.cuda/nvidia-smi均失败)"
+        handling: "返回无法检测显存提示"
+
+  - name: "checkModelMemory"
+    layer: "backend"
+    endpoint: "/manage/gpu/memory-check/{model_name}"
+    method: "POST"
+    request_schema:
+      model_name: "string"
+    response_schema:
+      feasible: "boolean"
+      available_gb: "number"
+      required_gb: "number"
+      safety_margin_gb: "number"
+      suggested_models: "string[]"
+    error_codes:
+      - code: "404"
+        meaning: "模型不存在"
+        handling: "返回模型不存在提示"
+      - code: "503"
+        meaning: "GPU检测失败"
+        handling: "降级到配置required_memory字段"
+
+  - name: "startDownload"
+    layer: "backend"
+    endpoint: "/manage/models/download"
+    method: "POST"
+    request_schema:
+      model_name: "string"
+      source: "string"  # hf/ms/oxl
+      save_dir: "string?"
+    response_schema:
+      task_id: "string"
+      status: "string"
+    error_codes:
+      - code: "400"
+        meaning: "缺少model_name/source参数"
+        handling: "返回参数错误提示"
+      - code: "409"
+        meaning: "模型已存在(无需下载)"
+        handling: "返回已有模型路径"
+      - code: "507"
+        meaning: "磁盘空间不足(>95%水位)"
+        handling: "返回磁盘不足告警"
+
+  - name: "getDownloadStatus"
+    layer: "backend"
+    endpoint: "/manage/models/download/{task_id}/status"
+    method: "GET"
+    request_schema:
+      task_id: "string"
+    response_schema:
+      task_id: "string"
+      status: "string"  # pending/downloading/completed/failed/cancelled
+      progress_pct: "number"
+      speed_mbps: "number"
+      eta_seconds: "number"
+      downloaded_bytes: "number"
+      total_bytes: "number"
+    error_codes:
+      - code: "404"
+        meaning: "任务不存在"
+        handling: "返回任务不存在提示"
+
+  - name: "cancelDownload"
+    layer: "backend"
+    endpoint: "/manage/models/download/{task_id}"
+    method: "DELETE"
+    request_schema:
+      task_id: "string"
+    response_schema:
+      cancelled: "boolean"
+    error_codes:
+      - code: "404"
+        meaning: "任务不存在"
+        handling: "返回任务不存在提示"
+
+  - name: "getPoolList"
+    layer: "backend"
+    endpoint: "/manage/models/pool"
+    method: "GET"
+    request_schema:
+      filter: "string?"  # all/local/downloaded
+      page: "number?"
+      page_size: "number?"
+    response_schema:
+      models: "PoolEntry[]"
+      total: "number"
+    error_codes:
+      - code: "500"
+        meaning: "模型池加载失败"
+        handling: "返回内部错误"
+
+  - name: "poolLoad"
+    layer: "backend"
+    endpoint: "/manage/models/pool/{model_key}/load"
+    method: "POST"
+    request_schema:
+      model_key: "string"
+      engine: "string?"  # vllm/sglang
+    response_schema:
+      success: "boolean"
+      model: "string"
+      engine: "string"
+      port: "number"
+    error_codes:
+      - code: "404"
+        meaning: "模型不在池中"
+        handling: "返回模型不存在"
+      - code: "409"
+        meaning: "显存不足"
+        handling: "返回显存不足告警+建议可运行模型"
+      - code: "409"
+        meaning: "模型正在运行"
+        handling: "返回当前运行状态"
+
+  - name: "poolDelete"
+    layer: "backend"
+    endpoint: "/manage/models/pool/{model_key}"
+    method: "DELETE"
+    request_schema:
+      model_key: "string"
+      remove_files: "boolean?"
+    response_schema:
+      deleted: "boolean"
+    error_codes:
+      - code: "404"
+        meaning: "模型不在池中"
+        handling: "返回模型不存在"
+      - code: "409"
+        meaning: "模型正在运行,无法删除"
+        handling: "返回运行状态提示"
+
+validation:
+  acceptance:
+    - criteria: "GET /manage/models/search?keyword=qwen&source=modelscope 返回搜索结果列表含size_b/quant/required_gb/feasible字段"
+      test_type: "integration"
+      priority: "P0"
+
+    - criteria: "GET /manage/gpu/recommend?keyword=qwen&source=modelscope 返回推荐最优模型+GPU信息+候选列表"
+      test_type: "integration"
+      priority: "P0"
+
+    - criteria: "POST /manage/gpu/memory-check/Qwen2.5-7B-Instruct 返回feasible/available_gb/required_gb/safety_margin_gb"
+      test_type: "integration"
+      priority: "P0"
+
+    - criteria: "POST /manage/models/download 启动下载任务,返回task_id,WebSocket推送进度"
+      test_type: "integration"
+      priority: "P1"
+
+    - criteria: "GET /manage/models/download/{task_id}/status 返回进度百分比/速度/剩余时间"
+      test_type: "integration"
+      priority: "P1"
+
+    - criteria: "DELETE /manage/models/download/{task_id} 取消下载任务"
+      test_type: "integration"
+      priority: "P1"
+
+    - criteria: "GET /manage/models/pool 返回模型池列表含来源/大小/量化/显存/本地路径/下载状态"
+      test_type: "integration"
+      priority: "P0"
+
+    - criteria: "POST /manage/models/pool/{key}/load 一键加载:显存校验→引擎启动→验证就绪"
+      test_type: "integration"
+      priority: "P1"
+
+    - criteria: "torch.cuda不可用时自动降级nvidia-smi检测,误差<5%"
+      test_type: "unit"
+      priority: "P0"
+
+    - criteria: "显存估算: 4bit=参数×0.7GB/8bit=×1.1GB/fp16=×2.0GB + 1GB冗余"
+      test_type: "unit"
+      priority: "P0"
+
+    - criteria: "搜索→下载→加载一键链路:搜索结果→下载→入库→显存校验→引擎启动→验证就绪"
+      test_type: "integration"
+      priority: "P1"
+
+    - criteria: "断点续传:下载中断后resume_download=True自动续传"
+      test_type: "integration"
+      priority: "P1"
+
+    - criteria: "磁盘空间校验:85%告警/95%终止下载"
+      test_type: "unit"
+      priority: "P1"
+
+    - criteria: "前端ModelSearchView页面:搜索→推荐→下载→加载完整交互"
+      test_type: "manual"
+      priority: "P1"
+
+    - criteria: "前端ModelPoolView页面:列表→加载→删除完整交互"
+      test_type: "manual"
+      priority: "P1"
+
+risks:
+  - level: "P0"
+    description: "subprocess.Popen进程管理不如systemd稳定,引擎异常退出时无守护"
+    mitigation: "3次自动重启兜底; config开关engine_manager_mode可降级回systemd"
+
+  - level: "P0"
+    description: "model_switch_orchestrator修改核心切换流程(Phase2.5),可能影响回滚机制"
+    mitigation: "双轨并行验证期; Phase2.5失败时直接跳过(不影响后续Phase); 配置开关控制是否启用显存校验"
+
+  - level: "P1"
+    description: "torch.cuda依赖冲突导致GPUMemoryManager无法加载"
+    mitigation: "降级到nvidia-smi解析(<5%误差可接受); try-except导入torch"
+
+  - level: "P1"
+    description: "HF/MS/OXL SDK版本不兼容导致下载/搜索功能异常"
+    mitigation: "各SDK独立版本锁定requirements.txt; 异常时降级到单一平台; 搜索失败返回503+建议切换平台"
+
+  - level: "P1"
+    description: "SGLang命令行参数与vLLM不兼容,引擎切换后参数丢失"
+    mitigation: "引擎类型→参数模板映射; config.yaml sglang_params独立配置; build_command()引擎适配"
+
+  - level: "P2"
+    description: "大模型下载速度慢,用户体验差"
+    mitigation: "ModelScope首选(国内最快); HF镜像加速; 显示速度+ETA; WebSocket实时推送进度"

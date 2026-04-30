@@ -175,7 +175,7 @@ func main() {
 		vllmManager, llamaCppMgr, modelTesting,
 		redisRepo, *configPath,
 	)
-	healthHandler := health.NewHealthHandler(gpuMonitor, scheduler, metricsCollector, cacheService, promExporter)
+	healthHandler := health.NewHealthHandler(gpuMonitor, scheduler, metricsCollector, cacheService, promExporter, vllmProxy, sysCtl, llamaCppMgr, redisRepo)
 	wsHandler := ws.NewWSHandler(wsManager, zapLogger)
 
 	v1Handler.RegisterRoutes(r.Group(""))
@@ -247,12 +247,16 @@ func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service
 
 	httpClient := &http.Client{Timeout: 2 * time.Second}
 
+	pingTicker := time.NewTicker(30 * time.Second)
+	defer pingTicker.Stop()
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-pingTicker.C:
+			ws.PingAll()
 		case <-ticker.C:
 			gpuSummary := gm.GetStatus()
 			models := s.GetAvailableModels()

@@ -28,6 +28,16 @@ import type {
   VLLMConfig,
   VLLMConfigUpdateRequest,
   SwitchStatusResponse,
+  SearchResult,
+  RecommendResult,
+  DownloadTask,
+  PoolListResponse,
+  PoolEntry,
+  MemoryCheckResult,
+  EngineType,
+  EngineStatus,
+  EngineConfig,
+  GPUMemoryInfo,
 } from '@/types'
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
@@ -501,5 +511,138 @@ export async function getSwitchStatus(): Promise<SwitchStatusResponse> {
 
 export async function cancelSwitch(): Promise<{ status: string }> {
   const { data } = await client.delete<{ status: string }>('/model-switch/cancel')
+  return data
+}
+
+export async function searchModels(keyword: string, source: string = 'all', limit: number = 10, config: AxiosRequestConfig = {}): Promise<{ results: SearchResult[]; total: number }> {
+  const { data } = await client.get<{ results: SearchResult[]; total: number }>(
+    `/manage/models/search?keyword=${encodeURIComponent(keyword)}&source=${source}&limit=${limit}`,
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function recommendModel(keyword: string, source: string = 'all', config: AxiosRequestConfig = {}): Promise<RecommendResult> {
+  const { data } = await client.get<RecommendResult>(
+    `/manage/gpu/recommend?keyword=${encodeURIComponent(keyword)}&source=${source}`,
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function checkModelMemory(modelName: string, config: AxiosRequestConfig = {}): Promise<MemoryCheckResult> {
+  const { data } = await client.post<MemoryCheckResult>(
+    `/manage/gpu/memory-check/${encodeURIComponent(modelName)}`,
+    null,
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function startDownload(modelName: string, source: string = 'hf', saveDir?: string, config: AxiosRequestConfig = {}): Promise<DownloadTask | { status: string; local_path: string; model_name: string }> {
+  const { data } = await client.post(
+    '/manage/models/download',
+    { model_name: modelName, source, save_dir: saveDir },
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function getDownloadStatus(taskId: string, config: AxiosRequestConfig = {}): Promise<DownloadTask> {
+  const { data } = await client.get<DownloadTask>(
+    `/manage/models/download/${taskId}/status`,
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function cancelDownload(taskId: string, config: AxiosRequestConfig = {}): Promise<{ cancelled: boolean; task_id: string }> {
+  const { data } = await client.delete<{ cancelled: boolean; task_id: string }>(
+    `/manage/models/download/${taskId}`,
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function listDownloads(config: AxiosRequestConfig = {}): Promise<DownloadTask[]> {
+  const { data } = await client.get<DownloadTask[]>(
+    '/manage/models/downloads',
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function getPoolList(filter: string = 'all', page: number = 1, pageSize: number = 50, config: AxiosRequestConfig = {}): Promise<PoolListResponse> {
+  const { data } = await client.get<PoolListResponse>(
+    `/manage/models/pool?filter=${filter}&page=${page}&page_size=${pageSize}`,
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function getPoolDetail(modelKey: string, config: AxiosRequestConfig = {}): Promise<PoolEntry> {
+  const { data } = await client.get<PoolEntry>(
+    `/manage/models/pool/${encodeURIComponent(modelKey)}`,
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function loadFromPool(modelKey: string, engine: string = 'vllm', config: AxiosRequestConfig = {}): Promise<{ success: boolean; model: string; engine: string; port: number }> {
+  const { data } = await client.post(
+    `/manage/models/pool/${encodeURIComponent(modelKey)}/load`,
+    { engine },
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function deleteFromPool(modelKey: string, removeFiles: boolean = false, config: AxiosRequestConfig = {}): Promise<{ deleted: boolean; model_key: string }> {
+  const { data } = await client.delete(
+    `/manage/models/pool/${encodeURIComponent(modelKey)}?remove_files=${removeFiles}`,
+    silentRequestConfig(config)
+  )
+  return data
+}
+
+export async function getLLMServiceStatus(config: AxiosRequestConfig = {}): Promise<Record<string, { running: boolean; engine: string; port: number | null; pid: number | null; started_at: string | null }>> {
+  const { data } = await client.get('/manage/service/status', silentRequestConfig(config))
+  return data
+}
+
+export async function getLLMServiceLogs(lines: number = 100, config: AxiosRequestConfig = {}): Promise<{ logs: string[]; count: number }> {
+  const { data } = await client.get('/manage/logs/test', silentRequestConfig({ params: { lines }, ...config }))
+  return data
+}
+
+export async function getEngineStatus(config: AxiosRequestConfig = {}): Promise<EngineStatus> {
+  const { data } = await client.get<EngineStatus>('/manage/engine/status', silentRequestConfig(config))
+  return data
+}
+
+export async function switchEngine(modelName: string, engineType: EngineType = 'vllm', port: number = 8000, config: AxiosRequestConfig = {}): Promise<ActionResponse & { session_id?: string }> {
+  const { data } = await client.post<ActionResponse & { session_id?: string }>(
+    '/manage/engine/switch',
+    { model_name: modelName, engine_type: engineType, port },
+    config
+  )
+  return data
+}
+
+export async function getEngineConfig(config: AxiosRequestConfig = {}): Promise<EngineConfig> {
+  const { data } = await client.get<EngineConfig>('/engines/config', silentRequestConfig(config))
+  return data
+}
+
+export async function updateEngineConfig(
+  newConfig: Partial<EngineConfig>,
+  config: AxiosRequestConfig = {}
+): Promise<EngineConfig> {
+  const { data } = await client.put<EngineConfig>('/engines/config', newConfig, config)
+  return data
+}
+
+export async function getGPUMemoryCheck(config: AxiosRequestConfig = {}): Promise<GPUMemoryInfo> {
+  const { data } = await client.get<GPUMemoryInfo>('/gpu/memory-check', silentRequestConfig(config))
   return data
 }

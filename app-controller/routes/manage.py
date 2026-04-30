@@ -14,7 +14,10 @@ from core.deps import (
     ws_manager as _ws_manager, metrics as _metrics, prometheus as _prometheus,
     cache_service as _cache_service, cache_updater as _cache_updater,
     structured_logger as _structured_logger, config_watcher as _config_watcher,
-    logger as _logger, redis_client as _redis_client
+    logger as _logger, redis_client as _redis_client,
+    gpu_memory_manager as _gpu_memory_manager, model_hub as _model_hub,
+    llm_service_manager as _llm_service_manager, model_pool_manager as _model_pool_manager,
+    download_task_manager as _download_task_manager, model_engine_scheduler as _model_engine_scheduler,
 )
 
 scheduler = _scheduler
@@ -29,6 +32,12 @@ structured_logger = _structured_logger
 config_watcher = _config_watcher
 logger = _logger
 redis_client = _redis_client
+gpu_memory_manager = _gpu_memory_manager
+model_hub = _model_hub
+llm_service_manager = _llm_service_manager
+model_pool_manager = _model_pool_manager
+download_task_manager = _download_task_manager
+model_engine_scheduler = _model_engine_scheduler
 
 manage_router = APIRouter(prefix="/manage")
 integration_router = APIRouter(prefix="/api/v1")
@@ -1236,3 +1245,305 @@ async def update_model_vllm_params(model_name: str, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update vLLM parameters: {str(e)}")
+
+
+# ===== Model Hub 新增路由 =====
+
+@manage_router.get("/models/search")
+async def search_models(keyword: str, source: str = "all", limit: int = 10):
+    if not keyword:
+        raise HTTPException(status_code=400, detail="缺少keyword参数")
+    try:
+        results = model_engine_scheduler.search(keyword, source, limit)
+        return {
+            "results": [r.__dict__ for r in results],
+            "total": len(results),
+            "keyword": keyword,
+            "source": source,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"搜索失败: {str(e)}")
+
+
+@manage_router.get("/gpu/recommend")
+async def recommend_model(keyword: str, source: str = "all"):
+    if not keyword:
+        raise HTTPException(status_code=400, detail="缺少keyword参数")
+    try:
+        result = model_engine_scheduler.recommend(keyword, source)
+        rec = result.get("recommended")
+        return {
+            "recommended": rec.__dict__ if rec else None,
+            "gpu_info": result.get("gpu_info"),
+            "candidates": [r.__dict__ for r in result.get("candidates", [])],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"推荐失败: {str(e)}")
+
+
+@manage_router.get("/gpu/memory-check")
+async def get_gpu_memory_info():
+    gpu_info = gpu_memory_manager.get_gpu_info()
+    if not gpu_info:
+        from core.gpu_memory_checker import GPUMemoryChecker
+        checker = GPUMemoryChecker()
+        gpu_info = checker.detect_all()
+    loaded_models = gpu_memory_manager.get_loaded_models_summary() if hasattr(gpu_memory_manager, 'get_loaded_models_summary') else []
+    return {
+        "gpu": gpu_info,
+        "loaded_models": loaded_models,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@manage_router.post("/gpu/memory-check/{model_name}")
+async def check_model_memory(model_name: str):
+    from core.gpu_memory_manager import GPUMemoryManager as _GM
+    size_b = _GM(None)._parse_size(model_name) if hasattr(_GM(None), '_parse_size') else None
+    quant = _GM(None)._parse_quant(model_name) if hasattr(_GM(None), '_parse_quant') else None
+    import re
+    size_match = re.search(r'(\d+(?:\.\d+)?)B', model_name, re.IGNORECASE)
+    if not size_match:
+        raise HTTPException(status_code=404, detail="无法从模型名提取参数大小")
+    size_b = float(size_match.group(1))
+    quant_match = re.search(r'(4bit|int4|8bit|int8|fp16|awq|gptq|gguf)', model_name, re.IGNORECASE)
+    quant = quant_match.group(1).lower() if quant_match else None
+    result = gpu_memory_manager.check_model_feasibility(size_b, quant)
+    if not result.get("gpu_available"):
+        raise HTTPException(status_code=503, detail="GPU检测失败，无法校验显存")
+    return result
+
+
+@manage_router.post("/models/download")
+async def start_download(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request body")
+    model_name = body.get("model_name")
+    source = body.get("source", "hf")
+    save_dir = body.get("save_dir")
+    if not model_name:
+        raise HTTPException(status_code=400, detail="缺少model_name参数")
+    result = download_task_manager.create_task(model_name, source, save_dir)
+    if result.get("status") == "error":
+        code = 507 if "磁盘" in result.get("message", "") else 500
+        raise HTTPException(status_code=code, detail=result.get("message"))
+    if result.get("status") == "already_exists":
+        return {"status": "already_exists", "local_path": result.get("local_path"), "model_name": result.get("model_name")}
+    return result
+
+
+@manage_router.get("/models/download/{task_id}/status")
+async def get_download_status(task_id: str):
+    result = download_task_manager.get_status(task_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return result
+
+
+@manage_router.delete("/models/download/{task_id}")
+async def cancel_download(task_id: str):
+    result = download_task_manager.cancel_task(task_id)
+    if not result.get("cancelled"):
+        raise HTTPException(status_code=404, detail=result.get("reason", "取消失败"))
+    return result
+
+
+@manage_router.get("/models/downloads")
+async def list_downloads():
+    return download_task_manager.list_tasks()
+
+
+@manage_router.post("/models/download/{task_id}/retry")
+async def retry_download(task_id: str):
+    result = download_task_manager.retry_task(task_id)
+    if not result.get("success"):
+        code = 404 if "not_found" in result.get("reason", "") else 409
+        raise HTTPException(status_code=code, detail=result.get("reason", "retry_failed"))
+    return result
+
+
+@manage_router.get("/models/pool")
+async def pool_list(filter: str = "all", page: int = 1, page_size: int = 50):
+    entries = model_pool_manager.get_pool_list(filter, page, page_size)
+    return {
+        "models": entries if entries and isinstance(entries[0], dict) else [e.__dict__ if hasattr(e, '__dict__') else e for e in entries],
+        "total": len(model_pool_manager._pool),
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@manage_router.get("/models/pool/{model_key}")
+async def pool_detail(model_key: str):
+    entry = model_pool_manager.get_pool_detail(model_key)
+    if not entry:
+        raise HTTPException(status_code=404, detail="模型不在池中")
+    return entry.__dict__
+
+
+@manage_router.post("/models/pool/{model_key}/load")
+async def pool_load(model_key: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    engine = body.get("engine", "vllm")
+    result = model_pool_manager.load_model(model_key, engine)
+    if not result.get("success"):
+        code = 409 if result.get("reason") in ("model_already_running", "insufficient_gpu_memory") else 404
+        raise HTTPException(status_code=code, detail=result.get("reason"))
+    return result
+
+
+@manage_router.delete("/models/pool/{model_key}")
+async def pool_delete(model_key: str, remove_files: bool = False):
+    result = model_pool_manager.delete_model(model_key, remove_files)
+    if not result.get("deleted"):
+        code = 409 if "running" in result.get("reason", "") else 404
+        raise HTTPException(status_code=code, detail=result.get("reason"))
+    return result
+
+
+@manage_router.post("/models/pool/register")
+async def pool_register(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    model_name = body.get("model_name")
+    source = body.get("source", "search")
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model_name required")
+    entry = model_pool_manager.register_from_search(
+        model_name=model_name,
+        source=source,
+        size_b=body.get("size_b"),
+        quant=body.get("quant"),
+        required_gb=body.get("required_gb"),
+        feasible=body.get("feasible"),
+    )
+    return entry.to_dict()
+
+
+@manage_router.post("/models/pool/sync-config")
+async def pool_sync_config():
+    result = model_pool_manager.sync_to_config()
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to sync pool to config")
+    return {"status": "success", "message": "Pool synced to config.yaml"}
+
+
+@manage_router.post("/engines/switch")
+async def engine_switch(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    model_name = body.get("model_name")
+    engine_type = body.get("engine_type", "vllm")
+    port = body.get("port", 8000)
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model_name required")
+    result = model_engine_scheduler.switch_engine(model_name, engine_type, port)
+    if not result.get("success"):
+        code = 409 if result.get("reason") == "insufficient_gpu_memory" else 500
+        raise HTTPException(status_code=code, detail=result.get("reason", "switch_failed"))
+    return result
+
+
+@manage_router.get("/engines/status")
+async def engine_status():
+    services = llm_service_manager.list_services()
+    return {
+        "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "systemd"),
+        "services": services,
+        "active_count": len([s for s in services if s.get("status") == "running"]),
+    }
+
+
+@manage_router.get("/engines/config")
+async def get_engines_config():
+    current_config = config_watcher.get_config()
+    engines_config = {}
+    if hasattr(current_config, 'sglang'):
+        engines_config["sglang"] = current_config.sglang.__dict__ if hasattr(current_config.sglang, '__dict__') else current_config.sglang
+    elif 'sglang' in (current_config if isinstance(current_config, dict) else {}):
+        engines_config["sglang"] = current_config['sglang']
+    vllm_cfg = {}
+    if hasattr(current_config, 'vllm'):
+        vllm_cfg = current_config.vllm.__dict__ if hasattr(current_config.vllm, '__dict__') else current_config.vllm
+    elif 'vllm' in (current_config if isinstance(current_config, dict) else {}):
+        vllm_cfg = current_config['vllm']
+    engines_config["vllm"] = vllm_cfg
+    engines_config["default_engine"] = os.environ.get("DEFAULT_ENGINE", "vllm")
+    engines_config["engine_manager_mode"] = os.environ.get("ENGINE_MANAGER_MODE", "systemd")
+    return engines_config
+
+
+@manage_router.put("/engines/config")
+async def update_engines_config(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    current_config = config_watcher.get_config()
+    config_dict = copy.deepcopy(current_config) if isinstance(current_config, dict) else copy.deepcopy(current_config.__dict__) if hasattr(current_config, '__dict__') else {}
+    if "default_engine" in body:
+        os.environ["DEFAULT_ENGINE"] = body["default_engine"]
+    if "engine_manager_mode" in body:
+        os.environ["ENGINE_MANAGER_MODE"] = body["engine_manager_mode"]
+    if "sglang" in body:
+        config_dict["sglang"] = body["sglang"]
+    if "vllm" in body:
+        if "vllm" not in config_dict:
+            config_dict["vllm"] = {}
+        config_dict["vllm"].update(body["vllm"])
+    success = config_watcher.save_config(config_dict)
+    if success:
+        persisted = config_watcher.get_config()
+        from core.deps import _on_config_changed
+        _on_config_changed(persisted)
+        return {"status": "success", "engines_config": {
+            "default_engine": os.environ.get("DEFAULT_ENGINE", "vllm"),
+            "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "systemd"),
+        }}
+    raise HTTPException(status_code=500, detail="Failed to persist engines config")
+
+
+# ===== Model Benchmark =====
+
+@manage_router.post("/models/{model_name}/benchmark")
+async def benchmark_model(model_name: str):
+    if not scheduler.is_model_available(model_name):
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not available")
+    try:
+        report = await model_tester.run_tests(model_name)
+        return {
+            "status": "completed",
+            "model_name": model_name,
+            "results": {
+                "tests_run": len(report.tests) if hasattr(report, 'tests') else 0,
+                "pass_rate": report.pass_rate if hasattr(report, 'pass_rate') else 0,
+                "errors": report.errors if hasattr(report, 'errors') else [],
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Benchmark failed: {str(e)}")
+
+
+@manage_router.post("/models/benchmark/comparative")
+async def comparative_benchmark(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    model_names = body.get("model_names", [])
+    if not model_names or len(model_names) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 model names required")
+    try:
+        analysis = await model_tester.run_comparative_analysis(model_names)
+        return {"status": "completed", "analysis": analysis}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Comparative benchmark failed: {str(e)}")

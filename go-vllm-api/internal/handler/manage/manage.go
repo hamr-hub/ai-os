@@ -30,6 +30,8 @@ type ManageHandler struct {
 	modelTesting *service.ModelTestingFramework
 	redis        *repository.RedisRepo
 	configPath   string
+	pythonClient *http.Client
+	pythonBaseURL string
 }
 
 func NewManageHandler(
@@ -61,6 +63,21 @@ func NewManageHandler(
 		modelTesting: modelTesting,
 		redis:        redis,
 		configPath:   configPath,
+		pythonClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        20,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     30 * time.Second,
+			},
+		},
+		pythonBaseURL: func() string {
+			url := os.Getenv("PYTHON_BACKEND_URL")
+			if url == "" {
+				url = "http://192.168.7.103:35000"
+			}
+			return url
+		}(),
 	}
 }
 
@@ -73,10 +90,11 @@ func (h *ManageHandler) waitForModelReady(ctx context.Context, modelName string)
 }
 
 func (h *ManageHandler) proxyPythonManage(c *gin.Context, method string, path string, body interface{}) {
-	baseURL := os.Getenv("PYTHON_BACKEND_URL")
-	if baseURL == "" {
-		baseURL = "http://192.168.7.103:35000"
+	targetURL := h.pythonBaseURL + path
+	if c.Request.URL.RawQuery != "" {
+		targetURL += "?" + c.Request.URL.RawQuery
 	}
+
 	var reqBody *bytes.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -89,7 +107,7 @@ func (h *ManageHandler) proxyPythonManage(c *gin.Context, method string, path st
 		reqBody = bytes.NewReader(nil)
 	}
 
-	req, err := http.NewRequestWithContext(c.Request.Context(), method, baseURL+path, reqBody)
+	req, err := http.NewRequestWithContext(c.Request.Context(), method, targetURL, reqBody)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -98,7 +116,7 @@ func (h *ManageHandler) proxyPythonManage(c *gin.Context, method string, path st
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.pythonClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -173,6 +191,26 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.GET("/vllm/models", h.GetVLLMModels)
 		m.GET("/metrics/health-detail", h.GetHealthDetail)
 		m.GET("/gpu/memory-optimization", h.GetMemoryOptimization)
+		m.GET("/models/search", h.ProxySearchModels)
+		m.GET("/gpu/recommend", h.ProxyRecommendModel)
+		m.POST("/gpu/memory-check/:model_name", h.ProxyCheckModelMemory)
+		m.POST("/models/download", h.ProxyStartDownload)
+		m.GET("/models/download/:task_id/status", h.ProxyGetDownloadStatus)
+		m.DELETE("/models/download/:task_id", h.ProxyCancelDownload)
+		m.GET("/models/downloads", h.ProxyListDownloads)
+		m.GET("/models/pool", h.ProxyPoolList)
+		m.GET("/models/pool/:model_key", h.ProxyPoolDetail)
+		m.POST("/models/pool/:model_key/load", h.ProxyPoolLoad)
+		m.DELETE("/models/pool/:model_key", h.ProxyPoolDelete)
+		m.POST("/engine/switch", h.ProxyEngineSwitch)
+		m.GET("/engine/status", h.ProxyEngineStatus)
+		m.POST("/engines/switch", h.ProxyEngineSwitch)
+		m.GET("/engines/status", h.ProxyEngineStatus)
+		m.GET("/engines/config", h.ProxyEnginesConfig)
+		m.PUT("/engines/config", h.ProxyUpdateEnginesConfig)
+		m.GET("/models/:model_name/vllm-config", h.ProxyModelVLLMConfig)
+		m.PUT("/models/:model_name/vllm-params", h.ProxyUpdateModelVLLMParams)
+		m.GET("/vllm/default-config", h.ProxyVLLMDefaultConfig)
 	}
 
 	v1 := rg.Group("/v1")
@@ -1504,4 +1542,130 @@ func (h *ManageHandler) SwitchAndTestModel(c *gin.Context) {
 		"message": fmt.Sprintf("Successfully switched to %s and completed tests", modelName),
 		"report":  report,
 	})
+}
+
+func (h *ManageHandler) proxyPythonManageGet(c *gin.Context, path string) {
+	h.proxyPythonManage(c, "GET", path, nil)
+}
+
+func (h *ManageHandler) proxyPythonManageDelete(c *gin.Context, path string) {
+	h.proxyPythonManage(c, "DELETE", path, nil)
+}
+
+func (h *ManageHandler) ProxySearchModels(c *gin.Context) {
+	keyword := c.Query("keyword")
+	source := c.Query("source")
+	limit := c.Query("limit")
+	path := fmt.Sprintf("/manage/models/search?keyword=%s&source=%s&limit=%s", keyword, source, limit)
+	h.proxyPythonManageGet(c, path)
+}
+
+func (h *ManageHandler) ProxyRecommendModel(c *gin.Context) {
+	keyword := c.Query("keyword")
+	source := c.Query("source")
+	path := fmt.Sprintf("/manage/gpu/recommend?keyword=%s&source=%s", keyword, source)
+	h.proxyPythonManageGet(c, path)
+}
+
+func (h *ManageHandler) ProxyCheckModelMemory(c *gin.Context) {
+	modelName := c.Param("model_name")
+	path := fmt.Sprintf("/manage/gpu/memory-check/%s", modelName)
+	h.proxyPythonManage(c, "POST", path, nil)
+}
+
+func (h *ManageHandler) ProxyStartDownload(c *gin.Context) {
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		body = nil
+	}
+	h.proxyPythonManage(c, "POST", "/manage/models/download", body)
+}
+
+func (h *ManageHandler) ProxyGetDownloadStatus(c *gin.Context) {
+	taskID := c.Param("task_id")
+	path := fmt.Sprintf("/manage/models/download/%s/status", taskID)
+	h.proxyPythonManageGet(c, path)
+}
+
+func (h *ManageHandler) ProxyCancelDownload(c *gin.Context) {
+	taskID := c.Param("task_id")
+	path := fmt.Sprintf("/manage/models/download/%s", taskID)
+	h.proxyPythonManageDelete(c, path)
+}
+
+func (h *ManageHandler) ProxyListDownloads(c *gin.Context) {
+	h.proxyPythonManageGet(c, "/manage/models/downloads")
+}
+
+func (h *ManageHandler) ProxyPoolList(c *gin.Context) {
+	filter := c.Query("filter")
+	page := c.Query("page")
+	pageSize := c.Query("page_size")
+	path := fmt.Sprintf("/manage/models/pool?filter=%s&page=%s&page_size=%s", filter, page, pageSize)
+	h.proxyPythonManageGet(c, path)
+}
+
+func (h *ManageHandler) ProxyPoolDetail(c *gin.Context) {
+	modelKey := c.Param("model_key")
+	path := fmt.Sprintf("/manage/models/pool/%s", modelKey)
+	h.proxyPythonManageGet(c, path)
+}
+
+func (h *ManageHandler) ProxyPoolLoad(c *gin.Context) {
+	modelKey := c.Param("model_key")
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		body = nil
+	}
+	path := fmt.Sprintf("/manage/models/pool/%s/load", modelKey)
+	h.proxyPythonManage(c, "POST", path, body)
+}
+
+func (h *ManageHandler) ProxyPoolDelete(c *gin.Context) {
+	modelKey := c.Param("model_key")
+	removeFiles := c.Query("remove_files")
+	path := fmt.Sprintf("/manage/models/pool/%s?remove_files=%s", modelKey, removeFiles)
+	h.proxyPythonManageDelete(c, path)
+}
+
+func (h *ManageHandler) ProxyEngineSwitch(c *gin.Context) {
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		body = map[string]interface{}{}
+	}
+	h.proxyPythonManage(c, "POST", "/manage/engine/switch", body)
+}
+
+func (h *ManageHandler) ProxyEngineStatus(c *gin.Context) {
+	h.proxyPythonManageGet(c, "/manage/engines/status")
+}
+
+func (h *ManageHandler) ProxyEnginesConfig(c *gin.Context) {
+	h.proxyPythonManageGet(c, "/manage/engines/config")
+}
+
+func (h *ManageHandler) ProxyUpdateEnginesConfig(c *gin.Context) {
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		body = map[string]interface{}{}
+	}
+	h.proxyPythonManage(c, "PUT", "/manage/engines/config", body)
+}
+
+func (h *ManageHandler) ProxyModelVLLMConfig(c *gin.Context) {
+	modelName := c.Param("model_name")
+	h.proxyPythonManageGet(c, fmt.Sprintf("/manage/models/%s/vllm-config", modelName))
+}
+
+func (h *ManageHandler) ProxyUpdateModelVLLMParams(c *gin.Context) {
+	modelName := c.Param("model_name")
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		body = map[string]interface{}{}
+	}
+	h.proxyPythonManage(c, "PUT", fmt.Sprintf("/manage/models/%s/vllm-params", modelName), body)
+}
+
+func (h *ManageHandler) ProxyVLLMDefaultConfig(c *gin.Context) {
+	h.proxyPythonManageGet(c, "/manage/vllm/default-config")
 }

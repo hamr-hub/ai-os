@@ -566,3 +566,121 @@ export interface SwitchStatusResponse {
   session: SwitchSession | null
   timestamp: string
 }
+
+export type EngineType = 'vllm' | 'sglang' | 'llama_cpp'
+
+export interface EngineStatus {
+  vllm: { running: boolean; pid: number | null; port: number | null; model: string | null; uptime: number | null }
+  sglang: { running: boolean; pid: number | null; port: number | null; model: string | null; uptime: number | null }
+  llama_cpp: { running: boolean; pid: number | null; port: number | null; model: string | null; uptime: number | null }
+  current_engine: EngineType
+}
+
+export interface EngineConfig {
+  vllm: { command: string; default_params: Record<string, unknown> }
+  sglang: { command: string; default_params: Record<string, unknown> }
+  llama_cpp: { command: string; default_params: Record<string, unknown> }
+}
+
+export interface ModelSearchResponse {
+  keyword: string
+  source: string
+  total: number
+  models: SearchResult[]
+  gpu_info: GPURecommendInfo | null
+}
+
+export interface GPUMemoryInfo {
+  available: boolean
+  total_gb: number
+  used_gb: number
+  free_gb: number
+  safety_available_gb: number
+  gpu_name: string
+  method: 'torch_cuda' | 'nvidia_smi'
+}
+
+export interface DownloadWSMessage {
+  event: 'download_started' | 'download_progress' | 'download_completed' | 'download_failed'
+  task_id: string
+  model_name?: string
+  progress_pct?: number
+  speed_mbps?: number
+  eta_seconds?: number
+  downloaded_bytes?: number
+  total_bytes?: number
+  error_message?: string
+  timestamp: string
+}
+
+export interface SearchResult {
+  name: string
+  source: string
+  size_b: number | null
+  quant: string | null
+  required_gb: number | null
+  feasible: boolean | null
+  model_id: string | null
+  description: string | null
+}
+
+export interface RecommendResult {
+  recommended: SearchResult | null
+  gpu_info: GPURecommendInfo
+  candidates: SearchResult[]
+}
+
+export interface GPURecommendInfo {
+  available: boolean
+  name?: string
+  total_gb?: number
+  used_gb?: number
+  free_gb?: number
+  safety_available_gb?: number
+}
+
+export interface DownloadTask {
+  task_id: string
+  model_name: string
+  source: string
+  status: 'pending' | 'downloading' | 'completed' | 'failed' | 'cancelled'
+  progress_pct: number
+  speed_mbps: number
+  eta_seconds: number
+  downloaded_bytes: number
+  total_bytes: number
+  local_path: string | null
+  error_message: string | null
+}
+
+export interface PoolEntry {
+  name: string
+  source: string
+  size_b: number | null
+  quant: string | null
+  required_gb: number | null
+  feasible: boolean | null
+  local_path: string | null
+  engine_type: string | null
+  download_status: 'completed' | 'not_downloaded' | 'downloading' | 'failed'
+  running_status: 'running' | 'stopped' | 'loading'
+  port: number | null
+  config_key: string | null
+}
+
+export interface PoolListResponse {
+  models: PoolEntry[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface MemoryCheckResult {
+  feasible: boolean
+  available_gb: number
+  required_gb: number
+  safety_margin_gb: number
+  gpu_available: boolean
+  gpu_name?: string
+  free_gb?: number
+}

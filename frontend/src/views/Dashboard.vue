@@ -6,6 +6,7 @@ import { useGPUHistory } from '@/composables/useGPUHistory'
 import { useGPUChartDatasets } from '@/composables/useGPUChartDatasets'
 import { useTokenStats } from '@/composables/useTokenStats'
 import { useSystemData } from '@/composables/useSystemData'
+import { useGPUMemory } from '@/composables/useGPUMemory'
 import LineChart from '@/components/LineChart.vue'
 import GpuMetricsCard from '@/components/cards/GpuMetricsCard.vue'
 import VLLMMetricsCard from '@/components/cards/VLLMMetricsCard.vue'
@@ -13,7 +14,8 @@ import SystemStatusCard from '@/components/cards/SystemStatusCard.vue'
 import TokenUsageCard from '@/components/cards/TokenUsageCard.vue'
 import HealthAlertCard from '@/components/cards/HealthAlertCard.vue'
 import RunningModelsCard from '@/components/cards/RunningModelsCard.vue'
-import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server } from 'lucide-vue-next'
+import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server, Gpu, CircleDot, AlertTriangle, CheckCircle } from 'lucide-vue-next'
+import { formatBytes } from '@/utils/format'
 
 const {
   modelList,
@@ -27,6 +29,7 @@ const {
   isRefreshing: isRefreshingModels,
 } = useModels()
 const { gpuSummary, refresh: refreshGPU, isRefreshing: isRefreshingGPU } = useGPU()
+const gpuMemoryEngine = useGPUMemory()
 const {
   gpuHistory,
   error: gpuHistoryError,
@@ -78,6 +81,13 @@ const refreshAll = () => {
   refreshTokens()
   refreshSystem()
   refreshGPUHistory()
+  gpuMemoryEngine.getEngines()
+}
+
+const engineLabels: Record<string, string> = {
+  vllm: 'vLLM',
+  sglang: 'SGLang',
+  llama_cpp: 'llama.cpp',
 }
 
 const gpu = computed(() => gpuSummary.value?.current ?? null)
@@ -179,6 +189,18 @@ const handleScale = (cardId: string, delta: number) => {
               :gpu-status="gpuStatus"
               :error="gpuHistoryError"
             />
+            <div v-if="gpu" class="memory-availability-bar">
+              <span class="mem-avail-label">可用显存</span>
+              <span class="mem-avail-value" :class="gpu.memory_utilization > 85 ? 'warn' : 'ok'">
+                {{ formatBytes(gpu.available_memory) }}
+              </span>
+              <span v-if="gpu.memory_utilization > 85" class="mem-warn-badge">
+                <AlertTriangle class="w-3 h-3" /> 显存紧张
+              </span>
+              <span v-else class="mem-ok-badge">
+                <CheckCircle class="w-3 h-3" />
+              </span>
+            </div>
             <template v-if="gpuHistory.length > 0">
               <div class="gpu-charts-grid">
               <div class="chart-card">
@@ -298,6 +320,30 @@ const handleScale = (cardId: string, delta: number) => {
               :handle-stop-model="handleStopModel"
               :handle-switch-and-set-default="handleSwitchAndSetDefault"
             />
+          </div>
+
+          <div class="card engine-card card-glow-primary scale-in stagger-7">
+            <div class="engine-card-header">
+              <Gpu class="card-icon-inner" style="color:var(--accent-primary)" />
+              <span class="card-title">推理引擎</span>
+            </div>
+            <div v-if="gpuMemoryEngine.engineStatus" class="engine-card-content">
+              <div class="engine-current-badge">
+                当前: {{ engineLabels[gpuMemoryEngine.engineStatus.current_engine] || gpuMemoryEngine.engineStatus.current_engine }}
+                <CircleDot v-if="gpuMemoryEngine.engineStatus[gpuMemoryEngine.engineStatus.current_engine]?.running" class="w-4 h-4" style="color:#4ade80" />
+              </div>
+              <div class="engine-list">
+                <div v-for="eng in ['vllm', 'sglang', 'llama_cpp']" :key="eng" class="engine-row">
+                  <span :class="gpuMemoryEngine.engineStatus[eng]?.running ? 'engine-dot running' : 'engine-dot stopped'"></span>
+                  <span class="engine-name">{{ engineLabels[eng] }}</span>
+                  <span :class="gpuMemoryEngine.engineStatus[eng]?.running ? 'engine-status running' : 'engine-status stopped'">
+                    {{ gpuMemoryEngine.engineStatus[eng]?.running ? '运行中' : '未运行' }}
+                  </span>
+                  <span v-if="gpuMemoryEngine.engineStatus[eng]?.model" class="engine-model">{{ gpuMemoryEngine.engineStatus[eng]?.model }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-else class="engine-card-empty">暂无引擎状态数据</div>
           </div>
         </div>
     </div>
@@ -547,6 +593,46 @@ const handleScale = (cardId: string, delta: number) => {
   margin-bottom: 16px;
 }
 
+.memory-availability-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.mem-avail-label {
+  color: var(--text-secondary);
+}
+
+.mem-avail-value.ok {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.mem-avail-value.warn {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.mem-warn-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  font-size: 12px;
+}
+
+.mem-ok-badge {
+  color: #22c55e;
+}
+
 .gpu-charts-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -623,5 +709,84 @@ const handleScale = (cardId: string, delta: number) => {
   font-size: 12px;
   color: var(--text-muted);
   opacity: 0.7;
+}
+
+.engine-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.engine-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.engine-current-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.engine-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.engine-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.engine-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.engine-dot.running {
+  background: #4ade80;
+}
+
+.engine-dot.stopped {
+  background: var(--border-primary);
+}
+
+.engine-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.engine-status {
+  font-size: 12px;
+}
+
+.engine-status.running {
+  color: #4ade80;
+}
+
+.engine-status.stopped {
+  color: var(--text-secondary);
+}
+
+.engine-model {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.engine-card-empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
 }
 </style>

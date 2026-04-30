@@ -50,3 +50,48 @@ export const formatRelativeTime = (ts?: string | null) => {
 
   return formatTimeLabel(ts)
 }
+
+export const formatDownloadSpeed = (mbps: number): string => {
+  if (!mbps || mbps <= 0) return '--'
+  if (mbps >= 1024) return `${(mbps / 1024).toFixed(1)} GB/s`
+  return `${mbps.toFixed(1)} MB/s`
+}
+
+export const formatRemainingTime = (seconds: number): string => {
+  if (!seconds || seconds <= 0) return '--'
+  if (seconds < 60) return `${Math.round(seconds)}秒`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}分${Math.round(seconds % 60)}秒`
+  return `${Math.floor(seconds / 3600)}时${Math.floor((seconds % 3600) / 60)}分`
+}
+
+export const formatDownloadProgress = (pct: number): string => {
+  if (!pct || pct < 0) return '0%'
+  if (pct >= 100) return '100%'
+  return `${pct.toFixed(1)}%`
+}
+
+export const formatModelSize = (sizeB: number | null): string => {
+  if (!sizeB) return '--'
+  if (sizeB >= 1) return `${sizeB}B`
+  return '--'
+}
+
+export const formatQuantType = (quant: string | null): string => {
+  if (!quant) return 'fp16'
+  return quant
+}
+
+export const formatMemoryEstimate = (gb: number | null): string => {
+  if (!gb) return '--'
+  return `${gb.toFixed(1)} GB`
+}
+
+export const formatSource = (source: string): string => {
+  const map: Record<string, string> = {
+    hf: 'HuggingFace',
+    modelscope: 'ModelScope',
+    openxlab: 'OpenXLab',
+    local: '本地',
+  }
+  return map[source] || source
+}

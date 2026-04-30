@@ -83,6 +83,7 @@ class SwitchSession:
     @classmethod
     def create_switch_phases(cls) -> List[PhaseDetail]:
         return [
+            PhaseDetail(0, "GPU显存校验"),
             PhaseDetail(1, "更新配置并重启"),
             PhaseDetail(2, "冒烟测试"),
         ]
@@ -90,6 +91,7 @@ class SwitchSession:
     @classmethod
     def create_start_phases(cls) -> List[PhaseDetail]:
         return [
+            PhaseDetail(0, "GPU显存校验"),
             PhaseDetail(1, "停止旧服务"),
             PhaseDetail(2, "强制清理进程"),
             PhaseDetail(3, "启动新服务"),
@@ -141,11 +143,12 @@ class _SwitchAborted(Exception):
 
 class ModelSwitchOrchestrator:
     SWITCH_MAX_TIMEOUT = 300
+    PHASE0_GPU_CHECK_TIMEOUT = 10
     PHASE1_STOP_TIMEOUT = 30
     PHASE1_PORT_CHECK_TIMEOUT = 15
     PHASE2_KILL_TIMEOUT = 60
     PHASE2_VERIFY_TIMEOUT = 15
-    PHASE3_START_TIMEOUT = 300  # 大模型可能需要几分钟加载
+    PHASE3_START_TIMEOUT = 300
     PHASE4_TEST_RETRIES = 3
     PHASE4_TEST_TIMEOUT = 15
 
@@ -164,11 +167,14 @@ class ModelSwitchOrchestrator:
         "memory alloc",
     ]
 
-    def __init__(self, ws_manager, vllm_service_name: str, vllm_port: int, model_base_path: str):
+    def __init__(self, ws_manager, vllm_service_name: str, vllm_port: int, model_base_path: str, gpu_memory_manager=None, engine_manager_mode: str = "systemd"):
         self._ws_manager = ws_manager
         self._vllm_service_name = vllm_service_name
         self._vllm_port = vllm_port
         self._model_base_path = model_base_path
+        self._gpu_memory_manager = gpu_memory_manager
+        self._engine_manager_mode = engine_manager_mode
+        self._llm_service_manager = None
         self._global_lock = asyncio.Lock()
         self._current_session: Optional[SwitchSession] = None
         self._cancel_requested = False
@@ -213,6 +219,17 @@ class ModelSwitchOrchestrator:
             self._current_session = session
 
             try:
+                session.overall_phase = SwitchPhase.IDLE
+                try:
+                    await asyncio.wait_for(
+                        self._phase0_gpu_memory_check(session),
+                        timeout=self.PHASE0_GPU_CHECK_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = f"GPU显存校验超时 ({self.PHASE0_GPU_CHECK_TIMEOUT}s)"
+                    await self._rollback(session, session.error)
+                    raise _SwitchAborted(session.error)
+
                 session.overall_phase = SwitchPhase.PHASE1
                 try:
                     await asyncio.wait_for(
@@ -279,6 +296,17 @@ class ModelSwitchOrchestrator:
             self._current_session = session
 
             try:
+                session.overall_phase = SwitchPhase.IDLE
+                try:
+                    await asyncio.wait_for(
+                        self._phase0_gpu_memory_check(session),
+                        timeout=self.PHASE0_GPU_CHECK_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    session.error = f"GPU显存校验超时 ({self.PHASE0_GPU_CHECK_TIMEOUT}s)"
+                    await self._rollback(session, session.error)
+                    raise _SwitchAborted(session.error)
+
                 session.overall_phase = SwitchPhase.PHASE1
                 try:
                     await asyncio.wait_for(
@@ -416,8 +444,63 @@ class ModelSwitchOrchestrator:
 
             return session
 
+    def _get_phase(self, session: SwitchSession, phase_num: int) -> PhaseDetail:
+        for p in session.phases:
+            if p.phase == phase_num:
+                return p
+        raise ValueError(f"Phase {phase_num} not found in session")
+
+    async def _phase0_gpu_memory_check(self, session: SwitchSession):
+        phase = self._get_phase(session, 0)
+        phase.status = PhaseStatus.RUNNING
+        phase.started_at = datetime.now().isoformat()
+        phase.progress = 10
+
+        await self._log(session, phase, f"GPU显存校验: 模型 {session.target_model}")
+        await self._broadcast(session, phase=0, progress=10, log="GPU显存校验")
+
+        if not self._gpu_memory_manager:
+            await self._log(session, phase, "无GPU显存管理器，跳过显存校验")
+            phase.status = PhaseStatus.SKIPPED
+            phase.progress = 100
+            phase.finished_at = datetime.now().isoformat()
+            await self._broadcast(session, phase=0, progress=100, log="显存校验跳过(无管理器)", level="warning")
+            return
+
+        model_name = session.target_model
+        model_path = session.target_model_path
+
+        feasibility = self._gpu_memory_manager.check_model_feasibility(
+            model_name, model_path=model_path
+        )
+
+        phase.progress = 80
+        await self._broadcast(session, phase=0, progress=80, log="显存校验计算完成")
+
+        if not feasibility.get("feasible"):
+            reason = feasibility.get("reason", "insufficient_memory")
+            required_gb = feasibility.get("required_gb", 0)
+            available_gb = feasibility.get("available_gb", 0)
+            error_msg = f"GPU显存不足: 需要 {required_gb}GB, 可用 {available_gb}GB (原因: {reason})"
+            phase.status = PhaseStatus.FAILED
+            phase.error = error_msg
+            phase.finished_at = datetime.now().isoformat()
+            await self._log(session, phase, error_msg)
+            await self._broadcast(session, phase=0, progress=100, log=error_msg, level="error")
+            await self._rollback(session, error_msg)
+            raise _SwitchAborted(error_msg)
+
+        required_gb = feasibility.get("required_gb", 0)
+        available_gb = feasibility.get("available_gb", 0)
+        safety_margin_gb = feasibility.get("safety_margin_gb", 0)
+        await self._log(session, phase, f"显存校验通过: 需要 {required_gb}GB, 可用 {available_gb}GB, 安全余量 {safety_margin_gb}GB")
+        phase.status = PhaseStatus.SUCCESS
+        phase.progress = 100
+        phase.finished_at = datetime.now().isoformat()
+        await self._broadcast(session, phase=0, progress=100, log="显存校验通过", level="success")
+
     async def _phase1_stop_and_verify(self, session: SwitchSession):
-        phase = session.phases[0]
+        phase = self._get_phase(session, 1)
         phase.status = PhaseStatus.RUNNING
         phase.started_at = datetime.now().isoformat()
         phase.progress = 10
@@ -425,43 +508,73 @@ class ModelSwitchOrchestrator:
         await self._log(session, phase, "停止 vLLM 服务...")
         await self._broadcast(session, phase=1, progress=10, log="停止旧服务")
 
-        from core.vllm_manager import stop_vllm_service, discover_vllm_port
-        stop_ok = stop_vllm_service()
-        if not stop_ok:
-            error_msg = "systemctl stop 失败"
+        if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
+            for svc in self._llm_service_manager.list_services():
+                self._llm_service_manager.stop_service(svc["service_name"])
+                await self._log(session, phase, f"subprocess停止: {svc['service_name']}")
+
+            port = self._vllm_port
+            start_time = time.time()
+            while time.time() - start_time < self.PHASE1_STOP_TIMEOUT:
+                if self._cancel_requested:
+                    raise _SwitchAborted("Cancelled")
+                if not self._is_port_alive(port):
+                    phase.status = PhaseStatus.SUCCESS
+                    phase.progress = 100
+                    phase.finished_at = datetime.now().isoformat()
+                    await self._log(session, phase, "vLLM 服务已停止(subprocess)")
+                    await self._broadcast(session, phase=1, progress=100, log="旧服务已停止", level="success")
+                    return
+                elapsed = int(time.time() - start_time)
+                phase.progress = min(90, 10 + int(80 * elapsed / self.PHASE1_STOP_TIMEOUT))
+                await self._broadcast(session, phase=1, progress=phase.progress, log=f"等待旧服务停止... ({elapsed}s)")
+                await asyncio.sleep(1)
+
+            error_msg = f"旧服务在 {self.PHASE1_STOP_TIMEOUT}s 内未停止"
             phase.status = PhaseStatus.FAILED
             phase.error = error_msg
             phase.finished_at = datetime.now().isoformat()
             await self._broadcast(session, phase=1, progress=100, log=error_msg, level="error")
             raise _SwitchAborted(error_msg)
 
-        port = discover_vllm_port()
-        start_time = time.time()
-        while time.time() - start_time < self.PHASE1_STOP_TIMEOUT:
-            if self._cancel_requested:
-                raise _SwitchAborted("Cancelled")
-            if not self._is_port_alive(port):
-                phase.status = PhaseStatus.SUCCESS
-                phase.progress = 100
+        else:
+            from core.vllm_manager import stop_vllm_service, discover_vllm_port
+            stop_ok = stop_vllm_service()
+            if not stop_ok:
+                error_msg = "systemctl stop 失败"
+                phase.status = PhaseStatus.FAILED
+                phase.error = error_msg
                 phase.finished_at = datetime.now().isoformat()
-                await self._log(session, phase, "vLLM 服务已停止")
-                await self._broadcast(session, phase=1, progress=100, log="旧服务已停止", level="success")
-                return
-            elapsed = int(time.time() - start_time)
-            phase.progress = min(90, 10 + int(80 * elapsed / self.PHASE1_STOP_TIMEOUT))
-            await self._broadcast(session, phase=1, progress=phase.progress, log=f"等待旧服务停止... ({elapsed}s)")
-            await asyncio.sleep(1)
+                await self._broadcast(session, phase=1, progress=100, log=error_msg, level="error")
+                raise _SwitchAborted(error_msg)
 
-        error_msg = f"旧服务在 {self.PHASE1_STOP_TIMEOUT}s 内未停止"
-        phase.status = PhaseStatus.FAILED
-        phase.error = error_msg
-        phase.finished_at = datetime.now().isoformat()
-        await self._broadcast(session, phase=1, progress=100, log=error_msg, level="error")
-        raise _SwitchAborted(error_msg)
+            port = discover_vllm_port()
+            start_time = time.time()
+            while time.time() - start_time < self.PHASE1_STOP_TIMEOUT:
+                if self._cancel_requested:
+                    raise _SwitchAborted("Cancelled")
+                if not self._is_port_alive(port):
+                    phase.status = PhaseStatus.SUCCESS
+                    phase.progress = 100
+                    phase.finished_at = datetime.now().isoformat()
+                    await self._log(session, phase, "vLLM 服务已停止")
+                    await self._broadcast(session, phase=1, progress=100, log="旧服务已停止", level="success")
+                    return
+                elapsed = int(time.time() - start_time)
+                phase.progress = min(90, 10 + int(80 * elapsed / self.PHASE1_STOP_TIMEOUT))
+                await self._broadcast(session, phase=1, progress=phase.progress, log=f"等待旧服务停止... ({elapsed}s)")
+                await asyncio.sleep(1)
+
+            error_msg = f"旧服务在 {self.PHASE1_STOP_TIMEOUT}s 内未停止"
+            phase.status = PhaseStatus.FAILED
+            phase.error = error_msg
+            phase.finished_at = datetime.now().isoformat()
+            await self._broadcast(session, phase=1, progress=100, log=error_msg, level="error")
+            raise _SwitchAborted(error_msg)
 
     async def _phase1_update_config_and_restart(self, session: SwitchSession):
         """Phase 1: 更新配置并重启服务"""
-        phase = session.phases[0]
+        phase = self._get_phase(session, 1)
         phase.status = PhaseStatus.RUNNING
         phase.started_at = datetime.now().isoformat()
 
@@ -469,34 +582,55 @@ class ModelSwitchOrchestrator:
         phase.progress = 10
         await self._broadcast(session, phase=1, progress=10, log="更新模型配置")
 
-        from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache, _build_vllm_health_url
-        script_ok = _update_vllm_script(session.target_model_path, session.target_model)
-        if not script_ok:
-            error_msg = "更新模型路径配置失败"
-            phase.status = PhaseStatus.FAILED
-            phase.error = error_msg
-            phase.finished_at = datetime.now().isoformat()
-            await self._rollback(session, error_msg)
-            raise _SwitchAborted(error_msg)
+        if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
+            await self._log(session, phase, "使用 subprocess 模式启动引擎")
+            await self._broadcast(session, phase=1, progress=15, log="subprocess模式启动引擎")
 
-        await self._log(session, phase, "模型配置更新成功")
-        refresh_vllm_port_cache()
+            for svc in self._llm_service_manager.list_services():
+                self._llm_service_manager.stop_service(svc["service_name"])
+                await self._log(session, phase, f"已停止服务: {svc['service_name']}")
 
-        phase.progress = 30
-        await self._broadcast(session, phase=1, progress=30, log="重启 vLLM 服务")
-        await self._log(session, phase, "重启 vLLM 服务...")
+            result = self._llm_service_manager.start_service(
+                session.target_model, session.target_model, "vllm", self._vllm_port
+            )
+            if result.get("status") != "started":
+                error_msg = f"subprocess启动失败: {result.get('message', 'unknown')}"
+                phase.status = PhaseStatus.FAILED
+                phase.error = error_msg
+                phase.finished_at = datetime.now().isoformat()
+                await self._rollback(session, error_msg)
+                raise _SwitchAborted(error_msg)
 
-        from core.vllm_manager import restart_vllm_service
-        restart_ok = restart_vllm_service()
-        if not restart_ok:
-            error_msg = "systemctl restart 失败"
-            phase.status = PhaseStatus.FAILED
-            phase.error = error_msg
-            phase.finished_at = datetime.now().isoformat()
-            await self._rollback(session, error_msg)
-            raise _SwitchAborted(error_msg)
+            await self._log(session, phase, f"引擎进程已启动 (pid={result.get('pid')})")
+        else:
+            from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache
+            script_ok = _update_vllm_script(session.target_model_path, session.target_model)
+            if not script_ok:
+                error_msg = "更新模型路径配置失败"
+                phase.status = PhaseStatus.FAILED
+                phase.error = error_msg
+                phase.finished_at = datetime.now().isoformat()
+                await self._rollback(session, error_msg)
+                raise _SwitchAborted(error_msg)
 
-        await self._log(session, phase, "vLLM 服务重启指令已发送")
+            await self._log(session, phase, "模型配置更新成功")
+            refresh_vllm_port_cache()
+
+            phase.progress = 30
+            await self._broadcast(session, phase=1, progress=30, log="重启 vLLM 服务")
+            await self._log(session, phase, "重启 vLLM 服务...")
+
+            from core.vllm_manager import restart_vllm_service
+            restart_ok = restart_vllm_service()
+            if not restart_ok:
+                error_msg = "systemctl restart 失败"
+                phase.status = PhaseStatus.FAILED
+                phase.error = error_msg
+                phase.finished_at = datetime.now().isoformat()
+                await self._rollback(session, error_msg)
+                raise _SwitchAborted(error_msg)
+
+            await self._log(session, phase, "vLLM 服务重启指令已发送")
 
         start_time = time.time()
         poll_interval = 3.0
@@ -511,7 +645,17 @@ class ModelSwitchOrchestrator:
             progress = 35 + int(55 * elapsed / self.PHASE3_START_TIMEOUT)
             phase.progress = min(progress, 90)
 
-            if elapsed - last_error_check >= 5:
+            if self._engine_manager_mode == "subprocess":
+                if elapsed - last_error_check >= 5:
+                    svc_status = self._llm_service_manager.check_health(session.target_model) if self._llm_service_manager else False
+                    if not svc_status and elapsed >= 30 and not port_seen_alive:
+                        phase.status = PhaseStatus.FAILED
+                        phase.error = f"subprocess引擎在 30s 内未就绪"
+                        phase.finished_at = datetime.now().isoformat()
+                        await self._rollback(session, phase.error)
+                        raise _SwitchAborted(phase.error)
+                    last_error_check = elapsed
+            elif elapsed - last_error_check >= 5:
                 error_msg = self._check_vllm_logs_for_errors()
                 if error_msg:
                     phase.status = PhaseStatus.FAILED
@@ -522,9 +666,13 @@ class ModelSwitchOrchestrator:
                     raise _SwitchAborted(f"Fatal error: {error_msg}")
                 last_error_check = elapsed
 
-            from core.vllm_manager import discover_vllm_port
-            port = discover_vllm_port()
-            health_url = _build_vllm_health_url(port)
+            if self._engine_manager_mode == "subprocess":
+                port = self._vllm_port
+                health_url = f"http://127.0.0.1:{port}/health"
+            else:
+                from core.vllm_manager import discover_vllm_port
+                port = discover_vllm_port()
+                health_url = _build_vllm_health_url(port)
 
             is_port_open = self._is_port_alive(port)
             if is_port_open:
@@ -564,18 +712,24 @@ class ModelSwitchOrchestrator:
         raise _SwitchAborted(error_msg)
 
     async def _phase2_smoke_test(self, session: SwitchSession):
-        """Phase 2: 冒烟测试"""
-        phase = session.phases[1]
+        await self._do_smoke_test(session, 2)
+
+    async def _do_smoke_test(self, session: SwitchSession, phase_num: int):
+        phase = self._get_phase(session, phase_num)
         phase.status = PhaseStatus.RUNNING
         phase.started_at = datetime.now().isoformat()
 
         await self._log(session, phase, "开始冒烟测试...")
         phase.progress = 10
-        await self._broadcast(session, phase=2, progress=10, log="冒烟测试")
+        await self._broadcast(session, phase=phase_num, progress=10, log="冒烟测试")
 
-        from core.vllm_manager import discover_vllm_port, _build_vllm_base_url
-        port = discover_vllm_port()
-        base_url = _build_vllm_base_url(port)
+        if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
+            port = self._vllm_port
+            base_url = f"http://127.0.0.1:{port}"
+        else:
+            from core.vllm_manager import discover_vllm_port, _build_vllm_base_url
+            port = discover_vllm_port()
+            base_url = _build_vllm_base_url(port)
         url = f"{base_url}/v1/chat/completions"
 
         actual_model_id = session.target_model_path
@@ -605,7 +759,7 @@ class ModelSwitchOrchestrator:
         for attempt in range(1, self.PHASE4_TEST_RETRIES + 1):
             progress = int(20 * attempt / self.PHASE4_TEST_RETRIES)
             phase.progress = max(phase.progress, progress)
-            await self._broadcast(session, phase=2, progress=phase.progress,
+            await self._broadcast(session, phase=phase_num, progress=phase.progress,
                                   log=f"冒烟测试第 {attempt}/{self.PHASE4_TEST_RETRIES} 次")
             try:
                 async with httpx.AsyncClient(timeout=self.PHASE4_TEST_TIMEOUT) as client:
@@ -619,7 +773,7 @@ class ModelSwitchOrchestrator:
                             phase.finished_at = datetime.now().isoformat()
                             await self._log(session, phase,
                                            f"冒烟测试通过 (第{attempt}次)")
-                            await self._broadcast(session, phase=2, progress=100,
+                            await self._broadcast(session, phase=phase_num, progress=100,
                                                   log="冒烟测试通过", level="success")
                             return
                         else:
@@ -642,7 +796,7 @@ class ModelSwitchOrchestrator:
         raise _SwitchAborted(error_msg)
 
     async def _phase2_force_kill_if_needed(self, session: SwitchSession):
-        phase = session.phases[1]
+        phase = self._get_phase(session, 2)
         phase.status = PhaseStatus.RUNNING
         phase.started_at = datetime.now().isoformat()
         phase.progress = 10
@@ -677,32 +831,46 @@ class ModelSwitchOrchestrator:
         await self._broadcast(session, phase=2, progress=100, log="残留进程清理完成", level="success")
 
     async def _phase3_start_and_check(self, session: SwitchSession):
-        phase = session.phases[2]
+        phase = self._get_phase(session, 3)
         phase.status = PhaseStatus.RUNNING
         phase.started_at = datetime.now().isoformat()
         phase.progress = 10
         await self._log(session, phase, f"启动目标模型: {session.target_model}")
         await self._broadcast(session, phase=3, progress=10, log="启动新服务")
 
-        from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache, start_vllm_service, _build_vllm_health_url
-        script_ok = _update_vllm_script(session.target_model_path, session.target_model)
-        if not script_ok:
-            error_msg = "更新模型路径配置失败"
-            phase.status = PhaseStatus.FAILED
-            phase.error = error_msg
-            phase.finished_at = datetime.now().isoformat()
-            await self._rollback(session, error_msg)
-            raise _SwitchAborted(error_msg)
+        if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
+            await self._log(session, phase, "subprocess模式启动引擎")
+            result = self._llm_service_manager.start_service(
+                session.target_model, session.target_model, "vllm", self._vllm_port
+            )
+            if result.get("status") != "started":
+                error_msg = f"subprocess启动失败: {result.get('message', 'unknown')}"
+                phase.status = PhaseStatus.FAILED
+                phase.error = error_msg
+                phase.finished_at = datetime.now().isoformat()
+                await self._rollback(session, error_msg)
+                raise _SwitchAborted(error_msg)
+            await self._log(session, phase, f"引擎进程已启动 (pid={result.get('pid')})")
+        else:
+            from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache, start_vllm_service, _build_vllm_health_url
+            script_ok = _update_vllm_script(session.target_model_path, session.target_model)
+            if not script_ok:
+                error_msg = "更新模型路径配置失败"
+                phase.status = PhaseStatus.FAILED
+                phase.error = error_msg
+                phase.finished_at = datetime.now().isoformat()
+                await self._rollback(session, error_msg)
+                raise _SwitchAborted(error_msg)
 
-        refresh_vllm_port_cache()
-        start_ok = start_vllm_service()
-        if not start_ok:
-            error_msg = "systemctl start 失败"
-            phase.status = PhaseStatus.FAILED
-            phase.error = error_msg
-            phase.finished_at = datetime.now().isoformat()
-            await self._rollback(session, error_msg)
-            raise _SwitchAborted(error_msg)
+            refresh_vllm_port_cache()
+            start_ok = start_vllm_service()
+            if not start_ok:
+                error_msg = "systemctl start 失败"
+                phase.status = PhaseStatus.FAILED
+                phase.error = error_msg
+                phase.finished_at = datetime.now().isoformat()
+                await self._rollback(session, error_msg)
+                raise _SwitchAborted(error_msg)
 
         start_time = time.time()
         last_error_check = 0
@@ -727,8 +895,13 @@ class ModelSwitchOrchestrator:
                 last_error_check = elapsed
 
             try:
-                from core.vllm_manager import discover_vllm_port
-                port = discover_vllm_port()
+                if self._engine_manager_mode == "subprocess":
+                    port = self._vllm_port
+                    health_url = f"http://127.0.0.1:{port}/health"
+                else:
+                    from core.vllm_manager import discover_vllm_port
+                    port = discover_vllm_port()
+                    health_url = _build_vllm_health_url(port)
                 is_port_open = self._is_port_alive(port)
                 if is_port_open:
                     port_seen_alive = True
@@ -740,7 +913,7 @@ class ModelSwitchOrchestrator:
                     raise _SwitchAborted(phase.error)
 
                 async with httpx.AsyncClient(timeout=3) as client:
-                    resp = await client.get(_build_vllm_health_url(port))
+                    resp = await client.get(health_url)
                     if resp.status_code == 200:
                         phase.status = PhaseStatus.SUCCESS
                         phase.progress = 100
@@ -760,16 +933,7 @@ class ModelSwitchOrchestrator:
         raise _SwitchAborted(error_msg)
 
     async def _phase4_smoke_test(self, session: SwitchSession):
-        phase = session.phases[3]
-        phase.status = PhaseStatus.RUNNING
-        phase.started_at = datetime.now().isoformat()
-        phase.progress = 10
-        await self._broadcast(session, phase=4, progress=10, log="冒烟测试")
-        await self._phase2_smoke_test(session)
-        phase.status = session.phases[1].status
-        phase.progress = session.phases[1].progress
-        phase.finished_at = datetime.now().isoformat()
-        phase.error = session.phases[1].error
+        await self._do_smoke_test(session, 4)
 
 
     async def _rollback(self, session: SwitchSession, reason: str, from_exception: bool = False):
@@ -781,47 +945,81 @@ class ModelSwitchOrchestrator:
                               log=f"开始回滚: {reason}", level="warning",
                               event_type="rollback_started")
 
-        from core.vllm_manager import _cleanup_runtime_override
-        _cleanup_runtime_override()
+        if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
+            from core.vllm_manager import _cleanup_runtime_override
+            _cleanup_runtime_override()
 
-        if session.previous_model_path:
-            from core.vllm_manager import _update_vllm_script, start_vllm_service
+            if session.previous_model_path and session.previous_model:
+                await self._broadcast(session, phase=0, progress=20,
+                                      log=f"subprocess模式回滚: {session.previous_model}",
+                                      level="warning")
+                for svc in self._llm_service_manager.list_services():
+                    self._llm_service_manager.stop_service(svc["service_name"])
 
-            logger.info("Rolling back to: %s", session.previous_model_path)
-            await self._broadcast(session, phase=0, progress=20,
-                                  log=f"恢复旧模型配置: {session.previous_model}",
-                                  level="warning")
-
-            script_ok = _update_vllm_script(
-                session.previous_model_path, session.previous_model
-            )
-            if not script_ok:
-                logger.error("Rollback config restore failed")
-                await self._broadcast(session, phase=0, progress=30,
-                                      log="旧模型配置恢复失败，尝试直接启动", level="error")
-
-            start_ok = start_vllm_service()
-            if start_ok:
-                await self._broadcast(session, phase=0, progress=80,
-                                      log="旧服务重启指令已发送，等待就绪", level="warning")
-                for _ in range(10):
-                    await asyncio.sleep(3)
-                    try:
-                        from core.vllm_manager import discover_vllm_port, _build_vllm_health_url
-                        port = discover_vllm_port()
-                        async with httpx.AsyncClient(timeout=3) as client:
-                            resp = await client.get(_build_vllm_health_url(port))
-                            if resp.status_code == 200:
-                                await self._log(session, session.phases[0],
-                                               "旧模型服务已恢复就绪")
-                                break
-                    except Exception:
-                        pass
+                result = self._llm_service_manager.start_service(
+                    session.previous_model, session.previous_model, "vllm", self._vllm_port
+                )
+                if result.get("status") == "started":
+                    await self._broadcast(session, phase=0, progress=80,
+                                          log="旧模型subprocess已启动，等待就绪", level="warning")
+                    for _ in range(10):
+                        await asyncio.sleep(3)
+                        try:
+                            async with httpx.AsyncClient(timeout=3) as client:
+                                resp = await client.get(f"http://127.0.0.1:{self._vllm_port}/health")
+                                if resp.status_code == 200:
+                                    await self._log(session, self._get_phase(session, 0),
+                                                   "旧模型服务已恢复就绪(subprocess)")
+                                    break
+                        except Exception:
+                            pass
+                else:
+                    logger.error("Rollback subprocess start failed: %s", result)
             else:
-                logger.error("Rollback start service failed")
+                await self._broadcast(session, phase=0, progress=50,
+                                      log="无旧模型记录，服务保持停止状态", level="warning")
         else:
-            await self._broadcast(session, phase=0, progress=50,
-                                  log="无旧模型记录，服务保持停止状态", level="warning")
+            from core.vllm_manager import _cleanup_runtime_override
+            _cleanup_runtime_override()
+
+            if session.previous_model_path:
+                from core.vllm_manager import _update_vllm_script, start_vllm_service
+
+                logger.info("Rolling back to: %s", session.previous_model_path)
+                await self._broadcast(session, phase=0, progress=20,
+                                      log=f"恢复旧模型配置: {session.previous_model}",
+                                      level="warning")
+
+                script_ok = _update_vllm_script(
+                    session.previous_model_path, session.previous_model
+                )
+                if not script_ok:
+                    logger.error("Rollback config restore failed")
+                    await self._broadcast(session, phase=0, progress=30,
+                                          log="旧模型配置恢复失败，尝试直接启动", level="error")
+
+                start_ok = start_vllm_service()
+                if start_ok:
+                    await self._broadcast(session, phase=0, progress=80,
+                                          log="旧服务重启指令已发送，等待就绪", level="warning")
+                    for _ in range(10):
+                        await asyncio.sleep(3)
+                        try:
+                            from core.vllm_manager import discover_vllm_port, _build_vllm_health_url
+                            port = discover_vllm_port()
+                            async with httpx.AsyncClient(timeout=3) as client:
+                                resp = await client.get(_build_vllm_health_url(port))
+                                if resp.status_code == 200:
+                                    await self._log(session, self._get_phase(session, 0),
+                                                   "旧模型服务已恢复就绪")
+                                    break
+                        except Exception:
+                            pass
+                else:
+                    logger.error("Rollback start service failed")
+            else:
+                await self._broadcast(session, phase=0, progress=50,
+                                      log="无旧模型记录，服务保持停止状态", level="warning")
 
         session.overall_phase = SwitchPhase.ROLLED_BACK
         session.finished_at = datetime.now().isoformat()

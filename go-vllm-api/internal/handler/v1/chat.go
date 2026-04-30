@@ -270,6 +270,7 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache")
 		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no")
 
 		c.Stream(func(w io.Writer) bool {
 			evt, ok := <-ch

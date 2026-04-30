@@ -72,21 +72,29 @@ func (rl *RateLimiterMiddleware) Handler() gin.HandlerFunc {
 
 		ip := c.ClientIP()
 		if rl.exemptIPs[ip] {
+			c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", rl.maxRequests))
+			c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", rl.maxRequests))
 			c.Next()
 			return
 		}
 
 		if rl.limiter != nil {
 			if !rl.limiter.CanAcceptClientRequest(ip, rl.maxRequests) {
+				c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", rl.maxRequests))
+				c.Header("X-RateLimit-Remaining", "0")
 				c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 					"error": "rate limit exceeded",
 				})
 				return
 			}
+			used := rl.limiter.GetClientRequestCount(ip)
+			remaining := rl.maxRequests - used
+			if remaining < 0 {
+				remaining = 0
+			}
+			c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", rl.maxRequests))
+			c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 		}
-
-		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", rl.maxRequests))
-		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", 0))
 		c.Next()
 	}
 }

@@ -109,6 +109,21 @@ func (rl *RateLimiter) CanAcceptClientRequest(clientID string, maxConcurrent int
 	return true
 }
 
+func (rl *RateLimiter) GetClientRequestCount(clientID string) int {
+	if rl.redis == nil || !rl.redis.IsConnected() {
+		return 0
+	}
+	ctx := context.Background()
+	key := fmt.Sprintf("%srate_limit:%s", rl.prefix, clientID)
+	val, err := rl.redis.Get(ctx, key)
+	if err != nil || val == "" {
+		return 0
+	}
+	var n int
+	fmt.Sscanf(val, "%d", &n)
+	return n
+}
+
 func (rl *RateLimiter) WaitForSlot(ctx context.Context, model string, maxConcurrent int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

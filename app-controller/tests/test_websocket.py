@@ -35,9 +35,8 @@ class TestWebSocket:
 
     def test_websocket_broadcast_status(self, client):
         with client.websocket_connect("/ws/monitor") as websocket:
-            websocket.send_text("ping")
-            message = websocket.receive_json()
-            assert message["type"] == "status_update"
-            assert "timestamp" in message
-            assert "gpu" in message
-            assert "models" in message
+            init_msg = websocket.receive_json()
+            assert init_msg["type"] == "monitor_state_sync"
+            assert "timestamp" in init_msg
+            assert "gpu" in init_msg
+            assert "models" in init_msg

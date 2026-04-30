@@ -28,6 +28,10 @@ pytest>=8.0.0
 pytest-asyncio>=0.23.0
 pytest-cov>=4.1.0
 
+# Model Hub
+huggingface-hub>=0.20.0
+modelscope>=1.9.0
+
 # Code Quality (optional)
 black>=24.0.0
 flake8>=7.0.0

@@ -121,3 +121,32 @@ func (m *WSManager) GetConnectionStats() map[string]interface{} {
 		"history_size":      len(m.history),
 	}
 }
+
+func (m *WSManager) PingAll() {
+	m.mu.Lock()
+	conns := make([]*websocket.Conn, 0, len(m.connections))
+	for conn := range m.connections {
+		conns = append(conns, conn)
+	}
+	m.mu.Unlock()
+
+	var dead []*websocket.Conn
+	for _, conn := range conns {
+		if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(5*time.Second)); err != nil {
+			dead = append(dead, conn)
+		}
+	}
+
+	if len(dead) > 0 {
+		m.mu.Lock()
+		for _, conn := range dead {
+			delete(m.connections, conn)
+			for _, chConns := range m.channels {
+				delete(chConns, conn)
+			}
+			conn.Close()
+		}
+		m.mu.Unlock()
+		m.logger.Debug("ws ping removed dead connections", zap.Int("count", len(dead)))
+	}
+}

@@ -19,6 +19,7 @@ type VLLMProxy struct {
 	requestClient *http.Client
 	streamClient  *http.Client
 	vllmHost      string
+	cb            *CircuitBreaker
 }
 
 func NewVLLMProxy(logger *zap.Logger, vllmHost string) *VLLMProxy {
@@ -28,6 +29,7 @@ func NewVLLMProxy(logger *zap.Logger, vllmHost string) *VLLMProxy {
 	return &VLLMProxy{
 		logger:   logger,
 		vllmHost: vllmHost,
+		cb:       NewCircuitBreaker(5, 30*time.Second),
 		requestClient: &http.Client{
 			Timeout: 60 * time.Second,
 			Transport: &http.Transport{
@@ -48,6 +50,10 @@ func NewVLLMProxy(logger *zap.Logger, vllmHost string) *VLLMProxy {
 	}
 }
 
+func (p *VLLMProxy) CircuitBreakerStats() map[string]interface{} {
+	return p.cb.Stats()
+}
+
 func readErrorBody(resp *http.Response) string {
 	if resp == nil || resp.Body == nil {
 		return ""
@@ -62,6 +68,10 @@ func readErrorBody(resp *http.Response) string {
 }
 
 func (p *VLLMProxy) ChatCompletion(ctx context.Context, port int, payload interface{}) (interface{}, error) {
+	if !p.cb.Allow() {
+		return nil, fmt.Errorf("circuit open: upstream unavailable (last error: %v)", p.cb.LastError())
+	}
+
 	url := fmt.Sprintf("http://%s:%d/v1/chat/completions", p.vllmHost, port)
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -75,12 +85,15 @@ func (p *VLLMProxy) ChatCompletion(ctx context.Context, port int, payload interf
 
 	resp, err := p.requestClient.Do(req)
 	if err != nil {
+		p.cb.RecordFailure(err)
 		return nil, fmt.Errorf("vLLM request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body := readErrorBody(resp)
+		errMsg := fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, body)
+		p.cb.RecordFailure(errMsg)
 		if body == "" {
 			return nil, fmt.Errorf("vLLM returned %d", resp.StatusCode)
 		}
@@ -89,12 +102,18 @@ func (p *VLLMProxy) ChatCompletion(ctx context.Context, port int, payload interf
 
 	var result interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		p.cb.RecordFailure(err)
 		return nil, err
 	}
+	p.cb.RecordSuccess()
 	return result, nil
 }
 
 func (p *VLLMProxy) StreamChatCompletion(ctx context.Context, port int, payload interface{}) (<-chan StreamEvent, error) {
+	if !p.cb.Allow() {
+		return nil, fmt.Errorf("circuit open: upstream unavailable (last error: %v)", p.cb.LastError())
+	}
+
 	url := fmt.Sprintf("http://%s:%d/v1/chat/completions", p.vllmHost, port)
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -109,12 +128,15 @@ func (p *VLLMProxy) StreamChatCompletion(ctx context.Context, port int, payload 
 
 	resp, err := p.streamClient.Do(req)
 	if err != nil {
+		p.cb.RecordFailure(err)
 		return nil, fmt.Errorf("vLLM stream request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		body := readErrorBody(resp)
 		resp.Body.Close()
+		errMsg := fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, body)
+		p.cb.RecordFailure(errMsg)
 		if body == "" {
 			return nil, fmt.Errorf("vLLM returned %d", resp.StatusCode)
 		}
@@ -139,36 +161,43 @@ func (p *VLLMProxy) streamReader(resp *http.Response, ch chan<- StreamEvent) {
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	lastActivity := time.Now()
-	heartbeatInterval := 10 * time.Second
-	sentHeartbeat := false
+	scanResults := make(chan string, 16)
+	scanDone := make(chan struct{})
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		now := time.Now()
-
-		if now.Sub(lastActivity) > heartbeatInterval && !sentHeartbeat {
-			ch <- StreamEvent{Data: ": heartbeat\n\n"}
-			sentHeartbeat = true
-			continue
+	go func() {
+		defer close(scanDone)
+		for scanner.Scan() {
+			scanResults <- scanner.Text()
 		}
+	}()
 
-		if strings.HasPrefix(line, "data: ") {
-			sentHeartbeat = false
-			lastActivity = now
-			data := strings.TrimPrefix(line, "data: ")
+	heartbeatTicker := time.NewTicker(10 * time.Second)
+	defer heartbeatTicker.Stop()
 
-			if data == "[DONE]" {
-				ch <- StreamEvent{Data: "data: [DONE]\n\n", Done: true}
+	for {
+		select {
+		case line, ok := <-scanResults:
+			if !ok {
+				if err := scanner.Err(); err != nil {
+					p.logger.Warn("stream reader failed", zap.Error(err))
+					ch <- StreamEvent{Error: err}
+				}
 				return
 			}
-			ch <- StreamEvent{Data: line + "\n\n"}
+			heartbeatTicker.Reset(10 * time.Second)
+			if strings.HasPrefix(line, "data: ") {
+				data := strings.TrimPrefix(line, "data: ")
+				if data == "[DONE]" {
+					ch <- StreamEvent{Data: "data: [DONE]\n\n", Done: true}
+					return
+				}
+				ch <- StreamEvent{Data: line + "\n\n"}
+			}
+		case <-heartbeatTicker.C:
+			ch <- StreamEvent{Data: ": heartbeat\n\n"}
+		case <-scanDone:
+			return
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		p.logger.Warn("stream reader failed", zap.Error(err))
-		ch <- StreamEvent{Error: err}
 	}
 }
 
@@ -254,6 +283,10 @@ func (p *VLLMProxy) WaitUntilReady(ctx context.Context, port int, timeout time.D
 }
 
 func (p *VLLMProxy) Embeddings(ctx context.Context, port int, payload interface{}) (interface{}, error) {
+	if !p.cb.Allow() {
+		return nil, fmt.Errorf("circuit open: upstream unavailable (last error: %v)", p.cb.LastError())
+	}
+
 	url := fmt.Sprintf("http://localhost:%d/v1/embeddings", port)
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -267,12 +300,15 @@ func (p *VLLMProxy) Embeddings(ctx context.Context, port int, payload interface{
 
 	resp, err := p.requestClient.Do(req)
 	if err != nil {
+		p.cb.RecordFailure(err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body := readErrorBody(resp)
+		errMsg := fmt.Errorf("vLLM returned %d: %s", resp.StatusCode, body)
+		p.cb.RecordFailure(errMsg)
 		if body == "" {
 			return nil, fmt.Errorf("vLLM returned %d", resp.StatusCode)
 		}
@@ -281,8 +317,10 @@ func (p *VLLMProxy) Embeddings(ctx context.Context, port int, payload interface{
 
 	var result interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		p.cb.RecordFailure(err)
 		return nil, err
 	}
+	p.cb.RecordSuccess()
 	return result, nil
 }
 

@@ -43,6 +43,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/GPUManage.vue'),
   },
   {
+    path: '/modelhub',
+    name: 'modelhub',
+    component: () => import('@/views/ModelHubPage.vue'),
+  },
+  {
+    path: '/modelpool',
+    name: 'modelpool',
+    component: () => import('@/views/ModelPoolPage.vue'),
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/Dashboard.vue'),

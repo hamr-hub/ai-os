@@ -14,10 +14,16 @@ from routes.manage import manage_router, integration_router
 from routes.health import health_router
 from routes.websocket import websocket_router
 from routes.agent import agent_router
+from routes.model_hub import hub_router
+from routes.sse import sse_router
+from routes.command import command_router
 from core.deps import (
     scheduler, gpu_monitor, ws_manager, metrics, prometheus,
     cache_service, cache_updater, redis_client,
     structured_logger, config_watcher, logger, model_tester, sys_controller, system_monitor,
+    gpu_memory_manager, model_hub, llm_service_manager, model_pool_manager,
+    download_task_manager, model_engine_scheduler, sse_push_manager, agent_system,
+    agent_session_manager,
     VLLM_REQUEST_TIMEOUT, VLLM_STREAM_TIMEOUT, VLLM_CLIENT_LIMITS,
     _background_tasks, _on_config_changed
 )
@@ -175,6 +181,10 @@ async def startup_event(app: FastAPI):
     _install_signal_handlers()
     config_watcher.start_watching()
 
+    model_hub.initialize()
+    model_pool_manager.scan_and_sync()
+    download_task_manager.initialize_semaphore()
+
     await scheduler.preload_models()
 
     _background_tasks.clear()
@@ -207,6 +217,8 @@ async def shutdown_event(app: FastAPI):
         app.state.vllm_stream_client = None
 
     sys_controller.cleanup_all_managed_processes()
+    llm_service_manager.cleanup_all()
+    sse_push_manager.cleanup()
 
     structured_logger.info("AI Controller service stopped", action="shutdown")
 
@@ -240,6 +252,9 @@ app.include_router(integration_router)
 app.include_router(health_router)
 app.include_router(websocket_router)
 app.include_router(agent_router)
+app.include_router(hub_router)
+app.include_router(sse_router)
+app.include_router(command_router)
 
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)

@@ -289,3 +289,28 @@ vllm:
   default_gpu_memory_utilization: 0.92
   default_max_model_len: 32768
   model_state_file: /root/ai-os/app-controller/scripts/.vllm_model_path
+  hf_endpoint: "https://hf-mirror.com"
+
+engines:
+  sglang:
+    default_port: 8100
+    default_gpu_memory_utilization: 0.90
+    default_max_model_len: 32768
+  hub:
+    save_root: /mnt/pve_models
+    hf_endpoint: "https://hf-mirror.com"
+    sources:
+      - local
+      - huggingface
+      - modelscope
+
+feature_flags:
+  multi_engine_enabled: true
+  sse_push_enabled: true
+  agent_command_enabled: true
+  download_resume_enabled: true
+  agent_blocked_commands:
+    - rm
+    - shutdown
+    - reboot
+    - mkfs

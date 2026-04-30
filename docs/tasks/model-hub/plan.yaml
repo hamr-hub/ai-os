@@ -1,0 +1,345 @@
+plan:
+  meta:
+    source_tech_doc: "docs/tasks/model-hub/tech-solution.yaml"
+    scope: "P0+P1"
+    test_coverage_target: 80
+    min_tests_per_feature: 3
+
+  tasks:
+    - id: "T0-1"
+      priority: "P0"
+      type: "test"
+      title: "GPUMemoryManager 单元测试"
+      test_type: "pure"
+      file: "app-controller/tests/test_gpu_memory_manager.py"
+      given: "torch.cuda可用或nvidia-smi可用"
+      when: "调用get_gpu_info/estimate_model_memory/is_enough/check_model_feasibility"
+      then:
+        - "get_gpu_info返回total/used/free字段,值合理"
+        - "estimate_model_memory(7,'4bit')≈6GB, 7*0.7+1=5.9"
+        - "estimate_model_memory(7,'fp16')≈15GB, 7*2.0+1=15"
+        - "is_enough(6)当free>=6时返回True"
+        - "check_model_feasibility返回feasible/available/required/safety_margin"
+        - "torch.cuda不可用时降级nvidia-smi"
+      depends_on: []
+
+    - id: "P0-1"
+      priority: "P0"
+      type: "code"
+      title: "实现 GPUMemoryManager"
+      files: ["app-controller/core/gpu_memory_manager.py"]
+      depends_on: ["T0-1"]
+      definition_of_done:
+        - "torch.cuda.mem_get_info()精准检测,降级nvidia-smi"
+        - "estimate_model_memory()支持4bit/8bit/fp16/bf16/awq/gptq/int4/int8量化"
+        - "check_model_feasibility()含85%安全水位线"
+        - "单元测试通过"
+
+    - id: "T0-2"
+      priority: "P0"
+      type: "test"
+      title: "MultiSourceModelHub 单元测试"
+      test_type: "pure"
+      file: "app-controller/tests/test_model_hub.py"
+      given: "HF/MS/OXL SDK可用"
+      when: "调用search_models/download_model/_parse_size/_parse_quant"
+      then:
+        - "_parse_size从模型名提取参数大小(7B→7,8B→8,235B→235)"
+        - "_parse_quant从模型名提取量化(4bit/int4/8bit/int8/fp16/awq/gptq/gguf)"
+        - "search_models返回含name/source/size_b/quant/required_gb/feasible的结果"
+        - "download_model返回本地路径"
+      depends_on: ["P0-1"]
+
+    - id: "P0-2"
+      priority: "P0"
+      type: "code"
+      title: "实现 MultiSourceModelHub"
+      files: ["app-controller/core/model_hub.py"]
+      depends_on: ["T0-2"]
+      definition_of_done:
+        - "HF搜索: huggingface_hub.list_models(search=keyword)"
+        - "MS搜索: Model.search(keyword)"
+        - "HF下载: snapshot_download(resume_download=True, local_dir=...)"
+        - "MS下载: ms_snapshot_download(cache_dir=...)"
+        - "OXL下载: oxl_model.download(output_dir=...)"
+        - "HF_ENDPOINT=https://hf-mirror.com国内镜像"
+        - "source=all时聚合3平台结果去重"
+        - "单元测试通过"
+
+    - id: "T0-3"
+      priority: "P0"
+      type: "test"
+      title: "DownloadTaskManager 单元测试"
+      test_type: "pure"
+      file: "app-controller/tests/test_download_manager.py"
+      given: "下载任务管理器初始化"
+      when: "调用create_task/get_status/cancel_task/list_tasks/_on_download_complete"
+      then:
+        - "create_task校验磁盘空间(85%告警/95%终止)"
+        - "create_task检查模型是否已存在(跳过下载)"
+        - "get_status返回task_id/status/progress_pct/speed_mbps/eta_seconds"
+        - "cancel_task取消下载任务"
+        - "_on_download_complete注册到model_pool+更新config"
+      depends_on: ["P0-2"]
+
+    - id: "P0-3"
+      priority: "P0"
+      type: "code"
+      title: "实现 DownloadTaskManager"
+      files: ["app-controller/core/download_manager.py"]
+      depends_on: ["T0-3"]
+      definition_of_done:
+        - "asyncio Task异步下载不阻塞主线程"
+        - "磁盘空间前置校验(85%告警/95%终止)"
+        - "模型已存在时跳过下载返回409"
+        - "max_concurrent_downloads=3并发限制"
+        - "下载完成回调: 入库+配置更新+前端通知"
+        - "单元测试通过"
+
+    - id: "T0-4"
+      priority: "P0"
+      type: "test"
+      title: "ModelPoolManager 单元测试"
+      test_type: "pure"
+      file: "app-controller/tests/test_model_pool.py"
+      given: "模型池管理器初始化"
+      when: "调用scan_and_sync/register_from_download/register_from_search/get_pool_list/load_model/delete_model/sync_to_config"
+      then:
+        - "scan_and_sync扫描本地模型目录同步到pool"
+        - "register_from_download自动注册含模型元信息"
+        - "get_pool_list返回全部模型含来源/大小/量化/显存/路径/状态"
+        - "load_model显存校验→引擎启动→验证就绪"
+        - "delete_model校验运行状态"
+      depends_on: ["P0-1"]
+
+    - id: "P0-4"
+      priority: "P0"
+      type: "code"
+      title: "实现 ModelPoolManager"
+      files: ["app-controller/core/model_pool.py"]
+      depends_on: ["T0-4"]
+      definition_of_done:
+        - "下载模型自动注册到pool"
+        - "搜索结果注册到pool(含模型元信息)"
+        - "本地扫描同步到pool(与ScanModels协调)"
+        - "pool列表含来源/大小/量化/显存/路径/下载状态/运行状态"
+        - "一键加载:显存校验→引擎启动→验证就绪"
+        - "删除校验运行状态"
+        - "config.yaml双向同步"
+        - "单元测试通过"
+
+    - id: "T0-5"
+      priority: "P0"
+      type: "test"
+      title: "LLMServiceManager 单元测试"
+      test_type: "pure"
+      file: "app-controller/tests/test_llm_service_manager.py"
+      given: "引擎进程管理器初始化"
+      when: "调用start_service/stop_service/build_command/get_service_status"
+      then:
+        - "build_command构造vLLM命令正确"
+        - "build_command构造SGLang命令正确"
+        - "stop_service优雅停止(SIGINT→10s→SIGKILL)"
+        - "get_service_status返回engine_type/pid/port/model/uptime/health"
+      depends_on: []
+
+    - id: "P0-5"
+      priority: "P0"
+      type: "code"
+      title: "实现 LLMServiceManager"
+      files: ["app-controller/core/llm_service_manager.py"]
+      depends_on: ["T0-5"]
+      definition_of_done:
+        - "subprocess.Popen直接进程管理"
+        - "vLLM命令: python -m vllm.entrypoints.openai.api_server"
+        - "SGLang命令: python -m sglang.launch_server"
+        - "优雅停止: SIGINT→10s→SIGKILL"
+        - "进程健康检查: HTTP readiness probe + PID存活"
+        - "异常退出自动重启: 3次→告警"
+        - "单元测试通过"
+
+    - id: "T0-6"
+      priority: "P0"
+      type: "test"
+      title: "ModelEngineScheduler 单元测试"
+      test_type: "pure"
+      file: "app-controller/tests/test_model_engine_scheduler.py"
+      given: "调度中心初始化"
+      when: "调用show_gpu/search/select_best_model/download_and_load/switch_engine"
+      then:
+        - "show_gpu返回GPU显存状态"
+        - "search返回搜索结果含显存可行性标注"
+        - "select_best_model过滤显存不足+按大小降序+推荐最优"
+        - "download_and_load完整链路:下载→入库→校验→启动→验证"
+        - "switch_engine:停止旧引擎→校验→启动新引擎→验证"
+      depends_on: ["P0-1", "P0-2", "P0-4", "P0-5"]
+
+    - id: "P0-6"
+      priority: "P0"
+      type: "code"
+      title: "实现 ModelEngineScheduler"
+      files: ["app-controller/core/model_engine_scheduler.py"]
+      depends_on: ["T0-6"]
+      definition_of_done:
+        - "统一调度入口:显存优选+搜索下载+模型池+引擎切换"
+        - "select_best_model:过滤显存不足→大小降序→推荐最优"
+        - "download_and_load:下载→入库→校验→启动→验证"
+        - "switch_engine:停止旧→校验→启动新→验证"
+        - "单元测试通过"
+
+    - id: "P1-1"
+      priority: "P1"
+      type: "code"
+      title: "Python路由扩展(manage.py新增11个路由)"
+      files: ["app-controller/routes/manage.py"]
+      depends_on: ["P0-6"]
+      definition_of_done:
+        - "search_models路由: GET /manage/models/search"
+        - "recommend_model路由: GET /manage/gpu/recommend"
+        - "check_model_memory路由: POST /manage/gpu/memory-check/{model_name}"
+        - "start_download路由: POST /manage/models/download"
+        - "download_status路由: GET /manage/models/download/{task_id}/status"
+        - "cancel_download路由: DELETE /manage/models/download/{task_id}"
+        - "list_downloads路由: GET /manage/models/downloads"
+        - "pool_list路由: GET /manage/models/pool"
+        - "pool_detail路由: GET /manage/models/pool/{model_key}"
+        - "pool_load路由: POST /manage/models/pool/{model_key}/load"
+        - "pool_delete路由: DELETE /manage/models/pool/{model_key}"
+
+    - id: "P1-2"
+      priority: "P1"
+      type: "code"
+      title: "WebSocket /ws/download 频道"
+      files: ["app-controller/routes/websocket.py"]
+      depends_on: ["P0-3"]
+      definition_of_done:
+        - "download_start/download_progress/download_complete/download_error/download_cancelled事件"
+        - "WebSocket连接管理(与现有ws_manager协调)"
+
+    - id: "P1-3"
+      priority: "P1"
+      type: "code"
+      title: "deps.py注册6个新模块单例"
+      files: ["app-controller/core/deps.py"]
+      depends_on: ["P0-1", "P0-2", "P0-3", "P0-4", "P0-5", "P0-6"]
+      definition_of_done:
+        - "注册GPUMemoryManager/MultiSourceModelHub/DownloadTaskManager/ModelPoolManager/LLMServiceManager/ModelEngineScheduler"
+        - "依赖注入生命周期管理"
+
+    - id: "P1-4"
+      priority: "P1"
+      type: "code"
+      title: "requirements.txt新增5个依赖"
+      files: ["app-controller/requirements.txt"]
+      depends_on: []
+      definition_of_done:
+        - "huggingface-hub>=0.20.0"
+        - "modelscope>=1.9.0"
+        - "openxlab>=0.1.0"
+        - "torch>=2.0.0"
+        - "psutil>=5.9.0"
+
+    - id: "P1-5"
+      priority: "P1"
+      type: "code"
+      title: "config.yaml engines/download配置段扩展"
+      files: ["app-controller/config.yaml"]
+      depends_on: []
+      definition_of_done:
+        - "新增engines配置段(vllm/sglang/llama_cpp command+default_params)"
+        - "新增download配置段(save_root/hf_endpoint/disk_warning_pct/disk_abort_pct/max_concurrent)"
+        - "模型增加engine_type/source字段"
+
+    - id: "P1-6"
+      priority: "P1"
+      type: "code"
+      title: "model_switch_orchestrator Phase2.5显存校验"
+      files: ["app-controller/core/model_switch_orchestrator.py"]
+      depends_on: ["P0-1", "P0-5"]
+      definition_of_done:
+        - "Phase2.5: GPUMemoryManager.check_model_feasibility()"
+        - "不可行时回滚+返回告警"
+        - "可行时继续Phase3"
+        - "调用LLMServiceManager替代sys_ctl"
+
+    - id: "P1-7"
+      priority: "P1"
+      type: "code"
+      title: "scheduler.py调用ModelPoolManager"
+      files: ["app-controller/core/scheduler.py"]
+      depends_on: ["P0-4"]
+      definition_of_done:
+        - "模型信息从ModelPoolManager获取"
+        - "与模型池协调(配置同步)"
+
+    - id: "P1-8"
+      priority: "P1"
+      type: "code"
+      title: "Go网关11个代理路由"
+      files: ["go-vllm-api/internal/handler/manage/manage.go"]
+      depends_on: ["P1-1"]
+      definition_of_done:
+        - "11个新路由代理转发到Python"
+        - "proxyPythonManage()统一代理"
+
+    - id: "P1-9"
+      priority: "P1"
+      type: "code"
+      title: "Go config新增Engines/Download结构体"
+      files: ["go-vllm-api/internal/config/config.go"]
+      depends_on: ["P1-5"]
+      definition_of_done:
+        - "EnginesConfig结构体(vllm/sglang/llama_cpp)"
+        - "DownloadConfig结构体(save_root/hf_endpoint/disk_warning/disk_abort/max_concurrent)"
+
+    - id: "P1-10"
+      priority: "P1"
+      type: "code"
+      title: "前端类型定义+API方法"
+      files: ["frontend/src/types/index.ts", "frontend/src/api/client.ts"]
+      depends_on: ["P1-1"]
+      definition_of_done:
+        - "4个新类型(SearchResult/RecommendResult/DownloadTask/PoolEntry)"
+        - "11个新API方法"
+        - "client.ts双axios实例扩展"
+
+    - id: "P1-11"
+      priority: "P1"
+      type: "code"
+      title: "前端3个composables"
+      files: ["frontend/src/composables/useModelSearch.ts", "frontend/src/composables/useModelDownload.ts", "frontend/src/composables/useModelPool.ts"]
+      depends_on: ["P1-10"]
+      definition_of_done:
+        - "useModelSearch: searchModels/recommendModel"
+        - "useModelDownload: startDownload/getDownloadStatus/cancelDownload"
+        - "useModelPool: getPoolList/loadFromPool/deleteFromPool"
+
+    - id: "P1-12"
+      priority: "P1"
+      type: "code"
+      title: "前端7个新组件"
+      files: ["frontend/src/components/SearchBar.vue", "frontend/src/components/SearchResultList.vue", "frontend/src/components/RecommendPanel.vue", "frontend/src/components/DownloadProgress.vue", "frontend/src/components/ModelPoolPanel.vue"]
+      depends_on: ["P1-11"]
+      definition_of_done:
+        - "SearchBar: 搜索输入+平台选择+limit"
+        - "SearchResultList: 结果列表含显存可行性✅❌"
+        - "RecommendPanel: 可用显存+推荐最优模型"
+        - "DownloadProgress: 进度条+速度+ETA+取消"
+        - "ModelPoolPanel: 已下载模型+加载状态"
+
+    - id: "P1-13"
+      priority: "P1"
+      type: "code"
+      title: "前端2个新页面+路由+侧边栏"
+      files: ["frontend/src/views/ModelSearchView.vue", "frontend/src/views/ModelPoolView.vue", "frontend/src/router/index.ts", "frontend/src/components/Sidebar.vue"]
+      depends_on: ["P1-12"]
+      definition_of_done:
+        - "ModelSearchView: 搜索→推荐→下载→加载完整交互"
+        - "ModelPoolView: 列表→加载→删除完整交互"
+        - "router新增/search和/pool路由"
+        - "Sidebar新增2个菜单项"
+
+  commands:
+    test: "cd app-controller && python -m pytest tests/ -v"
+    lint: "cd app-controller && python -m flake8 core/ routes/ --max-line-length=120"
+    typecheck: "cd frontend && npx vue-tsc --noEmit"

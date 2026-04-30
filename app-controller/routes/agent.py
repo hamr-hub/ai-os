@@ -19,6 +19,11 @@ from middleware.error_handler import ModelNotFoundException, ModelServiceUnavail
 agent_router = APIRouter(prefix="/manage/agent")
 
 
+def _session_mgr():
+    import main as m
+    return m.agent_session_manager
+
+
 # Pydantic models for request/response
 class AgentMessage(BaseModel):
     role: str = Field(..., description="Message role: user, assistant, or system")
@@ -392,3 +397,80 @@ def _convert_messages(messages: List[AgentMessage]) -> List[Dict]:
             item["name"] = msg.name
         result.append(item)
     return result
+
+
+# ===== Session Management =====
+
+class CreateSessionRequest(BaseModel):
+    title: str = Field("", description="Session title")
+    model: Optional[str] = Field(None, description="Model to use")
+
+
+class AddMessageRequest(BaseModel):
+    role: str = Field(..., description="Message role")
+    content: str = Field(..., description="Message content")
+
+
+@agent_router.post("/sessions")
+async def create_session(request: CreateSessionRequest):
+    mgr = _session_mgr()
+    session = mgr.create_session(title=request.title, model=request.model)
+    return session.to_dict()
+
+
+@agent_router.get("/sessions")
+async def list_sessions(archived: Optional[bool] = None):
+    mgr = _session_mgr()
+    return {"sessions": mgr.list_sessions(archived=archived), "total": len(mgr.list_sessions(archived=archived))}
+
+
+@agent_router.get("/sessions/{session_id}")
+async def get_session(session_id: str):
+    mgr = _session_mgr()
+    session = mgr.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict_full()
+
+
+@agent_router.post("/sessions/{session_id}/messages")
+async def add_session_message(session_id: str, request: AddMessageRequest):
+    mgr = _session_mgr()
+    session = mgr.add_message(session_id, request.role, request.content)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict()
+
+
+@agent_router.get("/sessions/{session_id}/messages")
+async def get_session_messages(session_id: str, limit: int = 100):
+    mgr = _session_mgr()
+    messages = mgr.get_session_messages(session_id, limit)
+    if messages is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"messages": messages, "session_id": session_id}
+
+
+@agent_router.delete("/sessions/{session_id}/messages")
+async def clear_session_messages(session_id: str):
+    mgr = _session_mgr()
+    if not mgr.clear_session_messages(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "success", "message": "Messages cleared"}
+
+
+@agent_router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    mgr = _session_mgr()
+    if not mgr.delete_session(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "success", "session_id": session_id}
+
+
+@agent_router.post("/sessions/{session_id}/archive")
+async def archive_session(session_id: str):
+    mgr = _session_mgr()
+    session = mgr.archive_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict()

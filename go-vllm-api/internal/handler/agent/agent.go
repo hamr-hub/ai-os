@@ -282,6 +282,7 @@ func (h *AgentHandler) AgentChat(c *gin.Context) {
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache")
 		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no")
 		c.Stream(func(w io.Writer) bool {
 			ch := make(chan string, 1)
 			go func() {

@@ -18,6 +18,8 @@ class TestModelTestingFramework:
         scheduler.get_model_port = Mock(return_value=8000)
         scheduler.get_model_supports_images = Mock(return_value=False)
         scheduler.start_model = AsyncMock(return_value=True)
+        scheduler.config = {"settings": {"preload_timeout": 180}}
+        scheduler._wait_for_model_ready = AsyncMock(return_value=True)
         return scheduler
     
     @pytest.fixture
@@ -208,6 +210,7 @@ class TestModelTestingFramework:
             model_name="model1",
             test_timestamp="2024-01-01T00:00:00",
             overall_status="passed",
+            runtime_status={"running": True, "port": 8000},
             feature_support={"chat": True, "tools": True, "image": False},
             performance_metrics={
                 "overall": {"avg_tps": 20, "avg_latency": 0.5, "pass_rate": 100}
@@ -217,11 +220,12 @@ class TestModelTestingFramework:
             errors=[],
             warnings=[]
         )
-        
+
         report2 = ModelTestReport(
             model_name="model2",
             test_timestamp="2024-01-01T00:01:00",
             overall_status="passed",
+            runtime_status={"running": True, "port": 8001},
             feature_support={"chat": True, "tools": False, "image": True},
             performance_metrics={
                 "overall": {"avg_tps": 30, "avg_latency": 0.3, "pass_rate": 100}
