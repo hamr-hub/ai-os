@@ -231,14 +231,14 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 	port := s.GetModelPort(matched)
 	if port > 0 && s.sysCtl.GetProcessInfo(port) {
 		currentModelPath := s.getCurrentVLLMModelPath()
-		
+
 		// 检查是否在切换窗口期内（2分钟）
 		s.mu.RLock()
 		switchTime, inGracePeriod := s.modelSwitchTime[matched]
 		isRecentlySwitched := inGracePeriod && time.Since(switchTime) < 2*time.Minute
 		_, inRunningModels := s.runningModels[matched]
 		s.mu.RUnlock()
-		
+
 		// 如果在切换窗口期内且在运行模型列表中，先跳过路径检查
 		if currentModelPath != "" && mc.ModelPath != "" && currentModelPath != mc.ModelPath {
 			if !isRecentlySwitched || !inRunningModels {
@@ -250,7 +250,7 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 			}
 			// 在窗口期内，继续检查其他条件
 		}
-		
+
 		if mc.Service != "" && !s.sysCtl.IsServiceRunning(mc.Service) {
 			s.mu.Lock()
 			delete(s.runningModels, matched)
@@ -334,9 +334,18 @@ func (s *Scheduler) shouldSkipKeepAlivePreload(name string) bool {
 	if s.GetModelBackendType(name) != "vllm" {
 		return false
 	}
-	currentModelPath := s.getCurrentVLLMModelPath()
+	s.mu.RLock()
+	currentModel := s.currentModel
+	s.mu.RUnlock()
+	if currentModel != "" && currentModel != name {
+		return true
+	}
 	mc := s.GetModelConfig(name)
-	if mc == nil || currentModelPath == "" {
+	if mc == nil {
+		return false
+	}
+	currentModelPath := s.getCurrentVLLMModelPath()
+	if currentModelPath == "" {
 		s.mu.RLock()
 		hasCurrent := s.currentModel != ""
 		s.mu.RUnlock()
@@ -481,7 +490,7 @@ func (s *Scheduler) MarkModelSelected(name string) {
 	s.modelLastUsed[matched] = time.Now()
 	s.modelSwitchTime[matched] = time.Now()
 	s.mu.Unlock()
-	
+
 	if s.vllmManager != nil {
 		s.vllmManager.RefreshVLLMPortCache()
 	}
@@ -795,7 +804,7 @@ func (s *Scheduler) WarmSwitchModel(ctx context.Context, name string) (bool, err
 		}
 
 		payload := map[string]interface{}{
-			"model":      vllmModelName,
+			"model": vllmModelName,
 			"messages": []map[string]interface{}{
 				{"role": "user", "content": "Hello"},
 			},

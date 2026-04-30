@@ -181,7 +181,9 @@ async def startup_event(app: FastAPI):
     _background_tasks.append(asyncio.create_task(gpu_monitor._update_cache_loop()))
     _background_tasks.append(asyncio.create_task(broadcast_status_loop()))
     _background_tasks.append(asyncio.create_task(save_history_loop()))
-    _background_tasks.append(asyncio.create_task(scheduler._health_watcher_loop()))
+    # NOTE: scheduler._health_watcher_loop is disabled because Go backend's
+    # PreloadWatcherLoop handles keep-alive model monitoring to avoid conflicts
+    # _background_tasks.append(asyncio.create_task(scheduler._health_watcher_loop()))
     structured_logger.info("AI Controller service started", action="startup")
 
 
