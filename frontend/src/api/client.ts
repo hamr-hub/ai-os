@@ -676,12 +676,12 @@ export async function updateEngineConfig(
 }
 
 export async function getEngineParamSchema(config: AxiosRequestConfig = {}): Promise<EngineParamSchema> {
-  const { data } = await client.get<EngineParamSchema>('/manage/engines/param-schema', silentRequestConfig(config))
+  const { data } = await client.get<EngineParamSchema>('/engines/param-schema', silentRequestConfig(config))
   return data
 }
 
 export async function getModelEngineParams(modelName: string, config: AxiosRequestConfig = {}): Promise<ModelEngineParams> {
-  const { data } = await client.get<ModelEngineParams>(`/manage/models/${encodeURIComponent(modelName)}/engine-params`, silentRequestConfig(config))
+  const { data } = await client.get<ModelEngineParams>(`/models/${encodeURIComponent(modelName)}/engine-params`, silentRequestConfig(config))
   return data
 }
 
@@ -692,7 +692,7 @@ export async function updateModelEngineParams(
   config: AxiosRequestConfig = {}
 ): Promise<{ status: string; model_name: string; engine_type: EngineType; params: Record<string, unknown> }> {
   const { data } = await client.put(
-    `/manage/models/${encodeURIComponent(modelName)}/engine-params`,
+    `/models/${encodeURIComponent(modelName)}/engine-params`,
     { engine_type: engineType, params },
     config
   )
@@ -705,36 +705,36 @@ export async function getGPUMemoryCheck(config: AxiosRequestConfig = {}): Promis
 }
 
 export async function getRateLimitConfig(config: AxiosRequestConfig = {}): Promise<RateLimitConfig> {
-  const { data } = await client.get<RateLimitConfig>('/manage/ratelimit/config', silentRequestConfig(config))
+  const { data } = await client.get<RateLimitConfig>('/ratelimit/config', silentRequestConfig(config))
   return data
 }
 
 export async function updateRateLimitConfig(newConfig: Partial<RateLimitConfig>, config: AxiosRequestConfig = {}): Promise<RateLimitConfig> {
-  const { data } = await client.put<RateLimitConfig>('/manage/ratelimit/config', newConfig, config)
+  const { data } = await client.put<RateLimitConfig>('/ratelimit/config', newConfig, config)
   return data
 }
 
 export async function getRateLimitStats(config: AxiosRequestConfig = {}): Promise<RateLimitStats> {
-  const { data } = await client.get<RateLimitStats>('/manage/ratelimit/stats', silentRequestConfig(config))
+  const { data } = await client.get<RateLimitStats>('/ratelimit/stats', silentRequestConfig(config))
   return data
 }
 
 export async function getSystemConfig(config: AxiosRequestConfig = {}): Promise<SystemConfig> {
-  const { data } = await client.get<SystemConfig>('/manage/config/global', silentRequestConfig(config))
+  const { data } = await client.get<SystemConfig>('/config/global', silentRequestConfig(config))
   return data
 }
 
 export async function updateSystemConfig(newConfig: Partial<SystemConfig>, config: AxiosRequestConfig = {}): Promise<SystemConfig> {
-  const { data } = await client.put<SystemConfig>('/manage/config/global', newConfig, config)
+  const { data } = await client.put<SystemConfig>('/config/global', newConfig, config)
   return data
 }
 
 export async function getHealthDetailed(config: AxiosRequestConfig = {}): Promise<HealthDetail> {
-  const { data } = await client.get<HealthDetail>('/manage/health/detailed', silentRequestConfig(config))
+  const { data } = await client.get<HealthDetail>('/health/detailed', silentRequestConfig(config))
   return data
 }
 
 export async function getHealthHistory(config: AxiosRequestConfig = {}): Promise<HealthHistoryEntry[]> {
-  const { data } = await client.get<HealthHistoryEntry[]>('/manage/health/history', silentRequestConfig(config))
+  const { data } = await client.get<HealthHistoryEntry[]>('/health/history', silentRequestConfig(config))
   return data
 }
