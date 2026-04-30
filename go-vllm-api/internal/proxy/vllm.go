@@ -104,6 +104,7 @@ func (p *VLLMProxy) ChatCompletion(ctx context.Context, port int, payload interf
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	attachRequestIDHeader(req, ctx)
 
 	resp, err := p.requestClient.Do(req)
 	if err != nil {
@@ -146,6 +147,7 @@ func (p *VLLMProxy) StreamChatCompletion(ctx context.Context, port int, payload 
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	attachRequestIDHeader(req, ctx)
 	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := p.streamClient.Do(req)
@@ -229,6 +231,7 @@ func (p *VLLMProxy) ListModels(ctx context.Context, port int) (interface{}, erro
 	if err != nil {
 		return nil, err
 	}
+	attachRequestIDHeader(req, ctx)
 	resp, err := p.requestClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -267,6 +270,7 @@ func (p *VLLMProxy) WaitUntilReady(ctx context.Context, port int, timeout time.D
 		if err != nil {
 			return err
 		}
+		attachRequestIDHeader(req, ctx)
 
 		resp, err := p.requestClient.Do(req)
 		if err == nil {
@@ -319,6 +323,7 @@ func (p *VLLMProxy) Embeddings(ctx context.Context, port int, payload interface{
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	attachRequestIDHeader(req, ctx)
 
 	resp, err := p.requestClient.Do(req)
 	if err != nil {
@@ -357,6 +362,7 @@ func (p *VLLMProxy) PostEndpoint(ctx context.Context, port int, path string, pay
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	attachRequestIDHeader(req, ctx)
 
 	resp, err := p.requestClient.Do(req)
 	if err != nil {

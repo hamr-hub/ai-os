@@ -3,10 +3,14 @@
 ## 架构
 
 ```
-前端 Vite (30001) → proxy /api/manage, /api/* → Python FastAPI /manage/* (35000)
-                                → proxy /api/health, /v1, /health → Go go-vllm-api (35001)
-                                → aiclient2api (3000, Docker部署)
-                                → Redis (6379)
+B端管控: 前端 Vite (30001) → proxy /api/manage → Python FastAPI /manage/* (35000) [引擎/模型管控]
+                                → proxy /ws → Python WebSocket (35000) [GPU监控/切换进度]
+C端推理: aiclient2api (3000, Docker部署) → provider → Go go-vllm-api (35001) → 推理引擎(:8000)
+基础设施: Redis (6379) [缓存/限流]
+
+两条核心路径:
+  C端推理: aiclient2api(Node) → provider → go-vllm-api → 推理引擎
+  B端管控: Frontend/插件 → Python → 引擎启停/模型管理
 ```
 
 端口配置详见 [端口参考](./port-reference.md)。
@@ -46,9 +50,10 @@ cd frontend
 pnpm install && pnpm dev    # http://localhost:30001
 ```
 
-### 5. aiclient2api (Docker)
+### 5. aiclient2api (开源项目+GPU插件, Node后端)
 ```bash
 cd aiclient2api && docker compose up -d    # http://localhost:3000
+# provider_pools.json 中 OPENAI_BASE_URL 指向 go-vllm-api:35001
 ```
 
 ## 调试

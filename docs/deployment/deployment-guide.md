@@ -27,12 +27,17 @@
 ```
 用户 → 浏览器
          ↓
-     Vite Dev Server (30001) — 前端热更新
-         ↓ (代理)
-     Python FastAPI (35000) — 管理接口
-     Go go-vllm-api (35001) — 推理接口
-     aiclient2api (3000, Docker) — API 网关
-     Redis (6379) — 缓存
+     Vite Dev Server (30001) — 前端热更新 (B端管控面板)
+         ↓ (代理 → Python B端)
+     Python FastAPI (35000) — 管理接口 /api/manage, /ws (引擎/模型管控)
+         
+     Go go-vllm-api (35001) — vLLM限流代理 /v1 (C端推理接口)
+     aiclient2api (3000, Docker) — 开源项目+GPU插件 (Node后端, provider→Go)
+     Redis (6379) — 缓存/限流
+
+两条核心路径:
+  C端推理: aiclient2api(Node) → provider → go-vllm-api → 推理引擎
+  B端管控: Frontend/插件 → Python → 引擎启停/模型管理
 ```
 
 **前置条件**:
@@ -55,7 +60,7 @@ cd go-vllm-api && go run cmd/server/main.go --port 35001
 # 4. 启动前端
 cd frontend && pnpm install && pnpm dev
 
-# 5. 启动 API 网关
+# 5. 启动 aiclient2api (开源项目+GPU插件, Node后端)
 cd aiclient2api && docker compose up -d
 ```
 
@@ -90,7 +95,7 @@ cd aiclient2api && docker compose up -d
 | redis | ai-os-redis | 6379:6379 | Redis 缓存 |
 | ai-controller | ai-os-controller | 35000:35000 | Python FastAPI |
 | go-vllm-api | ai-os-go-vllm-api | 35001:35001 | Go vLLM API |
-| aiclient | ai-os-aiclient | 3000:3000 | API 网关 |
+| aiclient | ai-os-aiclient | 3000:3000 | 开源项目+GPU插件 (Node后端) |
 | frontend | ai-os-frontend | 30000:80 | Nginx 前端 |
 
 **启动方式**:
@@ -347,12 +352,12 @@ docker run -d --name ai-os-redis -p 6379:6379 redis:7.2-alpine
 ## 服务架构
 
 ```
-用户 → 前端 (开发 30001 / 生产 30000)
-         ↓
-     aiclient2api (3000) — API 网关 / 鉴权
-         ↓
-     go-vllm-api (35001) — 推理接口 /v1
-     app-controller (35000) — 管理接口 /manage
+用户 → Nginx Frontend (30000) — B端管控面板
+         ↓ (B端管控路径)
+     aiclient2api (3000) — 开源项目+GPU插件, Node后端
+         ↓ (C端推理路径: provider → Go)
+     go-vllm-api (35001) — vLLM限流代理
+     app-controller (35000) — Python 管控 (引擎启停/模型管理)
          ↓
      vLLM (8000) — 模型推理
      Redis (6379) — 缓存 / 队列
@@ -367,9 +372,9 @@ docker run -d --name ai-os-redis -p 6379:6379 redis:7.2-alpine
 | 服务 | 开发端口 | Docker 端口 | 说明 |
 |------|---------|-------------|------|
 | 前端 Vite/Nginx | 30001 | 30000→80 | 开发 Vite / 生产 Nginx |
-| Python 后端 FastAPI | 35000 | 35000 | 管理接口 `/manage/*` |
-| Go 后端 go-vllm-api | 35001 | 35001 | 推理接口 `/v1/*` |
-| aiclient2api | 3000 | 3000 | API 网关 (Docker部署) |
+| Python B端 FastAPI | 35000 | 35000 | 引擎管控+模型管理 (Frontend/插件入口) |
+| Go vLLM限流代理 go-vllm-api | 35001 | 35001 | vLLM限流代理 (aiclient2api provider路由目标) |
+| aiclient2api | 3000 | 3000 | 开源项目+GPU插件 (Node后端, Docker部署) |
 | Redis | 6379 | 6379 | 缓存 / 队列 |
 | vLLM | 8000 | 8000 (容器内) | 模型推理，不对外暴露 |
 

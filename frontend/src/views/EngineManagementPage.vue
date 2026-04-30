@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, type Ref } from 'vue'
 import { useEngineManagement } from '@/composables/useEngineManagement'
 import { useModelSwitch } from '@/composables/useModelSwitch'
 import {
@@ -10,15 +10,14 @@ import {
   CheckCircle,
   XCircle,
   Play,
-  Square,
   Server,
   Settings,
   ArrowRight,
 } from 'lucide-vue-next'
 import type { EngineType } from '@/types'
 
-const { engineStatus, engineConfig, switchSession, loading, switching, error, fetchStatus, fetchConfig, doSwitchEngine, doUpdateConfig } = useEngineManagement()
-const { isSwitching, currentSession, triggerSwitch, triggerCancel, initSwitchMonitor } = useModelSwitch()
+const { engineStatus, engineConfig, loading, switching, error, fetchStatus, fetchConfig, doSwitchEngine, doUpdateConfig } = useEngineManagement()
+const { isSwitching, currentSession, triggerSwitch, triggerCancel } = useModelSwitch()
 
 const targetModel = ref('')
 const targetEngine: Ref<EngineType> = ref('vllm')

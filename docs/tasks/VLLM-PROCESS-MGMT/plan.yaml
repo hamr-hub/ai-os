@@ -1,0 +1,157 @@
+meta:
+  taskId: VLLM-PROCESS-MGMT
+  source: tech-solution.yaml
+  platform: backend_python
+  test_command: "cd app-controller && python -m pytest tests/ -v"
+  lint_command: "cd app-controller && python -m flake8 core/ routes/ --max-line-length=120"
+
+tasks:
+  - id: T1
+    title: "升级 LLMServiceManager vLLM 命令为 vllm serve"
+    priority: P0
+    ac_refs: ["AC1"]
+    change: modify
+    path: "app-controller/core/llm_service_manager.py"
+    description: |
+      1. _build_vllm_command 改为使用 "vllm serve" 命令替代 "python -m vllm.entrypoints.openai.api_server"
+      2. 新增 _build_vllm_env() 方法，注入 start_vllm_aiclient.sh 的环境变量
+      3. start_service 使用 _build_vllm_env 构建环境变量字典
+      4. 添加 --host 0.0.0.0 参数
+      5. 保留 --trust-remote-code, --enforce-eager, --kv-cache-dtype auto 等参数
+      6. attention_backend 通过 VLLM_ATTENTION_BACKEND 环境变量注入而非 CLI 参数
+    definition_of_done:
+      - "_build_vllm_command 返回以 'vllm serve' 开头的命令列表"
+      - "_build_vllm_env 返回包含 VLLM_USE_V1=1, NCCL_P2P_DISABLE=1 等环境变量字典"
+      - "start_service 使用 _build_vllm_env 的 env 注入到 Popen"
+    test_dependencies:
+      - "test_build_vllm_command_uses_vllm_serve"
+      - "test_build_vllm_env_includes_required_vars"
+      - "test_start_service_injects_env_vars"
+
+  - id: T2
+    title: "增强 stop_service 进程组优雅停止"
+    priority: P0
+    ac_refs: ["AC6"]
+    change: modify
+    path: "app-controller/core/llm_service_manager.py"
+    description: |
+      1. start_service 使用 Popen 的 preexec_fn=os.setsid 创建新进程组
+      2. stop_service 改为 os.killpg(pgid, SIGINT) 发送信号给整个进程组
+      3. timeout 后 os.killpg(pgid, SIGKILL) 强制杀进程组
+      4. 确保 vLLM worker 子进程被正确终止，GPU 显存释放
+    definition_of_done:
+      - "stop_service 发送 SIGINT 到进程组而非单个进程"
+      - "timeout 15s 后 SIGKILL 进程组"
+      - "cleanup_service 清理所有跟踪数据"
+    test_dependencies:
+      - "test_stop_service_sends_killpg"
+      - "test_stop_service_timeout_sigkill"
+
+  - id: T3
+    title: "添加进程守护健康检查循环"
+    priority: P0
+    ac_refs: ["AC5"]
+    change: modify
+    path: "app-controller/core/model_engine_scheduler.py"
+    description: |
+      1. 新增 _health_watcher_loop() asyncio 后台任务
+      2. 每5s遍历所有服务: 检查 process.poll() 和 HTTP /v1/models
+      3. 进程异常退出时调用 auto_restart (最多3次)
+      4. 在 main.py startup_event 中启动该后台任务
+      5. 在 shutdown_event 中取消该任务
+    definition_of_done:
+      - "_health_watcher_loop 检测到进程退出后触发 auto_restart"
+      - "auto_restart 最多重试3次"
+      - "后台任务在 startup/shutdown 正确管理"
+    test_dependencies:
+      - "test_health_watcher_detects_dead_process"
+      - "test_auto_restart_max_attempts"
+
+  - id: T4
+    title: "统一 ModelSwitchOrchestrator 使用 subprocess 模式"
+    priority: P1
+    ac_refs: ["AC3"]
+    change: modify
+    path: "app-controller/core/model_switch_orchestrator.py"
+    description: |
+      1. 当 engine_manager_mode=subprocess 时，使用 LLMServiceManager 替代 systemd/vllm_manager
+      2. 原子模型切换: stop_old_service → start_new_service → wait_for_ready → test
+      3. 保留 engine_manager_mode=systemd 降级路径
+    definition_of_done:
+      - "subprocess 模式下不调用任何 systemctl 命令"
+      - "模型切换通过 stop+start Popen 进程完成"
+    test_dependencies:
+      - "test_switch_subprocess_mode_no_systemctl"
+
+  - id: T5
+    title: "更新 config.yaml 添加环境变量和 subprocess 模式配置"
+    priority: P1
+    ac_refs: ["AC8"]
+    change: modify
+    path: "app-controller/config.yaml"
+    description: |
+      1. vllm 部分添加 engine_manager_mode: subprocess (默认)
+      2. vllm 部分添加 env_vars 字段，包含 VLLM_USE_V1, NCCL_P2P_DISABLE 等
+      3. vllm 部分添加 venv_path 配置
+      4. settings 添加 process_health_check_interval: 5
+    definition_of_done:
+      - "config.yaml 包含 engine_manager_mode: subprocess"
+      - "config.yaml 包含 env_vars 字段"
+    test_dependencies:
+      - "test_config_loads_env_vars"
+
+  - id: T6
+    title: "更新 deps.py 默认 subprocess 模式"
+    priority: P1
+    change: modify
+    path: "app-controller/core/deps.py"
+    description: |
+      1. _engine_manager_mode 从 config 读取，默认 subprocess
+      2. 将 env_vars 和 health_check_interval 传递给 LLMServiceManager
+    definition_of_done:
+      - "默认 engine_manager_mode=subprocess"
+    test_dependencies: []
+
+  - id: T7
+    title: "更新 API 路由适配 subprocess 模式"
+    priority: P1
+    ac_refs: ["AC4"]
+    change: modify
+    path: "app-controller/routes/manage.py"
+    description: |
+      1. /manage/engines/start 使用 LLMServiceManager.start_service
+      2. /manage/engines/stop 使用 LLMServiceManager.stop_service
+      3. /manage/engines/switch 使用 ModelEngineScheduler.switch_engine
+      4. /manage/engines/health 返回 subprocess 进程状态
+      5. 保留 systemctl 降级路径 (engine_manager_mode=systemd)
+    definition_of_done:
+      - "API 路由在 subprocess 模式下正确工作"
+    test_dependencies:
+      - "test_engine_start_api"
+      - "test_engine_stop_api"
+
+  - id: T8
+    title: "Go 后端 scheduler 适配 HTTP API"
+    priority: P2
+    change: modify
+    path: "go-vllm-api/internal/service/scheduler.go"
+    description: |
+      1. StartModel/StopModel/SwitchModel 通过 HTTP 调 Python /manage/engines/* API
+      2. 保留 systemctl fallback (当 Python API 不可用时)
+      3. 添加 PythonAPIClient struct
+    definition_of_done:
+      - "Go 通过 HTTP API 管理 vLLM 进程"
+    test_dependencies: []
+
+  - id: T9
+    title: "更新测试覆盖 subprocess 进程管理"
+    priority: P2
+    change: modify
+    path: "app-controller/tests/test_model_engine_scheduler.py"
+    description: |
+      1. mock subprocess.Popen 测试 vllm serve 命令构建
+      2. mock 进程退出测试 auto_restart
+      3. mock HTTP 响应测试 wait_for_ready
+    definition_of_done:
+      - "所有新增功能有对应测试"
+    test_dependencies: []

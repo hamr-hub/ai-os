@@ -1,0 +1,214 @@
+meta:
+  title: "vLLM Python 进程管理替代 systemd"
+  platform: backend
+  requirement_confidence: high
+  requirement_version: "1.0"
+  business_goal: "用 Python subprocess.Popen 替代 systemd 方式管理 vLLM 引擎进程，实现统一进程管理"
+
+scope:
+  in_scope:
+    - "升级 LLMServiceManager: vLLM 命令从 python -m vllm.entrypoints 改为 vllm serve"
+    - "迁移 start_vllm_aiclient.sh 的环境变量和参数到 Python 配置"
+    - "统一 ModelEngineScheduler 和 ModelSwitchOrchestrator 的进程管理为 subprocess"
+    - "进程健康检查: HTTP /v1/models + 进程存活检测替代 systemd is-active"
+    - "进程异常退出自动重启替代 systemd Restart=always"
+    - "优雅停止: SIGINT → timeout → SIGKILL 确保 GPU 显存释放"
+    - "Go 后端 scheduler 同步适配 subprocess 模式"
+  out_of_scope:
+    - "Docker/Kubernetes 部署方式"
+    - "前端 UI 变更"
+    - "vLLM 离线推理 Python API (LLM class)"
+
+file_changes:
+  - path: "app-controller/core/llm_service_manager.py"
+    change: modify
+    summary: "升级 vLLM 命令为 vllm serve，添加环境变量注入、日志重定向、进程守护"
+    risk: high
+    depends_on: []
+  - path: "app-controller/core/model_engine_scheduler.py"
+    change: modify
+    summary: "添加进程守护健康检查循环，替代 systemd watchdog"
+    risk: high
+    depends_on: ["app-controller/core/llm_service_manager.py"]
+  - path: "app-controller/core/model_switch_orchestrator.py"
+    change: modify
+    summary: "统一使用 LLMServiceManager 替代 systemd/vllm_manager 进行模型切换"
+    risk: high
+    depends_on: ["app-controller/core/llm_service_manager.py"]
+  - path: "app-controller/core/deps.py"
+    change: modify
+    summary: "调整依赖注入，model_switch_orchestrator 默认 engine_manager_mode=subprocess"
+    risk: medium
+  - path: "app-controller/core/sys_ctl.py"
+    change: modify
+    summary: "添加 start_managed_process 增强: 环境变量注入、日志文件、进程守护"
+    risk: medium
+  - path: "app-controller/config.yaml"
+    change: modify
+    summary: "添加 vllm 环境变量配置(VLLM_USE_V1, NCCL_P2P_DISABLE 等)，engine_manager_mode=subprocess"
+    risk: low
+  - path: "app-controller/core/vllm_manager.py"
+    change: modify
+    summary: "保留模型发现/参数推荐功能，移除 systemd 启停函数的调用入口"
+    risk: medium
+  - path: "app-controller/routes/manage.py"
+    change: modify
+    summary: "API 路由统一使用 subprocess 模式，保留兼容降级"
+    risk: medium
+    depends_on: ["app-controller/core/model_engine_scheduler.py"]
+  - path: "go-vllm-api/internal/service/scheduler.go"
+    change: modify
+    summary: "Go scheduler 适配: 进程启动通过 HTTP API 调 Python 后端而非直接 systemctl"
+    risk: high
+    depends_on: ["app-controller/routes/manage.py"]
+  - path: "app-controller/tests/test_model_engine_scheduler.py"
+    change: modify
+    summary: "更新测试: subprocess 进程管理的 mock 和验证"
+    risk: low
+
+design:
+  core_approach: |
+    核心设计：将 vLLM 引擎管理从 systemd 服务模式迁移到 Python subprocess.Popen 进程管理模式。
+
+    1. 升级 vLLM 启动命令：从 python -m vllm.entrypoints.openai.api_server 改为 vllm serve（vLLM v1 推荐方式）
+    2. 迁移 start_vllm_aiclient.sh 的环境变量（VLLM_USE_V1=1, NCCL_P2P_DISABLE=1 等）到 Python 配置注入
+    3. 进程管理全链路 subprocess：start/stop/restart/switch 都通过 LLMServiceManager 的 Popen 管理
+    4. 健康检查双轨：进程存活检测 (poll()) + HTTP /v1/models 响应检查
+    5. 进程守护：asyncio 后台任务循环检测进程状态，异常退出自动重启
+    6. 优雅停止：SIGINT(15s timeout) → SIGKILL，确保 vLLM worker 子进程和 GPU 显存正确释放
+    7. Go 后端适配：通过 HTTP API 调用 Python 后端的 subprocess 管理，而非直接 systemctl
+
+  process_lifecycle: |
+    进程生命周期管理：
+    - START: subprocess.Popen(cmd, env=env_with_vars, stdout=log_file, stderr=log_file) → wait_for_ready(120s)
+    - HEALTH: asyncio background task 每5s检查: process.poll() + http GET /v1/models
+    - RESTART: stop_service(SIGINT→SIGKILL) → start_service → wait_for_ready
+    - STOP: SIGINT → wait(15s) → SIGKILL → wait(3s) → cleanup → GPU unregister
+    - SWITCH: stop_old → GPU_unregister → sleep(3s) → start_new → wait_for_ready → GPU_register
+
+  env_vars_migration: |
+    从 start_vllm_aiclient.sh 迁移到 Python LLMServiceManager._build_vllm_env():
+    - VLLM_USE_V1=1
+    - NCCL_P2P_DISABLE=1
+    - NCCL_SOCKET_REUSEPORT=1
+    - NCCL_ASYNC_ERROR_HANDLING=1
+    - NCCL_IB_DISABLE=1
+    - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
+    - OMP_NUM_THREADS=16
+    - VLLM_NO_FLASHINFER=1
+    - FLASHINFER_DISABLE=1
+    - HF_ENDPOINT (from config)
+
+  vllm_command_upgrade: |
+    旧命令: python -m vllm.entrypoints.openai.api_server --model <path> --port <port>
+    新命令: vllm serve <model_path> --port <port> --host 0.0.0.0
+
+    新命令优势:
+    - vllm serve 是 vLLM v1 推荐的 OpenAI-compatible server 启动方式
+    - 内置 V1 engine 支持 (VLLM_USE_V1=1)
+    - 更简洁的 CLI 参数
+    - 自动检测模型类型和聊天模板
+
+    关键参数映射:
+    --model → 直接传入 model_path 到 vllm serve
+    --gpu-memory-utilization → 保留
+    --max-model-len → 保留
+    --trust-remote-code → 保留
+    --host 0.0.0.0 → 新增（旧版默认绑定所有，新版需显式指定）
+    --port → 保留
+    --kv-cache-dtype auto → 保留
+    --enable-chunked-prefill → 保留
+    --max-num-batched-tokens → 保留
+    --max-num-seqs → 保留
+    --enforce-eager → 保留
+    --enable-auto-tool-choice + --tool-call-parser → 保留
+    --attention-backend → 通过 VLLM_ATTENTION_BACKEND 环境变量设置
+
+api:
+  - name: "start_engine_process"
+    layer: backend
+    endpoint: "/manage/engines/start"
+    method: "POST"
+    request_schema:
+      model_name: "string"
+      engine_type: "string"
+      port: "int?"
+    response_schema:
+      status: "string"
+      pid: "int"
+      service_name: "string"
+      port: "int"
+    error_codes:
+      - code: "400"
+        meaning: "参数错误"
+        handling: "返回错误详情"
+      - code: "503"
+        meaning: "GPU显存不足"
+        handling: "返回 feasibility 信息和建议"
+
+  - name: "stop_engine_process"
+    layer: backend
+    endpoint: "/manage/engines/stop"
+    method: "POST"
+    request_schema:
+      service_name: "string"
+      timeout: "int?"
+    response_schema:
+      success: "bool"
+      service_name: "string"
+    error_codes:
+      - code: "404"
+        meaning: "服务不存在"
+        handling: "返回 not_found"
+      - code: "500"
+        meaning: "停止失败"
+        handling: "返回 stop_failed 详情"
+
+  - name: "switch_engine_process"
+    layer: backend
+    endpoint: "/manage/engines/switch"
+    method: "POST"
+    request_schema:
+      model_name: "string"
+      engine_type: "string?"
+      port: "int?"
+    response_schema:
+      success: "bool"
+      service_name: "string"
+      engine_type: "string"
+      port: "int"
+      status: "string"
+    error_codes:
+      - code: "503"
+        meaning: "GPU显存不足无法切换"
+        handling: "返回 feasibility + suggestion"
+
+  - name: "engine_health_status"
+    layer: backend
+    endpoint: "/manage/engines/health"
+    method: "GET"
+    request_schema:
+      service_name: "string?"
+    response_schema:
+      services: "ServiceStatus[]"
+      healthy_count: "int"
+      total_count: "int"
+    error_codes:
+      - code: "200"
+        meaning: "正常"
+        handling: "返回健康状态"
+
+validation:
+  acceptance:
+    - criterion: "vLLM 进程通过 vllm serve 命令启动（非 python -m）"
+      test: "start_service 返回命令包含 'vllm serve'"
+    - criterion: "进程异常退出后 5s 内自动重启"
+      test: "kill 进程后 wait_for_ready 返回 True"
+    - criterion: "SIGINT 优雅停止 vLLM，GPU 显存释放"
+      test: "stop_service 后 nvidia-smi 显示显存恢复"
+    - criterion: "模型切换: stop old → start new → /v1/models 返回 200"
+      test: "switch_model 返回 success=True 且新模型可推理"
+    - criterion: "start_vllm_aiclient.sh 的环境变量全部在 Python 配置中"
+      test: "Popen env 包含 VLLM_USE_V1, NCCL_P2P_DISABLE 等"
+    - criterion: "Go 后端通过 HTTP API 管理进程而非 systemctl"
+      test: "Go scheduler 调 Python /manage/engines/* API"

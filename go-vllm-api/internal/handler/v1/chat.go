@@ -157,6 +157,9 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	requestID, _ := c.Get("request_id")
+	proxyCtx := proxy.ContextWithRequestID(c.Request.Context(), fmt.Sprintf("%v", requestID))
+
 	modelName := req.Model
 	stream := req.Stream
 	statusCode := 200
