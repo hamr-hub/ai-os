@@ -61,43 +61,40 @@ function sendJson(res, statusCode, data) {
  * @param {http.IncomingMessage} req
  * @returns {Promise<boolean>}
  */
-async function checkAdminAuth(req) {
+async function checkAdminAuth(req, config) {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return false;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+            const { existsSync, readFileSync } = await import('fs');
+            const path = await import('path');
+
+            const TOKEN_STORE_FILE = path.join(process.cwd(), 'configs', 'token-store.json');
+
+            if (existsSync(TOKEN_STORE_FILE)) {
+                const content = readFileSync(TOKEN_STORE_FILE, 'utf8');
+                const tokenStore = JSON.parse(content);
+                const token = authHeader.substring(7);
+                const tokenInfo = tokenStore.tokens[token];
+
+                if (tokenInfo && Date.now() <= tokenInfo.expiryTime) {
+                    return true;
+                }
+            }
+        } catch (error) {
+            logger.error('[API Potluck] Token store auth check error:', error.message);
+        }
     }
-    
-    // 动态导入 ui-manager 中的 token 验证逻辑
-    try {
-        const { existsSync, readFileSync } = await import('fs');
-        const { promises: fs } = await import('fs');
-        const path = await import('path');
-        
-        const TOKEN_STORE_FILE = path.join(process.cwd(), 'configs', 'token-store.json');
-        
-        if (!existsSync(TOKEN_STORE_FILE)) {
-            return false;
+
+    if (config?.REQUIRED_API_KEY) {
+        const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7)
+                     : req.headers['x-admin-token'] || null;
+        if (token && token === config.REQUIRED_API_KEY) {
+            return true;
         }
-        
-        const content = readFileSync(TOKEN_STORE_FILE, 'utf8');
-        const tokenStore = JSON.parse(content);
-        const token = authHeader.substring(7);
-        const tokenInfo = tokenStore.tokens[token];
-        
-        if (!tokenInfo) {
-            return false;
-        }
-        
-        // 检查是否过期
-        if (Date.now() > tokenInfo.expiryTime) {
-            return false;
-        }
-        
-        return true;
-    } catch (error) {
-        logger.error('[API Potluck] Auth check error:', error.message);
-        return false;
     }
+
+    return false;
 }
 
 /**
@@ -108,15 +105,13 @@ async function checkAdminAuth(req) {
  * @param {http.ServerResponse} res - HTTP 响应对象
  * @returns {Promise<boolean>} - 是否处理了请求
  */
-export async function handlePotluckApiRoutes(method, path, req, res) {
-    // 只处理 /api/potluck 开头的请求
+export async function handlePotluckApiRoutes(method, path, req, res, config) {
     if (!path.startsWith('/api/potluck')) {
         return false;
     }
     logger.info('[API Potluck] Handling request:', method, path);
     
-    // 验证管理员权限
-    const isAuthed = await checkAdminAuth(req);
+    const isAuthed = await checkAdminAuth(req, config);
     if (!isAuthed) {
         sendJson(res, 401, { 
             success: false, 

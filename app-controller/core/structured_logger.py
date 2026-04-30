@@ -16,6 +16,7 @@ class StructuredLogger:
             self.logger.addHandler(handler)
     
     def _format_log(self, level: str, message: str, **kwargs) -> str:
+        kwargs.pop("level", None)
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "level": level.upper(),
@@ -26,18 +27,23 @@ class StructuredLogger:
     
     def debug(self, message: str, **kwargs):
         if self.logger.isEnabledFor(logging.DEBUG):
+            kwargs.pop("level", None)
             self.logger.debug(self._format_log("debug", message, **kwargs))
     
     def info(self, message: str, **kwargs):
+        kwargs.pop("level", None)
         self.logger.info(self._format_log("info", message, **kwargs))
     
     def warning(self, message: str, **kwargs):
+        kwargs.pop("level", None)
         self.logger.warning(self._format_log("warning", message, **kwargs))
     
     def error(self, message: str, **kwargs):
+        kwargs.pop("level", None)
         self.logger.error(self._format_log("error", message, **kwargs))
     
     def critical(self, message: str, **kwargs):
+        kwargs.pop("level", None)
         self.logger.critical(self._format_log("critical", message, **kwargs))
     
     def log_request(self, endpoint: str, method: str, status_code: int, 

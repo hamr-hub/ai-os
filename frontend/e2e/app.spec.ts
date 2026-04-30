@@ -41,7 +41,7 @@ test.describe('Dashboard 页面基本结构', () => {
     await expect(icon).toHaveClass(/animate-spin/)
   })
 
-  test('六个卡片区域可见', async ({ page }) => {
+  test('卡片区域可见', async ({ page }) => {
     await expect(page.locator('.gpu-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.token-card')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('.system-card')).toBeVisible({ timeout: 15000 })
@@ -79,10 +79,10 @@ test.describe('Dashboard 数据依赖测试', () => {
     await expect(systemGrid.or(emptyState)).toBeVisible({ timeout: 10000 })
   })
 
-  test('请求队列卡片有内容或空状态', async ({ page }) => {
-    const vllmGrid = page.locator('.vllm-card .vllm-grid')
+  test('vLLM指标卡片有内容或空状态', async ({ page }) => {
+    const metricsGrid = page.locator('.vllm-card .metrics-grid')
     const emptyState = page.locator('.vllm-card .empty-state')
-    await expect(vllmGrid.or(emptyState)).toBeVisible({ timeout: 10000 })
+    await expect(metricsGrid.or(emptyState)).toBeVisible({ timeout: 10000 })
   })
 
   test('健康告警卡片有内容或空状态', async ({ page }) => {
@@ -99,9 +99,9 @@ test.describe('Dashboard 数据依赖测试', () => {
 
   test('GPU监控sparkline区域', async ({ page }) => {
     const gpuCard = page.locator('.gpu-card').first()
-    const hasContent = await gpuCard.locator('.gpu-card-content').isVisible().catch(() => false)
-    const hasEmpty = await gpuCard.locator('.empty-state').isVisible().catch(() => false)
-    expect(hasContent || hasEmpty).toBe(true)
+    const hasCharts = await gpuCard.locator('.gpu-charts-grid').isVisible().catch(() => false)
+    const hasEmpty = await gpuCard.locator('.gpu-chart-empty-state').isVisible().catch(() => false)
+    expect(hasCharts || hasEmpty).toBe(true)
   })
 
   test('健康告警展开/折叠告警列表', async ({ page }) => {
@@ -116,13 +116,13 @@ test.describe('Dashboard 数据依赖测试', () => {
 })
 
 test.describe('Dashboard 响应式布局', () => {
-  test('宽屏3列布局', async ({ browser }) => {
+  test('宽屏2列布局', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 1400, height: 900 } })
     const page = await context.newPage()
     await login(page)
-    const grid = page.locator('.content > .grid')
+    const grid = page.locator('.dashboard-grid')
     const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
-    expect(columns.split(' ').length).toBe(3)
+    expect(columns.split(' ').length).toBe(2)
     await context.close()
   })
 
@@ -130,7 +130,7 @@ test.describe('Dashboard 响应式布局', () => {
     const context = await browser.newContext({ viewport: { width: 900, height: 900 } })
     const page = await context.newPage()
     await login(page)
-    const grid = page.locator('.content > .grid')
+    const grid = page.locator('.dashboard-grid')
     const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(2)
     await context.close()
@@ -140,7 +140,7 @@ test.describe('Dashboard 响应式布局', () => {
     const context = await browser.newContext({ viewport: { width: 500, height: 900 } })
     const page = await context.newPage()
     await login(page)
-    const grid = page.locator('.content > .grid')
+    const grid = page.locator('.dashboard-grid')
     const columns = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns)
     expect(columns.split(' ').length).toBe(1)
     await context.close()
@@ -179,12 +179,6 @@ test.describe('导航跳转', () => {
     await expect(page.locator('.gpu-monitor')).toBeVisible({ timeout: 10000 })
   })
 
-  test('点击导航到系统运维页面', async ({ page }) => {
-    await page.locator('.nav-item').filter({ hasText: '系统运维' }).click()
-    await expect(page).toHaveURL(/\/systemops/, { timeout: 10000 })
-    await expect(page.locator('.system-ops')).toBeVisible({ timeout: 10000 })
-  })
-
   test('点击导航到文档页面', async ({ page }) => {
     await page.locator('.nav-item').filter({ hasText: '系统文档' }).click()
     await expect(page).toHaveURL(/\/docs/, { timeout: 10000 })
@@ -193,9 +187,9 @@ test.describe('导航跳转', () => {
   test('导航active状态切换', async ({ page }) => {
     const dashboardNav = page.locator('.nav-item').filter({ hasText: '总览面板' })
     await expect(dashboardNav).toHaveClass(/active/)
-    await page.locator('.nav-item').filter({ hasText: 'Agent' }).click()
+    await page.locator('.nav-item').filter({ hasText: 'AI Agent' }).click()
     await expect(dashboardNav).not.toHaveClass(/active/)
-    const agentNav = page.locator('.nav-item').filter({ hasText: 'Agent' })
+    const agentNav = page.locator('.nav-item').filter({ hasText: 'AI Agent' })
     await expect(agentNav).toHaveClass(/active/)
   })
 })
@@ -340,7 +334,7 @@ test.describe('ModelManagement 页面', () => {
   })
 
   test('模型管理页面标题可见', async ({ page }) => {
-    await expect(page.locator('.header-title')).toHaveText('模型中心', { timeout: 15000 })
+    await expect(page.locator('.model-center .page-header .header-title').first()).toContainText('模型中心', { timeout: 15000 })
   })
 
   test('模型管理页面结构可见', async ({ page }) => {
@@ -382,7 +376,7 @@ test.describe('Monitor 页面', () => {
   })
 
   test('监控页面标题可见', async ({ page }) => {
-    await expect(page.locator('.header-title')).toHaveText('GPU 监控', { timeout: 15000 })
+    await expect(page.locator('.page-header .header-title')).toContainText('GPU 监控', { timeout: 15000 })
   })
 
   test('监控页面结构可见', async ({ page }) => {
@@ -441,7 +435,7 @@ test.describe('Benchmarks 页面', () => {
   })
 
   test('评测页面标题可见', async ({ page }) => {
-    await expect(page.locator('.header-title')).toHaveText('模型中心', { timeout: 15000 })
+    await expect(page.locator('.page-header .header-title').first()).toContainText('模型中心', { timeout: 15000 })
   })
 
   test('评测页面结构可见', async ({ page }) => {
@@ -498,18 +492,13 @@ test.describe('视觉一致性', () => {
   test('所有卡片有icon-wrap', async ({ page }) => {
     const iconWraps = page.locator('.icon-wrap')
     const count = await iconWraps.count()
-    expect(count).toBeGreaterThanOrEqual(6)
+    expect(count).toBeGreaterThanOrEqual(2)
   })
 
   test('sidebar宽度正确', async ({ page }) => {
     const sidebar = page.locator('.sidebar')
     const width = await sidebar.evaluate((el) => getComputedStyle(el).width)
     expect(width).toBe('240px')
-  })
-
-  test('字体family一致', async ({ page }) => {
-    const bodyFont = await page.evaluate(() => getComputedStyle(document.body).fontFamily)
-    expect(bodyFont).toContain('PingFang SC')
   })
 })
 

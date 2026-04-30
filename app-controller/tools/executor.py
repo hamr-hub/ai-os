@@ -289,6 +289,51 @@ class ToolExecutor:
                     await scheduler.flush_cache()
                 return {"status": "optimized", "strategy": strategy}
 
+        elif tool_name == "get_vllm_metrics":
+            vllm_metrics = getattr(app_module, 'vllm_metrics_scraper', None)
+            if not vllm_metrics:
+                return {"error": "vLLM metrics scraper not available"}
+            try:
+                metrics = vllm_metrics.scrape_metrics()
+                return metrics or {"error": "vLLM service not running"}
+            except Exception as e:
+                return {"error": f"Failed to scrape vLLM metrics: {e}"}
+
+        elif tool_name == "restart_vllm_service":
+            orchestrator = getattr(app_module, 'model_switch_orchestrator', None)
+            if not orchestrator:
+                return {"error": "Model switch orchestrator not available"}
+            model_name = arguments.get("model_name")
+            try:
+                result = await orchestrator.start(model_name)
+                return {"status": "restarted", "model": model_name, "result": result}
+            except Exception as e:
+                return {"error": f"Failed to restart vLLM service: {e}"}
+
+        elif tool_name == "get_engine_status":
+            engine_scheduler = getattr(app_module, 'model_engine_scheduler', None)
+            if not engine_scheduler:
+                return {"error": "Engine scheduler not available"}
+            try:
+                status = engine_scheduler.get_scheduler_status()
+                return status
+            except Exception as e:
+                return {"error": f"Failed to get engine status: {e}"}
+
+        elif tool_name == "switch_engine":
+            engine_scheduler = getattr(app_module, 'model_engine_scheduler', None)
+            if not engine_scheduler:
+                return {"error": "Engine scheduler not available"}
+            engine_type = arguments.get("engine_type")
+            model_name = arguments.get("model_name")
+            if not engine_type:
+                return {"error": "engine_type is required"}
+            try:
+                result = await engine_scheduler.switch_engine(engine_type, model_name)
+                return {"status": "switched", "engine": engine_type, "model": model_name, "result": result}
+            except Exception as e:
+                return {"error": f"Failed to switch engine: {e}"}
+
         else:
             return {"error": f"No handler for tool: {tool_name}"}
 

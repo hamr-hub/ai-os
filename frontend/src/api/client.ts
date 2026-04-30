@@ -659,13 +659,13 @@ export async function getLLMServiceLogs(lines: number = 100, config: AxiosReques
 }
 
 export async function getEngineStatus(config: AxiosRequestConfig = {}): Promise<EngineStatus> {
-  const { data } = await client.get<EngineStatus>('/engine/status', silentRequestConfig(config))
+  const { data } = await client.get<EngineStatus>('/engines/status', silentRequestConfig(config))
   return data
 }
 
 export async function switchEngine(modelName: string, engineType: EngineType = 'vllm', port: number = 8000, config: AxiosRequestConfig = {}): Promise<ActionResponse & { session_id?: string }> {
   const { data } = await client.post<ActionResponse & { session_id?: string }>(
-    '/engine/switch',
+    '/engines/switch',
     { model_name: modelName, engine_type: engineType, port },
     config
   )
@@ -730,12 +730,12 @@ export async function getRateLimitStats(config: AxiosRequestConfig = {}): Promis
 }
 
 export async function getSystemConfig(config: AxiosRequestConfig = {}): Promise<SystemConfig> {
-  const { data } = await client.get<SystemConfig>('/config/global', silentRequestConfig(config))
+  const { data } = await client.get<SystemConfig>('/config', silentRequestConfig(config))
   return data
 }
 
 export async function updateSystemConfig(newConfig: Partial<SystemConfig>, config: AxiosRequestConfig = {}): Promise<SystemConfig> {
-  const { data } = await client.put<SystemConfig>('/config/global', newConfig, config)
+  const { data } = await client.put<SystemConfig>('/config', newConfig, config)
   return data
 }
 

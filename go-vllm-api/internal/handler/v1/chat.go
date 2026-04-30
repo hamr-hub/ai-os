@@ -202,7 +202,7 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
-	if hasImage && !utils.IsMultimodalModel(modelName) {
+	if hasImage && !h.scheduler.GetModelSupportsImages(modelName) {
 		statusCode = 400
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Model %s does not support image inputs. Please use a multimodal model.", modelName)})
 		return

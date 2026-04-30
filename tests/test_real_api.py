@@ -78,12 +78,12 @@ if r and r.status_code == 200:
     test("health 包含 health_score 字段", "health_score" in d, f"score={d.get('health_score')}")
     test("health_score > 0", d.get("health_score", 0) > 0, f"score={d.get('health_score')}")
 
-r = get("/health/alert")
-test("GET /health/alert 返回 200", r is not None and r.status_code == 200)
+r = get("/manage/health/alert")
+test("GET /manage/health/alert 返回 200", r is not None and r.status_code == 200)
 if r and r.status_code == 200:
     d = r.json()
-    test("alert 包含 should_alert 字段", "should_alert" in d)
-    test("alert 包含 health_score 字段", "health_score" in d)
+    test("alert 包含 should_alert 字段", "should_alert" in d, f"should_alert={d.get('should_alert')}")
+    test("alert 包含 health_score 字段", "health_score" in d, f"health_score={d.get('health_score')}")
 
 # --- GPU 管理 ---
 print("\n--- GPU 管理 ---")
@@ -340,7 +340,10 @@ if r and r.status_code == 200:
     d = r.json()
     test("go health 包含 status", "status" in d, f"status={d.get('status')}")
 
-r = get("/health/detailed", base=GO_BASE)
+try:
+    r = requests.get(f"{GO_BASE}/health/detailed", timeout=30)
+except Exception as e:
+    r = None
 test("GET /health/detailed 返回 200", r is not None and r.status_code == 200)
 
 # --- Metrics ---

@@ -165,6 +165,14 @@ onUnmounted(() => {
       </div>
 
       <div class="metric-item">
+        <Clock class="metric-icon cyan" />
+        <div class="metric-content">
+          <div class="metric-label">每 Token 延迟</div>
+          <div class="metric-val">{{ (metrics.time_per_output_token * 1000).toFixed(1) }}ms</div>
+        </div>
+      </div>
+
+      <div class="metric-item">
         <Gauge class="metric-icon indigo" />
         <div class="metric-content">
           <div class="metric-label">缓存命中率</div>
@@ -320,6 +328,10 @@ onUnmounted(() => {
 
 .metric-icon.orange {
   color: #f97316;
+}
+
+.metric-icon.cyan {
+  color: #06b6d4;
 }
 
 .metric-icon.indigo {

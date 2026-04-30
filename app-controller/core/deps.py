@@ -142,6 +142,7 @@ def _on_config_changed(new_config):
     - 记录配置变更信息
     - 清除所有相关缓存
     - 更新调度器配置
+    - 同步模型池
     
     参数:
         new_config: 新的配置字典
@@ -151,3 +152,8 @@ def _on_config_changed(new_config):
     structured_logger.info(f"Configuration updated, models={model_count}, keys={list(new_config.get('models', {}).keys())[:5]}", action="config_reload")
     cache_service.delete_pattern("ai_controller:cache:*")
     scheduler.set_config(new_config)
+    try:
+        model_pool_manager.scan_and_sync()
+        structured_logger.info("Model pool synced after config change", action="config_reload")
+    except Exception as e:
+        structured_logger.warning(f"Failed to sync model pool after config change: {e}", action="config_reload")

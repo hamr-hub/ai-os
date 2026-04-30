@@ -358,7 +358,17 @@
     window.__aiMonitorSwitchModel = switchModel;
     window.__aiMonitorSwitchEngine = switchEngine;
 
+    function injectStyles() {
+        if (document.getElementById('ai-monitor-styles')) return;
+        var link = document.createElement('link');
+        link.id = 'ai-monitor-styles';
+        link.rel = 'stylesheet';
+        link.href = '/plugins/ai-monitor/styles.css';
+        document.head.appendChild(link);
+    }
+
     function init() {
+        injectStyles();
         createPanel();
     }
 

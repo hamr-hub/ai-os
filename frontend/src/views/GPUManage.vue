@@ -308,15 +308,15 @@ onUnmounted(() => {
             </div>
             <div class="vllm-metric">
               <span class="vllm-label">吞吐量</span>
-              <span class="vllm-value">{{ vllmMetrics.request_throughput.toFixed(1) }} req/s</span>
+              <span class="vllm-value">{{ vllmMetrics.generation_throughput.toFixed(1) }} req/s</span>
             </div>
             <div class="vllm-metric">
-              <span class="vllm-label">TTFT P50</span>
-              <span class="vllm-value">{{ (vllmMetrics.time_to_first_token_p50 * 1000).toFixed(0) }}ms</span>
+              <span class="vllm-label">TTFT</span>
+              <span class="vllm-value">{{ (vllmMetrics.time_to_first_token * 1000).toFixed(0) }}ms</span>
             </div>
             <div class="vllm-metric">
-              <span class="vllm-label">TPOT P50</span>
-              <span class="vllm-value">{{ (vllmMetrics.time_per_output_token_p50 * 1000).toFixed(0) }}ms</span>
+              <span class="vllm-label">TPOT</span>
+              <span class="vllm-value">{{ (vllmMetrics.time_per_output_token * 1000).toFixed(0) }}ms</span>
             </div>
           </div>
         </div>

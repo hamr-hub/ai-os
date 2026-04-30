@@ -320,6 +320,10 @@ export async function handleHealthApiRoutes(method, urlPath, req, res, config) {
             sendJSONResponse(res, 200, await healthMonitor.runCheck());
             return true;
         }
+        if (urlPath === '/api/health/system-status' && method === 'GET') {
+            sendJSONResponse(res, 200, healthMonitor.getSystemStatus());
+            return true;
+        }
         return false;
     } catch (error) {
         logger.error('[Health API]', error.message);

@@ -462,6 +462,15 @@
             pluginDivider.className = 'nav-divider';
             pluginDivider.style.cssText = 'margin: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.1);';
             var anchor = document.getElementById('nav-plugins');
+            if (!anchor) {
+                var pluginItems = nav.querySelectorAll('.nav-item');
+                for (var i = 0; i < pluginItems.length; i++) {
+                    if (pluginItems[i].dataset.section === 'plugins') {
+                        anchor = pluginItems[i];
+                        break;
+                    }
+                }
+            }
             if (anchor) anchor.before(pluginDivider);
             else nav.appendChild(pluginDivider);
             _logger('Divider created');

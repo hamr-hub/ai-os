@@ -110,3 +110,38 @@ async def get_prometheus_metrics():
 @health_router.get("/metrics/metadata")
 async def get_metrics_metadata():
     return prometheus.get_metrics_dict()
+
+
+@health_router.get("/health/history")
+async def get_health_history(count: int = 60):
+    history = []
+    try:
+        gpu_history = gpu_monitor.get_gpu_history(count)
+        for entry in gpu_history:
+            ts = entry.get("timestamp", "")
+            score = entry.get("health_score", 0)
+            if isinstance(score, (int, float)):
+                history.append({
+                    "timestamp": ts,
+                    "health_score": score,
+                    "status": "healthy" if score >= 90 else "degraded" if score >= 70 else "critical",
+                    "source": "gpu_history",
+                })
+    except Exception as exc:
+        logger.error(f"get_health_history failed: {exc}")
+
+    if not history:
+        try:
+            gpu_status = gpu_monitor.get_gpu_status()
+            vllm_metrics = gpu_monitor.get_vllm_metrics()
+            health_info = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
+            history.append({
+                "timestamp": datetime.now().isoformat(),
+                "health_score": health_info.get("overall", 0),
+                "status": health_info.get("status", "unknown"),
+                "source": "current",
+            })
+        except Exception as exc:
+            logger.error(f"get_health_history fallback failed: {exc}")
+
+    return history

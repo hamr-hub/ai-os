@@ -149,6 +149,7 @@ class ModelSwitchOrchestrator:
     PHASE2_KILL_TIMEOUT = 60
     PHASE2_VERIFY_TIMEOUT = 15
     PHASE3_START_TIMEOUT = 300
+    PHASE3_PORT_WAIT_TIMEOUT = 120
     PHASE4_TEST_RETRIES = 3
     PHASE4_TEST_TIMEOUT = 15
 
@@ -648,9 +649,9 @@ class ModelSwitchOrchestrator:
             if self._engine_manager_mode == "subprocess":
                 if elapsed - last_error_check >= 5:
                     svc_status = self._llm_service_manager.check_health(session.target_model) if self._llm_service_manager else False
-                    if not svc_status and elapsed >= 30 and not port_seen_alive:
+                    if not svc_status and elapsed >= self.PHASE3_PORT_WAIT_TIMEOUT and not port_seen_alive:
                         phase.status = PhaseStatus.FAILED
-                        phase.error = f"subprocess引擎在 30s 内未就绪"
+                        phase.error = f"subprocess引擎在 {self.PHASE3_PORT_WAIT_TIMEOUT}s 内未就绪"
                         phase.finished_at = datetime.now().isoformat()
                         await self._rollback(session, phase.error)
                         raise _SwitchAborted(phase.error)
@@ -677,9 +678,9 @@ class ModelSwitchOrchestrator:
             is_port_open = self._is_port_alive(port)
             if is_port_open:
                 port_seen_alive = True
-            elif elapsed >= 30 and not port_seen_alive:
+            elif elapsed >= self.PHASE3_PORT_WAIT_TIMEOUT and not port_seen_alive:
                 phase.status = PhaseStatus.FAILED
-                phase.error = f"服务重启后 30s 内端口 {port} 未打开，服务可能未成功启动"
+                phase.error = f"服务重启后 {self.PHASE3_PORT_WAIT_TIMEOUT}s 内端口 {port} 未打开，服务可能未成功启动"
                 phase.finished_at = datetime.now().isoformat()
                 await self._log(session, phase, phase.error)
                 await self._rollback(session, phase.error)
@@ -905,9 +906,9 @@ class ModelSwitchOrchestrator:
                 is_port_open = self._is_port_alive(port)
                 if is_port_open:
                     port_seen_alive = True
-                elif elapsed >= 30 and not port_seen_alive:
+                elif elapsed >= self.PHASE3_PORT_WAIT_TIMEOUT and not port_seen_alive:
                     phase.status = PhaseStatus.FAILED
-                    phase.error = f"服务启动后 30s 内端口 {port} 未打开"
+                    phase.error = f"服务启动后 {self.PHASE3_PORT_WAIT_TIMEOUT}s 内端口 {port} 未打开"
                     phase.finished_at = datetime.now().isoformat()
                     await self._rollback(session, phase.error)
                     raise _SwitchAborted(phase.error)

@@ -16,7 +16,8 @@ import HealthAlertCard from '@/components/cards/HealthAlertCard.vue'
 import { useRouter } from 'vue-router'
 import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server, Gpu, CircleDot, AlertTriangle, CheckCircle, ArrowRight, Layers, Star } from 'lucide-vue-next'
 import { formatBytes } from '@/utils/format'
-import type { EngineType } from '@/types'
+import type { EngineType, QueueStatus } from '@/types'
+import { getQueueStatus } from '@/api/client'
 
 const router = useRouter()
 
@@ -62,6 +63,14 @@ const {
   isRefreshing: isRefreshingSystem,
 } = useSystemData()
 
+const queueStatus = ref<QueueStatus | null>(null)
+const fetchQueueStatus = async () => {
+  try {
+    queueStatus.value = await getQueueStatus()
+  } catch {
+    queueStatus.value = null
+  }
+}
 
 const isRefreshing = computed(
   () =>
@@ -80,6 +89,7 @@ const refreshAll = () => {
   refreshSystem()
   refreshGPUHistory()
   gpuGetEngines()
+  fetchQueueStatus()
 }
 
 const engineLabels: Record<string, string> = {

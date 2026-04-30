@@ -1,6 +1,8 @@
 import logger from '../../utils/logger.js';
 import { backendClient } from './backend-client.js';
 
+const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://localhost:35000';
+
 class HealthMonitorService {
     constructor() {
         this.alertCache = null;
@@ -40,6 +42,7 @@ class HealthMonitorService {
             await Promise.allSettled([
                 this.fetchAlert(),
                 this.fetchDetail(),
+                this.fetchSystemStatus(),
             ]);
             this.lastFetchTime = new Date().toISOString();
         } catch (error) {
@@ -69,6 +72,16 @@ class HealthMonitorService {
         }
     }
 
+    async fetchSystemStatus() {
+        try {
+            const response = await fetch(`${PYTHON_BACKEND_URL}/manage/system/status`, { signal: AbortSignal.timeout(10000) });
+            if (!response.ok) return;
+            this.systemStatusCache = await response.json();
+        } catch (error) {
+            logger.error('[HealthMonitor] System status fetch error:', error.message);
+        }
+    }
+
     _addToHistory(alertResult) {
         const entry = {
             timestamp: new Date().toISOString(),
@@ -89,6 +102,10 @@ class HealthMonitorService {
 
     getDetail() {
         return { success: true, data: this.detailCache, timestamp: new Date().toISOString(), backendStatus: backendClient.getStatus() };
+    }
+
+    getSystemStatus() {
+        return { success: true, data: this.systemStatusCache, timestamp: new Date().toISOString(), backendStatus: backendClient.getStatus() };
     }
 
     getHistory() {

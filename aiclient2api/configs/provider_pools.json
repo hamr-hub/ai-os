@@ -10,7 +10,7 @@
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "97c731f8-8290-4959-8c4f-960fb4b3184c",
       "isHealthy": true,
-      "lastUsed": "2026-04-30T11:31:29.887Z",
+      "lastUsed": "2026-04-30T11:55:11.247Z",
       "usageCount": 0,
       "errorCount": 0,
       "lastErrorTime": null,

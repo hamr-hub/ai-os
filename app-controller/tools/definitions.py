@@ -285,6 +285,62 @@ class ToolRegistry:
             dangerous=False
         ))
 
+        # vLLM Management Tools
+        self.register(ToolDefinition(
+            name="get_vllm_metrics",
+            description="Get vLLM inference engine metrics including running/waiting requests, cache usage, TTFT, TPOT, and throughput",
+            parameters=[],
+            category="vllm",
+            dangerous=False
+        ))
+
+        self.register(ToolDefinition(
+            name="restart_vllm_service",
+            description="Restart the vLLM inference service (stops and starts the service with the current model)",
+            parameters=[
+                ToolParameter(
+                    name="model_name",
+                    type=ParameterType.STRING,
+                    description="Name of the model to restart (uses current model if not specified)",
+                    required=False
+                )
+            ],
+            category="vllm",
+            dangerous=True,
+            requires_confirmation=True
+        ))
+
+        self.register(ToolDefinition(
+            name="get_engine_status",
+            description="Get status of all LLM engine backends (vLLM, SGLang, llama.cpp) including running state, port, and health",
+            parameters=[],
+            category="vllm",
+            dangerous=False
+        ))
+
+        self.register(ToolDefinition(
+            name="switch_engine",
+            description="Switch the LLM engine backend (e.g., from vLLM to SGLang or vice versa)",
+            parameters=[
+                ToolParameter(
+                    name="engine_type",
+                    type=ParameterType.STRING,
+                    description="Target engine type to switch to",
+                    enum=["vllm", "sglang", "llamacpp"],
+                    required=True
+                ),
+                ToolParameter(
+                    name="model_name",
+                    type=ParameterType.STRING,
+                    description="Model name to use with the new engine",
+                    required=False
+                )
+            ],
+            category="vllm",
+            dangerous=True,
+            requires_confirmation=True
+        ))
+
     def register(self, tool: ToolDefinition) -> None:
         """Register a new tool"""
         self._tools[tool.name] = tool

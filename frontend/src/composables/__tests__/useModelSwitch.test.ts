@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('@/api/client', () => ({
-  getSwitchStatus: vi.fn(),
+  getSwitchStatus: vi.fn(() => Promise.resolve({ is_switching: true, session: null })),
+  atomicSwitchModel: vi.fn(() => Promise.resolve({ status: 'switching', session_id: 'sess-1' })),
+  cancelSwitch: vi.fn(() => Promise.resolve({ status: 'cancel_requested' })),
 }))
 
 vi.mock('@/stores/server', () => ({
@@ -44,15 +46,15 @@ describe('useModelSwitch', () => {
     expect(overallProgress.value).toBe(0)
   })
 
-  it('triggerSwitch设置isSwitching=true', () => {
+  it('triggerSwitch设置isSwitching=true', async () => {
     const { triggerSwitch, isSwitching } = useModelSwitch()
-    triggerSwitch('llama', false, 'switch')
+    await triggerSwitch('llama', false, 'switch')
     expect(isSwitching.value).toBe(true)
   })
 
-  it('computed属性overallProgress/phases/isCompleted/isFailed正确计算', () => {
+  it('computed属性overallProgress/phases/isCompleted/isFailed正确计算', async () => {
     const { triggerSwitch, currentSession, overallProgress, overallPhase, phases, isCompleted, isFailed } = useModelSwitch()
-    triggerSwitch('llama')
+    await triggerSwitch('llama')
 
     currentSession.value = {
       session_id: 'sess-1',
@@ -135,12 +137,12 @@ describe('useModelSwitch', () => {
     expect(isFailed.value).toBe(true)
   })
 
-  it('triggerCancel重置isSwitching并断开WS', () => {
+  it('triggerCancel重置isSwitching并断开WS', async () => {
     const { triggerSwitch, triggerCancel, isSwitching } = useModelSwitch()
-    triggerSwitch('llama')
+    await triggerSwitch('llama')
     expect(isSwitching.value).toBe(true)
 
-    triggerCancel()
+    await triggerCancel()
     expect(isSwitching.value).toBe(false)
   })
 })

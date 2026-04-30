@@ -8,7 +8,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathModule.dirname(__filename);
 
 const INJECT_TAG = '<script src="/plugins/ai-monitor/inject.js" defer></script>';
-const STYLE_TAG = '<link rel="stylesheet" href="/plugins/ai-monitor/styles.css">';
+
+let _staticInjected = false;
+
+async function ensureInjectedStaticIndex() {
+    if (_staticInjected) return;
+    try {
+        const indexPath = pathModule.resolve(process.cwd(), 'static', 'index.html');
+        let html = await fs.readFile(indexPath, 'utf8');
+        if (html.includes(INJECT_TAG)) { _staticInjected = true; return; }
+        html = html.includes('</body>') ? html.replace('</body>', INJECT_TAG + '</body>') : html + INJECT_TAG;
+        await fs.writeFile(indexPath, html, 'utf8');
+        _staticInjected = true;
+        logger.info('[AI Monitor] Injected script tag into static/index.html');
+    } catch (error) {
+        logger.error('[AI Monitor] Failed to inject static index:', error.message);
+    }
+}
 
 function parseRequestBody(req) {
     return new Promise((resolve, reject) => {
@@ -111,6 +127,7 @@ const aiMonitorPlugin = {
 
     async init(config) {
         await statusService.init();
+        await ensureInjectedStaticIndex();
         logger.info('[AI Monitor Plugin] v2.0 Initialized (with engine/model status panel)');
     },
 
@@ -126,50 +143,6 @@ const aiMonitorPlugin = {
     ],
 
     async middleware(req, res, requestUrl, config) {
-        const pathname = requestUrl.pathname;
-
-        if (pathname === '/' || pathname === '/app' || pathname === '/app/') {
-            const originalWriteHead = res.writeHead.bind(res);
-            const originalEnd = res.end.bind(res);
-            const chunks = [];
-            let headersSent = false;
-
-            res.writeHead = function(statusCode, statusMessage, headers) {
-                headersSent = true;
-                return originalWriteHead(statusCode, statusMessage, headers);
-            };
-
-            res.write = function(chunk) {
-                if (chunk) chunks.push(Buffer.from(chunk));
-                return true;
-            };
-
-            res.end = function(chunk, ...args) {
-                if (chunk) chunks.push(Buffer.from(chunk));
-                let body = Buffer.concat(chunks).toString('utf8');
-
-                if (body.includes('</head>') && !body.includes('/plugins/ai-monitor/styles.css')) {
-                    body = body.replace('</head>', STYLE_TAG + '</head>');
-                }
-                if (body.includes('</body>') && !body.includes('/plugins/ai-monitor/inject.js')) {
-                    body = body.replace('</body>', INJECT_TAG + '</body>');
-                } else if (!body.includes('/plugins/ai-monitor/inject.js')) {
-                    body += INJECT_TAG;
-                }
-
-                if (!headersSent) {
-                    res.writeHead(res.statusCode, {
-                        'Content-Type': 'text/html; charset=utf-8',
-                        'Content-Length': Buffer.byteLength(body),
-                    });
-                }
-                originalEnd(body, ...args);
-                return { handled: false };
-            };
-
-            return { handled: false };
-        }
-
         const aiPaths = [
             '/v1/chat/completions',
             '/v1/responses',
@@ -178,7 +151,7 @@ const aiMonitorPlugin = {
             '/v1/images/generations',
             '/v1/images/edits'
         ];
-        const isAiPath = aiPaths.some(path => pathname.includes(path));
+        const isAiPath = aiPaths.some(path => requestUrl.pathname.includes(path));
 
         if (isAiPath && req.method === 'POST' && !config._monitorRequestId) {
             const requestId = Date.now() + Math.random().toString(36).substring(2, 10);

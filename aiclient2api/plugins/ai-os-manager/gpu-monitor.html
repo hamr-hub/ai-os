@@ -567,7 +567,6 @@
             background: var(--text-muted);
             border-radius: 50%;
         }
-        }
 
         .provider-details {
             display: grid;
@@ -1305,13 +1304,6 @@
         }
 
         const chartStore = new Map();
-                <div class="loading">加载中...</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const chartStore = new Map();
         const lineColors = {
             utilization: '#6366f1',
             memory: '#06b6d4',
@@ -1669,22 +1661,6 @@
                             </div>
                         `;
                     }).join('');
-
-                    return `
-                        <div class="model-group" data-group="${group.base_name}">
-                            <div class="model-group-header" onclick="toggleModelGroup('${group.base_name}')">
-                                <div class="model-group-info">
-                                    <span class="model-group-name">${group.base_name}</span>
-                                    <span class="model-group-meta">${group.variant_count} 个变体 · ${formatMemorySize(group.total_size_mb)}</span>
-                                </div>
-                                <span class="model-group-toggle">▶</span>
-                            </div>
-                            <div class="model-variants" id="group-${group.base_name}">
-                                ${variantsHtml}
-                            </div>
-                        </div>
-                    `;
-                }).join('');
 
                     return `
                         <div class="model-group" data-group="${group.base_name}">

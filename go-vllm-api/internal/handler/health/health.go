@@ -55,6 +55,7 @@ func NewHealthHandler(gpuMonitor *service.GPUMonitor, scheduler *service.Schedul
 func (h *HealthHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/health", h.HealthCheck)
 	rg.GET("/health/detailed", h.HealthCheckDetailed)
+	rg.GET("/health/history", h.GetHealthHistory)
 	rg.GET("/metrics", h.GetPrometheusMetrics)
 	rg.GET("/metrics/metadata", h.GetMetricsMetadata)
 }
@@ -170,4 +171,19 @@ func (h *HealthHandler) GetPrometheusMetrics(c *gin.Context) {
 
 func (h *HealthHandler) GetMetricsMetadata(c *gin.Context) {
 	c.JSON(http.StatusOK, h.prometheus.GetMetricsDict())
+}
+
+func (h *HealthHandler) GetHealthHistory(c *gin.Context) {
+	gpuStatus := h.gpuMonitor.GetStatus()
+	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
+	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
+
+	entry := gin.H{
+		"timestamp":     time.Now().Format(time.RFC3339),
+		"health_score":  healthInfo["overall"],
+		"status":        healthInfo["status"],
+		"source":        "current",
+	}
+
+	c.JSON(http.StatusOK, []gin.H{entry})
 }
