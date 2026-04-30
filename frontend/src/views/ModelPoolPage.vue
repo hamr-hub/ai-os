@@ -26,10 +26,9 @@ const loadError = ref<string | null>(null)
 let poolWsTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
-  listPool(poolFilter.value)
-  getServiceStatus()
+  handleRefresh()
   poolWsTimer = setInterval(() => {
-    listPool(poolFilter.value)
+    void listPool(poolFilter.value)
   }, 3000)
 })
 

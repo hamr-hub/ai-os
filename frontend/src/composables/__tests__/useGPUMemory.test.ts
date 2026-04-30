@@ -109,6 +109,8 @@ describe('useGPUMemory', () => {
 
     await doSwitchEngine('sglang')
 
+    expect(switchEngine).toHaveBeenCalledWith('llama', 'sglang', 8000)
+
     expect(engineStatus.value!.current_engine).toBe('sglang')
   })
 
@@ -118,6 +120,7 @@ describe('useGPUMemory', () => {
     const { doSwitchEngine, error, switchingEngine } = useGPUMemory()
     const result = await doSwitchEngine('vllm')
 
+    expect(switchEngine).toHaveBeenCalledWith('', 'vllm', 8000)
     expect(result).toBeNull()
     expect(error.value).toBe('引擎忙')
     expect(switchingEngine.value).toBe(false)

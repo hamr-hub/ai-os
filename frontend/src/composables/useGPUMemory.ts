@@ -81,7 +81,16 @@ export function useGPUMemory() {
     switchingEngine.value = true
     error.value = null
     try {
-      const result = await switchEngine(targetEngine)
+      const currentModel =
+        engineStatus.value?.[engineStatus.value.current_engine]?.model ??
+        engineStatus.value?.vllm.model ??
+        engineStatus.value?.sglang.model ??
+        engineStatus.value?.llama_cpp.model
+      const currentPort =
+        engineStatus.value?.[targetEngine]?.port ??
+        engineStatus.value?.[engineStatus.value.current_engine]?.port ??
+        8000
+      const result = await switchEngine(currentModel ?? '', targetEngine, currentPort)
       if (engineStatus.value) {
         engineStatus.value.current_engine = targetEngine
       }

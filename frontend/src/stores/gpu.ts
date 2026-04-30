@@ -72,12 +72,15 @@ export const useGPUStore = defineStore('gpu', () => {
 
   const startPolling = () => {
     subscriberCount++
-    if (timer) return
 
-    unsubscribeWS = monitorWS.subscribe('monitor_state_sync', handleWSMessage)
+    if (!unsubscribeWS) {
+      unsubscribeWS = monitorWS.subscribe('monitor_state_sync', handleWSMessage)
+    }
     wsConnected.value = monitorWS.connected.value
 
-    fetchGPUData()
+    void fetchGPUData(timer !== null)
+
+    if (timer) return
     timer = window.setInterval(fetchGPUData, 30000)
   }
 

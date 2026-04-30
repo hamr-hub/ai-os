@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useModels } from '@/composables/useModels'
 import { useGPU } from '@/composables/useGPU'
 import { useGPUHistory } from '@/composables/useGPUHistory'
@@ -13,6 +13,7 @@ import VLLMMetricsCard from '@/components/cards/VLLMMetricsCard.vue'
 import SystemStatusCard from '@/components/cards/SystemStatusCard.vue'
 import TokenUsageCard from '@/components/cards/TokenUsageCard.vue'
 import HealthAlertCard from '@/components/cards/HealthAlertCard.vue'
+import RequestQueueCard from '@/components/cards/RequestQueueCard.vue'
 import { useRouter } from 'vue-router'
 import { RefreshCw, Cpu, Thermometer, Zap, Activity, MemoryStick, TrendingUp, Server, Gpu, CircleDot, AlertTriangle, CheckCircle, ArrowRight, Layers, Star } from 'lucide-vue-next'
 import { formatBytes } from '@/utils/format'
@@ -64,6 +65,7 @@ const {
 } = useSystemData()
 
 const queueStatus = ref<QueueStatus | null>(null)
+let queueRefreshTimer: number | null = null
 const fetchQueueStatus = async () => {
   try {
     queueStatus.value = await getQueueStatus()
@@ -95,6 +97,14 @@ const refreshAll = () => {
 onMounted(() => {
   gpuGetEngines()
   fetchQueueStatus()
+  queueRefreshTimer = window.setInterval(fetchQueueStatus, 5000)
+})
+
+onUnmounted(() => {
+  if (queueRefreshTimer) {
+    clearInterval(queueRefreshTimer)
+    queueRefreshTimer = null
+  }
 })
 
 const engineLabels: Record<string, string> = {
