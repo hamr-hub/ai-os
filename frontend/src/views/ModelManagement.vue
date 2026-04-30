@@ -1571,9 +1571,53 @@ watch(
   padding: 1px 5px;
   border-radius: 3px;
 }
+.preload-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  width: 28px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.preload-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.preload-toggle .toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: #374151;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+.preload-toggle .toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  left: 2px;
+  top: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.preload-toggle input:checked + .toggle-slider {
+  background: #3b82f6;
+}
+.preload-toggle input:checked + .toggle-slider::before {
+  transform: translateX(12px);
+}
+.preload-toggle input:disabled + .toggle-slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .item-actions {
   display: flex;
   gap: 4px;
+  align-items: center;
 }
 
 .loading-overlay {

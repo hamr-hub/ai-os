@@ -7,6 +7,8 @@ import {
   getAggregatedModels,
   updateModelVLLMConfig,
   atomicSwitchModel,
+  enablePreload,
+  disablePreload,
 } from '@/api/client'
 import type { ModelStatus, AggregatedModelsResponse, VLLMConfigUpdateRequest } from '@/types'
 import { isAbortError } from '@/utils/request'

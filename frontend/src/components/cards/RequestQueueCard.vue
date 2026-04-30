@@ -1,184 +1,107 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { QueueModelEntry } from '@/types'
-import { Layers } from 'lucide-vue-next'
+import type { QueueStatus } from '@/types'
+import { ListOrdered } from 'lucide-vue-next'
 
 const props = defineProps<{
-  queueStatus: Record<string, QueueModelEntry> | null
-  defaultModel: string | null
+  queueStatus: QueueStatus | null
 }>()
 
-const totalQueueRequests = computed(() => {
+const totalActive = computed(() => {
   if (!props.queueStatus) return 0
-  return Object.values(props.queueStatus).reduce(
-    (sum, q) => sum + q.active_requests,
-    0
-  )
+  return Object.values(props.queueStatus).reduce((sum, e) => sum + e.active_requests, 0)
 })
 
-const activeQueueEntries = computed(() => {
+const maxConcurrency = computed(() => {
+  if (!props.queueStatus) return 0
+  const entries = Object.values(props.queueStatus)
+  return entries.length > 0 ? entries[0].concurrency_limit : 0
+})
+
+const entries = computed(() => {
   if (!props.queueStatus) return []
-  const entries = Object.entries(props.queueStatus)
-    .filter(([, entry]) => entry.active_requests > 0)
-    .sort(([, a], [, b]) => b.active_requests - a.active_requests)
-  if (!entries.length) return []
-  const target = props.defaultModel || entries[0][0]
-  return entries
-    .filter(([name]) => name === target)
-    .slice(0, 1)
-    .map(([name, entry]) => ({ name, ...entry }))
+  return Object.entries(props.queueStatus).map(([name, e]) => ({ name, ...e }))
 })
 </script>
 
 <template>
   <div class="card-header">
-    <div class="icon-wrap primary"><Layers class="card-icon-inner" /></div>
+    <div class="icon-wrap blue"><ListOrdered class="card-icon-inner" /></div>
     <span class="card-title">请求队列</span>
-    <span v-if="queueStatus" class="count-badge">{{ totalQueueRequests }} 请求</span>
+    <span class="card-meta">{{ totalActive }} / {{ maxConcurrency }}</span>
   </div>
-  <template v-if="queueStatus">
-    <div v-if="activeQueueEntries.length" class="queue-list">
-      <div v-for="entry in activeQueueEntries" :key="entry.name" class="queue-row warning">
-        <span class="q-name">{{ entry.name }}</span>
-        <div class="q-info">
-          <span class="q-count warning">{{ entry.active_requests }}</span>
-          <span class="q-limit">/ {{ entry.concurrency_limit }}</span>
+  <template v-if="entries.length">
+    <div class="queue-entries">
+      <div v-for="entry in entries" :key="entry.name" class="queue-row">
+        <span class="queue-name">{{ entry.name }}</span>
+        <div class="queue-bar-wrap">
+          <div
+            class="queue-bar-fill"
+            :style="{ width: maxConcurrency ? Math.min((entry.active_requests / maxConcurrency) * 100, 100) + '%' : '0%' }"
+            :class="{ full: !entry.can_accept }"
+          ></div>
         </div>
-        <span class="q-status" :class="entry.can_accept ? 'success' : 'danger'">{{
-          entry.can_accept ? '可接受' : '已满'
-        }}</span>
+        <span class="queue-count" :class="{ full: !entry.can_accept }">
+          {{ entry.active_requests }}/{{ maxConcurrency }}
+        </span>
       </div>
     </div>
-    <div v-else class="empty-state">
-      <Layers class="empty-icon" />
-      <p>当前无活跃请求</p>
-    </div>
   </template>
-  <div v-else class="empty-state">
-    <Layers class="empty-icon-lg" />
-    <p>队列数据不可用</p>
-  </div>
+  <template v-else>
+    <div class="empty-msg">暂无队列数据</div>
+  </template>
 </template>
 
 <style scoped>
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.icon-wrap {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.icon-wrap.primary {
-  background: rgba(99, 102, 241, 0.15);
-  color: #6366f1;
-}
-
-.card-icon-inner {
-  width: 16px;
-  height: 16px;
-}
-
-.card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.count-badge {
-  font-size: 12px;
-  color: var(--text-muted);
-  background: var(--bg-secondary);
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-left: auto;
-}
-
-.empty-state {
-  text-align: center;
-  color: var(--text-muted);
-  padding: 24px 0;
-  font-size: 13px;
+.queue-entries {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
-
-.empty-icon {
-  width: 32px;
-  height: 32px;
-  color: var(--text-muted);
-}
-
-.empty-icon-lg {
-  width: 40px;
-  height: 40px;
-  color: var(--text-muted);
-}
-
-.queue-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .queue-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  border-left: 3px solid;
 }
-
-.queue-row.warning {
-  border-left-color: #f59e0b;
-}
-
-.q-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.q-info {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.q-count.warning {
-  color: #f59e0b;
-  font-weight: 600;
-}
-
-.q-limit {
+.queue-name {
   font-size: 11px;
-  color: var(--text-muted);
+  color: #9ca3af;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
-
-.q-status {
-  margin-left: auto;
-  font-size: 12px;
-  font-weight: 500;
+.queue-bar-wrap {
+  width: 60px;
+  height: 4px;
+  background: #1f2937;
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
-
-.q-status.success {
-  color: #22c55e;
+.queue-bar-fill {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 2px;
+  transition: width 0.3s;
 }
-
-.q-status.danger {
+.queue-bar-fill.full {
+  background: #ef4444;
+}
+.queue-count {
+  font-size: 11px;
+  color: #9ca3af;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.queue-count.full {
   color: #ef4444;
+}
+.empty-msg {
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
+  padding: 8px 0;
 }
 </style>
