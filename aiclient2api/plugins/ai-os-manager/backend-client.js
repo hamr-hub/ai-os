@@ -59,28 +59,6 @@ class BackendClient {
                 this._goCoolingUntil = Date.now() + this._coolingDuration;
             }
         }
-    }/manage/gpu/summary`, { signal: AbortSignal.timeout(5000) });
-            if (response.ok) {
-                this.goAvailable = true;
-            } else {
-                this.goAvailable = false;
-            }
-            this.lastGoCheck = Date.now();
-            if (!this.goAvailable && this.activeBackend === 'go') {
-                logger.warn('[BackendClient] Go backend GPU unavailable, falling back to Python');
-                this.activeBackend = 'python';
-            } else if (this.goAvailable && this.activeBackend !== 'go') {
-                logger.info('[BackendClient] Go backend available, switching to Go');
-                this.activeBackend = 'go';
-            }
-        } catch (e) {
-            this.goAvailable = false;
-            this.lastGoCheck = Date.now();
-            if (this.activeBackend === 'go') {
-                logger.warn('[BackendClient] Go backend unreachable, falling back to Python');
-                this.activeBackend = 'python';
-            }
-        }
     }
 
     async _checkPythonHealth() {
@@ -101,16 +79,6 @@ class BackendClient {
             this.lastPythonCheck = Date.now();
             if (this.activeBackend === 'python') {
                 logger.warn('[BackendClient] Python backend unreachable (failure %d)', this._consecutivePythonFailures);
-            }
-        }
-    }/manage/gpu/summary`, { signal: AbortSignal.timeout(5000) });
-            this.pythonAvailable = response.ok;
-            this.lastPythonCheck = Date.now();
-        } catch (e) {
-            this.pythonAvailable = false;
-            this.lastPythonCheck = Date.now();
-            if (this.activeBackend === 'python') {
-                logger.warn('[BackendClient] Python backend unreachable');
             }
         }
     }

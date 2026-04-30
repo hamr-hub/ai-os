@@ -20,7 +20,7 @@
  * ============================================
  */
 import { computed, onMounted } from 'vue'
-import { RouterView } from 'vue-router'
+import { RouterView, useRoute } from 'vue-router'
 import Sidebar from '@/components/Sidebar.vue'
 import TopBar from '@/components/TopBar.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
@@ -31,6 +31,8 @@ import { useServerStore } from '@/stores/server'
 const store = useAppStore()
 // 获取服务器连接状态管理器（后端连接、健康检查等）
 const serverStore = useServerStore()
+// 获取当前路由信息
+const route = useRoute()
 
 // 组件挂载时执行初始化操作
 onMounted(async () => {
@@ -46,27 +48,41 @@ onMounted(async () => {
 const mainMargin = computed(() =>
   store.sidebarCollapsed ? 'var(--sidebar-collapsed-width)' : 'var(--sidebar-width)'
 )
+
+// 判断当前页面是否需要全屏显示（不需要侧边栏和顶栏）
+const isFullscreenPage = computed(() => route.meta?.noAuth === true)
 </script>
 
 <template>
   <!-- 应用最外层容器 -->
   <div class="app-shell">
-    <!-- 顶部导航栏：显示服务器状态、连接管理等 -->
-    <TopBar />
     <!-- Toast 消息提示容器：显示全局通知 -->
     <ToastContainer />
-    <!-- 左侧边栏：导航菜单、GPU 状态等 -->
-    <Sidebar />
-    <!-- 主内容区域：根据路由动态渲染不同页面 -->
-    <main class="app-main" :style="{ marginLeft: mainMargin }">
-      <!-- RouterView 插槽：渲染当前路由对应的组件 -->
+    
+    <!-- 需要认证的页面显示布局元素 -->
+    <template v-if="!isFullscreenPage">
+      <!-- 顶部导航栏：显示服务器状态、连接管理等 -->
+      <TopBar />
+      <!-- 左侧边栏：导航菜单、GPU 状态等 -->
+      <Sidebar />
+      <!-- 主内容区域：根据路由动态渲染不同页面 -->
+      <main class="app-main" :style="{ marginLeft: mainMargin }">
+        <!-- RouterView 插槽：渲染当前路由对应的组件 -->
+        <RouterView v-slot="{ Component }">
+          <!-- 页面切换过渡动画 -->
+          <transition name="page" mode="out-in">
+            <component :is="Component" class="app-page" />
+          </transition>
+        </RouterView>
+      </main>
+    </template>
+    
+    <!-- 不需要认证的页面（如登录）全屏显示 -->
+    <template v-else>
       <RouterView v-slot="{ Component }">
-        <!-- 页面切换过渡动画 -->
-        <transition name="page" mode="out-in">
-          <component :is="Component" class="app-page" />
-        </transition>
+        <component :is="Component" />
       </RouterView>
-    </main>
+    </template>
   </div>
 </template>
 
