@@ -44,14 +44,16 @@ curl -s http://localhost:35001/health | python -m json.tool
 curl -s http://localhost:35001/v1/models | python -m json.tool
 ```
 
-### 3. aiclient2api 网关
+### 3. aiclient2api (开源项目+GPU插件, Node后端)
 
 ```bash
 # 健康检查
 curl -s http://localhost:3000/health
 
-# 代理测试（通过网关访问后端）
-curl -s http://localhost:3000/api/models
+# C端推理测试（通过 Node 后端 provider 路由到 Go 限流代理）
+curl -s http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"Gemma-4-31B-Abliterated","messages":[{"role":"user","content":"Hello"}],"max_tokens":50}'
 ```
 
 ### 4. Redis 连接

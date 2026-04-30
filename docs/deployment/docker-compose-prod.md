@@ -5,9 +5,15 @@
 生产环境使用根目录 `docker-compose.yml` 一键部署全部 5 个服务。
 
 ```
-用户 → Nginx (30000→80) → aiclient2api (3000) → app-controller (35000) / go-vllm-api (35001) → Redis (6379)
-                            ↓
-                         vLLM (8000, 容器内)
+用户 → Nginx (30000→80) — B端管控面板
+         ↓ (B端: Frontend/插件 → Python)
+     app-controller (35000) — Python 管控 (引擎启停/模型管理)
+         ↓ (C端: aiclient2api → provider → Go → 推理)
+     aiclient2api (3000) — 开源项目+GPU插件, Node后端
+         ↓ provider.baseURL → go-vllm-api:35001
+     go-vllm-api (35001) — vLLM限流代理
+         ↓ → 推理引擎(:8000)
+     Redis (6379) — 缓存/限流
 ```
 
 ## 服务清单
@@ -17,7 +23,7 @@
 | redis | ai-os-redis | 6379:6379 | redis:7.2-alpine |
 | ai-controller | ai-os-controller | 35000:35000 | nvidia/cuda:12.1.1 (自建) |
 | go-vllm-api | ai-os-go-vllm-api | 35001:35001 | go-vllm-api (自建) |
-| aiclient | ai-os-aiclient | 3000:3000 | justlikemaki/aiclient-2-api:latest |
+| aiclient | ai-os-aiclient | 3000:3000 | 开源项目+GPU插件 (Node后端) |
 | frontend | ai-os-frontend | 30000:80 | nginx:alpine (自建) |
 
 ## 启动步骤
@@ -78,15 +84,16 @@ docker exec ai-os-redis redis-cli ping
 |------|------|------|
 | 30000 | frontend | 用户访问入口 |
 | 35000 | ai-controller | Python API 管理接口（可设为内部） |
-| 35001 | go-vllm-api | Go API 推理接口（可设为内部） |
-| 3000 | aiclient | API 网关（可设为内部） |
+| 35001 | go-vllm-api | vLLM限流代理 (aiclient2api provider路由目标) |
+| 3000 | aiclient | 开源项目+GPU插件 (Node后端, C端推理入口) |
 | 6379 | Redis | 缓存服务（建议仅内网） |
 
 ### 安全建议
 
 - 仅对外暴露 30000（前端 Nginx）
 - Redis (6379) 绑定内网，禁止公网访问
-- 后端和网关通过 Docker 内部网络通信
+- 后端和 aiclient2api 通过 Docker 内部网络通信
+- aiclient2api Node后端通过 provider 配置路由到 go-vllm-api
 
 ```yaml
 # 如需限制端口暴露，修改 docker-compose.yml：

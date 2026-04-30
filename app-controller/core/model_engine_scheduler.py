@@ -4,6 +4,7 @@ import time
 from typing import Dict, Optional, List, Any
 
 from core.gpu_memory_checker import GPUMemoryChecker
+from core.llm_service_manager import _MAX_RESTART_ATTEMPTS
 
 logger = logging.getLogger("ai_controller.model_engine_scheduler")
 
@@ -626,3 +627,68 @@ class ModelEngineScheduler:
             "active_service": self._active_service,
             "switch_history_count": len(self._switch_history),
         }
+
+    async def _health_watcher_loop(self, interval: int = 5):
+        logger.info("Engine health watcher started (interval=%ds)", interval)
+        while True:
+            try:
+                if not self._llm_mgr:
+                    await asyncio.sleep(interval)
+                    continue
+                services = self._llm_mgr.list_services()
+                for svc in services:
+                    name = svc.get("service_name", "")
+                    if svc.get("status") == "stopped":
+                        exit_code = svc.get("exit_code", -1)
+                        logger.warning(
+                            "Service %s died (exit_code=%s), attempting auto-restart",
+                            name, exit_code,
+                        )
+                        model = self._llm_mgr._models.get(name, "")
+                        if model and model in self._engine_model_registry:
+                            reg = self._engine_model_registry[model]
+                            if reg.get("status") == "running":
+                                reg["status"] = "crashed"
+                                reg["exit_code"] = exit_code
+                        if self._llm_mgr.get_restart_count(name) < _MAX_RESTART_ATTEMPTS:
+                            result = self._llm_mgr.auto_restart(name)
+                            if result.get("status") == "started":
+                                logger.info("Auto-restarted service %s (pid=%s)", name, result.get("pid"))
+                                if model and model in self._engine_model_registry:
+                                    self._engine_model_registry[model]["status"] = "restarting"
+                                    port = self._llm_mgr._ports.get(name, 8000)
+                                    ready = await self._llm_mgr.wait_for_ready(name, port, timeout=120)
+                                    if ready:
+                                        self._engine_model_registry[model]["status"] = "running"
+                                        logger.info("Auto-restart service %s ready", name)
+                                    else:
+                                        self._engine_model_registry[model]["status"] = "failed"
+                                        logger.error("Auto-restart service %s failed readiness", name)
+                            else:
+                                logger.error("Auto-restart failed for %s: %s", name, result)
+                        else:
+                            logger.error("Service %s exceeded max restart attempts", name)
+                            if model and model in self._engine_model_registry:
+                                self._engine_model_registry[model]["status"] = "dead"
+                    elif svc.get("status") == "running":
+                        healthy = await self._llm_mgr.check_http_health(name)
+                        if not healthy:
+                            logger.warning("Service %s process alive but HTTP unhealthy", name)
+                for name, reg in self._engine_model_registry.items():
+                    if reg.get("preload_intended") and reg.get("status") in ("stopped", "crashed", "dead"):
+                        service = self._llm_mgr.get_service_by_model(name) if self._llm_mgr else None
+                        if not service or service.get("status") != "running":
+                            logger.info("Preload model %s not running, attempting deploy", name)
+                            engine = reg.get("engine", "vllm")
+                            port = reg.get("port", 8000)
+                            try:
+                                result = await self.deploy_model(name, engine_type=engine, port=port)
+                                if result.get("success"):
+                                    logger.info("Preload redeployed %s successfully", name)
+                                else:
+                                    logger.warning("Preload redeploy failed for %s: %s", name, result.get("reason"))
+                            except Exception as e:
+                                logger.error("Preload redeploy error for %s: %s", name, e)
+            except Exception as e:
+                logger.error("Health watcher loop error: %s", e)
+            await asyncio.sleep(interval)

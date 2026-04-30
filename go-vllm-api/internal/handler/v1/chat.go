@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"go-vllm-api/internal/middleware"
 	"go-vllm-api/internal/model"
 	"go-vllm-api/internal/pkg/utils"
 	"go-vllm-api/internal/proxy"
@@ -211,8 +212,10 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		active := h.scheduler.GetActiveRequests(modelName)
 		limit := h.scheduler.GetConcurrencyLimit()
 		queueLen := h.scheduler.GetQueueLength(modelName)
+		queueStart := time.Now()
 		if h.scheduler.IsQueueAvailable(modelName) {
 			ok := h.scheduler.WaitForSlot(c.Request.Context(), modelName, 30*time.Second)
+			middleware.RecordTiming(c, "queue_wait", time.Since(queueStart))
 			if !ok {
 				statusCode = 429
 				c.JSON(http.StatusTooManyRequests, gin.H{
@@ -238,6 +241,7 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		slotAcquired = true
 	}
 
+	modelReadyStart := time.Now()
 	if err := h.ensureModelReady(c, modelName); err != nil {
 		statusCode = 503
 		if h.scheduler.IsSwitchingInProgress() {
@@ -250,6 +254,7 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		}
 		return
 	}
+	middleware.RecordTiming(c, "model_ready", time.Since(modelReadyStart))
 
 	h.scheduler.MarkModelSelected(modelName)
 
@@ -276,8 +281,9 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		}
 		streamSlotAcquired = true
 
-		streamCtx, streamCancel := context.WithTimeout(c.Request.Context(), h.scheduler.GetStreamMaxDuration())
+		streamCtx, streamCancel := context.WithTimeout(proxyCtx, h.scheduler.GetStreamMaxDuration())
 		defer streamCancel()
+		c.Set("upstream", fmt.Sprintf("vllm:%d", port))
 
 		// Automatically include usage in streams
 		if _, ok := payload["stream_options"]; !ok {
@@ -342,7 +348,10 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
-	result, err := h.proxy.ChatCompletion(c.Request.Context(), port, payload)
+	inferenceStart := time.Now()
+	result, err := h.proxy.ChatCompletion(proxyCtx, port, payload)
+	middleware.RecordTiming(c, "inference", time.Since(inferenceStart))
+	c.Set("upstream", fmt.Sprintf("vllm:%d", port))
 	if err != nil {
 		statusCode = 503
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
@@ -372,6 +381,9 @@ func (h *V1Handler) CreateEmbeddings(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	requestID, _ := c.Get("request_id")
+	proxyCtx := proxy.ContextWithRequestID(c.Request.Context(), fmt.Sprintf("%v", requestID))
 
 	modelName := req.Model
 	if !h.scheduler.IsModelAvailable(modelName) {
@@ -410,7 +422,9 @@ func (h *V1Handler) CreateEmbeddings(c *gin.Context) {
 		payload["dimensions"] = *req.Dimensions
 	}
 
-	result, err := h.proxy.Embeddings(c.Request.Context(), port, payload)
+	result, err := h.proxy.Embeddings(proxyCtx, port, payload)
+	middleware.RecordTiming(c, "inference", time.Since(start))
+	c.Set("upstream", fmt.Sprintf("vllm:%d", port))
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return

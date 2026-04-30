@@ -19,6 +19,25 @@ _HEALTH_CHECK_TIMEOUT = 2
 
 class LLMServiceManager:
 
+    _VLLM_ENV_VARS = {
+        "VLLM_USE_V1": "1",
+        "NCCL_P2P_DISABLE": "1",
+        "NCCL_SOCKET_REUSEPORT": "1",
+        "NCCL_ASYNC_ERROR_HANDLING": "1",
+        "NCCL_IB_DISABLE": "1",
+        "CUDA_MANAGED_FORCE_DEVICE_ALLOC": "1",
+        "OMP_NUM_THREADS": "16",
+        "VLLM_NO_FLASHINFER": "1",
+        "FLASHINFER_DISABLE": "1",
+    }
+
+    _VLLM_SERVE_FIXED_ARGS = [
+        "--trust-remote-code",
+        "--host", "0.0.0.0",
+        "--enforce-eager",
+        "--kv-cache-dtype", "auto",
+    ]
+
     def __init__(self, config: Optional[AppConfig] = None):
         self._config = config
         self._processes: Dict[str, subprocess.Popen] = {}
@@ -29,6 +48,7 @@ class LLMServiceManager:
         self._restart_counts: Dict[str, int] = {}
         self._health_status: Dict[str, str] = {}
         self._model_paths: Dict[str, str] = {}
+        self._pgids: Dict[str, int] = {}
 
     def _get_model_config(self, model_name: str) -> Optional[ModelConfig]:
         if self._config:
@@ -48,6 +68,31 @@ class LLMServiceManager:
             return model_cfg.model_path
         return os.path.join(self._get_model_base_path(), model_name)
 
+    def _get_vllm_env(self, model_name: str) -> Dict[str, str]:
+        env = {**os.environ, **self._VLLM_ENV_VARS}
+        env["HF_ENDPOINT"] = os.environ.get(
+            "HF_ENDPOINT",
+            self._config.vllm.get("hf_endpoint", "https://hf-mirror.com")
+            if self._config and self._config.vllm else "https://hf-mirror.com",
+        )
+        model_cfg = self._get_model_config(model_name)
+        vllm_params = {}
+        if model_cfg and hasattr(model_cfg, 'vllm_params') and model_cfg.vllm_params:
+            vllm_params = model_cfg.vllm_params
+        elif isinstance(model_cfg, dict):
+            vllm_params = model_cfg.get("vllm_params", {})
+        attention_backend = vllm_params.get("attention_backend")
+        if attention_backend:
+            env["VLLM_ATTENTION_BACKEND"] = attention_backend
+        venv_path = (
+            self._config.vllm.get("venv_path")
+            if self._config and self._config.vllm else None
+        )
+        if venv_path and os.path.isfile(os.path.join(venv_path, "bin", "activate")):
+            env["VLLM_ENV_PATH"] = venv_path
+            env["PATH"] = os.path.join(venv_path, "bin") + ":" + env.get("PATH", "")
+        return env
+
     def build_command(self, model_name: str, engine_type: str, port: int) -> List[str]:
         model_path = self._get_model_path(model_name)
         model_cfg = self._get_model_config(model_name)
@@ -63,11 +108,8 @@ class LLMServiceManager:
             raise ValueError(f"Unsupported engine type: {engine_type}")
 
     def _build_vllm_command(self, model_path: str, port: int, cfg: Any) -> List[str]:
-        cmd = [
-            "python", "-m", "vllm.entrypoints.openai.api_server",
-            "--model", model_path,
-            "--port", str(port),
-        ]
+        cmd = ["vllm", "serve", model_path, "--port", str(port)]
+        cmd.extend(self._VLLM_SERVE_FIXED_ARGS)
 
         vllm_params = {}
         if hasattr(cfg, 'vllm_params') and cfg.vllm_params:
@@ -97,24 +139,25 @@ class LLMServiceManager:
         )
         cmd.extend(["--gpu-memory-utilization", str(gpu_util)])
 
+        max_num_seqs = vllm_params.get("max_num_seqs")
+        if max_num_seqs:
+            cmd.extend(["--max-num-seqs", str(max_num_seqs)])
+
+        max_num_batched_tokens = vllm_params.get("max_num_batched_tokens")
+        if max_num_batched_tokens:
+            cmd.extend(["--max-num-batched-tokens", str(max_num_batched_tokens)])
+
+        enable_chunked_prefill = vllm_params.get("enable_chunked_prefill")
+        if enable_chunked_prefill:
+            cmd.extend(["--enable-chunked-prefill"])
+
         if hasattr(cfg, 'supports_tool_calling') and cfg.supports_tool_calling:
             tool_parser = vllm_params.get("tool_call_parser", "hermes")
-            cmd.extend(["--tool-call-parser", tool_parser])
-            cmd.extend(["--enable-tool-call"])
+            if tool_parser:
+                cmd.extend(["--enable-auto-tool-choice", "--tool-call-parser", tool_parser])
 
         if hasattr(cfg, 'supports_images') and cfg.supports_images:
-            if "limit-mm-per-prompt" not in str(cmd):
-                cmd.extend(["--limit-mm-per-prompt", "10"])
-
-        for key, val in vllm_params.items():
-            if val is None or key in (
-                "dtype", "quantization", "tensor_parallel_size",
-                "gpu_memory_utilization", "tool_call_parser",
-                "max_model_len", "limit_mm_per_prompt",
-            ):
-                continue
-            arg_name = "--" + key.replace("_", "-")
-            cmd.extend([arg_name, str(val)])
+            cmd.extend(["--limit-mm-per-prompt", "10"])
 
         extra_args = []
         if hasattr(cfg, 'extra_args') and cfg.extra_args:
@@ -214,15 +257,32 @@ class LLMServiceManager:
         cmd = self.build_command(model_name, engine_type, port)
         logger.info("Starting %s engine for %s: %s", engine_type, model_name, " ".join(cmd))
 
-        env = {**os.environ, "HF_ENDPOINT": os.environ.get("HF_ENDPOINT", "https://hf-mirror.com")}
+        if engine_type == "vllm":
+            env = self._get_vllm_env(model_name)
+        else:
+            env = {**os.environ, "HF_ENDPOINT": os.environ.get("HF_ENDPOINT", "https://hf-mirror.com")}
+
+        log_dir = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "logs",
+            f"vllm-{model_name.split('/')[-1]}",
+        )
+        os.makedirs(log_dir, exist_ok=True)
+        log_file_path = os.path.join(log_dir, f"{engine_type}_{time.strftime('%Y%m%d_%H%M%S')}.log")
+        try:
+            log_fd = open(log_file_path, "a")
+        except OSError:
+            log_fd = subprocess.PIPE
+
         try:
             process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=log_fd,
+                stderr=log_fd,
                 env=env,
+                preexec_fn=os.setsid,
             )
             self._processes[service_name] = process
+            self._pgids[service_name] = os.getpgid(process.pid)
             self._engine_types[service_name] = engine_type
             self._ports[service_name] = port
             self._models[service_name] = model_name
@@ -237,6 +297,7 @@ class LLMServiceManager:
                 "engine_type": engine_type,
                 "model": model_name,
                 "port": port,
+                "log_file": log_file_path,
             }
         except Exception as e:
             logger.error("Failed to start %s: %s", service_name, e)
@@ -247,11 +308,15 @@ class LLMServiceManager:
         if not process:
             return False
 
+        pgid = self._pgids.get(service_name)
         pid = process.pid
-        logger.info("Stopping service %s (pid=%s)", service_name, pid)
+        logger.info("Stopping service %s (pid=%s, pgid=%s)", service_name, pid, pgid)
 
         try:
-            process.send_signal(signal.SIGINT)
+            if pgid and pgid > 0:
+                os.killpg(pgid, signal.SIGINT)
+            else:
+                process.send_signal(signal.SIGINT)
         except OSError:
             pass
 
@@ -259,11 +324,14 @@ class LLMServiceManager:
             process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             logger.warning(
-                "Service %s did not exit after SIGINT+%ds, sending SIGKILL",
+                "Service %s did not exit after SIGINT+%ds, sending SIGKILL to process group",
                 service_name, timeout,
             )
             try:
-                process.kill()
+                if pgid and pgid > 0:
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    process.kill()
             except OSError:
                 pass
             try:
@@ -278,8 +346,12 @@ class LLMServiceManager:
         process = self._processes.get(service_name)
         if not process:
             return False
+        pgid = self._pgids.get(service_name)
         try:
-            process.kill()
+            if pgid and pgid > 0:
+                os.killpg(pgid, signal.SIGKILL)
+            else:
+                process.kill()
             process.wait(timeout=5)
         except Exception:
             pass
@@ -288,6 +360,7 @@ class LLMServiceManager:
 
     def _cleanup_service(self, service_name: str):
         self._processes.pop(service_name, None)
+        self._pgids.pop(service_name, None)
         self._engine_types.pop(service_name, None)
         self._ports.pop(service_name, None)
         self._models.pop(service_name, None)
@@ -314,6 +387,7 @@ class LLMServiceManager:
             "service_name": service_name,
             "engine_type": self._engine_types.get(service_name, ""),
             "pid": process.pid,
+            "pgid": self._pgids.get(service_name, 0),
             "port": self._ports.get(service_name, 0),
             "model": self._models.get(service_name, ""),
             "uptime_seconds": round(uptime, 1),

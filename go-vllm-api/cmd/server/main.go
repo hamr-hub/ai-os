@@ -179,10 +179,12 @@ func main() {
 		redisRepo, *configPath,
 	)
 	healthHandler := health.NewHealthHandler(gpuMonitor, scheduler, metricsCollector, cacheService, promExporter, vllmProxy, sysCtl, llamaCppMgr, redisRepo)
-	wsHandler := ws.NewWSHandler(wsManager, zapLogger)
+	wsHandler := ws.NewWSHandlerWithState(wsManager, zapLogger, gpuMonitor, scheduler)
 
 	v1Handler.RegisterRoutes(r.Group(""))
-	manageHandler.RegisterRoutes(r.Group(""))
+	adminMW := middleware.NewAdminWhitelistMiddleware(cfg.Settings.TrustedProxies, []string{"GET", "HEAD"})
+	manageGroup := r.Group("", adminMW.Handler())
+	manageHandler.RegisterRoutes(manageGroup)
 	healthHandler.RegisterRoutes(r.Group(""))
 	wsHandler.RegisterRoutes(r.Group(""))
 	agentHandler.RegisterRoutes(r.Group(""))

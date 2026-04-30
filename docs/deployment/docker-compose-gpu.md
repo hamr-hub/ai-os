@@ -5,10 +5,15 @@
 GPU 环境在标准生产部署基础上增加 NVIDIA GPU 支持，用于 vLLM 模型推理加速。
 
 ```
-用户 → Nginx (30000) → aiclient2api (3000) → app-controller (35000) / go-vllm-api (35001)
-                                                  ↓
-                                              vLLM (8000, GPU)
-     Redis (6379) ← 独立缓存服务
+用户 → Nginx (30000) — B端管控面板
+         ↓ (B端管控路径)
+     Frontend/插件 → app-controller (35000) — Python 管控 (引擎启停/模型管理)
+         ↓ (C端推理路径)
+     aiclient2api (3000) — 开源项目+GPU插件, Node后端
+         ↓ provider → go-vllm-api (35001) — vLLM限流代理
+         ↓
+     vLLM (8000, GPU) — 推理引擎
+     Redis (6379) ← 缓存/限流
 ```
 
 ## 前置条件
