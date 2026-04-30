@@ -9,6 +9,8 @@ import {
   atomicSwitchModel,
   enablePreload,
   disablePreload,
+  startModel,
+  stopModel,
 } from '@/api/client'
 import type { ModelStatus, AggregatedModelsResponse, VLLMConfigUpdateRequest } from '@/types'
 import { isAbortError } from '@/utils/request'
@@ -114,7 +116,10 @@ export function useModels() {
   }
 
   const refresh = () => {
-    fetchModelStatus(true)
+    Promise.all([
+      fetchModelStatus(true),
+      fetchAggregatedModels(true),
+    ])
   }
 
   const handleSetDefaultModel = async (modelName: string) => {
@@ -146,10 +151,15 @@ export function useModels() {
     actionLoading.value = modelName
     error.value = null
     try {
-      await fetchModelStatus(true)
+      await startModel(modelName)
+      await Promise.all([
+        fetchModelStatus(true),
+        fetchAggregatedModels(true),
+      ])
     } catch (err) {
       error.value = err instanceof Error ? err.message : `Failed to start model ${modelName}`
       console.error('Failed to start model:', err)
+    } finally {
       actionLoading.value = null
     }
   }
@@ -158,7 +168,11 @@ export function useModels() {
     actionLoading.value = modelName
     error.value = null
     try {
-      await fetchModelStatus()
+      await stopModel(modelName)
+      await Promise.all([
+        fetchModelStatus(true),
+        fetchAggregatedModels(true),
+      ])
     } catch (err) {
       error.value = err instanceof Error ? err.message : `Failed to stop model ${modelName}`
       console.error('Failed to stop model:', err)
@@ -252,6 +266,7 @@ export function useModels() {
 
   onMounted(() => {
     fetchModelStatus()
+    fetchAggregatedModels()
     startAutoRefresh()
   })
 

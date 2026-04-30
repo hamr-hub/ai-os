@@ -53,7 +53,7 @@ const groups = [
 const isActive = (name: string) => route.name === name
 
 const navigateTo = (name: string) => {
-  router.push({ name })
+  router.push({ name, query: {} })
 }
 
 const cycleTheme = () => {

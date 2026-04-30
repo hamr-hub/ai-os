@@ -17,6 +17,7 @@ const props = defineProps<{
 }>()
 
 const runningModels = computed(() => props.modelList.filter((m) => m.running))
+const stoppedModels = computed(() => props.modelList.filter((m) => !m.running))
 
 const switchingProgress = computed(() => {
   if (!props.switchingModel) return null
@@ -74,11 +75,11 @@ const handleSwitchWithToast = async (name: string) => {
     </div>
   </div>
   <div v-else class="empty-state">暂无运行模型</div>
-  <div class="stopped-section">
+  <div v-if="stoppedModels.length" class="stopped-section">
     <div class="sub-header">可启动模型</div>
     <div class="stopped-list">
       <div
-        v-for="model in modelList.filter((m) => !m.running)"
+        v-for="model in stoppedModels"
         :key="model.name"
         class="model-row stopped"
       >

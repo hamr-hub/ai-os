@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: 'list',
   timeout: 60000,
   use: {
-    baseURL: 'http://localhost:30001',
+    baseURL: process.env.E2E_BASE_URL || 'http://localhost:30001',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     actionTimeout: 30000,

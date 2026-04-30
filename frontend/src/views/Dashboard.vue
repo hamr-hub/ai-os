@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useModels } from '@/composables/useModels'
 import { useGPU } from '@/composables/useGPU'
 import { useGPUHistory } from '@/composables/useGPUHistory'
@@ -91,6 +91,11 @@ const refreshAll = () => {
   gpuGetEngines()
   fetchQueueStatus()
 }
+
+onMounted(() => {
+  gpuGetEngines()
+  fetchQueueStatus()
+})
 
 const engineLabels: Record<string, string> = {
   vllm: 'vLLM',

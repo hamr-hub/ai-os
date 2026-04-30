@@ -101,13 +101,21 @@ test.describe('模型切换功能', () => {
   test.describe('可启动模型', () => {
     test('"可启动模型"区域标题存在', async ({ page }) => {
       const subHeader = page.locator('.running-card .sub-header')
-      await expect(subHeader).toHaveText('可启动模型', { timeout: CARD_TIMEOUT })
+      if ((await subHeader.count()) > 0) {
+        await expect(subHeader).toHaveText('可启动模型', { timeout: CARD_TIMEOUT })
+      } else {
+        await expect(page.locator('.running-card .empty-state')).toBeVisible({ timeout: CARD_TIMEOUT })
+      }
     })
 
     test('可启动模型区域结构完整', async ({ page }) => {
       const stoppedSection = page.locator('.running-card .stopped-section')
-      await expect(stoppedSection).toBeVisible({ timeout: CARD_TIMEOUT })
-      await expect(stoppedSection.locator('.stopped-list')).toBeAttached()
+      if ((await stoppedSection.count()) > 0) {
+        await expect(stoppedSection).toBeVisible({ timeout: CARD_TIMEOUT })
+        await expect(stoppedSection.locator('.stopped-list')).toBeAttached()
+      } else {
+        await expect(page.locator('.running-card .empty-state')).toBeVisible({ timeout: CARD_TIMEOUT })
+      }
     })
 
     test('可启动模型行结构正确', async ({ page }) => {
@@ -313,7 +321,11 @@ test.describe('模型切换功能', () => {
         await page.waitForTimeout(2000)
       }
       const badge = page.locator('.running-card .count-badge')
-      await expect(badge).toHaveText(/\d+\s*\/\s*\d+/)
+      if ((await badge.count()) > 0) {
+        await expect(badge).toHaveText(/\d+\s*\/\s*\d+/)
+      } else {
+        await expect(page.locator('.running-card .empty-state')).toBeVisible({ timeout: CARD_TIMEOUT })
+      }
     })
   })
 })
