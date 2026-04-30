@@ -34,6 +34,22 @@ const getDownloadStatus = vi.mocked(apiClient.getDownloadStatus)
 const cancelDownload = vi.mocked(apiClient.cancelDownload)
 const listDownloads = vi.mocked(apiClient.listDownloads)
 
+const task = {
+  task_id: 'dl-1',
+  model_name: 'qwen2',
+  source: 'hf',
+  status: 'downloading' as const,
+  progress_pct: 15,
+  speed_mbps: 20,
+  eta_seconds: 120,
+  downloaded_bytes: 100,
+  total_bytes: 1000,
+  local_path: null,
+  error_message: null,
+  allow_patterns: null,
+  ignore_patterns: null,
+}
+
 describe('useModelDownload', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -41,7 +57,6 @@ describe('useModelDownload', () => {
   })
 
   it('start成功创建下载任务', async () => {
-    const task = { task_id: 'dl-1', model_name: 'qwen2', status: 'downloading' }
     startDownload.mockResolvedValue(task)
 
     const { start, currentTask, loading, error } = useModelDownload()
@@ -64,8 +79,7 @@ describe('useModelDownload', () => {
   })
 
   it('start无task_id时currentTask不变', async () => {
-    const result = { message: 'already downloading' }
-    startDownload.mockResolvedValue(result)
+    startDownload.mockResolvedValue({ status: 'ok', local_path: '/tmp/model', model_name: 'model' })
 
     const { start, currentTask } = useModelDownload()
     await start('model')
@@ -74,7 +88,7 @@ describe('useModelDownload', () => {
   })
 
   it('getStatus更新currentTask', async () => {
-    const updated = { task_id: 'dl-1', status: 'downloading', progress_pct: 50 }
+    const updated = { ...task, progress_pct: 50 }
     getDownloadStatus.mockResolvedValue(updated)
 
     const { getStatus, currentTask } = useModelDownload()
@@ -85,20 +99,17 @@ describe('useModelDownload', () => {
   })
 
   it('cancel调用cancelDownload', async () => {
-    cancelDownload.mockResolvedValue({ cancelled: true })
+    cancelDownload.mockResolvedValue({ cancelled: true, task_id: 'dl-1' })
 
     const { cancel } = useModelDownload()
     const result = await cancel('dl-1')
 
     expect(cancelDownload).toHaveBeenCalledWith('dl-1')
-    expect(result).toEqual({ cancelled: true })
+    expect(result).toEqual({ cancelled: true, task_id: 'dl-1' })
   })
 
   it('list填充tasks', async () => {
-    const downloadTasks = [
-      { task_id: 'dl-1', model_name: 'qwen2', status: 'completed' },
-      { task_id: 'dl-2', model_name: 'llama', status: 'downloading' },
-    ]
+    const downloadTasks = [task, { ...task, task_id: 'dl-2', model_name: 'llama', status: 'completed' as const, progress_pct: 100 }]
     listDownloads.mockResolvedValue(downloadTasks)
 
     const { list, tasks } = useModelDownload()

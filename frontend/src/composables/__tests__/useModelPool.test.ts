@@ -15,17 +15,29 @@ const getPoolDetail = vi.mocked(apiClient.getPoolDetail)
 const loadFromPool = vi.mocked(apiClient.loadFromPool)
 const deleteFromPool = vi.mocked(apiClient.deleteFromPool)
 
+const poolEntry = {
+  name: 'qwen2-7b',
+  source: 'hf',
+  size_b: 14 * 1024 * 1024 * 1024,
+  quant: 'int4',
+  required_gb: 14,
+  feasible: true,
+  local_path: '/models/qwen2-7b',
+  engine_type: 'vllm',
+  download_status: 'completed' as const,
+  running_status: 'stopped' as const,
+  port: null,
+  config_key: 'qwen2-7b',
+}
+
 describe('useModelPool', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('list解构{models,total}填充poolList和total', async () => {
-    const models = [
-      { config_key: 'qwen2-7b', model_name: 'qwen2-7b' },
-      { config_key: 'llama-8b', model_name: 'llama-8b' },
-    ]
-    getPoolList.mockResolvedValue({ models, total: 2 })
+    const models = [poolEntry, { ...poolEntry, name: 'llama-8b', config_key: 'llama-8b' }]
+    getPoolList.mockResolvedValue({ models, total: 2, page: 1, page_size: 20 })
 
     const { list, poolList, total, loading, error } = useModelPool()
     await list()
@@ -47,17 +59,16 @@ describe('useModelPool', () => {
   })
 
   it('detail填充currentDetail', async () => {
-    const entry = { config_key: 'qwen2-7b', model_name: 'qwen2-7b', size_gb: 14 }
-    getPoolDetail.mockResolvedValue(entry)
+    getPoolDetail.mockResolvedValue(poolEntry)
 
     const { detail, currentDetail } = useModelPool()
     await detail('qwen2-7b')
 
-    expect(currentDetail.value).toEqual(entry)
+    expect(currentDetail.value).toEqual(poolEntry)
   })
 
   it('load返回结果', async () => {
-    const result = { loaded: true }
+    const result = { success: true, model: 'qwen2-7b', engine: 'vllm', port: 8000 }
     loadFromPool.mockResolvedValue(result)
 
     const { load } = useModelPool()
@@ -68,18 +79,15 @@ describe('useModelPool', () => {
   })
 
   it('remove成功后从poolList中filter移除', async () => {
-    const models = [
-      { config_key: 'qwen2-7b', model_name: 'qwen2-7b' },
-      { config_key: 'llama-8b', model_name: 'llama-8b' },
-    ]
-    getPoolList.mockResolvedValue({ models, total: 2 })
-    deleteFromPool.mockResolvedValue({ deleted: true })
+    const models = [poolEntry, { ...poolEntry, name: 'llama-8b', config_key: 'llama-8b' }]
+    getPoolList.mockResolvedValue({ models, total: 2, page: 1, page_size: 20 })
+    deleteFromPool.mockResolvedValue({ deleted: true, model_key: 'qwen2-7b' })
 
     const { list, remove, poolList, total } = useModelPool()
     await list()
     await remove('qwen2-7b')
 
-    expect(poolList.value).toEqual([{ config_key: 'llama-8b', model_name: 'llama-8b' }])
+    expect(poolList.value).toEqual([{ ...poolEntry, name: 'llama-8b', config_key: 'llama-8b' }])
     expect(total.value).toBe(1)
   })
 

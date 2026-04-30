@@ -14,6 +14,24 @@ import { useGPUStore } from '@/stores/gpu'
 
 const getGPUSummary = vi.mocked(apiClient.getGPUSummary)
 
+const gpuData = {
+  status: 'available' as const,
+  current: {
+    name: 'A100',
+    gpu_count: 1,
+    utilization: 80,
+    temperature: 65,
+    power_draw: 220,
+    power_limit: 300,
+    power_percent: 73,
+    memory_utilization: 50,
+    used_memory: 40,
+    available_memory: 40,
+    total_memory: 80,
+  },
+  history: [],
+}
+
 describe('useGPUStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -21,7 +39,6 @@ describe('useGPUStore', () => {
   })
 
   it('refresh填充gpuSummary', async () => {
-    const gpuData = { status: 'available', current: { name: 'A100', utilization: 80 }, history: [] }
     getGPUSummary.mockResolvedValue(gpuData)
 
     const store = useGPUStore()
@@ -53,7 +70,6 @@ describe('useGPUStore', () => {
   })
 
   it('subscriberCount控制轮询启停', async () => {
-    const gpuData = { status: 'available', current: { name: 'A100', utilization: 80 }, history: [] }
     getGPUSummary.mockResolvedValue(gpuData)
 
     const store = useGPUStore()
@@ -65,7 +81,6 @@ describe('useGPUStore', () => {
   })
 
   it('gpuCurrent和gpuStatus computed正确', async () => {
-    const gpuData = { status: 'available', current: { name: 'A100', utilization: 80 }, history: [] }
     getGPUSummary.mockResolvedValue(gpuData)
 
     const store = useGPUStore()

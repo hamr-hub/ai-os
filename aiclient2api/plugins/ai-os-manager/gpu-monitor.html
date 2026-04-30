@@ -6,25 +6,73 @@
     <title>GPU 监控与模型切换</title>
     <style>
         :root {
-            --bg-primary: #0f1419;
-            --bg-secondary: #1a1f26;
-            --bg-tertiary: #242a33;
-            --bg-card: #1c2128;
-            --text-primary: #e6edf3;
-            --text-secondary: #8b949e;
-            --text-muted: #6e7681;
-            --border-primary: #30363d;
+            /* 背景层次 */
+            --bg-primary: #0a0c10;
+            --bg-secondary: #111318;
+            --bg-tertiary: #1a1d24;
+            --bg-card: #14171c;
+            --bg-hover: #1e2128;
+            --bg-input: #0d1117;
+            
+            /* 文字层次 */
+            --text-primary: #f0f2f5;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --text-disabled: #4b5563;
+            
+            /* 边框层次 */
+            --border-primary: #2d333b;
             --border-card: #21262d;
-            --color-primary: #6366f1;
-            --color-primary-dark: #4f46e5;
-            --color-success: #22c55e;
-            --color-warning: #f59e0b;
-            --color-danger: #ef4444;
-            --color-secondary: #06b6d4;
+            --border-hover: #30363d;
+            
+            /* 主色调 */
+            --color-primary: #818cf8;
+            --color-primary-dark: #6366f1;
+            --color-primary-light: #a5b4fc;
+            --color-primary-rgb: 99, 102, 241;
+            
+            /* 状态色 */
+            --color-success: #34d399;
+            --color-success-dark: #10b981;
+            --color-warning: #fbbf24;
+            --color-warning-dark: #f59e0b;
+            --color-danger: #f87171;
+            --color-danger-dark: #ef4444;
+            --color-secondary: #22d3ee;
+            --color-secondary-dark: #06b6d4;
+            
+            /* 在线状态 */
+            --status-online: #22c55e;
+            --status-error: #ef4444;
+            
+            /* 阴影 */
             --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
-            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
-            --scrollbar-thumb: #484f58;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+            --shadow-md: 0 6px 12px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.6);
+            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.15);
+            
+            /* 滚动条 */
+            --scrollbar-thumb: #3d444d;
+            --scrollbar-thumb-hover: #4b5563;
+            
+            /* 间距 */
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 12px;
+            --space-lg: 16px;
+            --space-xl: 24px;
+            --space-2xl: 32px;
+            
+            /* 圆角 */
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --radius-xl: 16px;
+            
+            /* 字体 */
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', monospace;
         }
 
         * {
@@ -207,47 +255,70 @@
             gap: 20px;
         }
 
+        /* GPU 卡片 */
         .gpu-card {
             background: var(--bg-card);
-            backdrop-filter: blur(12px);
+            backdrop-filter: blur(16px);
             border: 1px solid var(--border-card);
-            border-radius: 16px;
-            padding: 25px;
+            border-radius: var(--radius-xl);
+            padding: var(--space-xl);
             box-shadow: var(--shadow);
-            transition: all 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .gpu-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--color-primary-light), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
         }
 
         .gpu-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-            border-color: var(--color-primary-light);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg), var(--shadow-glow);
+            border-color: var(--border-hover);
+        }
+
+        .gpu-card:hover::before {
+            opacity: 0.5;
         }
 
         .gpu-card h3 {
             color: var(--text-primary);
-            font-size: 1.3em;
-            margin-bottom: 20px;
+            font-size: 1.25em;
+            font-weight: 600;
+            margin-bottom: var(--space-lg);
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: var(--space-sm);
+            letter-spacing: -0.02em;
         }
 
         .gpu-card .gpu-index {
             background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             color: white;
-            border-radius: 8px;
-            width: 32px;
-            height: 32px;
+            border-radius: var(--radius-md);
+            width: 28px;
+            height: 28px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.9em;
+            font-size: 0.85em;
             font-weight: 700;
-            box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 0 12px rgba(var(--color-primary-rgb), 0.4);
+            flex-shrink: 0;
         }
 
+        /* 指标样式 */
         .metric {
-            margin-bottom: 18px;
+            margin-bottom: var(--space-lg);
         }
 
         .metric:last-child {
@@ -255,16 +326,20 @@
         }
 
         .metric-label {
-            color: var(--text-secondary);
-            font-size: 0.9em;
-            margin-bottom: 8px;
+            color: var(--text-muted);
+            font-size: 0.8em;
+            font-weight: 500;
+            margin-bottom: var(--space-xs);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .metric-value {
             color: var(--text-primary);
-            font-size: 1.2em;
+            font-size: 1.15em;
             font-weight: 600;
-            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-family: var(--font-mono);
+            letter-spacing: -0.01em;
         }
 
         .progress-track {
@@ -487,36 +562,104 @@
             color: white;
         }
 
+        /* 加载状态 */
         .loading {
             text-align: center;
             color: var(--text-secondary);
-            padding: 40px;
+            padding: var(--space-2xl);
             font-size: 1.1em;
             grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-md);
         }
 
+        .loading::before {
+            content: '';
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-primary);
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: var(--space-2xl);
+            color: var(--text-muted);
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-lg);
+            background: var(--bg-secondary);
+            border: 1px dashed var(--border-primary);
+            border-radius: var(--radius-xl);
+        }
+
+        .empty-state i {
+            font-size: 3em;
+            opacity: 0.4;
+            color: var(--text-muted);
+        }
+
+        .empty-state-text {
+            font-size: 1em;
+            color: var(--text-secondary);
+        }
+
+        /* 消息提示 */
         .error {
-            background: rgba(239, 68, 68, 0.12);
-            color: #fecaca;
-            border: 1px solid rgba(239, 68, 68, 0.25);
-            border-radius: 10px;
-            padding: 12px 16px;
-            margin-bottom: 16px;
+            background: rgba(248, 113, 113, 0.08);
+            color: var(--color-danger);
+            border: 1px solid rgba(248, 113, 113, 0.2);
+            border-radius: var(--radius-lg);
+            padding: var(--space-md) var(--space-lg);
+            margin-bottom: var(--space-lg);
+            font-size: 0.95em;
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .error::before {
+            content: '⚠';
+            font-size: 1.2em;
         }
 
         .success-message {
-            background: rgba(34, 197, 94, 0.12);
-            color: #bbf7d0;
-            border: 1px solid rgba(34, 197, 94, 0.25);
-            border-radius: 10px;
-            padding: 12px 16px;
-            margin-bottom: 16px;
+            background: rgba(52, 211, 153, 0.08);
+            color: var(--color-success);
+            border: 1px solid rgba(52, 211, 153, 0.2);
+            border-radius: var(--radius-lg);
+            padding: var(--space-md) var(--space-lg);
+            margin-bottom: var(--space-lg);
+            font-size: 0.95em;
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .success-message::before {
+            content: '✓';
+            font-size: 1.2em;
         }
 
         .timestamp {
-            color: var(--text-secondary);
-            font-size: 0.9em;
-            margin-top: 14px;
+            color: var(--text-muted);
+            font-size: 0.85em;
+            margin-top: var(--space-lg);
+            text-align: right;
+            font-family: var(--font-mono);
             text-align: right;
         }
 
@@ -1239,7 +1382,7 @@
                 refreshMonitorStatus(result);
                 const grid = document.getElementById('gpu-grid');
                 if (result.data.length === 0) {
-                    grid.innerHTML = '<div class="loading"><i class="fas fa-desktop" style="font-size: 2em; margin-bottom: 12px; display: block; opacity: 0.5;"></i>未检测到 GPU 设备</div>';
+                    grid.innerHTML = '<div class="empty-state"><i class="fas fa-desktop"></i><span class="empty-state-text">未检测到 GPU 设备</span></div>';
                     return;
                 }
                 const history = Array.isArray(result.history) ? result.history : [];
@@ -1360,7 +1503,7 @@
                 document.getElementById('model-status-text').textContent = result.currentModel ? `当前模型: ${result.currentModel}` : '已加载模型数据';
 
                 if (!result.groups || result.groups.length === 0) {
-                    list.innerHTML = '<div class="loading"><i class="fas fa-cube" style="font-size: 2em; margin-bottom: 12px; display: block; opacity: 0.5;"></i>暂无可用的模型</div>';
+                    list.innerHTML = '<div class="empty-state"><i class="fas fa-cube"></i><span class="empty-state-text">暂无可用的模型</span></div>';
                     return;
                 }
 
@@ -1740,7 +1883,7 @@
                 document.getElementById('model-error').innerHTML = '';
                 const list = document.getElementById('provider-list');
                 if (result.data.length === 0) {
-                    list.innerHTML = '<div class="loading"><i class="fas fa-server" style="font-size: 2em; margin-bottom: 12px; display: block; opacity: 0.5;"></i>暂无 Provider 配置</div>';
+                    list.innerHTML = '<div class="empty-state"><i class="fas fa-server"></i><span class="empty-state-text">暂无 Provider 配置</span></div>';
                     return;
                 }
                 list.innerHTML = result.data.map(provider => {

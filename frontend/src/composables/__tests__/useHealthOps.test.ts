@@ -15,13 +15,38 @@ const healthCheck = vi.mocked(apiClient.healthCheck)
 const getHealthDetailed = vi.mocked(apiClient.getHealthDetailed)
 const getHealthHistory = vi.mocked(apiClient.getHealthHistory)
 
+const alert = {
+  should_alert: true,
+  health_score: 72,
+  status: 'warning' as const,
+  alert_reasons: ['GPU温度高'],
+  timestamp: '2026-01-01T00:00:00Z',
+}
+
+const detail = {
+  overall_score: 88,
+  status: 'healthy' as const,
+  checks: {
+    gpu: { available: true, utilization: 52, temperature: 68, memory_used_pct: 42 },
+    go_backend: { reachable: true, response_time_ms: 10 },
+    python_backend: { reachable: true, response_time_ms: 12 },
+    vllm_service: { running: true, active_requests: 1 },
+    redis: { available: true, connected: true },
+  },
+  alert_reasons: [],
+  timestamp: '2026-01-01T00:00:00Z',
+}
+
+const history = [
+  { timestamp: '2026-01-01T00:00:00Z', health_score: 90, status: 'healthy', alert_count: 0 },
+]
+
 describe('useHealthOps', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('fetchAlert填充healthAlert', async () => {
-    const alert = { status: 'warning', message: 'GPU温度高' }
     getHealthAlert.mockResolvedValue(alert)
 
     const { fetchAlert, healthAlert, loading, error } = useHealthOps()
@@ -43,7 +68,6 @@ describe('useHealthOps', () => {
   })
 
   it('fetchDetail填充healthDetail', async () => {
-    const detail = { gpu_health: 'ok', services: [] }
     getHealthDetailed.mockResolvedValue(detail)
 
     const { fetchDetail, healthDetail } = useHealthOps()
@@ -53,7 +77,6 @@ describe('useHealthOps', () => {
   })
 
   it('fetchHistory填充healthHistory', async () => {
-    const history = [{ timestamp: '2026-01-01', event: 'check' }]
     getHealthHistory.mockResolvedValue(history)
 
     const { fetchHistory, healthHistory } = useHealthOps()
@@ -73,9 +96,9 @@ describe('useHealthOps', () => {
   })
 
   it('runCheck先调healthCheck再刷新alert+detail', async () => {
-    healthCheck.mockResolvedValue({})
-    getHealthAlert.mockResolvedValue({ status: 'healthy' })
-    getHealthDetailed.mockResolvedValue({ gpu_health: 'ok' })
+    healthCheck.mockResolvedValue({ status: 'ok' })
+    getHealthAlert.mockResolvedValue({ ...alert, status: 'healthy', should_alert: false, alert_reasons: [] })
+    getHealthDetailed.mockResolvedValue(detail)
 
     const { runCheck, healthAlert, healthDetail, loading, error } = useHealthOps()
     await runCheck()
@@ -83,8 +106,8 @@ describe('useHealthOps', () => {
     expect(healthCheck).toHaveBeenCalledOnce()
     expect(getHealthAlert).toHaveBeenCalledOnce()
     expect(getHealthDetailed).toHaveBeenCalledOnce()
-    expect(healthAlert.value).toEqual({ status: 'healthy' })
-    expect(healthDetail.value).toEqual({ gpu_health: 'ok' })
+    expect(healthAlert.value?.status).toBe('healthy')
+    expect(healthDetail.value).toEqual(detail)
     expect(loading.value).toBe(false)
     expect(error.value).toBeNull()
   })

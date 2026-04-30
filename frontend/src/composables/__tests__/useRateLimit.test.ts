@@ -21,7 +21,9 @@ describe('useRateLimit', () => {
   })
 
   it('fetchQueueStatus填充queueStatus', async () => {
-    const queue = { active_requests: 5, queued_requests: 2 }
+    const queue = {
+      qwen2: { active_requests: 5, queued_requests: 2, estimated_wait_seconds: 3 },
+    }
     getQueueStatus.mockResolvedValue(queue)
 
     const { fetchQueueStatus, queueStatus, loading, error } = useRateLimit()
