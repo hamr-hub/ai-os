@@ -47,284 +47,379 @@
     var sectionHTML = '\
 <div id="aios-gpu" class="section" data-section="aios-gpu" style="display: none;">\
     <div class="section-header">\
-        <h2>GPU监控</h2>\
+        <h2><i class="fas fa-microchip"></i> GPU监控</h2>\
         <div class="section-actions">\
-            <button class="aios-btn aios-btn-sm" onclick="AiosManager.gpu.refresh()">刷新</button>\
-            <button class="aios-btn aios-btn-sm aios-btn-toggle" id="aios-gpu-auto-btn" onclick="AiosManager.gpu.toggleAutoRefresh()">自动刷新</button>\
+            <button class="aios-btn aios-btn-sm" onclick="AiosManager.gpu.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>\
+            <button class="aios-btn aios-btn-sm aios-btn-toggle" id="aios-gpu-auto-btn" onclick="AiosManager.gpu.toggleAutoRefresh()"><i class="fas fa-clock"></i> 自动刷新</button>\
         </div>\
     </div>\
     <div class="aios-dashboard">\
-        <div class="aios-cards-row">\
-            <div class="aios-card">\
-                <div class="aios-card-title">GPU型号</div>\
-                <div class="aios-card-value" id="aios-gpu-name">--</div>\
+        <div class="aios-stats-grid">\
+            <div class="aios-stat-card">\
+                <div class="aios-stat-icon"><i class="fas fa-memory"></i></div>\
+                <div class="aios-stat-body">\
+                    <div class="aios-stat-label">GPU型号</div>\
+                    <div class="aios-stat-value" id="aios-gpu-name">--</div>\
+                </div>\
             </div>\
-            <div class="aios-card">\
-                <div class="aios-card-title">GPU利用率</div>\
-                <div class="aios-card-value" id="aios-gpu-util">--</div>\
-                <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-gpu-util-bar"></div></div>\
+            <div class="aios-stat-card">\
+                <div class="aios-stat-icon"><i class="fas fa-tachometer-alt"></i></div>\
+                <div class="aios-stat-body">\
+                    <div class="aios-stat-label">GPU利用率</div>\
+                    <div class="aios-stat-value" id="aios-gpu-util">--</div>\
+                    <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-gpu-util-bar"></div></div>\
+                </div>\
             </div>\
-            <div class="aios-card">\
-                <div class="aios-card-title">显存使用</div>\
-                <div class="aios-card-value" id="aios-gpu-mem">--</div>\
-                <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-gpu-mem-bar"></div></div>\
+            <div class="aios-stat-card">\
+                <div class="aios-stat-icon"><i class="fas fa-database"></i></div>\
+                <div class="aios-stat-body">\
+                    <div class="aios-stat-label">显存使用</div>\
+                    <div class="aios-stat-value" id="aios-gpu-mem">--</div>\
+                    <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-gpu-mem-bar"></div></div>\
+                </div>\
             </div>\
-            <div class="aios-card">\
-                <div class="aios-card-title">温度</div>\
-                <div class="aios-card-value" id="aios-gpu-temp">--</div>\
+            <div class="aios-stat-card">\
+                <div class="aios-stat-icon"><i class="fas fa-thermometer-half"></i></div>\
+                <div class="aios-stat-body">\
+                    <div class="aios-stat-label">温度</div>\
+                    <div class="aios-stat-value" id="aios-gpu-temp">--</div>\
+                </div>\
             </div>\
-            <div class="aios-card">\
-                <div class="aios-card-title">功耗</div>\
-                <div class="aios-card-value" id="aios-gpu-power">--</div>\
+            <div class="aios-stat-card">\
+                <div class="aios-stat-icon"><i class="fas fa-bolt"></i></div>\
+                <div class="aios-stat-body">\
+                    <div class="aios-stat-label">功耗</div>\
+                    <div class="aios-stat-value" id="aios-gpu-power">--</div>\
+                </div>\
             </div>\
         </div>\
-        <div class="aios-chart-container">\
-            <h4>历史趋势</h4>\
-            <canvas id="aios-gpu-history-chart" height="200"></canvas>\
+        <div class="aios-chart-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-chart-line"></i> 历史趋势</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <canvas id="aios-gpu-history-chart" height="200"></canvas>\
+            </div>\
         </div>\
-        <div class="aios-process-list">\
-            <h4>GPU进程</h4>\
-            <table class="aios-table" id="aios-gpu-processes">\
-                <thead><tr><th>PID</th><th>进程名</th><th>显存占用</th></tr></thead>\
-                <tbody><tr><td colspan="3" class="aios-empty">无进程</td></tr></tbody>\
-            </table>\
+        <div class="aios-table-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-tasks"></i> GPU进程</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <table class="aios-table" id="aios-gpu-processes">\
+                    <thead><tr><th>PID</th><th>进程名</th><th>显存占用</th></tr></thead>\
+                    <tbody><tr><td colspan="3" class="aios-empty">无进程</td></tr></tbody>\
+                </table>\
+            </div>\
         </div>\
     </div>\
 </div>\
 \
 <div id="aios-switch" class="section" data-section="aios-switch" style="display: none;">\
     <div class="section-header">\
-        <h2>模型切换</h2>\
+        <h2><i class="fas fa-exchange-alt"></i> 模型切换</h2>\
         <div class="section-actions">\
-            <button class="aios-btn aios-btn-sm" onclick="AiosManager.modelSwitch.refresh()">刷新</button>\
+            <button class="aios-btn aios-btn-sm" onclick="AiosManager.modelSwitch.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>\
         </div>\
     </div>\
     <div class="aios-dashboard">\
-        <div class="aios-current-status" id="aios-current-status">\
-            <div class="aios-status-cards">\
-                <div class="aios-status-card aios-status-engine">\
-                    <div class="aios-status-card-icon"><i class="fas fa-bolt"></i></div>\
-                    <div class="aios-status-card-body">\
-                        <div class="aios-status-card-label">当前引擎</div>\
-                        <div class="aios-status-card-value" id="aios-current-engine">--</div>\
+        <div class="aios-status-banner">\
+            <div class="aios-banner-title">当前运行状态</div>\
+            <div class="aios-banner-cards">\
+                <div class="aios-banner-item">\
+                    <div class="aios-banner-icon"><i class="fas fa-bolt"></i></div>\
+                    <div class="aios-banner-info">\
+                        <div class="aios-banner-label">当前引擎</div>\
+                        <div class="aios-banner-value" id="aios-current-engine">--</div>\
                     </div>\
                 </div>\
-                <div class="aios-status-card aios-status-model">\
-                    <div class="aios-status-card-icon"><i class="fas fa-cube"></i></div>\
-                    <div class="aios-status-card-body">\
-                        <div class="aios-status-card-label">运行中模型</div>\
-                        <div class="aios-status-card-value" id="aios-current-model">--</div>\
+                <div class="aios-banner-item">\
+                    <div class="aios-banner-icon"><i class="fas fa-cube"></i></div>\
+                    <div class="aios-banner-info">\
+                        <div class="aios-banner-label">运行中模型</div>\
+                        <div class="aios-banner-value" id="aios-current-model">--</div>\
                     </div>\
                 </div>\
-                <div class="aios-status-card aios-status-port">\
-                    <div class="aios-status-card-icon"><i class="fas fa-plug"></i></div>\
-                    <div class="aios-status-card-body">\
-                        <div class="aios-status-card-label">服务端口</div>\
-                        <div class="aios-status-card-value" id="aios-current-port">--</div>\
+                <div class="aios-banner-item">\
+                    <div class="aios-banner-icon"><i class="fas fa-plug"></i></div>\
+                    <div class="aios-banner-info">\
+                        <div class="aios-banner-label">服务端口</div>\
+                        <div class="aios-banner-value" id="aios-current-port">--</div>\
                     </div>\
                 </div>\
             </div>\
         </div>\
-        <div class="aios-quick-switch" id="aios-quick-switch">\
-            <h4>快速切换</h4>\
-            <div class="aios-quick-switch-form">\
-                <div class="aios-quick-switch-field">\
-                    <label>目标模型</label>\
-                    <select id="aios-quick-switch-model" class="aios-input aios-select">\
-                        <option value="">选择模型...</option>\
-                    </select>\
-                </div>\
-                <div class="aios-quick-switch-field">\
-                    <label>引擎</label>\
-                    <select id="aios-quick-switch-engine" class="aios-input aios-select">\
-                        <option value="vllm">vLLM</option>\
-                        <option value="sglang">SGLang</option>\
-                        <option value="llamacpp">llama.cpp</option>\
-                    </select>\
-                </div>\
-                <div class="aios-quick-switch-field">\
-                    <label>端口</label>\
-                    <input type="number" id="aios-quick-switch-port" class="aios-input" value="8000" min="1024" max="65535">\
-                </div>\
-                <div class="aios-quick-switch-field aios-quick-switch-actions">\
-                    <button class="aios-btn aios-btn-primary" onclick="AiosManager.modelSwitch.quickSwitch()">切换模型</button>\
-                    <button class="aios-btn aios-btn-warning" onclick="AiosManager.modelSwitch.quickSwitchEngine()">切换引擎</button>\
+        <div class="aios-action-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-random"></i> 快速切换</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div class="aios-form-grid">\
+                    <div class="aios-form-group">\
+                        <label>目标模型</label>\
+                        <select id="aios-quick-switch-model" class="aios-input aios-select">\
+                            <option value="">选择模型...</option>\
+                        </select>\
+                    </div>\
+                    <div class="aios-form-group">\
+                        <label>引擎</label>\
+                        <select id="aios-quick-switch-engine" class="aios-input aios-select">\
+                            <option value="vllm">vLLM</option>\
+                            <option value="sglang">SGLang</option>\
+                            <option value="llamacpp">llama.cpp</option>\
+                        </select>\
+                    </div>\
+                    <div class="aios-form-group">\
+                        <label>端口</label>\
+                        <input type="number" id="aios-quick-switch-port" class="aios-input" value="8000" min="1024" max="65535">\
+                    </div>\
+                    <div class="aios-form-group aios-form-actions">\
+                        <button class="aios-btn aios-btn-primary" onclick="AiosManager.modelSwitch.quickSwitch()"><i class="fas fa-exchange-alt"></i> 切换模型</button>\
+                        <button class="aios-btn aios-btn-warning" onclick="AiosManager.modelSwitch.quickSwitchEngine()"><i class="fas fa-sync"></i> 切换引擎</button>\
+                    </div>\
                 </div>\
             </div>\
         </div>\
-        <div class="aios-models-list" id="aios-models-container">\
+        <div class="aios-models-card" id="aios-models-container">\
             <div class="aios-loading">加载中...</div>\
         </div>\
-        <div class="aios-switch-status" id="aios-switch-status">\
-            <h4>切换状态</h4>\
-            <div id="aios-switch-status-content">无进行中的切换</div>\
+        <div class="aios-status-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-info-circle"></i> 切换状态</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div id="aios-switch-status-content">无进行中的切换</div>\
+            </div>\
         </div>\
     </div>\
 </div>\
 \
 <div id="aios-engine" class="section" data-section="aios-engine" style="display: none;">\
     <div class="section-header">\
-        <h2>引擎管理</h2>\
+        <h2><i class="fas fa-cogs"></i> 引擎管理</h2>\
         <div class="section-actions">\
-            <button class="aios-btn aios-btn-sm" onclick="AiosManager.engine.refresh()">刷新</button>\
+            <button class="aios-btn aios-btn-sm" onclick="AiosManager.engine.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>\
         </div>\
     </div>\
     <div class="aios-dashboard">\
-        <div class="aios-engine-current" id="aios-engine-current">\
-            <h4>当前引擎</h4>\
-            <div class="aios-engine-cards" id="aios-engine-cards">\
-                <div class="aios-engine-card" data-engine="vllm">\
-                    <div class="aios-engine-card-header">vLLM</div>\
-                    <div class="aios-engine-card-status" id="aios-engine-vllm-status">未运行</div>\
+        <div class="aios-engine-grid">\
+            <div class="aios-engine-card" data-engine="vllm">\
+                <div class="aios-engine-header">\
+                    <div class="aios-engine-icon"><i class="fas fa-bolt"></i></div>\
+                    <div class="aios-engine-title">vLLM</div>\
                 </div>\
-                <div class="aios-engine-card" data-engine="sglang">\
-                    <div class="aios-engine-card-header">SGLang</div>\
-                    <div class="aios-engine-card-status" id="aios-engine-sglang-status">未运行</div>\
+                <div class="aios-engine-status" id="aios-engine-vllm-status">未运行</div>\
+            </div>\
+            <div class="aios-engine-card" data-engine="sglang">\
+                <div class="aios-engine-header">\
+                    <div class="aios-engine-icon"><i class="fas fa-rocket"></i></div>\
+                    <div class="aios-engine-title">SGLang</div>\
                 </div>\
-                <div class="aios-engine-card" data-engine="llamacpp">\
-                    <div class="aios-engine-card-header">llama.cpp</div>\
-                    <div class="aios-engine-card-status" id="aios-engine-llamacpp-status">未运行</div>\
+                <div class="aios-engine-status" id="aios-engine-sglang-status">未运行</div>\
+            </div>\
+            <div class="aios-engine-card" data-engine="llamacpp">\
+                <div class="aios-engine-header">\
+                    <div class="aios-engine-icon"><i class="fas fa-leaf"></i></div>\
+                    <div class="aios-engine-title">llama.cpp</div>\
+                </div>\
+                <div class="aios-engine-status" id="aios-engine-llamacpp-status">未运行</div>\
+            </div>\
+        </div>\
+        <div class="aios-action-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-random"></i> 引擎切换</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div class="aios-form-grid">\
+                    <div class="aios-form-group">\
+                        <label>模型</label>\
+                        <select id="aios-engine-switch-model" class="aios-input aios-select">\
+                            <option value="">选择模型...</option>\
+                        </select>\
+                    </div>\
+                    <div class="aios-form-group">\
+                        <label>目标引擎</label>\
+                        <select id="aios-engine-switch-type" class="aios-input aios-select">\
+                            <option value="vllm">vLLM</option>\
+                            <option value="sglang">SGLang</option>\
+                            <option value="llamacpp">llama.cpp</option>\
+                        </select>\
+                    </div>\
+                    <div class="aios-form-group">\
+                        <label>端口</label>\
+                        <input type="number" id="aios-engine-switch-port" class="aios-input" value="8000" min="1024" max="65535">\
+                    </div>\
+                    <div class="aios-form-group aios-form-actions">\
+                        <button class="aios-btn aios-btn-primary" onclick="AiosManager.engine.switchEngine()"><i class="fas fa-sync"></i> 切换引擎</button>\
+                    </div>\
                 </div>\
             </div>\
         </div>\
-        <div class="aios-engine-switch-panel">\
-            <h4>引擎切换</h4>\
-            <div class="aios-engine-switch-form">\
-                <div class="aios-engine-switch-field">\
-                    <label>模型</label>\
-                    <select id="aios-engine-switch-model" class="aios-input aios-select">\
-                        <option value="">选择模型...</option>\
-                    </select>\
-                </div>\
-                <div class="aios-engine-switch-field">\
-                    <label>目标引擎</label>\
-                    <select id="aios-engine-switch-type" class="aios-input aios-select">\
-                        <option value="vllm">vLLM</option>\
-                        <option value="sglang">SGLang</option>\
-                        <option value="llamacpp">llama.cpp</option>\
-                    </select>\
-                </div>\
-                <div class="aios-engine-switch-field">\
-                    <label>端口</label>\
-                    <input type="number" id="aios-engine-switch-port" class="aios-input" value="8000" min="1024" max="65535">\
-                </div>\
-                <div class="aios-engine-switch-field">\
-                    <button class="aios-btn aios-btn-primary" onclick="AiosManager.engine.switchEngine()">切换引擎</button>\
-                </div>\
+        <div class="aios-status-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-list"></i> 引擎状态</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div id="aios-engine-status-content">加载中...</div>\
             </div>\
         </div>\
-        <div class="aios-engine-status" id="aios-engine-status">\
-            <h4>引擎状态</h4>\
-            <div id="aios-engine-status-content">加载中...</div>\
-        </div>\
-        <div class="aios-engine-config" id="aios-engine-config">\
-            <h4>引擎配置</h4>\
-            <div id="aios-engine-config-content">加载中...</div>\
+        <div class="aios-config-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-sliders-h"></i> 引擎配置</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div id="aios-engine-config-content">加载中...</div>\
+            </div>\
         </div>\
     </div>\
 </div>\
 \
 <div id="aios-config" class="section" data-section="aios-config" style="display: none;">\
     <div class="section-header">\
-        <h2>配置中心</h2>\
+        <h2><i class="fas fa-cog"></i> 配置中心</h2>\
         <div class="section-actions">\
-            <button class="aios-btn aios-btn-sm" onclick="AiosManager.config.refresh()">刷新</button>\
-            <button class="aios-btn aios-btn-sm aios-btn-primary" onclick="AiosManager.config.save()">保存</button>\
+            <button class="aios-btn aios-btn-sm" onclick="AiosManager.config.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>\
+            <button class="aios-btn aios-btn-sm aios-btn-primary" onclick="AiosManager.config.save()"><i class="fas fa-save"></i> 保存</button>\
         </div>\
     </div>\
     <div class="aios-dashboard">\
-        <div class="aios-config-section">\
-            <h4>全局配置</h4>\
-            <form id="aios-global-config-form" class="aios-config-form"></form>\
-        </div>\
-        <div class="aios-config-section">\
-            <h4>vLLM默认配置</h4>\
-            <form id="aios-vllm-config-form" class="aios-config-form"></form>\
-        </div>\
-        <div class="aios-config-section">\
-            <h4>默认模型</h4>\
-            <div class="aios-config-row">\
-                <input type="text" id="aios-default-model-input" placeholder="输入模型名称" class="aios-input">\
-                <button class="aios-btn aios-btn-primary" onclick="AiosManager.config.setDefaultModel()">设置</button>\
-                <button class="aios-btn aios-btn-danger" onclick="AiosManager.config.clearDefaultModel()">清除</button>\
+        <div class="aios-config-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-globe"></i> 全局配置</h3>\
             </div>\
-            <div id="aios-current-default-model" class="aios-config-info">当前默认模型: --</div>\
+            <div class="aios-card-content">\
+                <form id="aios-global-config-form" class="aios-config-form"></form>\
+            </div>\
+        </div>\
+        <div class="aios-config-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-microchip"></i> vLLM默认配置</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <form id="aios-vllm-config-form" class="aios-config-form"></form>\
+            </div>\
+        </div>\
+        <div class="aios-config-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-star"></i> 默认模型</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div class="aios-form-row">\
+                    <input type="text" id="aios-default-model-input" placeholder="输入模型名称" class="aios-input">\
+                    <button class="aios-btn aios-btn-primary" onclick="AiosManager.config.setDefaultModel()"><i class="fas fa-check"></i> 设置</button>\
+                    <button class="aios-btn aios-btn-danger" onclick="AiosManager.config.clearDefaultModel()"><i class="fas fa-trash"></i> 清除</button>\
+                </div>\
+                <div id="aios-current-default-model" class="aios-config-info">当前默认模型: --</div>\
+            </div>\
         </div>\
     </div>\
 </div>\
 \
 <div id="aios-health" class="section" data-section="aios-health" style="display: none;">\
     <div class="section-header">\
-        <h2>健康运维</h2>\
+        <h2><i class="fas fa-heartbeat"></i> 健康运维</h2>\
         <div class="section-actions">\
-            <button class="aios-btn aios-btn-sm" onclick="AiosManager.health.refresh()">刷新</button>\
-            <button class="aios-btn aios-btn-sm aios-btn-primary" onclick="AiosManager.health.runCheck()">运行检查</button>\
+            <button class="aios-btn aios-btn-sm" onclick="AiosManager.health.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>\
+            <button class="aios-btn aios-btn-sm aios-btn-primary" onclick="AiosManager.health.runCheck()"><i class="fas fa-stethoscope"></i> 运行检查</button>\
         </div>\
     </div>\
     <div class="aios-dashboard">\
-        <div class="aios-health-overview" id="aios-health-overview">\
+        <div class="aios-health-banner">\
             <div class="aios-health-score">\
-                <div class="aios-score-circle" id="aios-health-score-circle">\
+                <div class="aios-score-ring" id="aios-health-score-circle">\
                     <span id="aios-health-score-value">--</span>\
                 </div>\
                 <div class="aios-score-label">健康评分</div>\
             </div>\
             <div class="aios-health-status">\
-                <h4>系统状态</h4>\
+                <h3>系统状态</h3>\
                 <div id="aios-health-status-content">加载中...</div>\
             </div>\
         </div>\
-        <div class="aios-alerts">\
-            <h4>告警信息</h4>\
-            <div id="aios-alerts-container">无告警</div>\
+        <div class="aios-alerts-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-bell"></i> 告警信息</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div id="aios-alerts-container">无告警</div>\
+            </div>\
         </div>\
-        <div class="aios-system-monitor">\
-            <h4>系统资源</h4>\
-            <div class="aios-cards-row">\
-                <div class="aios-card">\
-                    <div class="aios-card-title">CPU使用率</div>\
-                    <div class="aios-card-value" id="aios-cpu-util">--</div>\
-                    <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-cpu-bar"></div></div>\
-                </div>\
-                <div class="aios-card">\
-                    <div class="aios-card-title">内存使用</div>\
-                    <div class="aios-card-value" id="aios-mem-util">--</div>\
-                    <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-mem-bar"></div></div>\
-                </div>\
-                <div class="aios-card">\
-                    <div class="aios-card-title">磁盘使用</div>\
-                    <div class="aios-card-value" id="aios-disk-util">--</div>\
-                    <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-disk-bar"></div></div>\
+        <div class="aios-system-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-desktop"></i> 系统资源</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div class="aios-stats-grid">\
+                    <div class="aios-metric-card">\
+                        <div class="aios-metric-icon"><i class="fas fa-microchip"></i></div>\
+                        <div class="aios-metric-body">\
+                            <div class="aios-metric-label">CPU使用率</div>\
+                            <div class="aios-metric-value" id="aios-cpu-util">--</div>\
+                            <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-cpu-bar"></div></div>\
+                        </div>\
+                    </div>\
+                    <div class="aios-metric-card">\
+                        <div class="aios-metric-icon"><i class="fas fa-memory"></i></div>\
+                        <div class="aios-metric-body">\
+                            <div class="aios-metric-label">内存使用</div>\
+                            <div class="aios-metric-value" id="aios-mem-util">--</div>\
+                            <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-mem-bar"></div></div>\
+                        </div>\
+                    </div>\
+                    <div class="aios-metric-card">\
+                        <div class="aios-metric-icon"><i class="fas fa-hdd"></i></div>\
+                        <div class="aios-metric-body">\
+                            <div class="aios-metric-label">磁盘使用</div>\
+                            <div class="aios-metric-value" id="aios-disk-util">--</div>\
+                            <div class="aios-progress-bar"><div class="aios-progress-fill" id="aios-disk-bar"></div></div>\
+                        </div>\
+                    </div>\
                 </div>\
             </div>\
         </div>\
-        <div class="aios-health-history">\
-            <h4>健康历史</h4>\
-            <canvas id="aios-health-history-chart" height="150"></canvas>\
+        <div class="aios-chart-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-chart-line"></i> 健康历史</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <canvas id="aios-health-history-chart" height="150"></canvas>\
+            </div>\
         </div>\
     </div>\
 </div>\
 \
 <div id="aios-ratelimit" class="section" data-section="aios-ratelimit" style="display: none;">\
     <div class="section-header">\
-        <h2>限流控制</h2>\
+        <h2><i class="fas fa-tachometer-alt"></i> 限流控制</h2>\
         <div class="section-actions">\
-            <button class="aios-btn aios-btn-sm" onclick="AiosManager.ratelimit.refresh()">刷新</button>\
-            <button class="aios-btn aios-btn-sm aios-btn-primary" onclick="AiosManager.ratelimit.saveConfig()">保存配置</button>\
+            <button class="aios-btn aios-btn-sm" onclick="AiosManager.ratelimit.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>\
+            <button class="aios-btn aios-btn-sm aios-btn-primary" onclick="AiosManager.ratelimit.saveConfig()"><i class="fas fa-save"></i> 保存配置</button>\
         </div>\
     </div>\
     <div class="aios-dashboard">\
-        <div class="aios-queue-status">\
-            <h4>队列状态</h4>\
-            <div id="aios-queue-content">加载中...</div>\
+        <div class="aios-status-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-list-ul"></i> 队列状态</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div id="aios-queue-content">加载中...</div>\
+            </div>\
         </div>\
-        <div class="aios-ratelimit-config">\
-            <h4>限流配置</h4>\
-            <form id="aios-ratelimit-config-form" class="aios-config-form"></form>\
+        <div class="aios-config-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-sliders-h"></i> 限流配置</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <form id="aios-ratelimit-config-form" class="aios-config-form"></form>\
+            </div>\
         </div>\
-        <div class="aios-ratelimit-stats">\
-            <h4>限流统计</h4>\
-            <div id="aios-ratelimit-stats-content">加载中...</div>\
+        <div class="aios-stats-card">\
+            <div class="aios-card-header">\
+                <h3><i class="fas fa-chart-bar"></i> 限流统计</h3>\
+            </div>\
+            <div class="aios-card-content">\
+                <div id="aios-ratelimit-stats-content">加载中...</div>\
+            </div>\
         </div>\
     </div>\
 </div>';
