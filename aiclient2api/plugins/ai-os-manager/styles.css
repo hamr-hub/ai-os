@@ -669,3 +669,530 @@ canvas {
     font-weight: 500;
 }
 
+.aios-input {
+    padding: 10px 14px;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    transition: all 0.2s ease;
+}
+
+.aios-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.15);
+}
+
+.aios-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+}
+
+.aios-textarea {
+    padding: 10px 14px;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-mono);
+    min-height: 80px;
+    resize: vertical;
+    transition: all 0.2s ease;
+}
+
+.aios-textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.15);
+}
+
+.aios-config-row {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
+    margin-bottom: var(--space-sm);
+}
+
+.aios-config-info {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* 健康监控 */
+.aios-health-overview {
+    display: flex;
+    gap: var(--space-xl);
+    margin-bottom: var(--space-xl);
+    align-items: center;
+}
+
+.aios-health-score {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.aios-score-circle {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    border: 4px solid var(--color-success);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow);
+    transition: border-color 0.3s ease;
+}
+
+.aios-score-label {
+    margin-top: var(--space-sm);
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.aios-health-status {
+    flex: 1;
+}
+
+.aios-health-status h4 {
+    color: var(--text-primary);
+    margin: 0 0 var(--space-sm) 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.aios-status-healthy { color: var(--color-success); font-weight: 600; }
+.aios-status-warning { color: var(--color-warning); font-weight: 600; }
+.aios-status-critical { color: var(--color-danger); font-weight: 600; }
+.aios-status-unknown { color: var(--text-muted); font-weight: 600; }
+
+.aios-alerts {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    margin-bottom: var(--space-xl);
+    box-shadow: var(--shadow);
+}
+
+.aios-alert-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.aios-alert-item {
+    padding: 10px 14px;
+    background: rgba(239, 68, 68, 0.08);
+    border-left: 3px solid var(--color-danger);
+    margin-bottom: 6px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: var(--color-danger);
+    font-size: 13px;
+}
+
+.aios-system-monitor {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    margin-bottom: var(--space-xl);
+    box-shadow: var(--shadow);
+}
+
+.aios-health-history {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    box-shadow: var(--shadow);
+}
+
+/* 限流控制 */
+.aios-queue-status,
+.aios-ratelimit-config,
+.aios-ratelimit-stats {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    margin-bottom: var(--space-lg);
+    box-shadow: var(--shadow);
+}
+
+.aios-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-lg);
+}
+
+.aios-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-lg);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-primary);
+    transition: all 0.3s ease;
+}
+
+.aios-stat:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-2px);
+}
+
+.aios-stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.aios-stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+/* 引擎管理 */
+.aios-engine-status,
+.aios-engine-config {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    margin-bottom: var(--space-lg);
+    box-shadow: var(--shadow);
+}
+
+.aios-engine-current {
+    margin-bottom: var(--space-xl);
+}
+
+.aios-engine-current h4 {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 var(--space-lg) 0;
+}
+
+.aios-engine-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-lg);
+}
+
+.aios-engine-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.aios-engine-card:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.aios-engine-card-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+}
+
+.aios-engine-card-status {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.aios-engine-running {
+    border-color: var(--color-success) !important;
+    background: rgba(34, 197, 94, 0.05) !important;
+}
+
+.aios-engine-running-text {
+    color: var(--color-success) !important;
+}
+
+.aios-engine-stopped-text {
+    color: var(--text-muted) !important;
+}
+
+.aios-engine-switch-panel {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-xl);
+    margin-bottom: var(--space-xl);
+    box-shadow: var(--shadow);
+}
+
+.aios-engine-switch-panel h4 {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 var(--space-lg) 0;
+}
+
+.aios-engine-switch-form {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: var(--space-md);
+    align-items: end;
+}
+
+.aios-engine-switch-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.aios-engine-switch-field label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.aios-engine-info > div,
+.aios-engine-config-info > div {
+    padding: 6px 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.aios-engine-config-info pre {
+    background: var(--bg-input);
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    overflow-x: auto;
+    margin-top: var(--space-sm);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+}
+
+/* 导航样式 */
+.nav-item {
+    display: block;
+    padding: 10px 16px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border-radius: var(--radius-md);
+    margin: 2px 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.nav-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+.nav-item.active {
+    background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15) 0%, rgba(var(--color-primary-rgb), 0.05) 100%);
+    color: var(--color-primary);
+    border: 1px solid rgba(var(--color-primary-rgb), 0.2);
+}
+
+.nav-item i {
+    width: 20px;
+    margin-right: 8px;
+    text-align: center;
+}
+
+.nav-divider {
+    margin: 8px 16px;
+    border-bottom: 1px solid var(--border-card);
+}
+
+/* Toast notification styles */
+.aios-toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.aios-toast {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-radius: var(--radius-lg);
+    color: var(--text-primary);
+    font-size: 13px;
+    box-shadow: var(--shadow-lg);
+    min-width: 250px;
+    max-width: 400px;
+    animation: aios-slide-in 0.3s ease;
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-card);
+}
+
+@keyframes aios-slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.aios-toast-info {
+    background: rgba(30, 64, 175, 0.9);
+    border-left: 4px solid #3b82f6;
+}
+
+.aios-toast-success {
+    background: rgba(20, 83, 45, 0.9);
+    border-left: 4px solid #22c55e;
+}
+
+.aios-toast-warning {
+    background: rgba(120, 53, 15, 0.9);
+    border-left: 4px solid #f59e0b;
+}
+
+.aios-toast-error {
+    background: rgba(127, 29, 29, 0.9);
+    border-left: 4px solid #ef4444;
+}
+
+.aios-toast-close {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.aios-toast-close:hover {
+    opacity: 1;
+}
+
+/* vLLM params modal */
+.aios-vllm-params-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.aios-vllm-params-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-2xl);
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+}
+
+.aios-vllm-params-content h4 {
+    color: var(--text-primary);
+    margin: 0 0 var(--space-lg) 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.aios-vllm-params-actions {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-lg);
+    justify-content: flex-end;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .aios-dashboard {
+        padding: var(--space-md);
+    }
+
+    .aios-cards-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .aios-status-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .aios-quick-switch-form {
+        grid-template-columns: 1fr;
+    }
+
+    .aios-engine-switch-form {
+        grid-template-columns: 1fr;
+    }
+
+    .aios-model-info {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .aios-health-overview {
+        flex-direction: column;
+    }
+
+    .aios-config-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-sm);
+    }
+
+    .section-actions {
+        width: 100%;
+    }
+
+    .aios-engine-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .aios-cards-row {
+        grid-template-columns: 1fr;
+    }
+}

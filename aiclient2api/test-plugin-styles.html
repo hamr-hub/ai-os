@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-OS 插件样式测试</title>
+    <link rel="stylesheet" href="/plugins/ai-os-manager/styles.css">
+    <link rel="stylesheet" href="/plugins/ai-monitor/styles.css">
+    <style>
+        body {
+            background: #0a0c10;
+            color: #f0f2f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding: 40px;
+            min-height: 100vh;
+        }
+        .test-section {
+            margin-bottom: 60px;
+        }
+        .test-section h2 {
+            color: #818cf8;
+            margin-bottom: 24px;
+            font-size: 20px;
+            border-bottom: 1px solid #21262d;
+            padding-bottom: 12px;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; margin-bottom: 40px; background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AI-OS 插件样式端到端测试</h1>
+
+    <!-- AI-OS Manager 样式测试 -->
+    <div class="test-section">
+        <h2>AI-OS Manager 样式测试</h2>
+
+        <div class="aios-dashboard">
+            <!-- 数据卡片 -->
+            <div class="aios-cards-row">
+                <div class="aios-card">
+                    <div class="aios-card-title">GPU 型号</div>
+                    <div class="aios-card-value">NVIDIA A100</div>
+                </div>
+                <div class="aios-card">
+                    <div class="aios-card-title">GPU 利用率</div>
+                    <div class="aios-card-value">72.5%</div>
+                    <div class="aios-progress-bar"><div class="aios-progress-fill aios-warning" style="width:72.5%"></div></div>
+                </div>
+                <div class="aios-card">
+                    <div class="aios-card-title">显存使用</div>
+                    <div class="aios-card-value">32.1 GB</div>
+                    <div class="aios-progress-bar"><div class="aios-progress-fill aios-success" style="width:45%"></div></div>
+                </div>
+                <div class="aios-card">
+                    <div class="aios-card-title">温度</div>
+                    <div class="aios-card-value">65°C</div>
+                </div>
+            </div>
+
+            <!-- 状态卡片 -->
+            <div class="aios-status-cards">
+                <div class="aios-status-card">
+                    <div class="aios-status-card-icon">⚡</div>
+                    <div class="aios-status-card-body">
+                        <div class="aios-status-card-label">当前引擎</div>
+                        <div class="aios-status-card-value">vLLM</div>
+                    </div>
+                </div>
+                <div class="aios-status-card">
+                    <div class="aios-status-card-icon">🧠</div>
+                    <div class="aios-status-card-body">
+                        <div class="aios-status-card-label">运行中模型</div>
+                        <div class="aios-status-card-value aios-value-active">Qwen2.5-72B</div>
+                    </div>
+                </div>
+                <div class="aios-status-card">
+                    <div class="aios-status-card-icon">🔌</div>
+                    <div class="aios-status-card-body">
+                        <div class="aios-status-card-label">服务端口</div>
+                        <div class="aios-status-card-value">8000</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 按钮测试 -->
+            <div style="margin: 24px 0; display: flex; gap: 12px; flex-wrap: wrap;">
+                <button class="aios-btn aios-btn-primary">主按钮</button>
+                <button class="aios-btn aios-btn-success">成功按钮</button>
+                <button class="aios-btn aios-btn-warning">警告按钮</button>
+                <button class="aios-btn aios-btn-danger">危险按钮</button>
+                <button class="aios-btn">默认按钮</button>
+                <button class="aios-btn aios-btn-sm aios-btn-primary">小按钮</button>
+            </div>
+
+            <!-- 模型列表测试 -->
+            <div class="aios-model-group" style="margin-top: 24px;">
+                <h5>Qwen 模型组</h5>
+                <div class="aios-model-item aios-current-model">
+                    <div class="aios-model-header">
+                        <span class="aios-model-name">Qwen2.5-72B-Instruct</span>
+                        <span class="aios-model-status aios-running">运行中</span>
+                        <span class="aios-badge">当前</span>
+                    </div>
+                    <div class="aios-model-info">
+                        <span>后端: vllm</span>
+                        <span>端口: 8000</span>
+                        <span>显存: 40GB</span>
+                    </div>
+                    <div class="aios-model-actions">
+                        <button class="aios-btn aios-btn-sm aios-btn-warning">停止</button>
+                    </div>
+                </div>
+                <div class="aios-model-item">
+                    <div class="aios-model-header">
+                        <span class="aios-model-name">Qwen2.5-7B-Instruct</span>
+                        <span class="aios-model-status aios-stopped">已停止</span>
+                    </div>
+                    <div class="aios-model-info">
+                        <span>后端: vllm</span>
+                        <span>端口: --</span>
+                        <span>显存: 16GB</span>
+                    </div>
+                    <div class="aios-model-actions">
+                        <button class="aios-btn aios-btn-sm aios-btn-success">启动</button>
+                        <button class="aios-btn aios-btn-sm aios-btn-primary">切换</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置表单测试 -->
+            <div class="aios-config-section" style="margin-top: 24px;">
+                <h4>配置测试</h4>
+                <form class="aios-config-form">
+                    <div class="aios-config-field">
+                        <label>模型路径</label>
+                        <input type="text" class="aios-input" placeholder="/models/qwen" value="/models/qwen2.5">
+                    </div>
+                    <div class="aios-config-field">
+                        <label>GPU 利用率</label>
+                        <input type="number" class="aios-input" value="0.9" step="0.1">
+                    </div>
+                    <div class="aios-config-row">
+                        <button class="aios-btn aios-btn-primary">保存</button>
+                        <button class="aios-btn">取消</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 统计卡片 -->
+            <div class="aios-stats-grid" style="margin-top: 24px;">
+                <div class="aios-stat">
+                    <span class="aios-stat-label">总请求数</span>
+                    <span class="aios-stat-value">12.5K</span>
+                </div>
+                <div class="aios-stat">
+                    <span class="aios-stat-label">QPS</span>
+                    <span class="aios-stat-value">42</span>
+                </div>
+                <div class="aios-stat">
+                    <span class="aios-stat-label">延迟</span>
+                    <span class="aios-stat-value">23ms</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI-Monitor 样式测试 -->
+    <div class="test-section">
+        <h2>AI-Monitor 悬浮面板样式测试</h2>
+        <p style="color: #6b7280; margin-bottom: 20px;">点击下方按钮模拟悬浮面板展开效果</p>
+
+        <div id="ai-monitor-toggle" onclick="toggleDemoPanel()">
+            <span class="aim-toggle-icon">⚡</span>
+            <span class="aim-toggle-label">AI Monitor</span>
+        </div>
+
+        <div id="ai-monitor-panel">
+            <div class="aim-panel-header">
+                <span class="aim-panel-title">AI Monitor</span>
+                <div class="aim-panel-header-actions">
+                    <button class="aim-btn aim-btn-sm">刷新</button>
+                    <button class="aim-btn aim-btn-sm aim-btn-collapse" onclick="toggleDemoPanel()">✕</button>
+                </div>
+            </div>
+            <div class="aim-panel-body">
+                <div class="aim-section">
+                    <div class="aim-section-title">当前引擎</div>
+                    <div class="aim-engine-cards">
+                        <div class="aim-engine-card aim-engine-active">
+                            <div class="aim-engine-indicator aim-indicator-running"></div>
+                            <div class="aim-engine-info">
+                                <div class="aim-engine-name">vLLM</div>
+                                <div class="aim-engine-detail">端口 8000</div>
+                            </div>
+                        </div>
+                        <div class="aim-engine-card aim-engine-inactive">
+                            <div class="aim-engine-indicator aim-indicator-stopped"></div>
+                            <div class="aim-engine-info">
+                                <div class="aim-engine-name">SGLang</div>
+                                <div class="aim-engine-detail">未运行</div>
+                            </div>
+                        </div>
+                        <div class="aim-engine-card aim-engine-inactive">
+                            <div class="aim-engine-indicator aim-indicator-stopped"></div>
+                            <div class="aim-engine-info">
+                                <div class="aim-engine-name">llama.cpp</div>
+                                <div class="aim-engine-detail">未运行</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="aim-section">
+                    <div class="aim-section-title">运行中的模型</div>
+                    <div class="aim-running-models">
+                        <div class="aim-model-item aim-model-current">
+                            <div class="aim-model-row">
+                                <span class="aim-model-name">Qwen2.5-72B-Instruct</span>
+                                <span class="aim-model-badge">当前</span>
+                            </div>
+                            <div class="aim-model-meta">
+                                <span class="aim-meta-engine" style="color:#3b82f6">vLLM</span>
+                                <span class="aim-meta-port">:8000</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="aim-section">
+                    <div class="aim-section-title">切换模型</div>
+                    <div class="aim-switch-form">
+                        <select class="aim-select">
+                            <option>选择模型...</option>
+                            <option>Qwen2.5-72B-Instruct</option>
+                            <option>Qwen2.5-7B-Instruct</option>
+                        </select>
+                        <select class="aim-select">
+                            <option>vLLM</option>
+                            <option>SGLang</option>
+                        </select>
+                        <button class="aim-btn aim-btn-primary aim-btn-block">切换模型</button>
+                    </div>
+                </div>
+
+                <div class="aim-section">
+                    <div class="aim-section-title">切换引擎</div>
+                    <div class="aim-engine-switch-row">
+                        <button class="aim-btn aim-btn-engine">
+                            <span class="aim-engine-dot" style="background:#3b82f6"></span> vLLM
+                        </button>
+                        <button class="aim-btn aim-btn-engine">
+                            <span class="aim-engine-dot" style="background:#22c55e"></span> SGLang
+                        </button>
+                        <button class="aim-btn aim-btn-engine">
+                            <span class="aim-engine-dot" style="background:#f59e0b"></span> llama.cpp
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 测试 -->
+    <div class="test-section">
+        <h2>Toast 通知测试</h2>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button class="aios-btn aios-btn-primary" onclick="showDemoToast('info')">Info Toast</button>
+            <button class="aios-btn aios-btn-success" onclick="showDemoToast('success')">Success Toast</button>
+            <button class="aios-btn aios-btn-warning" onclick="showDemoToast('warning')">Warning Toast</button>
+            <button class="aios-btn aios-btn-danger" onclick="showDemoToast('error')">Error Toast</button>
+        </div>
+        <div id="demo-toast-container" style="position: relative; margin-top: 20px; min-height: 100px;"></div>
+    </div>
+
+    <script>
+        let panelOpen = false;
+        function toggleDemoPanel() {
+            panelOpen = !panelOpen;
+            const panel = document.getElementById('ai-monitor-panel');
+            const toggle = document.getElementById('ai-monitor-toggle');
+            if (panelOpen) {
+                panel.classList.add('aim-panel-open');
+                toggle.classList.add('aim-toggle-active');
+            } else {
+                panel.classList.remove('aim-panel-open');
+                toggle.classList.remove('aim-toggle-active');
+            }
+        }
+
+        function showDemoToast(type) {
+            const container = document.getElementById('demo-toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'aim-toast aim-toast-' + type;
+            toast.style.position = 'relative';
+            toast.style.marginBottom = '8px';
+            toast.innerHTML = '<span>' + type.toUpperCase() + ' 通知消息示例</span><button class="aim-toast-close" onclick="this.parentElement.remove()">&times;</button>';
+            container.appendChild(toast);
+            setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4000);
+        }
+    </script>
+</body>
+</html>
