@@ -8,7 +8,7 @@
 
 ## 项目概览
 
-4 个核心模块：frontend (Vue 3)、app-controller (FastAPI)、go-vllm-api (Go Gin)、aiclient2api (网关)
+4 个核心模块：frontend (Vue 3, B端管控面板)、app-controller (FastAPI, 引擎/模型管控)、go-vllm-api (Go Gin, vLLM限流代理)、aiclient2api (开源项目+GPU插件, Node后端, C端推理入口)
 
 ---
 
