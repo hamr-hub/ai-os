@@ -543,7 +543,7 @@ export async function cancelSwitch(): Promise<{ status: string }> {
 
 export async function searchModels(keyword: string, source: string = 'all', limit: number = 10, config: AxiosRequestConfig = {}): Promise<{ results: SearchResult[]; total: number }> {
   const { data } = await client.get<{ results: SearchResult[]; total: number }>(
-    `/manage/models/search?keyword=${encodeURIComponent(keyword)}&source=${source}&limit=${limit}`,
+    `/models/search?keyword=${encodeURIComponent(keyword)}&source=${source}&limit=${limit}`,
     silentRequestConfig(config)
   )
   return data
@@ -551,7 +551,7 @@ export async function searchModels(keyword: string, source: string = 'all', limi
 
 export async function recommendModel(keyword: string, source: string = 'all', config: AxiosRequestConfig = {}): Promise<RecommendResult> {
   const { data } = await client.get<RecommendResult>(
-    `/manage/gpu/recommend?keyword=${encodeURIComponent(keyword)}&source=${source}`,
+    `/gpu/recommend?keyword=${encodeURIComponent(keyword)}&source=${source}`,
     silentRequestConfig(config)
   )
   return data
@@ -559,7 +559,7 @@ export async function recommendModel(keyword: string, source: string = 'all', co
 
 export async function checkModelMemory(modelName: string, config: AxiosRequestConfig = {}): Promise<MemoryCheckResult> {
   const { data } = await client.post<MemoryCheckResult>(
-    `/manage/gpu/memory-check/${encodeURIComponent(modelName)}`,
+    `/gpu/memory-check/${encodeURIComponent(modelName)}`,
     null,
     silentRequestConfig(config)
   )
@@ -574,7 +574,7 @@ export async function startDownload(modelName: string, source: string = 'hf', sa
   if (options?.maxWorkers) body.max_workers = options.maxWorkers
   if (options?.forceDownload) body.force_download = options.forceDownload
   const { data } = await client.post(
-    '/manage/models/download',
+    '/models/download',
     body,
     silentRequestConfig(config)
   )
@@ -583,7 +583,7 @@ export async function startDownload(modelName: string, source: string = 'hf', sa
 
 export async function getDownloadStatus(taskId: string, config: AxiosRequestConfig = {}): Promise<DownloadTask> {
   const { data } = await client.get<DownloadTask>(
-    `/manage/models/download/${taskId}/status`,
+    `/models/download/${taskId}/status`,
     silentRequestConfig(config)
   )
   return data
@@ -591,7 +591,7 @@ export async function getDownloadStatus(taskId: string, config: AxiosRequestConf
 
 export async function cancelDownload(taskId: string, config: AxiosRequestConfig = {}): Promise<{ cancelled: boolean; task_id: string }> {
   const { data } = await client.delete<{ cancelled: boolean; task_id: string }>(
-    `/manage/models/download/${taskId}`,
+    `/models/download/${taskId}`,
     silentRequestConfig(config)
   )
   return data
@@ -599,7 +599,7 @@ export async function cancelDownload(taskId: string, config: AxiosRequestConfig 
 
 export async function listDownloads(config: AxiosRequestConfig = {}): Promise<DownloadTask[]> {
   const { data } = await client.get<DownloadTask[]>(
-    '/manage/models/downloads',
+    '/models/downloads',
     silentRequestConfig(config)
   )
   return data
@@ -607,7 +607,7 @@ export async function listDownloads(config: AxiosRequestConfig = {}): Promise<Do
 
 export async function getPoolList(filter: string = 'all', page: number = 1, pageSize: number = 50, config: AxiosRequestConfig = {}): Promise<PoolListResponse> {
   const { data } = await client.get<PoolListResponse>(
-    `/manage/models/pool?filter=${filter}&page=${page}&page_size=${pageSize}`,
+    `/models/pool?filter=${filter}&page=${page}&page_size=${pageSize}`,
     silentRequestConfig(config)
   )
   return data
@@ -615,7 +615,7 @@ export async function getPoolList(filter: string = 'all', page: number = 1, page
 
 export async function getPoolDetail(modelKey: string, config: AxiosRequestConfig = {}): Promise<PoolEntry> {
   const { data } = await client.get<PoolEntry>(
-    `/manage/models/pool/${encodeURIComponent(modelKey)}`,
+    `/models/pool/${encodeURIComponent(modelKey)}`,
     silentRequestConfig(config)
   )
   return data
@@ -623,7 +623,7 @@ export async function getPoolDetail(modelKey: string, config: AxiosRequestConfig
 
 export async function loadFromPool(modelKey: string, engine: string = 'vllm', config: AxiosRequestConfig = {}): Promise<{ success: boolean; model: string; engine: string; port: number }> {
   const { data } = await client.post(
-    `/manage/models/pool/${encodeURIComponent(modelKey)}/load`,
+    `/models/pool/${encodeURIComponent(modelKey)}/load`,
     { engine },
     silentRequestConfig(config)
   )
@@ -632,30 +632,30 @@ export async function loadFromPool(modelKey: string, engine: string = 'vllm', co
 
 export async function deleteFromPool(modelKey: string, removeFiles: boolean = false, config: AxiosRequestConfig = {}): Promise<{ deleted: boolean; model_key: string }> {
   const { data } = await client.delete(
-    `/manage/models/pool/${encodeURIComponent(modelKey)}?remove_files=${removeFiles}`,
+    `/models/pool/${encodeURIComponent(modelKey)}?remove_files=${removeFiles}`,
     silentRequestConfig(config)
   )
   return data
 }
 
 export async function getLLMServiceStatus(config: AxiosRequestConfig = {}): Promise<Record<string, { running: boolean; engine: string; port: number | null; pid: number | null; started_at: string | null }>> {
-  const { data } = await client.get('/manage/service/status', silentRequestConfig(config))
+  const { data } = await client.get('/service/status', silentRequestConfig(config))
   return data
 }
 
 export async function getLLMServiceLogs(lines: number = 100, config: AxiosRequestConfig = {}): Promise<{ logs: string[]; count: number }> {
-  const { data } = await client.get('/manage/logs/test', silentRequestConfig({ params: { lines }, ...config }))
+  const { data } = await client.get('/logs/test', silentRequestConfig({ params: { lines }, ...config }))
   return data
 }
 
 export async function getEngineStatus(config: AxiosRequestConfig = {}): Promise<EngineStatus> {
-  const { data } = await client.get<EngineStatus>('/manage/engine/status', silentRequestConfig(config))
+  const { data } = await client.get<EngineStatus>('/engine/status', silentRequestConfig(config))
   return data
 }
 
 export async function switchEngine(modelName: string, engineType: EngineType = 'vllm', port: number = 8000, config: AxiosRequestConfig = {}): Promise<ActionResponse & { session_id?: string }> {
   const { data } = await client.post<ActionResponse & { session_id?: string }>(
-    '/manage/engine/switch',
+    '/engine/switch',
     { model_name: modelName, engine_type: engineType, port },
     config
   )

@@ -373,7 +373,7 @@ models:
       max_num_seqs: 64
       tool_call_parser: null
 settings:
-  concurrency_limit: 10
+  concurrency_limit: 11
   default_memory_strategy: balanced
   gpu_memory_utilization: 0.92
   idle_timeout: 600
