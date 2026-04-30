@@ -208,6 +208,20 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	maxModelLen := h.scheduler.GetMaxModelLen(modelName)
+	if maxModelLen > 0 {
+		estimatedTokens := h.estimateInputTokens(req)
+		if estimatedTokens > maxModelLen {
+			statusCode = 400
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":            fmt.Sprintf("Input too long: estimated %d tokens exceeds model maximum %d", estimatedTokens, maxModelLen),
+				"estimated_tokens": estimatedTokens,
+				"max_model_len":    maxModelLen,
+			})
+			return
+		}
+	}
+
 	if !h.scheduler.AcquireRequest(modelName) {
 		active := h.scheduler.GetActiveRequests(modelName)
 		limit := h.scheduler.GetConcurrencyLimit()
@@ -627,4 +641,38 @@ func randomHex(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func (h *V1Handler) estimateInputTokens(req model.ChatCompletionRequest) int {
+	totalChars := 0
+	for _, msg := range req.Messages {
+		if msg.Content.Str != nil {
+			totalChars += len(*msg.Content.Str)
+		}
+		for _, part := range msg.Content.List {
+			if part.Type == "text" {
+				totalChars += len(part.Text)
+			}
+		}
+		if msg.Name != "" {
+			totalChars += len(msg.Name)
+		}
+		for _, tc := range msg.ToolCalls {
+			if tc.Function.Arguments != "" {
+				totalChars += len(tc.Function.Arguments)
+			}
+			totalChars += len(tc.Function.Name)
+		}
+	}
+	if req.User != "" {
+		totalChars += len(req.User)
+	}
+	for _, tool := range req.Tools {
+		totalChars += len(tool.Function.Name) + len(tool.Function.Description)
+	}
+	estimated := totalChars / 4
+	if estimated == 0 && totalChars > 0 {
+		estimated = 1
+	}
+	return estimated
 }

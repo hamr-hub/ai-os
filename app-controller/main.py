@@ -36,6 +36,7 @@ from middleware.error_handler import (
 )
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.timeout_handler import TimeoutHandlerMiddleware
+from middleware.admin_whitelist import AdminWhitelistMiddleware
 
 async def request_tracking_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())
@@ -236,9 +237,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Controller API", version="1.0.0", lifespan=lifespan)
 
+cors_origins = app_controller_cfg.get("cors_origins", ["*"])
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -247,6 +249,14 @@ app.add_middleware(
 app.middleware("http")(RateLimitMiddleware(max_requests=100, window_seconds=60))
 app.middleware("http")(TimeoutHandlerMiddleware(timeout_seconds=60))
 app.middleware("http")(request_tracking_middleware)
+
+trusted_proxies = os.environ.get("TRUSTED_PROXIES", "").split(",") if os.environ.get("TRUSTED_PROXIES") else []
+app_controller_cfg = config.get("app_controller", {})
+whitelist_cfg = app_controller_cfg.get("admin_whitelist", {})
+if whitelist_cfg.get("enabled", True):
+    config_allowed_ips = whitelist_cfg.get("allowed_ips", [])
+    trusted_proxies.extend(config_allowed_ips)
+app.add_middleware(AdminWhitelistMiddleware, trusted_proxies=trusted_proxies)
 
 app.include_router(v1_router)
 app.include_router(manage_router)

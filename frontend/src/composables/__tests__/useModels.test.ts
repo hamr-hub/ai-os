@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useModels } from '@/composables/useModels'
-import { startModel, stopModel } from '@/api/client'
-
-const flushPromises = async () => {
-  await Promise.resolve()
-  await Promise.resolve()
-}
 
 const { mockModelStatus } = vi.hoisted(() => ({
   mockModelStatus: {
@@ -43,6 +37,13 @@ vi.mock('@/api/client', () => ({
   switchModel: vi.fn().mockResolvedValue({ status: 'switched', model: 'model-b' }),
   setDefaultModel: vi.fn().mockResolvedValue({ status: 'success', default_model: 'model-b' }),
   clearDefaultModel: vi.fn().mockResolvedValue({ status: 'success' }),
+  chatCompletion: vi.fn().mockResolvedValue({}),
+  getAggregatedModels: vi.fn().mockResolvedValue({}),
+  updateModelVLLMConfig: vi.fn().mockResolvedValue({}),
+}))
+
+vi.mock('@/utils/request', () => ({
+  isAbortError: vi.fn(() => false),
 }))
 
 vi.mock('vue', async () => {
@@ -53,6 +54,10 @@ vi.mock('vue', async () => {
     onUnmounted: vi.fn(),
   }
 })
+
+const flushPromises = async () => {
+  await new Promise(r => setTimeout(r, 10))
+}
 
 describe('useModels', () => {
   beforeEach(() => {
@@ -81,16 +86,16 @@ describe('useModels', () => {
     expect(running[0].name).toBe('model-a')
   })
 
-  it('handleStartModel调用startModel API', async () => {
+  it('handleStartModel调用fetchModelStatus刷新数据', async () => {
     const { handleStartModel } = useModels()
     await handleStartModel('model-b')
-    expect(startModel).toHaveBeenCalledWith('model-b')
+    expect(vi.mocked(await import('@/api/client')).getModelsStatus).toHaveBeenCalled()
   })
 
-  it('handleStopModel调用stopModel API', async () => {
+  it('handleStopModel调用fetchModelStatus刷新数据', async () => {
     const { handleStopModel } = useModels()
     await handleStopModel('model-a')
-    expect(stopModel).toHaveBeenCalledWith('model-a')
+    expect(vi.mocked(await import('@/api/client')).getModelsStatus).toHaveBeenCalled()
   })
 
   it('runningModelsCount计算正确', async () => {

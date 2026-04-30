@@ -1,0 +1,212 @@
+meta:
+  title: "ai-os前端测试计划与测试用例全覆盖"
+  platform: "frontend"
+  requirement_id: "frontend-redesign-test-plan"
+  requirement_version: "v1.0"
+  developer: "heyongxian"
+  created_at: "2026-04-30"
+  business_goal: "为Vue3前端管控面板和aiclient2api插件提供系统性测试覆盖，确保≥80%composable/store覆盖率，≥100个测试用例，vitest全PASS"
+  requirement_confidence: "high"
+
+scope:
+  in_scope:
+    - "前端composable单元测试(14个新composable)"
+    - "前端store单元测试(3个新store)"
+    - "API client新增函数测试"
+    - "Vue页面组件基础渲染测试(14个页面)"
+    - "E2E关键路径测试(4条)"
+    - "aiclient2api插件核心功能测试"
+  out_of_scope:
+    - "Go后端测试"
+    - "Python后端测试"
+    - "性能压测"
+    - "Docker部署测试"
+
+global_constraints:
+  - "测试框架: vitest + @vue/test-utils + happy-dom"
+  - "测试风格: 中文describe/it，遵循现有测试模式(vi.mock + createPinia + beforeEach)"
+  - "Mock策略: vi.mock('@/api/client')统一mock所有API函数"
+  - "Store测试: createPinia + setActivePinia + beforeEach"
+  - "禁止lint全量检查: 必须增量检查"
+
+file_changes:
+  - path: "frontend/src/composables/__tests__/useAuth.test.ts"
+    change: "add"
+    summary: "useAuth composable单元测试: login/logout/token/user/isAuthenticated"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useAuth.ts"]
+  - path: "frontend/src/composables/__tests__/useConfigManagement.test.ts"
+    change: "add"
+    summary: "useConfigManagement测试: fetchAll/updateEngineConf/updateSystemConf/setDefault/clearDefault"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useConfigManagement.ts"]
+  - path: "frontend/src/composables/__tests__/useEngineManagement.test.ts"
+    change: "add"
+    summary: "useEngineManagement测试: fetchStatus/fetchConfig/doSwitchEngine/doUpdateConfig"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useEngineManagement.ts"]
+  - path: "frontend/src/composables/__tests__/useHealthOps.test.ts"
+    change: "add"
+    summary: "useHealthOps测试: fetchAlert/fetchDetail/fetchHistory/runCheck"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useHealthOps.ts"]
+  - path: "frontend/src/composables/__tests__/useRateLimit.test.ts"
+    change: "add"
+    summary: "useRateLimit测试: fetchQueueStatus/fetchConfig/fetchStats/doUpdateConfig"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useRateLimit.ts"]
+  - path: "frontend/src/composables/__tests__/useModelDownload.test.ts"
+    change: "add"
+    summary: "useModelDownload测试: start/getStatus/cancel/list/connectDownloadWS/disconnectWS"
+    risk: "medium"
+    depends_on: ["frontend/src/composables/useModelDownload.ts"]
+  - path: "frontend/src/composables/__tests__/useModelPool.test.ts"
+    change: "add"
+    summary: "useModelPool测试: list/detail/load/remove"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useModelPool.ts"]
+  - path: "frontend/src/composables/__tests__/useModelSearch.test.ts"
+    change: "add"
+    summary: "useModelSearch测试: search/recommend/checkMemory"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useModelSearch.ts"]
+  - path: "frontend/src/composables/__tests__/useModelSwitch.test.ts"
+    change: "add"
+    summary: "useModelSwitch测试: triggerSwitch/triggerCancel/connectWS/initSwitchMonitor/computed"
+    risk: "medium"
+    depends_on: ["frontend/src/composables/useModelSwitch.ts"]
+  - path: "frontend/src/composables/__tests__/usePolling.test.ts"
+    change: "add"
+    summary: "usePolling测试: fetch/refresh/startPolling/stopPolling/AbortController"
+    risk: "low"
+    depends_on: ["frontend/src/composables/usePolling.ts"]
+  - path: "frontend/src/composables/__tests__/useLLMService.test.ts"
+    change: "add"
+    summary: "useLLMService测试: getStatus/getLogs/start/stop/loadFromPoolService"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useLLMService.ts"]
+  - path: "frontend/src/composables/__tests__/useGPUMemory.test.ts"
+    change: "add"
+    summary: "useGPUMemory测试: getGPU/recommend/checkMemory/getMemoryInfo/getEngines/doSwitchEngine"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useGPUMemory.ts"]
+  - path: "frontend/src/composables/__tests__/useGPUMemoryCheck.test.ts"
+    change: "add"
+    summary: "useGPUMemoryCheck测试: fetchMemoryInfo/getRecommendation/checkModel"
+    risk: "low"
+    depends_on: ["frontend/src/composables/useGPUMemoryCheck.ts"]
+  - path: "frontend/src/stores/__tests__/auth.test.ts"
+    change: "add"
+    summary: "auth store测试: setToken/clearToken/isAuthenticated"
+    risk: "low"
+    depends_on: ["frontend/src/stores/auth.ts"]
+  - path: "frontend/src/stores/__tests__/modelPool.test.ts"
+    change: "add"
+    summary: "modelPool store测试: fetchPool/searchModelsAction/startDownloadAction/cancelDownloadAction/loadFromPoolAction/deleteFromPoolAction/connectWS"
+    risk: "medium"
+    depends_on: ["frontend/src/stores/modelPool.ts"]
+  - path: "frontend/src/stores/__tests__/gpu.test.ts"
+    change: "add"
+    summary: "gpu store测试: fetchGPUData/startPolling/stopPolling/refresh/gpuCurrent/gpuStatus"
+    risk: "low"
+    depends_on: ["frontend/src/stores/gpu.ts"]
+  - path: "frontend/src/views/__tests__/Dashboard.test.ts"
+    change: "add"
+    summary: "Dashboard页面渲染测试: GPU卡片/模型卡片/系统卡片"
+    risk: "low"
+    depends_on: ["frontend/src/views/Dashboard.vue"]
+  - path: "frontend/src/views/__tests__/ModelManagement.test.ts"
+    change: "add"
+    summary: "ModelManagement页面渲染测试"
+    risk: "low"
+    depends_on: ["frontend/src/views/ModelManagement.vue"]
+  - path: "frontend/src/views/__tests__/ModelHubPage.test.ts"
+    change: "add"
+    summary: "ModelHubPage渲染测试"
+    risk: "low"
+    depends_on: ["frontend/src/views/ModelHubPage.vue"]
+  - path: "frontend/src/views/__tests__/ModelPoolPage.test.ts"
+    change: "add"
+    summary: "ModelPoolPage渲染测试"
+    risk: "low"
+    depends_on: ["frontend/src/views/ModelPoolPage.vue"]
+  - path: "frontend/src/views/__tests__/EngineManagementPage.test.ts"
+    change: "add"
+    summary: "EngineManagementPage渲染测试"
+    risk: "low"
+    depends_on: ["frontend/src/views/EngineManagementPage.vue"]
+  - path: "frontend/src/views/__tests__/RateLimitPage.test.ts"
+    change: "add"
+    summary: "RateLimitPage渲染测试"
+    risk: "low"
+    depends_on: ["frontend/src/views/RateLimitPage.vue"]
+  - path: "frontend/src/views/__tests__/ConfigManagementPage.test.ts"
+    change: "add"
+    summary: "ConfigManagementPage渲染测试"
+    risk: "low"
+    depends_on: ["frontend/src/views/ConfigManagementPage.vue"]
+  - path: "frontend/src/views/__tests__/HealthOpsPage.test.ts"
+    change: "add"
+    summary: "HealthOpsPage渲染测试"
+    risk: "low"
+    depends_on: ["frontend/src/views/HealthOpsPage.vue"]
+  - path: "frontend/src/views/__tests__/AuthPage.test.ts"
+    change: "add"
+    summary: "AuthPage渲染测试"
+    risk: "low"
+    depends_on: ["frontend/src/views/AuthPage.vue"]
+  - path: "frontend/docs/tasks/frontend-redesign/test-plan.yaml"
+    change: "add"
+    summary: "测试计划YAML(机读格式)"
+    risk: "low"
+  - path: "frontend/docs/tasks/frontend-redesign/test-plan.md"
+    change: "add"
+    summary: "测试计划MD(人读格式)"
+    risk: "low"
+
+validation:
+  acceptance:
+    - id: "V-01"
+      criteria: "vitest run全部composable/store测试PASS"
+      test_command: "cd frontend && npx vitest run"
+    - id: "V-02"
+      criteria: "测试用例总数≥100"
+      test_command: "cd frontend && npx vitest run | grep 'Tests'"
+    - id: "V-03"
+      criteria: "pnpm build通过(无类型错误)"
+      test_command: "cd frontend && pnpm build"
+    - id: "V-04"
+      criteria: "增量lint检查通过"
+      test_command: "git diff --name-only HEAD | grep '.test.ts$' | xargs eslint"
+
+risks:
+  - level: "P1"
+    description: "useModelSwitch和useModelDownload涉及WebSocket逻辑，测试需mockWebSocket构造函数和onUnmounted"
+    mitigation: "使用vi.stubGlobal('WebSocket', mockWS)和vi.mock('vue', async=>({...await import('vue'),onUnmounted:vi.fn()}))"
+  - level: "P1"
+    description: "usePolling涉及onMounted/onUnmounted生命周期，测试需mockvue生命周期"
+    mitigation: "使用vi.mock('vue')替换onMounted/onUnmounted为vi.fn()"
+  - level: "P2"
+    description: "部分页面组件渲染测试可能因Chart.js依赖导致测试环境问题"
+    mitigation: "mock chart.js相关依赖，只测试基本DOM渲染"
+
+open_questions: []
+
+test_strategy:
+  framework: "vitest"
+  test_types:
+    - type: "unit"
+      scope: "composables, stores, api/client functions"
+      count_estimate: 80
+    - type: "component"
+      scope: "Vue page view components"
+      count_estimate: 20
+    - type: "e2e"
+      scope: "Dashboard/ModelManagement/ModelHub/ModelPool关键路径"
+      count_estimate: 4
+  mock_strategy:
+    api_client: "vi.mock('@/api/client')统一mock所有API函数"
+    pinia: "createPinia() + setActivePinia() + beforeEach()"
+    vue_lifecycle: "vi.mock('vue')替换onMounted/onUnmounted/onUnmounted"
+    websocket: "vi.stubGlobal('WebSocket', MockWebSocket)"
+    localStorage: "vi.stubGlobal('localStorage', mockLocalStorage)"

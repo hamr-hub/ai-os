@@ -1,0 +1,91 @@
+task_id: AIOS-ARCH-FIX
+source: 系统架构完善 — 基于架构文档修正所有模块缺口
+developer: heyongxian
+created_at: 2026-04-30
+
+explicit_requirements:
+  features:
+    - "P0-1: 三方配置统一 — 根config.yaml/app-controller/config.yaml/go-vllm-api/config.yaml 模型定义/元数据/Redis DB 对齐"
+    - "P0-2: Frontend Docker 容器端口修复 — Dockerfile EXPOSE 80 vs docker-compose 30000:30000 不匹配"
+    - "P0-3: Docker nginx.conf 使用 localhost upstream — 应改用 Docker 服务名"
+    - "P0-4: admin_whitelist.go 未提交 — Go 服务无法编译"
+    - "P0-5: B端 /manage/* 无鉴权 — 全部 API 裸暴露"
+    - "P1-1: 硬编码 192.168.7.103 IP — main.go/backend-client.js/nginx_30000.conf 4处"
+    - "P1-2: Vite dev proxy 默认端口错误 — .env.development vs vite.config.ts 不对齐"
+    - "P1-3: GGUF 模型 service 类型错误 — app-controller config 中 llama_cpp 模型配置为 vllm-aiclient"
+    - "P1-4: docker-compose 缺 PYTHON_BACKEND_URL/GO_BACKEND_URL 环境变量"
+    - "P1-5: Docker nginx.conf 缺 /ws/ WebSocket 路由"
+    - "P1-6: Redis DB 不一致 — Python 用 db5, Go/root 用 db0"
+    - "P2-1: Go internal 包 0% 测试覆盖"
+    - "P2-2: aiclient2api 插件无测试"
+    - "P2-3: Python model_engine_scheduler/model_hub 无测试"
+    - "P2-4: 旧 gpu-monitor-switch.disabled 插件残留"
+    - "P2-5: Stream max duration 不可配置"
+  user_roles:
+    - admin: B端管理员, 操作引擎启停/模型切换/下载
+    - user: C端用户, 通过 aiclient2api 发起推理请求
+  data_models:
+    - config_yaml: 统一配置模型(模型列表/引擎参数/Redis/限流)
+    - model_entry: 模型定义(name/service/vllm_params/supports_images/tool_calling)
+    - engine_config: 引擎配置(vllm/sglang/llama_cpp)
+  api_endpoints:
+    - "/manage/*": B端管控API(需鉴权)
+    - "/v1/*": C端推理API(限流代理)
+    - "/ws/*": WebSocket服务端推送
+  ui_states:
+    - login_page: AuthPage.vue 需实际鉴权流程
+    - dashboard: GPU监控/模型管理(需WebSocket实时推送正常工作)
+
+implicit_requirements:
+  - "Docker 环境下所有容器间通信必须使用 Docker 服务名而非 localhost/硬编码IP"
+  - "统一配置文件必须同时满足 Python B端 和 Go 限流代理 的需求"
+  - "前端 nginx.conf 必须包含 /ws/ WebSocket 路由 + 86400s 超时"
+  - "所有 GGUF 模型在配置中 service 类型必须为 llama_cpp"
+  - "Redis DB 号必须全局统一为 0(Docker compose 传参)"
+  - "admin_whitelist.go 必须提交到 Git"
+  - "config.yaml 须支持双后端读取 — Python 读 engines/model_groups/feature_flags, Go 读 discovery/llama_cpp/vllm_params"
+
+acceptance_criteria:
+  - "AC-01: root config.yaml 包含 Python 和 Go 所需的所有字段(模型列表/引擎/discovery/model_groups/vllm_params/llama_cpp/feature_flags)"
+  - "AC-02: app-controller/config.yaml 和 go-vllm-api/configs/config.yaml 与 root config.yaml 模型定义完全一致"
+  - "AC-03: Frontend Docker 容器端口映射正确(30000:80 或容器内 nginx 监 30000)"
+  - "AC-04: Docker nginx.conf upstreams 使用 Docker 服务名(ai-controller/go-vllm-api/aiclient)"
+  - "AC-05: admin_whitelist.go 已提交到 Git, Go 服务可编译"
+  - "AC-06: B端 /manage/* POST/PUT/DELETE 需鉴权(至少 JWT 或 IP 白名单)"
+  - "AC-07: 所有硬编码 IP 替换为环境变量或 Docker 服务名"
+  - "AC-08: Vite dev proxy 默认端口对齐(Python:35000, Go:35001)"
+  - "AC-09: GGUF 模型 service 类型为 llama_cpp"
+  - "AC-10: docker-compose 为所有服务设置必要环境变量(PYTHON_BACKEND_URL/GO_BACKEND_URL/REDIS_DB)"
+  - "AC-11: Docker nginx.conf 包含 /ws/ WebSocket 路由(proxy_pass ai-controller:35000, 86400s timeout)"
+  - "AC-12: Redis DB 号全局统一(db0)"
+
+tech_constraints:
+  stateManagement: pinia
+  styling: tailwind-css
+  testFramework: vitest+jest(go)
+  uiLibrary: custom-components
+  apiPattern: REST+SSE+WebSocket
+  folderStructure: multi-module
+  authPattern: jwt-ip-whitelist
+  routingPattern: config-based(vue-router)
+
+priority_matrix:
+  P0:
+    - config_drift
+    - docker_port_bug
+    - docker_nginx_localhost
+    - admin_whitelist_untracked
+    - no_auth
+  P1:
+    - hardcoded_ip
+    - vite_proxy_mismatch
+    - gguf_service_wrong
+    - docker_env_missing
+    - ws_route_missing
+    - redis_db_mismatch
+  P2:
+    - go_test_coverage
+    - aiclient_test_coverage
+    - python_test_coverage
+    - legacy_plugin_cleanup
+    - stream_max_duration_config

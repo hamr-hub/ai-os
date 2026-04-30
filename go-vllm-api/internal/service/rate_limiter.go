@@ -146,3 +146,32 @@ func (rl *RateLimiter) Flush() {
 	ctx := context.Background()
 	rl.redis.Delete(ctx, rl.prefix+"active_requests:*")
 }
+
+func (rl *RateLimiter) AddTokenCount(clientID string, tokenCount int, maxTokensPerMinute int) bool {
+	if rl.redis == nil || !rl.redis.IsConnected() {
+		return true
+	}
+	if maxTokensPerMinute <= 0 {
+		return true
+	}
+	ctx := context.Background()
+	key := fmt.Sprintf("%stoken_limit:%s", rl.prefix, clientID)
+	newVal, _ := rl.redis.IncrBy(ctx, key, int64(tokenCount))
+	rl.redis.Expire(ctx, key, 60*time.Second)
+	return newVal <= int64(maxTokensPerMinute)
+}
+
+func (rl *RateLimiter) GetTokenCount(clientID string) int {
+	if rl.redis == nil || !rl.redis.IsConnected() {
+		return 0
+	}
+	ctx := context.Background()
+	key := fmt.Sprintf("%stoken_limit:%s", rl.prefix, clientID)
+	val, err := rl.redis.Get(ctx, key)
+	if err != nil || val == "" {
+		return 0
+	}
+	var n int
+	fmt.Sscanf(val, "%d", &n)
+	return n
+}

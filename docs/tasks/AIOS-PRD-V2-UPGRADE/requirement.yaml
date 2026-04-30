@@ -1,0 +1,100 @@
+taskId: AIOS-PRD-V2-UPGRADE
+title: PRD 全功能升级迭代
+priority: high
+status: in_progress
+source: docs/agent/prd.md
+developer: heyongxian
+createdAt: 2026-04-30
+version: v2
+
+requirementOverview:
+  description: 基于 PRD v1.3 文档，对 ai-os 平台现有实现进行全量功能升级迭代，补齐缺失功能、优化部分实现、完善验收标准覆盖
+  coreLinkage: 搜索模型 → 显存优选 → 下载入库 → 一键加载 → vLLM/SGLang引擎推理
+  platformType: backend_python
+
+features:
+  - id: F15-UPGRADE
+    name: 多源模型下载完善
+    priority: P1
+    prdRef: 功能点15
+    currentStatus: partial
+    gapAnalysis:
+      - OpenXLab 搜索/下载源未实现 (model_hub.py 缺少 _search_oxl 和 _download_oxl)
+      - 下载进度百分比不实时 (progress_pct 仅 0→100 on completion，缺少中间百分比推送)
+      - ModelScope 下载缺少 resume_download=True (仅 HF 有)
+    acceptanceCriteria:
+      - ac1: 支持 OpenXLab 搜索: keyword 搜索返回模型列表 (ac_type: code)
+      - ac2: 支持 OpenXLab 下载: openxlab model download (ac_type: code)
+      - ac3: 下载进度实时百分比推送 - HF 用回调函数追踪 snapshot_download 进度 (ac_type: code)
+      - ac4: ModelScope 下载支持 resume_download=True 断点续传 (ac_type: code)
+
+  - id: F16-UPGRADE
+    name: 跨平台模型搜索完善
+    priority: P1
+    prdRef: 功能点16
+    currentStatus: partial
+    gapAnalysis:
+      - OpenXLab 搜索源缺失
+      - 搜索结果排序功能未实现 (search_models 仅返回列表，无排序参数)
+    acceptanceCriteria:
+      - ac1: 支持 OpenXLab 搜索: keyword 搜索返回模型 ID+标签 (ac_type: code)
+      - ac2: GET /manage/models/search?keyword=xxx&source=all 聚合 3 平台结果去重 (ac_type: code)
+      - ac3: 搜索结果支持按 size/quant/required_gb/feasible 排序 (ac_type: code)
+
+  - id: F3-UPGRADE
+    name: 限流增强 - 双维度限流与前置拦截
+    priority: P0
+    prdRef: 功能点3 + 7.1风险#2
+    currentStatus: partial
+    gapAnalysis:
+      - 仅 IP QPS 限流，缺少每分钟总输入 token 限流维度
+      - GPU-adaptive 已部分实现 (85% threshold) 但缺少显存维度自适应
+      - 缺少前置拦截 (输入超 max_model_len 直接拒绝)
+    acceptanceCriteria:
+      - ac1: 双维度限流: IP 维度同时限制 QPS + 每分钟总输入 token 数 (ac_type: code)
+      - ac2: 显存自适应限流: GPU 显存利用率>90% 时降额限流 (ac_type: code)
+      - ac3: 前置拦截: 输入 token 数超模型 max_model_len 直接拒绝返回 400 (ac_type: code)
+      - ac4: X-RateLimit-Remaining 头精确反映窗口剩余额度 (ac_type: code)
+
+  - id: F8-UPGRADE
+    name: 熔断阈值与队列限制
+    priority: P1
+    prdRef: 功能点8 + 7.1风险#3
+    currentStatus: partial
+    gapAnalysis:
+      - CircuitBreaker 默认 failureThreshold=5, resetTimeout=30s (PRD 要求 threshold=10, reset=5s)
+      - 缺少 max_queue_size 限制 (WaitForSlot 仅 30s timeout，无队列容量上限)
+    acceptanceCriteria:
+      - ac1: 连续 10 次请求失败触发熔断，5s 快速拒绝 (ac_type: config)
+      - ac2: max_queue_size 超额请求立即返回 429 (ac_type: code)
+      - ac3: 熔断状态通过 /health/detailed 和 /v1/status 可查询 (ac_type: code)
+
+  - id: F12-UPGRADE
+    name: 配置管理增强 - 乐观锁与操作日志
+    priority: P1
+    prdRef: 功能点12 + 7.2风险#1#2
+    currentStatus: partial
+    gapAnalysis:
+      - PUT /manage/config 全量覆盖无版本号/乐观锁
+      - 无配置变更操作日志
+      - Go/Python 双向校验未实现
+    acceptanceCriteria:
+      - ac1: config.yaml 增加 version 字段，每次修改自动递增 (ac_type: code)
+      - ac2: PUT /manage/config 校验 version 不匹配拒绝更新 (HTTP 409) (ac_type: code)
+      - ac3: Python 修改配置后调用 Go /manage/config 校验一致性 (ac_type: code)
+      - ac4: 配置变更操作日志: 记录操作人/时间/前后值 (ac_type: code)
+
+  - id: F4-UPGRADE
+    name: 并发控制增强 - 分级并发与超时兜底
+    priority: P1
+    prdRef: 功能点4 + 7.1风险#1
+    currentStatus: partial
+    gapAnalysis:
+      - 普通/流式请求共用 max_concurrent 槽位
+      - 流式请求无最大时长限制 (仅有 stream header timeout 120s)
+      - 僵尸连接巡检仅在 scheduler.go (zombieChecker 5min)，但未针对流式连接特殊处理
+    acceptanceCriteria:
+      - ac1: config 增加 max_stream_concurrent，普通/流式分开设上限 (ac_type: config)
+      - ac2: 流式请求最大 30min 超时兜底 (ac_type: code)
+      - ac3: 僵尸流式连接巡检: 清理空闲>5min 的 SSE 连接 (ac_type: code)
+      - ac4: goroutine 数量监控告警 (ac_type: code)

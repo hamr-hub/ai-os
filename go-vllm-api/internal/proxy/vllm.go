@@ -51,7 +51,7 @@ func NewVLLMProxy(logger *zap.Logger, vllmHost string) *VLLMProxy {
 	return &VLLMProxy{
 		logger:   logger,
 		vllmHost: vllmHost,
-		cb:       NewCircuitBreaker(5, 30*time.Second),
+		cb:       NewCircuitBreaker(10, 5*time.Second),
 		requestClient: &http.Client{
 			Timeout: 60 * time.Second,
 			Transport: &http.Transport{

@@ -78,7 +78,7 @@ func (h *WSHandler) ModelSwitch(c *gin.Context) {
 func (h *WSHandler) sendSwitchStateSync(conn *websocket.Conn) {
 	baseURL := os.Getenv("PYTHON_BACKEND_URL")
 	if baseURL == "" {
-		baseURL = "http://192.168.7.103:35000"
+		baseURL = "http://localhost:35000"
 	}
 
 	client := &http.Client{Timeout: 3 * time.Second}

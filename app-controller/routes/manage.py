@@ -803,7 +803,9 @@ async def get_cache_stats():
 
 @manage_router.get("/config")
 async def get_config():
-    return config_watcher.get_config()
+    cfg = config_watcher.get_config()
+    cfg["version"] = config_watcher.get_version()
+    return cfg
 
 
 @manage_router.put("/config")
@@ -811,6 +813,18 @@ async def update_config(request: Request):
     import yaml
     try:
         body = await request.json()
+
+        expected_version = body.get("version")
+        ok, current_version = config_watcher.check_version(expected_version)
+        if not ok:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "version conflict",
+                    "message": f"Expected version {expected_version}, but current is {current_version}. Please fetch the latest config and retry.",
+                    "current_version": current_version,
+                },
+            )
 
         current_config = copy.deepcopy(config_watcher.get_config())
 
@@ -829,13 +843,20 @@ async def update_config(request: Request):
                 current_config['vllm'] = {}
             current_config['vllm'].update(body['vllm'])
 
+        before_config = copy.deepcopy(config_watcher.get_config())
+
         success = config_watcher.save_config(current_config)
 
         if success:
             from core.deps import _on_config_changed
             persisted_config = config_watcher.get_config()
             _on_config_changed(persisted_config)
-            return {"status": "success", "message": "Configuration updated and persisted", "config": persisted_config}
+
+            operator = request.headers.get("X-Operator", "anonymous")
+            config_watcher.log_operation(operator, "update", before_config, persisted_config)
+
+            persisted_config["version"] = config_watcher.get_version()
+            return {"status": "success", "message": "Configuration updated and persisted", "config": persisted_config, "version": config_watcher.get_version()}
         else:
             detail = config_watcher.get_last_error() or "Failed to persist configuration"
             raise HTTPException(status_code=400, detail=detail)
@@ -1250,16 +1271,17 @@ async def update_model_vllm_params(model_name: str, request: Request):
 # ===== Model Hub 新增路由 =====
 
 @manage_router.get("/models/search")
-async def search_models(keyword: str, source: str = "all", limit: int = 10):
+async def search_models(keyword: str, source: str = "all", limit: int = 10, sort: Optional[str] = None):
     if not keyword:
         raise HTTPException(status_code=400, detail="缺少keyword参数")
     try:
-        results = model_engine_scheduler.search(keyword, source, limit)
+        results = model_engine_scheduler.search(keyword, source, limit, sort=sort)
         return {
             "results": [r.__dict__ for r in results],
             "total": len(results),
             "keyword": keyword,
             "source": source,
+            "sort": sort,
         }
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"搜索失败: {str(e)}")
@@ -1325,7 +1347,14 @@ async def start_download(request: Request):
     save_dir = body.get("save_dir")
     if not model_name:
         raise HTTPException(status_code=400, detail="缺少model_name参数")
-    result = download_task_manager.create_task(model_name, source, save_dir)
+    result = download_task_manager.create_task(
+        model_name, source, save_dir,
+        hf_token=body.get("hf_token"),
+        allow_patterns=body.get("allow_patterns"),
+        ignore_patterns=body.get("ignore_patterns"),
+        max_workers=body.get("max_workers"),
+        force_download=body.get("force_download", False),
+    )
     if result.get("status") == "error":
         code = 507 if "磁盘" in result.get("message", "") else 500
         raise HTTPException(status_code=code, detail=result.get("message"))
@@ -1568,6 +1597,83 @@ async def get_gpu_realtime(device_id: int = 0):
     if not info.get("available"):
         raise HTTPException(status_code=503, detail=info.get("reason", "GPU不可用"))
     return info
+
+
+@manage_router.get("/engines/param-schema")
+async def get_engine_param_schema():
+    from core.engine_param_schema import ENGINE_PARAM_SCHEMA
+    return ENGINE_PARAM_SCHEMA
+
+
+@manage_router.get("/models/{model_name}/engine-params")
+async def get_model_engine_params(model_name: str):
+    current_config = config_watcher.get_config()
+    model_cfg = current_config.models.get(model_name) if hasattr(current_config, 'models') else None
+    if not model_cfg:
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
+    engine_type = model_cfg.engine_type if hasattr(model_cfg, 'engine_type') else "vllm"
+    params = {}
+    if engine_type == "vllm":
+        params = model_cfg.vllm_params if hasattr(model_cfg, 'vllm_params') else {}
+    elif engine_type == "sglang":
+        params = model_cfg.sglang_params if hasattr(model_cfg, 'sglang_params') else {}
+    elif engine_type == "llamacpp":
+        llamacpp_specific = {}
+        if hasattr(model_cfg, 'n_gpu_layers') and model_cfg.n_gpu_layers != -1:
+            llamacpp_specific["n_gpu_layers"] = model_cfg.n_gpu_layers
+        if hasattr(model_cfg, 'ctx_size') and model_cfg.ctx_size != 4096:
+            llamacpp_specific["ctx_size"] = model_cfg.ctx_size
+        if hasattr(model_cfg, 'n_threads') and model_cfg.n_threads is not None:
+            llamacpp_specific["n_threads"] = model_cfg.n_threads
+        llamacpp_from_dict = model_cfg.llamacpp_params if hasattr(model_cfg, 'llamacpp_params') else {}
+        params = {**llamacpp_from_dict, **llamacpp_specific}
+    return {
+        "model_name": model_name,
+        "engine_type": engine_type,
+        "params": params,
+    }
+
+
+@manage_router.put("/models/{model_name}/engine-params")
+async def update_model_engine_params(model_name: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    engine_type = body.get("engine_type")
+    params = body.get("params", {})
+    if not engine_type or engine_type not in ("vllm", "sglang", "llamacpp"):
+        raise HTTPException(status_code=400, detail="engine_type must be vllm, sglang, or llamacpp")
+    current_config = config_watcher.get_config()
+    model_cfg = current_config.models.get(model_name) if hasattr(current_config, 'models') else None
+    if not model_cfg:
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
+    config_dict = copy.deepcopy(current_config.__dict__) if hasattr(current_config, '__dict__') else copy.deepcopy(current_config) if isinstance(current_config, dict) else {}
+    models_dict = config_dict.get("models", {})
+    if model_name not in models_dict:
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not in config")
+    model_dict = models_dict[model_name]
+    if isinstance(model_dict, dict):
+        model_dict["engine_type"] = engine_type
+    elif hasattr(model_dict, '__dict__'):
+        model_dict.__dict__["engine_type"] = engine_type
+    param_key = f"{engine_type}_params"
+    if engine_type == "llamacpp":
+        for special_key in ("n_gpu_layers", "ctx_size", "n_threads"):
+            if special_key in params:
+                val = params.pop(special_key)
+                if isinstance(model_dict, dict):
+                    model_dict[special_key] = val
+                elif hasattr(model_dict, '__dict__'):
+                    model_dict.__dict__[special_key] = val
+    if isinstance(model_dict, dict):
+        model_dict[param_key] = params
+    elif hasattr(model_dict, '__dict__'):
+        model_dict.__dict__[param_key] = params
+    success = config_watcher.save_config(config_dict)
+    if success:
+        return {"status": "success", "model_name": model_name, "engine_type": engine_type, "params": params}
+    raise HTTPException(status_code=500, detail="Failed to persist config")
 
 
 @manage_router.post("/engines/deploy")

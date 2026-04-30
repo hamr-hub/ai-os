@@ -75,6 +75,29 @@ class PriorityConfig(BaseModel):
     default: str = "normal"
     enabled: bool = True
 
+class DownloadConfig(BaseModel):
+    hf_token: Optional[str] = None
+    ms_token: Optional[str] = None
+    hf_endpoint: str = "https://hf-mirror.com"
+    save_root: str = "/mnt/pve_models"
+    max_concurrent: int = Field(ge=1, le=10, default=3)
+    max_workers: int = Field(ge=1, le=16, default=8)
+    disk_warning_pct: float = Field(ge=0.5, le=0.99, default=0.85)
+    disk_abort_pct: float = Field(ge=0.8, le=0.99, default=0.95)
+    default_allow_patterns: Optional[List[str]] = None
+    default_ignore_patterns: Optional[List[str]] = None
+
+    @classmethod
+    def from_env(cls) -> "DownloadConfig":
+        hf_token = os.getenv("HF_TOKEN") or os.getenv("hf_token")
+        ms_token = os.getenv("MS_TOKEN") or os.getenv("ms_token")
+        hf_endpoint = os.getenv("HF_ENDPOINT") or os.getenv("hf_endpoint") or "https://hf-mirror.com"
+        return cls(hf_token=hf_token, ms_token=ms_token, hf_endpoint=hf_endpoint)
+
+    def get_effective_hf_token(self, request_token: Optional[str] = None) -> Optional[str]:
+        return request_token or self.hf_token
+
+
 class RecoveryConfig(BaseModel):
     max_restart_attempts: int = Field(ge=1, le=10, default=3)
     restart_cooldown: int = Field(ge=1, le=300, default=60)

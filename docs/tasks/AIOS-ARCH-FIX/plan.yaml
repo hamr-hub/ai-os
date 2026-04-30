@@ -1,0 +1,205 @@
+plan:
+  meta:
+    source_tech_doc: "docs/tasks/AIOS-ARCH-FIX/tech-solution.yaml"
+    scope: "P0+P1"
+    test_coverage_target: 80
+    min_tests_per_feature: 2
+
+  tasks:
+    - id: "T1-test"
+      priority: "P0"
+      type: "test"
+      title: "Python admin_whitelist 中间件单元测试"
+      test_type: "pure"
+      file: "app-controller/tests/test_admin_whitelist.py"
+      given: "Python AdminWhitelistMiddleware 已创建"
+      when: "不同来源IP访问 /manage/* POST/GET 请求"
+      then:
+        - "内网IP(192.168.x.x) POST 返回 200(放行)"
+        - "外网IP(8.8.8.8) POST 返回 403(拒绝)"
+        - "任何IP GET 返回 200(只读放行)"
+        - "loopback 127.0.0.1 POST 返回 200(放行)"
+      depends_on: []
+
+    - id: "T2-test"
+      priority: "P0"
+      type: "test"
+      title: "Python config 加载统一配置单元测试"
+      test_type: "pure"
+      file: "app-controller/tests/test_config_unified_loading.py"
+      given: "root config.yaml 包含 model_groups/vllm_params/feature_flags/engines/llama_cpp/discovery"
+      when: "Python core/config.py 从 root config.yaml 加载"
+      then:
+        - "成功加载 model_groups 字段(8组)"
+        - "成功加载 vllm_params(per model)"
+        - "成功加载 feature_flags(5 flags)"
+        - "成功加载 engines(vllm+sglang+hub)"
+        - "成功加载 llama_cpp 配置"
+        - "GGUF 模型 service 为 llama_cpp"
+      depends_on: []
+
+    - id: "T3-test"
+      priority: "P1"
+      type: "test"
+      title: "Go admin_whitelist 中间件单元测试"
+      test_type: "pure"
+      file: "go-vllm-api/internal/middleware/admin_whitelist_test.go"
+      given: "Go AdminWhitelistMiddleware 已创建"
+      when: "不同来源IP访问管理接口"
+      then:
+        - "内网CIDR IP POST 放行"
+        - "外网IP POST 返回 403"
+        - "任何IP GET 放行"
+      depends_on: []
+
+    - id: "P0-1"
+      priority: "P0"
+      type: "code"
+      title: "统一配置文件 — 合3份为root config.yaml"
+      files: ["config.yaml"]
+      depends_on: ["T2-test"]
+      definition_of_done:
+        - "root config.yaml 包含 Python+Go 所需所有字段"
+        - "GGUF 模型 service=llama_cpp"
+        - "Gemma-4 supports_images=true, supports_tool_calling=true"
+        - "Qwen3-235B required_memory=120GB"
+        - "Redis db=0"
+        - "包含 model_groups/vllm_params/feature_flags/engines/llama_cpp/discovery"
+      implementation_notes:
+        - "合并 app-controller/config.yaml 的 model_groups/vllm_params/feature_flags 到 root"
+        - "合并 go-vllm-api/config.yaml 的 discovery 到 root"
+        - "修正 GGUF 模型 service 为 llama_cpp + 独立 port 8001/8002"
+        - "修正 Gemma-4 supports_images=true, supports_tool_calling=true"
+        - "修正 Redis db=0"
+
+    - id: "P0-2"
+      priority: "P0"
+      type: "code"
+      title: "Python admin_whitelist 中间件实现"
+      files: ["app-controller/middleware/admin_whitelist.py", "app-controller/main.py"]
+      depends_on: ["T1-test"]
+      definition_of_done:
+        - "AdminWhitelistMiddleware 实现与 Go 等价策略"
+        - "内网CIDR放行写操作"
+        - "GET/HEAD任何IP放行"
+        - "注册到 main.py 中间件栈"
+      implementation_notes:
+        - "参考 go-vllm-api/internal/middleware/admin_whitelist.go 策略"
+        - "默认放行 CIDR: 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16"
+        - "支持 TrustedProxies 配置扩展CIDR"
+        - "在 main.py 中添加 admin_whitelist_middleware(app)"
+
+    - id: "P0-3"
+      priority: "P0"
+      type: "code"
+      title: "git add admin_whitelist.go"
+      files: ["go-vllm-api/internal/middleware/admin_whitelist.go"]
+      depends_on: ["T3-test"]
+      definition_of_done:
+        - "文件已 git add"
+        - "Go 服务可编译"
+      implementation_notes:
+        - "git add go-vllm-api/internal/middleware/admin_whitelist.go"
+
+    - id: "P0-4"
+      priority: "P0"
+      type: "code"
+      title: "frontend Docker nginx.conf 修复 — upstreams改Docker服务名+加/ws/路由"
+      files: ["frontend/nginx.conf"]
+      depends_on: []
+      definition_of_done:
+        - "upstreams 使用 Docker 服务名(ai-controller/go-vllm-api/aiclient)"
+        - "包含 /ws/ WebSocket 路由(proxy_read_timeout 86400s)"
+        - "包含 /v1/test/ → Python 路由"
+        - "listen 80"
+      implementation_notes:
+        - "app_controller upstream → ai-controller:35000"
+        - "go_vllm_api upstream → go-vllm-api:35001"
+        - "api_gateway upstream → aiclient:3000"
+        - "manage_frontend upstream → localhost:80(容器内自身)"
+        - "/ws/ 路由: proxy_pass ai-controller:35000/ws/, proxy_http_version 1.1, Upgrade+Connection headers"
+
+    - id: "P1-1"
+      priority: "P1"
+      type: "code"
+      title: "docker-compose.yml 修复 — 端口/环境变量/config mount"
+      files: ["docker-compose.yml"]
+      depends_on: ["P0-1", "P0-4"]
+      definition_of_done:
+        - "frontend 端口 30000:80"
+        - "go-vllm-api config mount ./config.yaml:/app/configs/config.yaml"
+        - "go-vllm-api PYTHON_BACKEND_URL=http://ai-controller:35000"
+        - "aiclient GO_BACKEND_URL=http://go-vllm-api:35001"
+        - "aiclient PYTHON_BACKEND_URL=http://ai-controller:35000"
+      implementation_notes:
+        - "frontend ports: 30000:80"
+        - "go-vllm-api volumes: ./config.yaml:/app/configs/config.yaml"
+        - "go-vllm-api environment 加 PYTHON_BACKEND_URL=http://ai-controller:35000"
+        - "aiclient environment 加 GO_BACKEND_URL/PYTHON_BACKEND_URL"
+
+    - id: "P1-2"
+      priority: "P1"
+      type: "code"
+      title: "Vite dev proxy 端口对齐"
+      files: ["frontend/vite.config.ts", "frontend/.env.development"]
+      depends_on: []
+      definition_of_done:
+        - "VITE_BACKEND 默认 http://localhost:35000"
+        - "VITE_GATEWAY 默认 http://localhost:35001"
+        - "/api/health 路由代理到 Python(unifiedBackend)"
+      implementation_notes:
+        - "vite.config.ts: VITE_BACKEND 默认 → localhost:35000"
+        - "vite.config.ts: VITE_GATEWAY 默认 → localhost:35001"
+        - ".env.development: 加 VITE_BACKEND/VITE_GATEWAY 环境变量"
+        - "/api/health 路由改 target 为 unifiedBackend(Python)"
+
+    - id: "P1-3"
+      priority: "P1"
+      type: "code"
+      title: "硬编码IP → 环境变量"
+      files: ["go-vllm-api/cmd/server/main.go", "aiclient2api/plugins/ai-os-manager/backend-client.js", "frontend/nginx_30000.conf"]
+      depends_on: []
+      definition_of_done:
+        - "main.go PYTHON_BACKEND_URL 默认 localhost:35000"
+        - "backend-client.js 默认 localhost:35001/localhost:35000"
+        - "nginx_30000.conf upstreams 改 localhost 或环境变量引用"
+      implementation_notes:
+        - "main.go: os.Getenv(PYTHON_BACKEND_URL) 默认 http://localhost:35000"
+        - "backend-client.js: GO_BACKEND_URL 默认 http://localhost:35001, PYTHON_BACKEND_URL 默认 http://localhost:35000"
+        - "nginx_30000.conf: upstreams 改 localhost(本地部署场景)"
+
+    - id: "P1-4"
+      priority: "P1"
+      type: "code"
+      title: "Python/Go config 加载适配 root config.yaml"
+      files: ["app-controller/core/config.py", "go-vllm-api/internal/config/config.go"]
+      depends_on: ["P0-1", "T2-test"]
+      definition_of_done:
+        - "Python 从 root config 加载 model_groups/vllm_params/feature_flags/engines"
+        - "Go 从 root config 加载 discovery/model_groups/vllm_params"
+        - "测试通过"
+      implementation_notes:
+        - "config.py: 扩展 Config 类加载 model_groups, vllm_params(per model), feature_flags, engines.hub/sglang"
+        - "config.go: 扩展 AppConfig 加载 ModelGroups, per-model VllmParams, Discovery, FeatureFlags"
+
+    - id: "P1-5"
+      priority: "P1"
+      type: "code"
+      title: "删除冗余配置副本"
+      files: ["app-controller/config.yaml", "go-vllm-api/configs/config.yaml"]
+      depends_on: ["P1-4"]
+      definition_of_done:
+        - "app-controller/config.yaml 已删除(本地开发引用 root)"
+        - "go-vllm-api/configs/config.yaml 已删除(本地开发引用 root)"
+        - "app-controller/main.py config_path 默认改为 ../config.yaml"
+        - "go-vllm-api main.go config_path 默认改为 ../config.yaml"
+      implementation_notes:
+        - "git rm app-controller/config.yaml"
+        - "git rm go-vllm-api/configs/config.yaml"
+        - "app-controller/main.py: CONFIG_PATH 默认 ../config.yaml"
+        - "go-vllm-api cmd/server/main.go: configPath 默认 ../config.yaml"
+
+  commands:
+    test: "cd app-controller && pytest tests/test_admin_whitelist.py tests/test_config_unified_loading.py; cd go-vllm-api && go test ./internal/middleware/..."
+    lint: "cd app-controller && git diff --name-only HEAD | grep '.py$' | xargs ruff check --max-line-length=120; cd go-vllm-api && go vet ./..."
+    typecheck: "cd frontend && npx vue-tsc --noEmit"

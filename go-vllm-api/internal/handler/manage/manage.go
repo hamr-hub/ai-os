@@ -74,7 +74,7 @@ func NewManageHandler(
 		pythonBaseURL: func() string {
 			url := os.Getenv("PYTHON_BACKEND_URL")
 			if url == "" {
-				url = "http://192.168.7.103:35000"
+				url = "http://localhost:35000"
 			}
 			return url
 		}(),

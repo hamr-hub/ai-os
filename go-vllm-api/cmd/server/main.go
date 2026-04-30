@@ -73,7 +73,7 @@ func exitCodeForListenError(err error) int {
 
 func main() {
 	port := flag.Int("port", 35001, "Server port")
-	configPath := flag.String("config", "configs/config.yaml", "Config file path")
+	configPath := flag.String("config", "../config.yaml", "Config file path")
 	logDir := flag.String("log-dir", "", "Custom log directory")
 	flag.Parse()
 
@@ -182,7 +182,7 @@ func main() {
 	wsHandler := ws.NewWSHandlerWithState(wsManager, zapLogger, gpuMonitor, scheduler)
 
 	v1Handler.RegisterRoutes(r.Group(""))
-	adminMW := middleware.NewAdminWhitelistMiddleware(cfg.Settings.TrustedProxies, []string{"GET", "HEAD"})
+	adminMW := middleware.NewAdminWhitelistMiddleware(cfg.GoApi.AdminWhitelist.AllowedIPs, []string{"GET", "HEAD"})
 	manageGroup := r.Group("", adminMW.Handler())
 	manageHandler.RegisterRoutes(manageGroup)
 	healthHandler.RegisterRoutes(r.Group(""))
@@ -246,7 +246,7 @@ func main() {
 func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service.Scheduler, ws *service.WSManager, mc *service.MetricsCollector, sc *service.SystemStatusCollector, l *zap.Logger) {
 	pythonBaseURL := os.Getenv("PYTHON_BACKEND_URL")
 	if pythonBaseURL == "" {
-		pythonBaseURL = "http://192.168.7.103:35000"
+		pythonBaseURL = "http://localhost:35000"
 	}
 	switchStatusURL := pythonBaseURL + "/manage/switch/status"
 

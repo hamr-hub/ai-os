@@ -159,6 +159,13 @@ func (r *RedisRepo) Decr(ctx context.Context, key string) (int64, error) {
 	return r.client.Decr(ctx, key).Result()
 }
 
+func (r *RedisRepo) IncrBy(ctx context.Context, key string, value int64) (int64, error) {
+	if r.client == nil {
+		return 0, fmt.Errorf("redis not connected")
+	}
+	return r.client.IncrBy(ctx, key, value).Result()
+}
+
 func (r *RedisRepo) LPush(ctx context.Context, key string, values ...interface{}) error {
 	if r.client == nil {
 		return fmt.Errorf("redis not connected")

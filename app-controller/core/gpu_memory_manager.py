@@ -77,10 +77,16 @@ class GPUMemoryManager:
             q = quant or self._checker.parse_model_quant(model_name)
             return self._checker.estimate_model_memory_by_params(size_b, q)
         if self._config:
-            model_cfg = self._config.get_model(model_name)
-            if model_cfg:
-                mem_str = model_cfg.required_memory
-                return parse_memory_size(mem_str)
+            if hasattr(self._config, 'get_model'):
+                model_cfg = self._config.get_model(model_name)
+                if model_cfg:
+                    mem_str = model_cfg.required_memory
+                    return parse_memory_size(mem_str)
+            elif isinstance(self._config, dict):
+                model_cfg = self._config.get('models', {}).get(model_name)
+                if model_cfg:
+                    mem_str = model_cfg.get('required_memory', '8GB')
+                    return parse_memory_size(mem_str)
         return int(8 * 1024 ** 3)
 
     def estimate_model_memory_gb(

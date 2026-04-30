@@ -126,3 +126,58 @@ class TestGetStats:
         stats = mgr.get_stats()
         assert stats["total_tasks"] == 1
         assert "by_status" in stats
+
+
+class TestCreateTaskWithNewParams:
+    def test_create_task_with_hf_token(self):
+        model_hub = MagicMock()
+        model_hub.is_model_local.return_value = False
+        mgr = _make_dl_mgr(model_hub=model_hub)
+        result = mgr.create_task("Qwen2.5-7B-Instruct", "hf", auto_start=False, hf_token="hf_test_token")
+        assert "task_id" in result
+        task = mgr._tasks[result["task_id"]]
+        assert task.hf_token == "hf_test_token"
+
+    def test_create_task_with_allow_patterns(self):
+        model_hub = MagicMock()
+        model_hub.is_model_local.return_value = False
+        mgr = _make_dl_mgr(model_hub=model_hub)
+        result = mgr.create_task("Qwen2.5-7B-Instruct", "hf", auto_start=False, allow_patterns=["*.safetensors", "config.json"])
+        task = mgr._tasks[result["task_id"]]
+        assert task.allow_patterns == ["*.safetensors", "config.json"]
+
+    def test_create_task_with_ignore_patterns(self):
+        model_hub = MagicMock()
+        model_hub.is_model_local.return_value = False
+        mgr = _make_dl_mgr(model_hub=model_hub)
+        result = mgr.create_task("Qwen2.5-7B-Instruct", "hf", auto_start=False, ignore_patterns=["*.bin"])
+        task = mgr._tasks[result["task_id"]]
+        assert task.ignore_patterns == ["*.bin"]
+
+    def test_create_task_with_max_workers(self):
+        model_hub = MagicMock()
+        model_hub.is_model_local.return_value = False
+        mgr = _make_dl_mgr(model_hub=model_hub)
+        result = mgr.create_task("Qwen2.5-7B-Instruct", "hf", auto_start=False, max_workers=4)
+        task = mgr._tasks[result["task_id"]]
+        assert task.max_workers == 4
+
+    def test_create_task_with_force_download(self):
+        model_hub = MagicMock()
+        model_hub.is_model_local.return_value = False
+        mgr = _make_dl_mgr(model_hub=model_hub)
+        result = mgr.create_task("Qwen2.5-7B-Instruct", "hf", auto_start=False, force_download=True)
+        task = mgr._tasks[result["task_id"]]
+        assert task.force_download == True
+
+    def test_create_task_default_params(self):
+        model_hub = MagicMock()
+        model_hub.is_model_local.return_value = False
+        mgr = _make_dl_mgr(model_hub=model_hub)
+        result = mgr.create_task("Qwen2.5-7B-Instruct", "hf", auto_start=False)
+        task = mgr._tasks[result["task_id"]]
+        assert task.hf_token is None
+        assert task.allow_patterns is None
+        assert task.ignore_patterns is None
+        assert task.max_workers is None
+        assert task.force_download == False

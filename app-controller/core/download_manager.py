@@ -31,6 +31,11 @@ class DownloadTask:
     max_retries: int = 3
     checksum: Optional[str] = None
     save_dir: Optional[str] = None
+    hf_token: Optional[str] = None
+    allow_patterns: Optional[List[str]] = None
+    ignore_patterns: Optional[List[str]] = None
+    max_workers: Optional[int] = None
+    force_download: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -71,6 +76,7 @@ class DownloadTaskManager:
         self._save_root = "/mnt/pve_models"
         self._progress_callbacks: List[Callable] = []
         self._semaphore: Optional[asyncio.Semaphore] = None
+        self._download_progress_refs: Dict[str, Any] = {}
 
         if config:
             if hasattr(config, 'vllm') and config.vllm:
@@ -120,6 +126,11 @@ class DownloadTaskManager:
     def create_task(
         self, model_name: str, source: str,
         save_dir: Optional[str] = None, auto_start: bool = True,
+        hf_token: Optional[str] = None,
+        allow_patterns: Optional[List[str]] = None,
+        ignore_patterns: Optional[List[str]] = None,
+        max_workers: Optional[int] = None,
+        force_download: bool = False,
     ) -> Dict:
         disk_check = self._check_disk_space()
         if not disk_check.get("ok", True):
@@ -151,6 +162,11 @@ class DownloadTaskManager:
             source=source,
             status="pending",
             save_dir=save_dir,
+            hf_token=hf_token,
+            allow_patterns=allow_patterns,
+            ignore_patterns=ignore_patterns,
+            max_workers=max_workers,
+            force_download=force_download,
         )
         self._tasks[task_id] = task
 
@@ -190,8 +206,18 @@ class DownloadTaskManager:
             for attempt in range(task.max_retries + 1):
                 try:
                     if self._model_hub:
+                        def on_progress(pct: float):
+                            task.progress_pct = pct
+                            self._fire_progress(task)
+
                         result = self._model_hub.download_model(
                             task.model_name, mapped_source, task.save_dir,
+                            hf_token=task.hf_token,
+                            allow_patterns=task.allow_patterns,
+                            ignore_patterns=task.ignore_patterns,
+                            max_workers=task.max_workers,
+                            force_download=task.force_download,
+                            progress_callback=on_progress,
                         )
                         task.status = result.get("status", "error")
                         task.local_path = result.get("local_path")

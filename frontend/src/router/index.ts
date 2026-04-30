@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -76,6 +77,13 @@ const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: () => import('@/views/AuthPage.vue'),
+    meta: { noAuth: true },
+  },
+  {
+    path: '/blocked',
+    name: 'blocked',
+    component: () => import('@/views/WhitelistBlocked.vue'),
+    meta: { noAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -87,6 +95,15 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+router.beforeEach((to) => {
+  if (to.meta.noAuth) return true
+  const authStore = useAuthStore()
+  if (!authStore.isAuthenticated) {
+    return { name: 'login' }
+  }
+  return true
 })
 
 export default router

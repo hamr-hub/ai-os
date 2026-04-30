@@ -4,14 +4,14 @@ import json
 import logging
 import hashlib
 import time
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, Callable
 from dataclasses import dataclass, field
 
 logger = logging.getLogger("ai_controller.model_hub")
 
 _HF_ENDPOINT_DEFAULT = "https://hf-mirror.com"
 
-_SOURCE_PRIORITY = ["local", "huggingface", "modelscope"]
+_SOURCE_PRIORITY = ["local", "huggingface", "modelscope", "openxlab"]
 
 _MODEL_EXTENSIONS = ['.safetensors', '.bin', '.pt', '.gguf', '.onnx']
 
@@ -57,7 +57,10 @@ class MultiSourceModelHub:
         self._local_models: Dict[str, LocalModelInfo] = {}
         self._model_metadata: Dict[str, Dict] = {}
         self._hf_endpoint = _HF_ENDPOINT_DEFAULT
+        self._hf_token: Optional[str] = None
+        self._ms_token: Optional[str] = None
         self._save_root = "/mnt/pve_models"
+        self._max_workers = 8
         self._initialized = False
 
         if config:
@@ -69,6 +72,18 @@ class MultiSourceModelHub:
                 if hub_cfg:
                     self._save_root = hub_cfg.get("save_root", self._save_root)
                     self._hf_endpoint = hub_cfg.get("hf_endpoint", self._hf_endpoint)
+                    self._hf_token = hub_cfg.get("hf_token", self._hf_token)
+                    self._ms_token = hub_cfg.get("ms_token", self._ms_token)
+                    self._max_workers = hub_cfg.get("max_workers", self._max_workers)
+
+        hf_env_token = os.environ.get("HF_TOKEN") or os.environ.get("hf_token")
+        if hf_env_token:
+            if not self._hf_token:
+                self._hf_token = hf_env_token
+        ms_env_token = os.environ.get("MS_TOKEN") or os.environ.get("ms_token")
+        if ms_env_token:
+            if not self._ms_token:
+                self._ms_token = ms_env_token
 
     def initialize(self):
         if self._initialized:
@@ -213,7 +228,7 @@ class MultiSourceModelHub:
             results.append(result)
         return results
 
-    def search_models(self, keyword: str, source: str = "all", limit: int = 10) -> List[SearchResult]:
+    def search_models(self, keyword: str, source: str = "all", limit: int = 10, sort: Optional[str] = None) -> List[SearchResult]:
         self.initialize()
         results = []
         if source in ("local", "all"):
@@ -222,6 +237,8 @@ class MultiSourceModelHub:
             results.extend(self._search_hf(keyword, limit))
         if source in ("modelscope", "ms", "all"):
             results.extend(self._search_ms(keyword, limit))
+        if source in ("openxlab", "oxl", "all"):
+            results.extend(self._search_oxl(keyword, limit))
 
         seen = set()
         deduped = []
@@ -230,7 +247,40 @@ class MultiSourceModelHub:
             if key not in seen:
                 seen.add(key)
                 deduped.append(r)
+
+        if sort:
+            deduped = self._sort_results(deduped, sort)
+
         return deduped[:limit]
+
+    _SORT_FIELDS = {
+        "size": "size_b",
+        "quant": "quant",
+        "required_gb": "required_gb",
+        "feasible": "feasible",
+        "downloads": "downloads",
+        "name": "name",
+    }
+
+    def _sort_results(self, results: List[SearchResult], sort: str) -> List[SearchResult]:
+        desc = False
+        field_name = sort
+        if sort.startswith("-"):
+            desc = True
+            field_name = sort[1:]
+        attr = self._SORT_FIELDS.get(field_name, field_name)
+        def _key(r: SearchResult):
+            v = getattr(r, attr, None)
+            if v is None:
+                if attr == "feasible":
+                    return 0
+                if attr in ("size_b", "required_gb", "downloads"):
+                    return float('inf') if not desc else -1
+                return ""
+            if isinstance(v, bool):
+                return 1 if v else 0
+            return v
+        return sorted(results, key=_key, reverse=desc)
 
     def _search_local(self, keyword: str, limit: int) -> List[SearchResult]:
         results = []
@@ -256,10 +306,11 @@ class MultiSourceModelHub:
                 ))
         return results[:limit]
 
-    def _search_hf(self, keyword: str, limit: int) -> List[SearchResult]:
+    def _search_hf(self, keyword: str, limit: int, hf_token: Optional[str] = None) -> List[SearchResult]:
         try:
             from huggingface_hub import HfApi
-            api = HfApi(endpoint=self._hf_endpoint)
+            token = hf_token or self._hf_token
+            api = HfApi(endpoint=self._hf_endpoint, token=token)
             models = api.list_models(search=keyword, limit=limit, sort="downloads")
             results = []
             for m in models:
@@ -323,41 +374,181 @@ class MultiSourceModelHub:
             logger.error("MS search failed: %s", e)
             return []
 
+    def _search_oxl(self, keyword: str, limit: int) -> List[SearchResult]:
+        try:
+            import urllib.request
+            import urllib.parse
+            url = f"https://openxlab.org.cn/api/v1/models?keyword={urllib.parse.quote(keyword)}&limit={limit}"
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+            results = []
+            models = data.get("data", data.get("models", []))
+            if isinstance(models, list):
+                for m in models:
+                    name = m.get("name", m.get("model_name", ""))
+                    model_id = m.get("id", name)
+                    size_b = None
+                    if m.get("size"):
+                        size_b = float(m["size"])
+                    quant = self._parse_quant(name)
+                    local_path = self.get_model_local_path(name)
+                    source = "local" if local_path else "openxlab"
+                    feasible = None
+                    required_gb = None
+                    if size_b and self._gpu_memory_manager:
+                        feasibility = self._gpu_memory_manager.check_model_feasibility(
+                            "", size_b=size_b, quant=quant,
+                        )
+                        feasible = feasibility["feasible"]
+                        required_gb = feasibility.get("required_gb")
+                    results.append(SearchResult(
+                        name=name, source=source,
+                        size_b=size_b, quant=quant,
+                        required_gb=required_gb, feasible=feasible,
+                        model_id=model_id, local_path=local_path,
+                        description=m.get("description"),
+                        downloads=m.get("downloads"),
+                    ))
+            return results[:limit]
+        except Exception as e:
+            logger.error("OXL search failed: %s", e)
+            return []
+
+    def _download_oxl(self, model_name: str, target_dir: str) -> Dict:
+        try:
+            import urllib.request
+            url = f"https://openxlab.org.cn/api/v1/models/{model_name}/download"
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+            download_url = data.get("download_url", data.get("url", ""))
+            if not download_url:
+                return {"status": "error", "message": "No download URL found", "source": "openxlab"}
+            os.makedirs(target_dir, exist_ok=True)
+            import subprocess
+            cmd = ["git", "clone", download_url, target_dir]
+            if os.path.exists(target_dir):
+                cmd = ["git", "pull", "--rebase"]
+                result = subprocess.run(cmd, cwd=target_dir, capture_output=True, text=True, timeout=300)
+            else:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                return {"status": "error", "message": result.stderr[:200], "source": "openxlab"}
+            self._register_downloaded_model(model_name, target_dir)
+            return {"status": "completed", "local_path": target_dir, "source": "openxlab"}
+        except Exception as e:
+            logger.error("OXL download failed: %s", e)
+            return {"status": "error", "message": str(e), "source": "openxlab"}
+
     def download_model(
         self, model_name: str, source: str = "hf",
         save_dir: Optional[str] = None,
+        hf_token: Optional[str] = None,
+        ms_token: Optional[str] = None,
+        allow_patterns: Optional[List[str]] = None,
+        ignore_patterns: Optional[List[str]] = None,
+        max_workers: Optional[int] = None,
+        force_download: bool = False,
+        progress_callback: Optional[Callable] = None,
     ) -> Dict:
         local_path = self.get_model_local_path(model_name)
-        if local_path:
+        if local_path and not force_download:
             return {"status": "already_exists", "local_path": local_path, "source": "local"}
 
         target_dir = save_dir or os.path.join(self._save_root, model_name.split("/")[-1])
+        effective_hf_token = hf_token or self._hf_token
+        effective_ms_token = ms_token or self._ms_token
+        workers = max_workers or self._max_workers
+        allow = allow_patterns
+        ignore = ignore_patterns
 
         if source in ("huggingface", "hf"):
-            return self._download_hf(model_name, target_dir)
+            return self._download_hf(model_name, target_dir, effective_hf_token, allow, ignore, workers, force_download, progress_callback)
         elif source in ("modelscope", "ms"):
-            return self._download_ms(model_name, target_dir)
+            return self._download_ms(model_name, target_dir, effective_ms_token, allow, ignore, workers, resume_download=True, progress_callback=progress_callback)
+        elif source in ("openxlab", "oxl"):
+            return self._download_oxl(model_name, target_dir)
         return {"status": "error", "message": f"Unknown source: {source}"}
 
-    def _download_hf(self, model_name: str, target_dir: str) -> Dict:
+    def _download_hf(
+        self, model_name: str, target_dir: str,
+        hf_token: Optional[str] = None,
+        allow_patterns: Optional[List[str]] = None,
+        ignore_patterns: Optional[List[str]] = None,
+        max_workers: int = 8,
+        force_download: bool = False,
+        progress_callback: Optional[Callable] = None,
+    ) -> Dict:
         try:
             from huggingface_hub import snapshot_download
-            local_path = snapshot_download(
-                repo_id=model_name,
-                local_dir=target_dir,
-                resume_download=True,
-                endpoint=self._hf_endpoint,
-            )
+
+            tqdm_class = None
+            if progress_callback:
+                try:
+                    from tqdm import tqdm
+
+                    class ProgressTqdm(tqdm):
+                        def update(self, n=1):
+                            result = super().update(n)
+                            if progress_callback and self.total and self.total > 0:
+                                pct = min(100.0, (self.n / self.total) * 100)
+                                progress_callback(pct)
+                            return result
+
+                    tqdm_class = ProgressTqdm
+                except ImportError:
+                    pass
+
+            kwargs = {
+                "repo_id": model_name,
+                "local_dir": target_dir,
+                "resume_download": True,
+                "endpoint": self._hf_endpoint,
+                "max_workers": max_workers,
+                "force_download": force_download,
+            }
+            if hf_token:
+                kwargs["token"] = hf_token
+            if allow_patterns:
+                kwargs["allow_patterns"] = allow_patterns
+            if ignore_patterns:
+                kwargs["ignore_patterns"] = ignore_patterns
+            if tqdm_class:
+                kwargs["tqdm_class"] = tqdm_class
+            local_path = snapshot_download(**kwargs)
             self._register_downloaded_model(model_name, local_path)
             return {"status": "completed", "local_path": local_path, "source": "huggingface"}
         except Exception as e:
             logger.error("HF download failed: %s", e)
             return {"status": "error", "message": str(e), "source": "huggingface"}
 
-    def _download_ms(self, model_name: str, target_dir: str) -> Dict:
+    def _download_ms(
+        self, model_name: str, target_dir: str,
+        ms_token: Optional[str] = None,
+        allow_patterns: Optional[List[str]] = None,
+        ignore_patterns: Optional[List[str]] = None,
+        max_workers: int = 8,
+        resume_download: bool = True,
+        progress_callback: Optional[Callable] = None,
+    ) -> Dict:
         try:
             from modelscope.hub.snapshot_download import snapshot_download as ms_download
-            local_path = ms_download(model_id=model_name, cache_dir=target_dir)
+            kwargs = {
+                "model_id": model_name,
+                "local_dir": target_dir,
+                "max_workers": max_workers,
+                "resume_download": resume_download,
+            }
+            if ms_token:
+                kwargs["cookies"] = {"token": ms_token}
+            if allow_patterns:
+                kwargs["allow_patterns"] = allow_patterns
+            if ignore_patterns:
+                kwargs["ignore_patterns"] = ignore_patterns
+            local_path = ms_download(**kwargs)
+            if progress_callback:
+                progress_callback(100.0)
             self._register_downloaded_model(model_name, local_path)
             return {"status": "completed", "local_path": local_path, "source": "modelscope"}
         except Exception as e:

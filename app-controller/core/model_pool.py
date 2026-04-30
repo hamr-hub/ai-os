@@ -98,8 +98,9 @@ class ModelPoolManager:
                 self._pool[name] = entry
                 count += 1
 
-        if self._config and hasattr(self._config, 'models'):
-            for name, model_cfg in self._config.models.items():
+        if self._config:
+            models_dict = self._config.get('models', {}) if isinstance(self._config, dict) else (self._config.models if hasattr(self._config, 'models') else {})
+            for name, model_cfg in models_dict.items():
                 if name not in self._pool:
                     entry = self._create_entry_from_config(name, model_cfg)
                     self._pool[name] = entry
@@ -138,10 +139,15 @@ class ModelPoolManager:
         entry.estimated_memory_bytes = self._estimate_entry_memory(entry)
         return entry
 
+    def _cfg_get(self, cfg: Any, key: str, default=None):
+        if isinstance(cfg, dict):
+            return cfg.get(key, default)
+        return getattr(cfg, key, default)
+
     def _create_entry_from_config(self, name: str, cfg: Any) -> PoolEntry:
         size_b = GPUMemoryChecker.parse_model_size(name)
         quant = GPUMemoryChecker.parse_model_quant(name)
-        model_path = getattr(cfg, 'model_path', None) or os.path.join(self._model_base_path, name)
+        model_path = self._cfg_get(cfg, 'model_path') or os.path.join(self._model_base_path, name)
         entry = PoolEntry(
             name=name, source="config",
             size_b=size_b, quant=quant,
@@ -149,13 +155,13 @@ class ModelPoolManager:
             download_status="completed",
             running_status="stopped",
             config_key=name,
-            engine_type=getattr(cfg, 'engine_type', 'vllm'),
-            port=cfg.port if hasattr(cfg, 'port') else None,
-            keep_alive=getattr(cfg, 'keep_alive', False),
-            preload=getattr(cfg, 'preload', False),
-            supports_images=getattr(cfg, 'supports_images', False),
-            supports_tool_calling=getattr(cfg, 'supports_tool_calling', False),
-            description=getattr(cfg, 'description', None),
+            engine_type=self._cfg_get(cfg, 'engine_type', 'vllm') or self._cfg_get(cfg, 'service', 'vllm'),
+            port=self._cfg_get(cfg, 'port'),
+            keep_alive=self._cfg_get(cfg, 'keep_alive', False),
+            preload=self._cfg_get(cfg, 'preload', False),
+            supports_images=self._cfg_get(cfg, 'supports_images', False),
+            supports_tool_calling=self._cfg_get(cfg, 'supports_tool_calling', False),
+            description=self._cfg_get(cfg, 'description'),
         )
         entry.estimated_memory_bytes = self._estimate_entry_memory(entry)
         return entry

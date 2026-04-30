@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -458,7 +459,21 @@ func (s *Scheduler) StartZombieChecker(ctx context.Context) {
 					}
 				}
 			}
+			for model, count := range s.streamActive {
+				if count > 0 {
+					lastUsed, hasLast := s.modelLastUsed[model]
+					if hasLast && now.Sub(lastUsed) > idleTimeout {
+						s.logger.Warn("zombie checker: stale stream connection detected, releasing slots", zap.String("model", model), zap.Int64("stale_slots", count))
+						s.streamActive[model] = 0
+					}
+				}
+			}
 			s.mu.Unlock()
+
+			goroutineCount := runtime.NumGoroutine()
+			if goroutineCount > 500 {
+				s.logger.Warn("goroutine count exceeds threshold", zap.Int("count", goroutineCount), zap.Int("threshold", 500))
+			}
 		}
 	}
 }
@@ -504,6 +519,20 @@ func (s *Scheduler) GetQueueLength(model string) int {
 
 func (s *Scheduler) WaitForSlot(ctx context.Context, model string, timeout time.Duration) bool {
 	return s.rateLimiter.WaitForSlot(ctx, model, s.GetConcurrencyLimit(), timeout)
+}
+
+func (s *Scheduler) GetMaxModelLen(name string) int {
+	mc := s.GetModelConfig(name)
+	if mc != nil && mc.MaxModelLen > 0 {
+		return mc.MaxModelLen
+	}
+	s.mu.RLock()
+	defaultLen := s.cfg.VLLM.DefaultMaxModelLen
+	s.mu.RUnlock()
+	if defaultLen > 0 {
+		return defaultLen
+	}
+	return 0
 }
 
 func (s *Scheduler) IsModelPreloaded(name string) bool {

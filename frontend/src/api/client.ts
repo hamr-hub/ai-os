@@ -37,6 +37,8 @@ import type {
   EngineType,
   EngineStatus,
   EngineConfig,
+  EngineParamSchema,
+  ModelEngineParams,
   GPUMemoryInfo,
   RateLimitConfig,
   RateLimitStats,
@@ -46,6 +48,7 @@ import type {
 } from '@/types'
 import { useServerStore } from '@/stores/server'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { readSSEStream, DONE_SENTINEL } from '@/utils/sse'
 import { buildStreamErrorMessage } from '@/utils/connection'
 
@@ -140,22 +143,41 @@ const attachRetryInterceptor = (instance: typeof client) => {
 
 client.interceptors.request.use((config) => {
   const serverStore = useServerStore()
+  const authStore = useAuthStore()
   config.baseURL = serverStore.manageBase
+  if (authStore.token) {
+    config.headers = config.headers || {}
+    config.headers['Authorization'] = `Bearer ${authStore.token}`
+  }
   return config
 })
 
 v1Client.interceptors.request.use((config) => {
   const serverStore = useServerStore()
+  const authStore = useAuthStore()
   config.baseURL = serverStore.v1Base
+  if (authStore.token) {
+    config.headers = config.headers || {}
+    config.headers['Authorization'] = `Bearer ${authStore.token}`
+  }
   return config
 })
 
 const handleResponseError = (error: unknown) => {
   const config = (error as { config?: RetryableConfig }).config
   const appStore = useAppStore()
+  const err = error as { response?: { status?: number; data?: { error?: string; client_ip?: string } } }
 
   if (axios.isCancel(error)) {
     return Promise.reject(error)
+  }
+
+  if (err.response?.status === 403) {
+    const errMsg = err.response.data?.error || 'admin write operations require internal network access'
+    if (errMsg.includes('admin write') || errMsg.includes('whitelist') || errMsg.includes('internal network')) {
+      window.location.hash = '#/blocked'
+      return Promise.reject(error)
+    }
   }
 
   if (!config?.suppressGlobalErrorToast) {
@@ -544,10 +566,16 @@ export async function checkModelMemory(modelName: string, config: AxiosRequestCo
   return data
 }
 
-export async function startDownload(modelName: string, source: string = 'hf', saveDir?: string, config: AxiosRequestConfig = {}): Promise<DownloadTask | { status: string; local_path: string; model_name: string }> {
+export async function startDownload(modelName: string, source: string = 'hf', saveDir?: string, options?: { hfToken?: string; allowPatterns?: string[]; ignorePatterns?: string[]; maxWorkers?: number; forceDownload?: boolean }, config: AxiosRequestConfig = {}): Promise<DownloadTask | { status: string; local_path: string; model_name: string }> {
+  const body: Record<string, unknown> = { model_name: modelName, source, save_dir: saveDir }
+  if (options?.hfToken) body.hf_token = options.hfToken
+  if (options?.allowPatterns) body.allow_patterns = options.allowPatterns
+  if (options?.ignorePatterns) body.ignore_patterns = options.ignorePatterns
+  if (options?.maxWorkers) body.max_workers = options.maxWorkers
+  if (options?.forceDownload) body.force_download = options.forceDownload
   const { data } = await client.post(
     '/manage/models/download',
-    { model_name: modelName, source, save_dir: saveDir },
+    body,
     silentRequestConfig(config)
   )
   return data
@@ -644,6 +672,30 @@ export async function updateEngineConfig(
   config: AxiosRequestConfig = {}
 ): Promise<EngineConfig> {
   const { data } = await client.put<EngineConfig>('/engines/config', newConfig, config)
+  return data
+}
+
+export async function getEngineParamSchema(config: AxiosRequestConfig = {}): Promise<EngineParamSchema> {
+  const { data } = await client.get<EngineParamSchema>('/manage/engines/param-schema', silentRequestConfig(config))
+  return data
+}
+
+export async function getModelEngineParams(modelName: string, config: AxiosRequestConfig = {}): Promise<ModelEngineParams> {
+  const { data } = await client.get<ModelEngineParams>(`/manage/models/${encodeURIComponent(modelName)}/engine-params`, silentRequestConfig(config))
+  return data
+}
+
+export async function updateModelEngineParams(
+  modelName: string,
+  engineType: EngineType,
+  params: Record<string, unknown>,
+  config: AxiosRequestConfig = {}
+): Promise<{ status: string; model_name: string; engine_type: EngineType; params: Record<string, unknown> }> {
+  const { data } = await client.put(
+    `/manage/models/${encodeURIComponent(modelName)}/engine-params`,
+    { engine_type: engineType, params },
+    config
+  )
   return data
 }
 

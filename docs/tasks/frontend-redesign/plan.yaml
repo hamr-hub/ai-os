@@ -1,0 +1,238 @@
+plan:
+  meta:
+    source_tech_doc: "docs/tasks/frontend-redesign/tech-solution.yaml"
+    scope: "P0+P1"
+    test_coverage_target: 80
+    min_tests_per_feature: 2
+    mode: standard
+
+  tasks:
+    - id: "T0-1"
+      priority: "P0"
+      type: "test"
+      title: "useModelSwitch Phase2.5显存校验单元测试"
+      test_type: "hook"
+      file: "frontend/src/composables/__tests__/useModelSwitch.test.ts"
+      given: "引擎切换WebSocket推送含phase2.5显存校验步骤"
+      when: "监听switch_progress消息"
+      then:
+        - "phase2.5状态从pending→running→success/failed正确映射"
+        - "显存不足时phase2.5状态为failed并触发rollback"
+        - "overall_progress含phase2.5进度百分比"
+      depends_on: []
+
+    - id: "P0-1"
+      priority: "P0"
+      type: "code"
+      title: "useModelSwitch添加Phase2.5显存校验步骤支持"
+      files: ["frontend/src/composables/useModelSwitch.ts", "frontend/src/types/index.ts"]
+      depends_on: ["T0-1"]
+      definition_of_done:
+        - "SwitchPhaseDetail支持phase2.5显存校验步骤"
+        - "WebSocket消息解析含phase2.5进度"
+        - "对应单元测试通过"
+        - "pnpm build通过"
+
+    - id: "T0-2"
+      priority: "P0"
+      type: "test"
+      title: "useModelDownload WS下载进度+降级轮询单元测试"
+      test_type: "hook"
+      file: "frontend/src/composables/__tests__/useModelDownload.test.ts"
+      given: "下载任务WS推送进度消息"
+      when: "WS连接正常/断开"
+      then:
+        - "WS消息正确解析progress_pct/speed_mbps/eta_seconds"
+        - "WS断开时降级3s轮询getDownloadStatus"
+        - "下载完成/失败/取消状态正确映射"
+      depends_on: []
+
+    - id: "P0-2"
+      priority: "P0"
+      type: "code"
+      title: "useModelDownload WS进度+断点续传+降级轮询实现"
+      files: ["frontend/src/composables/useModelDownload.ts"]
+      depends_on: ["T0-2"]
+      definition_of_done:
+        - "WS下载进度实时展示"
+        - "WS断开降级3s轮询"
+        - "下载完成自动提示前往模型池"
+        - "pnpm build通过"
+
+    - id: "T0-3"
+      priority: "P0"
+      type: "test"
+      title: "useModelPool一键加载流程单元测试"
+      test_type: "hook"
+      file: "frontend/src/composables/__tests__/useModelPool.test.ts"
+      given: "模型池有可用模型且GPU显存足够"
+      when: "调用loadFromPool一键加载"
+      then:
+        - "显存校验→引擎启动→就绪验证顺序执行"
+        - "显存不足时拒绝加载并返回feasible=false"
+        - "加载成功后返回success=true+port"
+      depends_on: []
+
+    - id: "P0-3"
+      priority: "P0"
+      type: "code"
+      title: "useModelPool一键加载流程(显存校验→引擎→验证)实现"
+      files: ["frontend/src/composables/useModelPool.ts"]
+      depends_on: ["T0-3"]
+      definition_of_done:
+        - "一键加载含显存校验步骤"
+        - "显存不足拒绝+建议列表"
+        - "pnpm build通过"
+
+    - id: "T0-4"
+      priority: "P1"
+      type: "test"
+      title: "useModelSearch高级过滤器单元测试"
+      test_type: "hook"
+      file: "frontend/src/composables/__tests__/useModelSearch.test.ts"
+      given: "搜索结果含feasible/quant/size/source字段"
+      when: "应用高级过滤器"
+      then:
+        - "feasible过滤器筛选可运行模型"
+        - "quant过滤器按量化类型筛选"
+        - "排序功能按size/required_gb排序"
+      depends_on: []
+
+    - id: "P1-1"
+      priority: "P1"
+      type: "code"
+      title: "useModelSearch高级过滤器+排序实现"
+      files: ["frontend/src/composables/useModelSearch.ts"]
+      depends_on: ["T0-4"]
+      definition_of_done:
+        - "搜索结果含feasible/quant/source/size过滤"
+        - "显存优选按钮调用recommendModel"
+        - "pnpm build通过"
+
+    - id: "T0-5"
+      priority: "P1"
+      type: "test"
+      title: "useEngineManagement引擎配置编辑+Phase2.5单元测试"
+      test_type: "hook"
+      file: "frontend/src/composables/__tests__/useEngineManagement.test.ts"
+      given: "引擎后端可用"
+      when: "调用getEngineConfig/updateEngineConfig"
+      then:
+        - "引擎配置正确读取和更新"
+        - "引擎切换含Phase2.5显存校验"
+        - "配置格式错误时保持原值"
+      depends_on: []
+
+    - id: "P1-2"
+      priority: "P1"
+      type: "code"
+      title: "useEngineManagement引擎配置CRUD+Phase2.5实现"
+      files: ["frontend/src/composables/useEngineManagement.ts"]
+      depends_on: ["T0-5"]
+      definition_of_done:
+        - "getEngineConfig/updateEngineConfig API调用"
+        - "引擎切换4阶段含Phase2.5"
+        - "pnpm build通过"
+
+    - id: "P1-3"
+      priority: "P1"
+      type: "code"
+      title: "Dashboard GPU显存告警增强+引擎指标卡片"
+      files: ["frontend/src/views/Dashboard.vue", "frontend/src/components/cards/GpuMetricsCard.vue"]
+      depends_on: []
+      definition_of_done:
+        - "GPU利用率>85%红色告警标识"
+        - "可用显存数值醒目展示"
+        - "SGLang/llama.cpp引擎状态卡片"
+        - "pnpm build通过"
+
+    - id: "P1-4"
+      priority: "P1"
+      type: "code"
+      title: "ModelManagement引擎面板集成+Phase2.5+配置编辑Modal"
+      files: ["frontend/src/views/ModelManagement.vue", "frontend/src/components/EngineSwitchPanel.vue"]
+      depends_on: ["P0-1", "P1-2"]
+      definition_of_done:
+        - "EngineSwitchPanel集成到ModelManagement"
+        - "Phase2.5显存校验步骤展示"
+        - "引擎配置编辑Modal(调用已有API)"
+        - "pnpm build通过"
+
+    - id: "P1-5"
+      priority: "P1"
+      type: "code"
+      title: "ModelHubPage搜索徽章+过滤器+显存优选+下载进度+跳转按钮"
+      files: ["frontend/src/views/ModelHubPage.vue", "frontend/src/composables/useGPUMemory.ts"]
+      depends_on: ["P0-2", "P1-1"]
+      definition_of_done:
+        - "搜索结果含feasible徽章(✅可运行/❌显存不足)"
+        - "高级过滤器(size/quant/feasible/source)"
+        - "显存优选面板+推荐模型"
+        - "WS下载进度展示"
+        - "下载完成→前往模型池按钮"
+        - "pnpm build通过"
+
+    - id: "P1-6"
+      priority: "P1"
+      type: "code"
+      title: "ModelPoolPage统计概览+一键加载+引擎选择+降级轮询+错误banner"
+      files: ["frontend/src/views/ModelPoolPage.vue"]
+      depends_on: ["P0-3"]
+      definition_of_done:
+        - "模型池统计概览卡片(总数/状态分布/总大小)"
+        - "一键加载流程含显存校验→引擎启动→验证"
+        - "引擎选择(vllm/sglang/llama_cpp)"
+        - "WS降级轮询+状态指示灯"
+        - "错误banner+重试按钮"
+        - "pnpm build通过"
+
+    - id: "P1-7"
+      priority: "P1"
+      type: "code"
+      title: "EngineManagementPage引擎配置编辑UI+状态详情"
+      files: ["frontend/src/views/EngineManagementPage.vue"]
+      depends_on: ["P1-2"]
+      definition_of_done:
+        - "引擎配置编辑表单(command+params)"
+        - "引擎状态详情(PID/端口/uptime)"
+        - "pnpm build通过"
+
+    - id: "P1-8"
+      priority: "P1"
+      type: "code"
+      title: "GPUManage SGLang/llama.cpp专项指标+引擎状态卡片"
+      files: ["frontend/src/views/GPUManage.vue"]
+      depends_on: []
+      definition_of_done:
+        - "SGLang/llama.cpp引擎状态卡片"
+        - "各引擎专项指标展示"
+        - "pnpm build通过"
+
+    - id: "P2-1"
+      priority: "P2"
+      type: "code"
+      title: "AgentChatWindow图片上传+预览+多模态消息"
+      files: ["frontend/src/views/AgentView.vue", "frontend/src/components/AgentChatWindow.vue"]
+      depends_on: []
+      definition_of_done:
+        - "图片上传按钮+预览"
+        - "多模态消息格式化(content含image_url)"
+        - "pnpm build通过"
+
+    - id: "P2-2"
+      priority: "P2"
+      type: "code"
+      title: "api/client.ts引擎配置API调用增强+types补充"
+      files: ["frontend/src/api/client.ts", "frontend/src/types/index.ts"]
+      depends_on: []
+      definition_of_done:
+        - "Phase2.5类型定义补充"
+        - "EngineConfigEdit类型完善"
+        - "DownloadWSMessage类型完善"
+        - "pnpm build通过"
+
+  commands:
+    test: "cd frontend && pnpm test"
+    lint: "cd frontend && npx eslint src/ --ext .ts,.vue --max-warnings 50"
+    typecheck: "cd frontend && pnpm build"
+    build: "cd frontend && pnpm build"

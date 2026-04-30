@@ -172,6 +172,7 @@ class LLMServiceManager:
         cmd = [
             "python", "-m", "sglang.launch_server",
             "--model-path", model_path,
+            "--host", "0.0.0.0",
             "--port", str(port),
         ]
 
@@ -181,27 +182,139 @@ class LLMServiceManager:
         elif isinstance(cfg, dict):
             sglang_params = cfg.get("sglang_params", {})
 
-        tp = sglang_params.get("tensor_parallel_size", 1)
+        tp = sglang_params.get("tp_size", sglang_params.get("tensor_parallel_size", 1))
         if tp > 1:
             cmd.extend(["--tp", str(tp)])
 
-        gpu_util = sglang_params.get(
-            "gpu_memory_utilization",
-            self._get_gpu_memory_utilization(),
+        dp = sglang_params.get("dp_size", 1)
+        if dp > 1:
+            cmd.extend(["--dp-size", str(dp)])
+
+        mem_frac = sglang_params.get(
+            "mem_fraction_static",
+            sglang_params.get("gpu_memory_utilization", self._get_gpu_memory_utilization()),
         )
-        cmd.extend(["--mem-fraction-static", str(gpu_util)])
+        cmd.extend(["--mem-fraction-static", str(mem_frac)])
 
         ctx_len = sglang_params.get("context_length")
         if ctx_len:
             cmd.extend(["--context-length", str(ctx_len)])
 
+        if sglang_params.get("trust_remote_code", False):
+            cmd.extend(["--trust-remote-code"])
+
+        dtype = sglang_params.get("dtype")
+        if dtype and dtype != "auto":
+            cmd.extend(["--dtype", dtype])
+
+        quant = sglang_params.get("quantization")
+        if quant:
+            cmd.extend(["--quantization", quant])
+
+        kv_dtype = sglang_params.get("kv_cache_dtype")
+        if kv_dtype and kv_dtype != "auto":
+            cmd.extend(["--kv-cache-dtype", kv_dtype])
+
+        load_fmt = sglang_params.get("load_format")
+        if load_fmt and load_fmt != "auto":
+            cmd.extend(["--load-format", load_fmt])
+
+        served_name = sglang_params.get("served_model_name")
+        if served_name:
+            cmd.extend(["--served-model-name", served_name])
+
+        max_running = sglang_params.get("max_running_requests")
+        if max_running:
+            cmd.extend(["--max-running-requests", str(max_running)])
+
+        max_total = sglang_params.get("max_total_tokens")
+        if max_total:
+            cmd.extend(["--max-total-tokens", str(max_total)])
+
+        chunked = sglang_params.get("chunked_prefill_size")
+        if chunked is not None:
+            cmd.extend(["--chunked-prefill-size", str(chunked)])
+
+        sched = sglang_params.get("schedule_policy")
+        if sched and sched != "fcfs":
+            cmd.extend(["--schedule-policy", sched])
+
+        if sglang_params.get("disable_radix_cache", False):
+            cmd.extend(["--disable-radix-cache"])
+
+        if sglang_params.get("disable_overlap_schedule", False):
+            cmd.extend(["--disable-overlap-schedule"])
+
+        if sglang_params.get("enable_torch_compile", False):
+            cmd.extend(["--enable-torch-compile"])
+
+        if sglang_params.get("disable_cuda_graph", False):
+            cmd.extend(["--disable-cuda-graph"])
+
+        tool_parser = sglang_params.get("tool_call_parser")
+        if tool_parser:
+            cmd.extend(["--tool-call-parser", tool_parser])
+
+        multimodal = sglang_params.get("enable_multimodal")
+        if multimodal is True:
+            cmd.extend(["--enable-multimodal"])
+        elif multimodal is False:
+            cmd.extend(["--enable-multimodal", "false"])
+
+        reasoning = sglang_params.get("reasoning_parser")
+        if reasoning:
+            cmd.extend(["--reasoning-parser", reasoning])
+
+        log_level = sglang_params.get("log_level")
+        if log_level and log_level != "info":
+            cmd.extend(["--log-level", log_level])
+
+        watchdog = sglang_params.get("watchdog_timeout")
+        if watchdog and watchdog != 300:
+            cmd.extend(["--watchdog-timeout", str(watchdog)])
+
+        if sglang_params.get("enable_metrics", False):
+            cmd.extend(["--enable-metrics"])
+
+        if sglang_params.get("skip_server_warmup", False):
+            cmd.extend(["--skip-server-warmup"])
+
+        lora_paths_val = sglang_params.get("lora_paths")
+        if lora_paths_val:
+            cmd.extend(["--lora-paths", str(lora_paths_val)])
+
+        max_lora_rank = sglang_params.get("max_lora_rank")
+        if max_lora_rank:
+            cmd.extend(["--max-lora-rank", str(max_lora_rank)])
+
+        download_dir = sglang_params.get("download_dir")
+        if download_dir:
+            cmd.extend(["--download-dir", download_dir])
+
+        _HANDLED_KEYS = {
+            "tp_size", "tensor_parallel_size", "dp_size",
+            "mem_fraction_static", "gpu_memory_utilization",
+            "context_length", "trust_remote_code", "dtype",
+            "quantization", "kv_cache_dtype", "load_format",
+            "served_model_name", "max_running_requests",
+            "max_total_tokens", "chunked_prefill_size",
+            "schedule_policy", "disable_radix_cache",
+            "disable_overlap_schedule", "enable_torch_compile",
+            "disable_cuda_graph", "tool_call_parser",
+            "enable_multimodal", "reasoning_parser",
+            "log_level", "watchdog_timeout", "enable_metrics",
+            "skip_server_warmup", "lora_paths", "max_lora_rank",
+            "download_dir",
+        }
+
         for key, val in sglang_params.items():
-            if val is None or key in (
-                "tensor_parallel_size", "gpu_memory_utilization", "context_length",
-            ):
+            if val is None or key in _HANDLED_KEYS:
                 continue
-            arg_name = "--" + key.replace("_", "-")
-            cmd.extend([arg_name, str(val)])
+            if isinstance(val, bool):
+                if val:
+                    cmd.extend(["--" + key.replace("_", "-")])
+            else:
+                cmd.extend(["--" + key.replace("_", "-"), str(val)])
 
         return cmd
 

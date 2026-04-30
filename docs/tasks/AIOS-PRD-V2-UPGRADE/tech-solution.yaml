@@ -1,0 +1,174 @@
+meta:
+  title: "PRD全功能升级迭代 - 6项真实缺口补齐"
+  platform: "go_backend + python_backend"
+  source: "docs/agent/prd.md"
+  requirement_version: "v2"
+  developer: "heyongxian"
+
+scope:
+  in_scope:
+    - "F15: 多源模型下载完善 (OpenXLab + 实时进度 + MS resume)"
+    - "F16: 跨平台搜索完善 (OpenXLab + 排序)"
+    - "F3: 限流增强 (token维度 + 前置拦截 + 显存自适应)"
+    - "F8: 熔断阈值与队列限制 (threshold=10 + max_queue_size)"
+    - "F12: 配置管理增强 (version/乐观锁 + 双向校验 + 操作日志)"
+    - "F4: 并发控制增强 (分级并发 + 30min超时 + 僵尸清理)"
+  out_of_scope:
+    - "F13/F14/F22: 已完整实现，无需升级"
+    - "F1-F11/F17-F21: 已实现，无缺口"
+    - "前端新增页面/组件"
+    - "多仓架构改造"
+
+file_changes:
+  - path: "app-controller/core/model_hub.py"
+    change: modify
+    summary: "新增 OpenXLab 搜索/下载源 + MS resume_download + 下载进度回调"
+    risk: "medium"
+    depends_on: ["app-controller/core/download_manager.py"]
+
+  - path: "app-controller/core/download_manager.py"
+    change: modify
+    summary: "下载进度实时百分比推送 (HF callback + 中间 progress_pct 更新)"
+    risk: "medium"
+
+  - path: "app-controller/routes/model_hub.py"
+    change: modify
+    summary: "搜索接口增加 sort 参数 + source=oxl 支持"
+    risk: "low"
+
+  - path: "go-vllm-api/internal/service/rate_limiter.go"
+    change: modify
+    summary: "新增 IP 维度每分钟总输入 token 限流计数器"
+    risk: "high"
+    implementation_notes:
+      - "双维度: 现有 Redis QPS counter + 新增 Redis token_counter (IP:每分钟token数)"
+
+  - path: "go-vllm-api/internal/middleware/ratelimit.go"
+    change: modify
+    summary: "X-RateLimit-Remaining 精确计算 + token 限流检查 + GPU显存>90%降额"
+    risk: "high"
+    depends_on: ["go-vllm-api/internal/service/rate_limiter.go"]
+
+  - path: "go-vllm-api/internal/handler/v1/chat.go"
+    change: modify
+    summary: "前置拦截: 输入 token 数超 max_model_len 返回 400"
+    risk: "medium"
+
+  - path: "go-vllm-api/internal/proxy/vllm.go"
+    change: modify
+    summary: "CircuitBreaker 参数调整为 threshold=10, resetTimeout=5s"
+    risk: "low"
+    implementation_notes:
+      - "修改 NewCircuitBreaker(5, 30*time.Second) → NewCircuitBreaker(10, 5*time.Second)"
+
+  - path: "go-vllm-api/internal/service/scheduler.go"
+    change: modify
+    summary: "max_queue_size 限制 + max_stream_concurrent + stream 30min超时 + 僵尸流式清理 + goroutine监控"
+    risk: "high"
+    implementation_notes:
+      - "分级并发: max_concurrent(普通) + max_stream_concurrent(流式)"
+      - "流式超时: context.WithTimeout(streamCtx, 30*time.Minute)"
+      - "僵尸流式: zombieChecker 增加 stream idle>5min 清理逻辑"
+
+  - path: "app-controller/core/config.py"
+    change: modify
+    summary: "AppConfig 增加 version 字段"
+    risk: "low"
+
+  - path: "app-controller/core/config_watcher.py"
+    change: modify
+    summary: "version 自动递增 + 操作日志记录"
+    risk: "medium"
+    depends_on: ["app-controller/core/config.py"]
+
+  - path: "app-controller/routes/manage.py"
+    change: modify
+    summary: "PUT /manage/config 乐观锁校验(version 409) + Go一致性校验调用"
+    risk: "medium"
+    depends_on: ["app-controller/core/config_watcher.py"]
+
+api:
+  - name: "search_models_with_sort"
+    layer: "backend"
+    endpoint: "GET /manage/models/search"
+    method: "GET"
+    request_schema:
+      keyword: "string"
+      source: "string"
+      limit: "number?"
+      sort: "string?"
+    response_schema:
+      models: "SearchResultItem[]"
+      total: "number"
+      gpu_info: "GPUFeasibilityInfo"
+    error_codes:
+      - code: "400"
+        meaning: "搜索参数缺失"
+        handling: "返回错误提示"
+      - code: "503"
+        meaning: "搜索平台不可用"
+        handling: "降级到可用平台"
+
+  - name: "update_config_with_version"
+    layer: "backend"
+    endpoint: "PUT /manage/config"
+    method: "PUT"
+    request_schema:
+      version: "number"
+      config: "object"
+    response_schema:
+      status: "string"
+      new_version: "number"
+      config: "object"
+    error_codes:
+      - code: "409"
+        meaning: "版本冲突"
+        handling: "返回当前版本号，提示重新获取"
+      - code: "500"
+        meaning: "配置持久化失败"
+        handling: "返回错误详情"
+
+validation:
+  acceptance:
+    - criteria: "OpenXLab搜索返回模型列表且包含模型名/源/大小/量化"
+      feature: "F15/F16"
+      test_type: "unit"
+    - criteria: "下载进度从0渐进到100而非跳变"
+      feature: "F15"
+      test_type: "integration"
+    - criteria: "MS下载resume_download=True，中断后可续传"
+      feature: "F15"
+      test_type: "integration"
+    - criteria: "IP每分钟token数超限返回429"
+      feature: "F3"
+      test_type: "unit"
+    - criteria: "输入超max_model_len返回400"
+      feature: "F3"
+      test_type: "unit"
+    - criteria: "GPU>90%时限流阈值降低50%"
+      feature: "F3"
+      test_type: "integration"
+    - criteria: "CircuitBreaker threshold=10, reset=5s"
+      feature: "F8"
+      test_type: "unit"
+    - criteria: "max_queue_size超额立即429"
+      feature: "F8"
+      test_type: "unit"
+    - criteria: "PUT /manage/config version不匹配返回409"
+      feature: "F12"
+      test_type: "unit"
+    - criteria: "配置修改后version自动递增"
+      feature: "F12"
+      test_type: "unit"
+    - criteria: "Python配置变更后Go一致性校验"
+      feature: "F12"
+      test_type: "integration"
+    - criteria: "max_stream_concurrent独立配置生效"
+      feature: "F4"
+      test_type: "unit"
+    - criteria: "流式请求30min超时后自动断开"
+      feature: "F4"
+      test_type: "integration"
+    - criteria: "僵尸流式连接>5min自动清理"
+      feature: "F4"
+      test_type: "unit"

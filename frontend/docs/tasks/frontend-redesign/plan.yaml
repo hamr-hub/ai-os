@@ -1,0 +1,414 @@
+plan:
+  meta:
+    source_tech_doc: "frontend/docs/tasks/frontend-redesign/tech-solution.yaml"
+    scope: "P0"
+    test_coverage_target: 80
+    min_tests_per_feature: 3
+    created_at: "2026-04-30"
+    developer: "heyongxian"
+
+  tasks:
+    - id: "T0-1"
+      priority: "P0"
+      type: "test"
+      title: "useAuth composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useAuth.test.ts"
+      given: "useAuth composable已实现login/logout/token/user/isAuthenticated"
+      when: "调用login/logout方法"
+      then:
+        - "login后token和user正确设置到localStorage"
+        - "logout后token和user清空"
+        - "isAuthenticated根据token计算"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client')不需要(无API调用)"
+        - "vi.stubGlobal('localStorage', mockLocalStorage)"
+
+    - id: "T0-2"
+      priority: "P0"
+      type: "test"
+      title: "useConfigManagement composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useConfigManagement.test.ts"
+      given: "useConfigManagement已实现fetchAll/updateEngineConf/updateSystemConf/setDefault/clearDefault"
+      when: "调用各配置管理方法"
+      then:
+        - "fetchAll并行获取4种配置并赋值"
+        - "updateEngineConf成功返回true"
+        - "setDefault/clearDefault操作默认模型"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock getVLLMDefaultConfig/getEngineConfig/updateEngineConfig/getDefaultModel/setDefaultModel/clearDefaultModel/getSystemConfig/updateSystemConfig"
+        - "createPinia + setActivePinia (依赖serverStore)"
+
+    - id: "T0-3"
+      priority: "P0"
+      type: "test"
+      title: "useEngineManagement composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useEngineManagement.test.ts"
+      given: "useEngineManagement已实现fetchStatus/fetchConfig/doSwitchEngine/doUpdateConfig"
+      when: "调用引擎管理方法"
+      then:
+        - "fetchStatus填充engineStatus"
+        - "doSwitchEngine成功返回session_id时构造SwitchSession"
+        - "切换失败清空状态"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock getEngineStatus/switchEngine/getEngineConfig/updateEngineConfig"
+
+    - id: "T0-4"
+      priority: "P0"
+      type: "test"
+      title: "useHealthOps composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useHealthOps.test.ts"
+      given: "useHealthOps已实现fetchAlert/fetchDetail/fetchHistory/runCheck"
+      when: "调用健康检查方法"
+      then:
+        - "fetchAlert填充healthAlert"
+        - "runCheck先调healthCheck再刷新alert+detail"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock getHealthAlert/healthCheck/getHealthDetailed/getHealthHistory"
+
+    - id: "T0-5"
+      priority: "P0"
+      type: "test"
+      title: "useRateLimit composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useRateLimit.test.ts"
+      given: "useRateLimit已实现fetchQueueStatus/fetchConfig/fetchStats/doUpdateConfig"
+      when: "调用限流配置方法"
+      then:
+        - "fetchQueueStatus填充queueStatus"
+        - "doUpdateConfig成功时更新rateLimitConfig"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock getQueueStatus/getRateLimitConfig/updateRateLimitConfig/getRateLimitStats"
+
+    - id: "T0-6"
+      priority: "P0"
+      type: "test"
+      title: "useModelDownload composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useModelDownload.test.ts"
+      given: "useModelDownload已实现start/getStatus/cancel/list/connectDownloadWS"
+      when: "调用下载管理方法和WS连接"
+      then:
+        - "start成功创建下载任务"
+        - "WS连接处理4种事件(started/progress/completed/failed)"
+        - "WS断连降级为3s轮询"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock startDownload/getDownloadStatus/cancelDownload/listDownloads"
+        - "MockWebSocket: vi.stubGlobal('WebSocket', class{send=vi.fn();close=vi.fn();addEventListener=vi.fn()})"
+        - "vi.mock('@/stores/server') mock useServerStore"
+
+    - id: "T0-7"
+      priority: "P0"
+      type: "test"
+      title: "useModelPool composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useModelPool.test.ts"
+      given: "useModelPool已实现list/detail/load/remove"
+      when: "调用模型池方法"
+      then:
+        - "list解构{models,total}填充poolList"
+        - "remove成功后从poolList中filter移除"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock getPoolList/getPoolDetail/loadFromPool/deleteFromPool"
+
+    - id: "T0-8"
+      priority: "P0"
+      type: "test"
+      title: "useModelSearch composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useModelSearch.test.ts"
+      given: "useModelSearch已实现search/recommend/checkMemory"
+      when: "调用搜索方法"
+      then:
+        - "search解构data.results填充results"
+        - "checkMemory返回结果但不存储到状态"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock searchModels/recommendModel/checkModelMemory"
+
+    - id: "T0-9"
+      priority: "P0"
+      type: "test"
+      title: "useModelSwitch composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useModelSwitch.test.ts"
+      given: "useModelSwitch已实现triggerSwitch/cancel/WS/computed"
+      when: "调用模型切换和WS监控"
+      then:
+        - "triggerSwitch设置isSwitching=true"
+        - "computed属性(overallProgress/phases/isCompleted/isFailed)正确计算"
+        - "终态时停止polling+断WS"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock getSwitchStatus"
+        - "vi.mock('@/stores/server') mock useServerStore"
+        - "vi.mock('@/stores/app') mock useAppStore"
+        - "MockWebSocket"
+
+    - id: "T0-10"
+      priority: "P0"
+      type: "test"
+      title: "usePolling composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/usePolling.test.ts"
+      given: "usePolling已实现fetch/refresh/startPolling/stopPolling/AbortController"
+      when: "调用轮询控制方法"
+      then:
+        - "fetch调用fetchFn并设置loading"
+        - "AbortController防止并发请求"
+        - "非Abort错误写入error"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('vue') mock onMounted/onUnmounted"
+        - "vi.mock('@/utils/request') mock isAbortError"
+
+    - id: "T0-11"
+      priority: "P0"
+      type: "test"
+      title: "useLLMService composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useLLMService.test.ts"
+      given: "useLLMService已实现getStatus/getLogs/start/stop/loadFromPoolService"
+      when: "调用LLM服务管理方法"
+      then:
+        - "getStatus填充services字典"
+        - "getLogs只取result.logs"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock startModel/stopModel/getLLMServiceStatus/getLLMServiceLogs/loadFromPool"
+
+    - id: "T0-12"
+      priority: "P0"
+      type: "test"
+      title: "useGPUMemory composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useGPUMemory.test.ts"
+      given: "useGPUMemory已实现getGPU/recommend/checkMemory/doSwitchEngine"
+      when: "调用GPU显存管理方法"
+      then:
+        - "getGPU填充gpuInfo"
+        - "doSwitchEngine成功后乐观更新current_engine"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock getGPUSummary/getGPUMemoryCheck/recommendModel/checkModelMemory/getEngineStatus/switchEngine"
+
+    - id: "T0-13"
+      priority: "P0"
+      type: "test"
+      title: "useGPUMemoryCheck composable单元测试"
+      test_type: "pure"
+      file: "frontend/src/composables/__tests__/useGPUMemoryCheck.test.ts"
+      given: "useGPUMemoryCheck已实现fetchMemoryInfo/getRecommendation/checkModel"
+      when: "调用显存校验方法"
+      then:
+        - "fetchMemoryInfo填充memoryInfo"
+        - "checkModel双重输出(赋值ref+返回值)"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock getGPUMemoryCheck/recommendModel/checkModelMemory"
+
+    - id: "T0-14"
+      priority: "P0"
+      type: "test"
+      title: "auth/modelPool/gpu store单元测试"
+      test_type: "pure"
+      file: "frontend/src/stores/__tests__/auth.test.ts"
+      given: "auth store已实现setToken/clearToken/isAuthenticated"
+      when: "调用token管理方法"
+      then:
+        - "setToken存localStorage并更新状态"
+        - "clearToken清localStorage并重置"
+        - "isAuthenticated根据token计算"
+      depends_on: []
+
+    - id: "T0-15"
+      priority: "P0"
+      type: "test"
+      title: "modelPool store单元测试"
+      test_type: "pure"
+      file: "frontend/src/stores/__tests__/modelPool.test.ts"
+      given: "modelPool store已实现fetchPool/searchModelsAction/startDownloadAction等"
+      when: "调用模型池+搜索+下载方法"
+      then:
+        - "fetchPool填充pool"
+        - "startDownloadAction成功后connectWS"
+        - "deleteFromPoolAction成功后filter移除"
+        - "getRecommendation合并recommended+candidates"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock 8个API函数"
+        - "vi.mock('@/utils/downloadWebSocket') mock onDownloadMessage"
+        - "createPinia + setActivePinia"
+
+    - id: "T0-16"
+      priority: "P0"
+      type: "test"
+      title: "gpu store单元测试"
+      test_type: "pure"
+      file: "frontend/src/stores/__tests__/gpu.test.ts"
+      given: "gpu store已实现fetchGPUData/startPolling/stopPolling/引用计数"
+      when: "调用GPU数据和轮询控制方法"
+      then:
+        - "fetchGPUData填充gpuSummary"
+        - "subscriberCount控制轮询启停"
+        - "AbortController防止并发"
+      depends_on: []
+      implementation_notes:
+        - "vi.mock('@/api/client') mock getGPUSummary"
+        - "vi.mock('@/utils/request') mock isAbortError"
+
+    - id: "T0-17"
+      priority: "P1"
+      type: "test"
+      title: "关键页面组件渲染测试"
+      test_type: "component"
+      file: "frontend/src/views/__tests__/Dashboard.test.ts"
+      given: "8个关键页面组件已实现"
+      when: "mount渲染页面组件"
+      then:
+        - "Dashboard渲染GPU/模型卡片区域"
+        - "ModelManagement渲染模型列表"
+        - "ModelHubPage渲染搜索/下载UI"
+        - "ModelPoolPage渲染池列表"
+      depends_on: []
+      implementation_notes:
+        - "@vue/test-utils mount shallowMount"
+        - "mock所有composable依赖"
+        - "8个页面共用一个测试文件结构(每个describe独立)"
+
+    - id: "T0-18"
+      priority: "P1"
+      type: "test"
+      title: "测试计划文档生成"
+      test_type: "pure"
+      file: "frontend/docs/tasks/frontend-redesign/test-plan.yaml"
+      given: "tech-solution和plan已生成"
+      when: "汇总测试矩阵和覆盖率目标"
+      then:
+        - "test-plan.yaml包含完整测试矩阵"
+        - "test-plan.md包含人读测试计划"
+      depends_on: []
+
+    - id: "P0-1"
+      priority: "P0"
+      type: "code"
+      title: "编写useAuth/useConfigManagement/useEngineManagement测试代码"
+      files:
+        - "frontend/src/composables/__tests__/useAuth.test.ts"
+        - "frontend/src/composables/__tests__/useConfigManagement.test.ts"
+        - "frontend/src/composables/__tests__/useEngineManagement.test.ts"
+      depends_on: ["T0-1", "T0-2", "T0-3"]
+      definition_of_done:
+        - "3个测试文件编写完成"
+        - "所有测试用例通过vitest run"
+        - "代码通过lint检查"
+
+    - id: "P0-2"
+      priority: "P0"
+      type: "code"
+      title: "编写useHealthOps/useRateLimit测试代码"
+      files:
+        - "frontend/src/composables/__tests__/useHealthOps.test.ts"
+        - "frontend/src/composables/__tests__/useRateLimit.test.ts"
+      depends_on: ["T0-4", "T0-5"]
+      definition_of_done:
+        - "2个测试文件编写完成"
+        - "所有测试用例通过"
+        - "lint检查通过"
+
+    - id: "P0-3"
+      priority: "P0"
+      type: "code"
+      title: "编写useModelDownload/useModelPool/useModelSearch测试代码"
+      files:
+        - "frontend/src/composables/__tests__/useModelDownload.test.ts"
+        - "frontend/src/composables/__tests__/useModelPool.test.ts"
+        - "frontend/src/composables/__tests__/useModelSearch.test.ts"
+      depends_on: ["T0-6", "T0-7", "T0-8"]
+      definition_of_done:
+        - "3个测试文件编写完成"
+        - "WS mock测试通过"
+        - "所有测试通过"
+
+    - id: "P0-4"
+      priority: "P0"
+      type: "code"
+      title: "编写useModelSwitch/usePolling测试代码"
+      files:
+        - "frontend/src/composables/__tests__/useModelSwitch.test.ts"
+        - "frontend/src/composables/__tests__/usePolling.test.ts"
+      depends_on: ["T0-9", "T0-10"]
+      definition_of_done:
+        - "2个测试文件编写完成"
+        - "WS+生命周期mock测试通过"
+
+    - id: "P0-5"
+      priority: "P0"
+      type: "code"
+      title: "编写useLLMService/useGPUMemory/useGPUMemoryCheck测试代码"
+      files:
+        - "frontend/src/composables/__tests__/useLLMService.test.ts"
+        - "frontend/src/composables/__tests__/useGPUMemory.test.ts"
+        - "frontend/src/composables/__tests__/useGPUMemoryCheck.test.ts"
+      depends_on: ["T0-11", "T0-12", "T0-13"]
+      definition_of_done:
+        - "3个测试文件编写完成"
+        - "所有测试通过"
+
+    - id: "P0-6"
+      priority: "P0"
+      type: "code"
+      title: "编写auth/modelPool/gpu store测试代码"
+      files:
+        - "frontend/src/stores/__tests__/auth.test.ts"
+        - "frontend/src/stores/__tests__/modelPool.test.ts"
+        - "frontend/src/stores/__tests__/gpu.test.ts"
+      depends_on: ["T0-14", "T0-15", "T0-16"]
+      definition_of_done:
+        - "3个store测试文件编写完成"
+        - "所有测试通过"
+
+    - id: "P1-1"
+      priority: "P1"
+      type: "code"
+      title: "编写关键页面组件渲染测试代码"
+      files:
+        - "frontend/src/views/__tests__/Dashboard.test.ts"
+        - "frontend/src/views/__tests__/ModelManagement.test.ts"
+        - "frontend/src/views/__tests__/ModelHubPage.test.ts"
+        - "frontend/src/views/__tests__/ModelPoolPage.test.ts"
+        - "frontend/src/views/__tests__/EngineManagementPage.test.ts"
+        - "frontend/src/views/__tests__/RateLimitPage.test.ts"
+        - "frontend/src/views/__tests__/ConfigManagementPage.test.ts"
+        - "frontend/src/views/__tests__/AuthPage.test.ts"
+      depends_on: ["T0-17"]
+      definition_of_done:
+        - "8个页面渲染测试文件编写完成"
+        - "所有渲染测试通过"
+
+    - id: "P1-2"
+      priority: "P1"
+      type: "code"
+      title: "生成测试计划文档"
+      files:
+        - "frontend/docs/tasks/frontend-redesign/test-plan.yaml"
+        - "frontend/docs/tasks/frontend-redesign/test-plan.md"
+      depends_on: ["T0-18"]
+      definition_of_done:
+        - "test-plan.yaml和test-plan.md生成完成"
+        - "测试矩阵完整"
+
+  commands:
+    test: "cd frontend && npx vitest run"
+    lint: "git diff --name-only HEAD | grep '.test.ts$' | xargs eslint"
+    typecheck: "cd frontend && npx vue-tsc --noEmit"

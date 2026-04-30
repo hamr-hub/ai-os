@@ -50,7 +50,7 @@ import httpx
 import os
 
 # 确定配置文件路径（相对于此文件的上两级目录）
-config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
+config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.yaml")
 
 # 创建配置监听器并加载初始配置
 config_watcher = ConfigWatcher(config_path)

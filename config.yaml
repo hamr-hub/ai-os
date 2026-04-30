@@ -1,3 +1,13 @@
+model_groups:
+  Gemma-4-31B: "^Gemma-4-31B"
+  Qwen3-235B: "^Qwen3-235B"
+  Qwen3.6-35B: "^Qwen3\\.6-35B"
+  Qwen2.5-72B: "^Qwen2\\.5-72B"
+  llama-3.3-70b: "^llama-3\\.3-70b"
+  midnight-miqu-103b: "^midnight-miqu-103b"
+  qwen2.5-72b: "^qwen2\\.5-72b"
+  deepseek-r1: "^deepseek-r1"
+
 models:
   Gemma-4-31B-Abliterated:
     service: vllm-aiclient
@@ -10,6 +20,14 @@ models:
     supports_tool_calling: true
     supports_image_generation: false
     description: "Gemma 4 31B 模型（去审查版）"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 40960
+      max_num_batched_tokens: 16384
+      enable_chunked_prefill: true
+      tool_call_parser: gemma4
+      attention_backend: TRITON_ATTN
 
   Qwen3-235B-A22B-Instruct-2507-AWQ:
     service: vllm-aiclient
@@ -22,6 +40,14 @@ models:
     supports_tool_calling: true
     supports_image_generation: false
     description: "Qwen3 235B AWQ 量化模型"
+    vllm_params:
+      max_num_seqs: 32
+      gpu_memory_utilization: 0.75
+      max_model_len: 8192
+      max_num_batched_tokens: 4096
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   Qwen3.6-35B-A3B:
     service: vllm-aiclient
@@ -34,6 +60,14 @@ models:
     supports_tool_calling: true
     supports_image_generation: false
     description: "Qwen3.6 35B 稀疏激活模型"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 40960
+      max_num_batched_tokens: 16384
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   Qwen3.6-35B-A3B-NVFP4:
     service: vllm-aiclient
@@ -46,6 +80,14 @@ models:
     supports_tool_calling: true
     supports_image_generation: false
     description: "Qwen3.6 35B NVFP4 量化模型"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 40960
+      max_num_batched_tokens: 16384
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   Qwen3.6-35B-A3B-Uncensored:
     service: vllm-aiclient
@@ -58,6 +100,14 @@ models:
     supports_tool_calling: true
     supports_image_generation: false
     description: "Qwen3.6 35B 去审查版"
+    vllm_params:
+      max_num_seqs: 256
+      gpu_memory_utilization: 0.90
+      max_model_len: 40960
+      max_num_batched_tokens: 16384
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   llama-3.3-70b-8.0bpw:
     service: vllm-aiclient
@@ -70,6 +120,14 @@ models:
     supports_tool_calling: true
     supports_image_generation: false
     description: "Llama 3.3 70B 8bit 量化模型"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   llama-3.3-70b-abliterated-gguf:
     service: vllm-aiclient
@@ -82,6 +140,14 @@ models:
     supports_tool_calling: false
     supports_image_generation: false
     description: "Llama 3.3 70B GGUF 去审查版"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   llama-3.3-70b-exl2-6_5:
     service: vllm-aiclient
@@ -94,6 +160,14 @@ models:
     supports_tool_calling: true
     supports_image_generation: false
     description: "Llama 3.3 70B EXL2 6.5bpw 量化"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   llama-3.3-70b-exl2-8_0:
     service: vllm-aiclient
@@ -106,6 +180,14 @@ models:
     supports_tool_calling: true
     supports_image_generation: false
     description: "Llama 3.3 70B EXL2 8.0bpw 量化"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   midnight-miqu-103b-5.0bpw:
     service: vllm-aiclient
@@ -118,6 +200,14 @@ models:
     supports_tool_calling: false
     supports_image_generation: false
     description: "Midnight Miqu 103B 5bpw 量化"
+    vllm_params:
+      max_num_seqs: 32
+      gpu_memory_utilization: 0.80
+      max_model_len: 8192
+      max_num_batched_tokens: 4096
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   qwen2.5-72b-exl2-8_0:
     service: vllm-aiclient
@@ -130,6 +220,14 @@ models:
     supports_tool_calling: true
     supports_image_generation: false
     description: "Qwen2.5 72B EXL2 8.0bpw 量化"
+    vllm_params:
+      max_num_seqs: 64
+      gpu_memory_utilization: 0.85
+      max_model_len: 16384
+      max_num_batched_tokens: 8192
+      enable_chunked_prefill: true
+      tool_call_parser: null
+      attention_backend: FLASH_ATTN
 
   Gemma-4-31B-GGUF-Q4:
     service: llama_cpp
@@ -200,7 +298,19 @@ vllm:
   default_port: 8000
   default_gpu_memory_utilization: 0.92
   default_max_model_len: 32768
-  engine_manager_mode: systemd
+  engine_manager_mode: subprocess
+  venv_path: /root/ai-suite/vllm_env
+  hf_endpoint: "https://hf-mirror.com"
+  env_vars:
+    VLLM_USE_V1: "1"
+    NCCL_P2P_DISABLE: "1"
+    NCCL_SOCKET_REUSEPORT: "1"
+    NCCL_ASYNC_ERROR_HANDLING: "1"
+    NCCL_IB_DISABLE: "1"
+    CUDA_MANAGED_FORCE_DEVICE_ALLOC: "1"
+    OMP_NUM_THREADS: "16"
+    VLLM_NO_FLASHINFER: "1"
+    FLASHINFER_DISABLE: "1"
 
 engines:
   vllm:
@@ -208,7 +318,16 @@ engines:
     default_port: 8000
   sglang:
     enabled: false
-    default_port: 8000
+    default_port: 8100
+    default_gpu_memory_utilization: 0.90
+    default_max_model_len: 32768
+  hub:
+    save_root: /mnt/pve_models
+    hf_endpoint: "https://hf-mirror.com"
+    sources:
+      - local
+      - huggingface
+      - modelscope
 
 llama_cpp:
   server_module: llama_cpp.server
@@ -216,3 +335,47 @@ llama_cpp:
   default_n_gpu_layers: -1
   default_ctx_size: 4096
   default_host: "0.0.0.0"
+
+discovery:
+  auto_discover: true
+  priority: "scan_first"
+
+feature_flags:
+  multi_engine_enabled: true
+  sse_push_enabled: true
+  agent_command_enabled: true
+  download_resume_enabled: true
+  agent_blocked_commands:
+    - rm
+    - shutdown
+    - reboot
+    - mkfs
+
+app_controller:
+  host: "0.0.0.0"
+  port: 35000
+  admin_whitelist:
+    enabled: true
+    allowed_ips:
+      - "127.0.0.1"
+      - "::1"
+    block_write_non_whitelist: true
+  websocket:
+    enabled: true
+    path: "/ws"
+    ping_interval: 30
+    ping_timeout: 10
+  cors_origins:
+    - "http://localhost:30001"
+    - "http://localhost:30000"
+
+go_api:
+  host: "0.0.0.0"
+  port: 35001
+  manage_backend_url: "http://localhost:35000"
+  admin_whitelist:
+    enabled: true
+    allowed_ips:
+      - "127.0.0.1"
+      - "::1"
+    block_write_non_whitelist: true

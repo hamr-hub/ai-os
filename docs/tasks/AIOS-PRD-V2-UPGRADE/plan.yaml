@@ -1,0 +1,110 @@
+taskId: AIOS-PRD-V2-UPGRADE
+title: PRD全功能升级迭代 - 任务拆解
+source: tech-solution.yaml
+
+tasks:
+  - id: T1
+    title: "OpenXLab 搜索/下载源实现"
+    priority: P1
+    feature: F15/F16
+    file_changes:
+      - app-controller/core/model_hub.py
+      - app-controller/routes/model_hub.py
+    test_first: true
+    test_command: "cd app-controller && python -m pytest tests/test_model_hub.py -k oxl -v"
+    definition_of_done:
+      - "_search_oxl() 返回 OpenXLab 搜索结果 (model_name/source/path/size_b/quant)"
+      - "_download_oxl() 调用 openxlab API 下载模型到本地"
+      - "search_models(source='oxl') 正常返回结果"
+      - "search_models(source='all') 聚合 HF+MS+OXL 去重"
+
+  - id: T2
+    title: "下载进度实时百分比推送"
+    priority: P1
+    feature: F15
+    file_changes:
+      - app-controller/core/download_manager.py
+      - app-controller/core/model_hub.py
+    test_first: true
+    test_command: "cd app-controller && python -m pytest tests/test_download_manager.py -k progress -v"
+    definition_of_done:
+      - "HF下载过程中 progress_pct 从0渐进到100"
+      - "progress_pct 中间值通过 WS/SSE 推送"
+      - "snapshot_download 使用 tqdm callback 追踪进度"
+
+  - id: T3
+    title: "ModelScope resume_download + 搜索排序"
+    priority: P1
+    feature: F15/F16
+    file_changes:
+      - app-controller/core/model_hub.py
+      - app-controller/routes/model_hub.py
+    test_first: true
+    test_command: "cd app-controller && python -m pytest tests/test_model_hub.py -k resume_sort -v"
+    definition_of_done:
+      - "MS下载使用 resume_download=True"
+      - "search_models 支持 sort 参数 (size/quant/required_gb/feasible)"
+      - "路由接口 /manage/models/search 支持 sort query param"
+
+  - id: T4
+    title: "Token维度限流 + max_model_len前置拦截"
+    priority: P0
+    feature: F3
+    file_changes:
+      - go-vllm-api/internal/service/rate_limiter.go
+      - go-vllm-api/internal/middleware/ratelimit.go
+      - go-vllm-api/internal/handler/v1/chat.go
+    test_first: true
+    test_command: "cd go-vllm-api && go test ./internal/service/... ./internal/middleware/... ./internal/handler/v1/... -v -run RateLimit"
+    definition_of_done:
+      - "TokenLimiter: Redis key ratelimit:token:{ip} 60s窗口计数"
+      - "chat.go: 输入token超max_model_len返回400"
+      - "ratelimit.go: X-RateLimit-Remaining 精确反映窗口剩余额度"
+      - "GPU显存>90%时限流阈值降低50%"
+
+  - id: T5
+    title: "熔断阈值调整 + max_queue_size"
+    priority: P1
+    feature: F8
+    file_changes:
+      - go-vllm-api/internal/proxy/vllm.go
+      - go-vllm-api/internal/service/scheduler.go
+    test_first: true
+    test_command: "cd go-vllm-api && go test ./internal/proxy/... ./internal/service/... -v -run Circuit"
+    definition_of_done:
+      - "NewCircuitBreaker(10, 5*time.Second)"
+      - "scheduler.go: max_queue_size 超额立即返回429"
+      - "/health/detailed 包含 circuit_breaker state"
+
+  - id: T6
+    title: "配置 version + 乐观锁 + Go校验 + 操作日志"
+    priority: P1
+    feature: F12
+    file_changes:
+      - app-controller/core/config.py
+      - app-controller/core/config_watcher.py
+      - app-controller/routes/manage.py
+    test_first: true
+    test_command: "cd app-controller && python -m pytest tests/test_config_version.py -v"
+    definition_of_done:
+      - "config.yaml 新增 version 字段"
+      - "save_config() version自动递增"
+      - "PUT /manage/config version不匹配返回409"
+      - "Python配置变更后调用Go校验一致性"
+      - "操作日志记录: operator/timestamp/before/after"
+
+  - id: T7
+    title: "分级并发 + 30min超时 + 僵尸清理 + goroutine监控"
+    priority: P1
+    feature: F4
+    file_changes:
+      - go-vllm-api/internal/service/scheduler.go
+      - go-vllm-api/internal/config/watcher.go
+    test_first: true
+    test_command: "cd go-vllm-api && go test ./internal/service/... -v -run Concurrent"
+    definition_of_done:
+      - "config.yaml 新增 max_stream_concurrent 字段"
+      - "scheduler: streamSlots 独立 semaphore"
+      - "流式请求 context.WithTimeout 30min"
+      - "zombieChecker 清理 idle>5min 流式连接"
+      - "goroutine count 定期检查并告警"

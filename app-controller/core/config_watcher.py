@@ -4,15 +4,20 @@ import asyncio
 import logging
 import tempfile
 import copy
-from typing import Dict, Callable, List, Tuple
+import json
+import time
+from typing import Dict, Callable, List, Tuple, Optional
 from core.config import load_config as load_app_config, validate_config
 
 logger = logging.getLogger("ai_controller.config_watcher")
+
+CONFIG_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", "config_ops.log")
 
 class ConfigWatcher:
     def __init__(self, config_path: str):
         self.config_path = config_path
         self._config = {}
+        self._version = 0
         self._last_modified = None
         self._callbacks: List[Callable[[Dict], None]] = []
         self._watch_task = None
@@ -39,6 +44,8 @@ class ConfigWatcher:
                 return False, {}
             normalized = config.model_dump(exclude_none=True)
             self._last_error = None
+            if normalized.get("version", 0) > self._version:
+                self._version = normalized.get("version", 0)
             return True, normalized
         except Exception as exc:
             self._last_error = str(exc)
@@ -105,10 +112,59 @@ class ConfigWatcher:
             self._watch_task = None
             return None
     
+    def get_version(self) -> int:
+        return self._version
+
+    def check_version(self, expected_version: Optional[int]) -> Tuple[bool, int]:
+        if expected_version is None:
+            return True, self._version
+        if expected_version != self._version:
+            return False, self._version
+        return True, self._version
+
+    def log_operation(self, operator: str, action: str, before: Dict, after: Dict):
+        log_dir = os.path.dirname(CONFIG_LOG_FILE)
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+        entry = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "operator": operator,
+            "action": action,
+            "version_before": self._version - 1 if action == "update" else self._version,
+            "version_after": self._version,
+            "before_keys": list(before.keys()) if isinstance(before, dict) else [],
+            "after_keys": list(after.keys()) if isinstance(after, dict) else [],
+        }
+        try:
+            with open(CONFIG_LOG_FILE, "a") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception:
+            logger.exception("Failed to write config operation log")
+
     def save_config(self, config: Dict) -> bool:
         try:
             if not isinstance(config, dict):
                 raise ValueError("Config payload must be a dict")
+
+            raw_config = {}
+            if os.path.exists(self.config_path):
+                with open(self.config_path, "r") as f:
+                    raw_config = yaml.safe_load(f) or {}
+
+            normalized = load_app_config(self.config_path)
+            errors = validate_config(normalized)
+            if errors:
+                self._last_error = "; ".join(errors)
+                logger.error("Refusing to save invalid config for %s: %s", self.config_path, self._last_error)
+                return False
+
+            merged = copy.deepcopy(raw_config)
+            normalized_dict = normalized.model_dump(exclude_none=True)
+            for key, value in normalized_dict.items():
+                merged[key] = value
+            for key in config:
+                if key not in normalized_dict:
+                    merged[key] = config[key]
 
             temp_path = None
             with tempfile.NamedTemporaryFile(
@@ -117,21 +173,15 @@ class ConfigWatcher:
                 dir=os.path.dirname(self.config_path) or None,
                 delete=False,
             ) as f:
-                yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True)
+                yaml.safe_dump(merged, f, default_flow_style=False, allow_unicode=True)
                 temp_path = f.name
 
             try:
-                normalized = load_app_config(temp_path)
-                errors = validate_config(normalized)
-                if errors:
-                    self._last_error = "; ".join(errors)
-                    logger.error("Refusing to save invalid config for %s: %s", self.config_path, self._last_error)
-                    return False
-
                 os.replace(temp_path, self.config_path)
-                self._config = normalized.model_dump(exclude_none=True)
+                self._config = normalized_dict
                 self._last_modified = os.path.getmtime(self.config_path)
                 self._last_error = None
+                self._version += 1
                 return True
             finally:
                 if temp_path and os.path.exists(temp_path):

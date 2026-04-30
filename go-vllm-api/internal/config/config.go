@@ -12,11 +12,41 @@ import (
 )
 
 type AppConfig struct {
-	Models     map[string]ModelConfig `yaml:"models"`
-	Settings   SettingsConfig         `yaml:"settings"`
-	VLLM       VLLMConfig             `yaml:"vllm"`
-	LlamaCpp   LlamaCppConfig         `yaml:"llama_cpp"`
-	Discovery  DiscoveryConfig        `yaml:"discovery"`
+	Models      map[string]ModelConfig `yaml:"models"`
+	Settings    SettingsConfig         `yaml:"settings"`
+	VLLM        VLLMConfig             `yaml:"vllm"`
+	LlamaCpp    LlamaCppConfig         `yaml:"llama_cpp"`
+	Discovery   DiscoveryConfig        `yaml:"discovery"`
+	GoApi       GoApiConfig            `yaml:"go_api"`
+	AppController AppControllerConfig  `yaml:"app_controller"`
+}
+
+type GoApiConfig struct {
+	Host              string           `yaml:"host"`
+	Port              int              `yaml:"port"`
+	ManageBackendURL  string           `yaml:"manage_backend_url"`
+	AdminWhitelist    AdminWhitelistConfig `yaml:"admin_whitelist"`
+}
+
+type AppControllerConfig struct {
+	Host           string               `yaml:"host"`
+	Port           int                  `yaml:"port"`
+	AdminWhitelist AdminWhitelistConfig `yaml:"admin_whitelist"`
+	WebSocket      WebSocketConfig      `yaml:"websocket"`
+	CorsOrigins    []string             `yaml:"cors_origins"`
+}
+
+type AdminWhitelistConfig struct {
+	Enabled              bool     `yaml:"enabled"`
+	AllowedIPs           []string `yaml:"allowed_ips"`
+	BlockWriteNonWhitelist bool   `yaml:"block_write_non_whitelist"`
+}
+
+type WebSocketConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	Path         string `yaml:"path"`
+	PingInterval int    `yaml:"ping_interval"`
+	PingTimeout  int    `yaml:"ping_timeout"`
 }
 
 type DiscoveryConfig struct {
@@ -38,6 +68,7 @@ type ModelConfig struct {
 	SupportsImageGeneration bool  `yaml:"supports_image_generation"`
 	Description            string `yaml:"description"`
 	ConcurrencyLimit       int    `yaml:"concurrency_limit"`
+	MaxModelLen            int    `yaml:"max_model_len"`
 
 	NGPULayers int      `yaml:"n_gpu_layers"`
 	CtxSize    int      `yaml:"ctx_size"`
@@ -249,9 +280,18 @@ func Save(path string, c *AppConfig) error {
 }
 
 func DefaultConfigPath() string {
+	envPath := os.Getenv("CONFIG_PATH")
+	if envPath != "" {
+		return envPath
+	}
 	exe, err := os.Executable()
 	if err != nil {
-		return "configs/config.yaml"
+		return "../config.yaml"
+	}
+	parentDir := filepath.Dir(filepath.Dir(exe))
+	rootConfig := filepath.Join(parentDir, "config.yaml")
+	if _, statErr := os.Stat(rootConfig); statErr == nil {
+		return rootConfig
 	}
 	return filepath.Join(filepath.Dir(exe), "configs", "config.yaml")
 }

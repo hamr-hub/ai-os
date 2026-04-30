@@ -155,10 +155,10 @@ class ModelEngineScheduler:
             "timestamp": time.time(),
         }
 
-    def search(self, keyword: str, source: str = "all", limit: int = 10) -> List:
+    def search(self, keyword: str, source: str = "all", limit: int = 10, sort: Optional[str] = None) -> List:
         if not self._model_hub:
             return []
-        results = self._model_hub.search_models(keyword, source, limit)
+        results = self._model_hub.search_models(keyword, source, limit, sort=sort)
         for r in results:
             if hasattr(r, 'size_b') and r.size_b and self._gpu_mgr:
                 feasibility = self._gpu_mgr.check_model_feasibility(

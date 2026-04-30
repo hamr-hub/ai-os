@@ -31,7 +31,7 @@ _switching_in_progress = False
 def _load_vllm_config() -> Dict[str, Any]:
     try:
         import yaml
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.yaml')
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 config = yaml.safe_load(f)
@@ -245,7 +245,7 @@ def get_available_models() -> List[Dict[str, Any]]:
 def _load_models_config() -> Dict[str, Any]:
     try:
         import yaml
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.yaml')
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 config = yaml.safe_load(f)
@@ -274,7 +274,7 @@ def _parse_config_memory(value) -> int:
 def _load_model_groups_config() -> Dict[str, str]:
     try:
         import yaml
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.yaml')
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 config = yaml.safe_load(f)
@@ -346,7 +346,7 @@ def get_aggregated_models() -> List[Dict[str, Any]]:
 
     try:
         import yaml
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.yaml')
         models_config = {}
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
@@ -486,7 +486,7 @@ def save_model_vllm_params(model_name: str, vllm_params: Dict[str, Any]) -> bool
     try:
         import yaml
         
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.yaml')
         if not os.path.exists(config_path):
             return False
         
@@ -519,7 +519,7 @@ def get_model_vllm_params(model_name: str) -> Dict[str, Any]:
     try:
         import yaml
         
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.yaml')
         if not os.path.exists(config_path):
             return {}
         
@@ -549,7 +549,7 @@ def _find_model_name_from_path(model_path: str) -> Optional[str]:
     """
     try:
         import yaml
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.yaml')
         
         if not os.path.exists(config_path):
             return None

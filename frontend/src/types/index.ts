@@ -582,6 +582,35 @@ export interface EngineConfig {
   llama_cpp: { command: string; default_params: Record<string, unknown> }
 }
 
+export interface EngineParamDef {
+  key: string
+  type: 'int' | 'float' | 'str' | 'bool'
+  default: number | string | boolean | null
+  description: string
+  cli_arg: string | null
+  min?: number
+  max?: number
+  choices?: string[]
+  note?: string
+}
+
+export interface EngineParamGroup {
+  name: string
+  params: EngineParamDef[]
+}
+
+export interface EngineParamSchema {
+  [engineType: string]: {
+    groups: EngineParamGroup[]
+  }
+}
+
+export interface ModelEngineParams {
+  model_name: string
+  engine_type: EngineType
+  params: Record<string, unknown>
+}
+
 export interface ModelSearchResponse {
   keyword: string
   source: string
@@ -651,6 +680,8 @@ export interface DownloadTask {
   total_bytes: number
   local_path: string | null
   error_message: string | null
+  allow_patterns: string[] | null
+  ignore_patterns: string[] | null
 }
 
 export interface PoolEntry {

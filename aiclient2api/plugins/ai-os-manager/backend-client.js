@@ -1,7 +1,7 @@
 import logger from '../../utils/logger.js';
 
-const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://192.168.7.103:35001';
-const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://192.168.7.103:35000';
+const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://localhost:35001';
+const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://localhost:35000';
 
 class BackendClient {
     constructor() {

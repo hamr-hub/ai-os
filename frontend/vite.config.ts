@@ -11,10 +11,10 @@ const resolvePort = (value: string | undefined, fallback: number) => {
 }
 
 const unifiedBackend = normalizeTarget(
-  process.env.VITE_BACKEND || 'http://localhost:80',
+  process.env.VITE_BACKEND || 'http://localhost:35000',
 )
 const gatewayBackend = normalizeTarget(
-  process.env.VITE_GATEWAY || 'http://localhost:3000',
+  process.env.VITE_GATEWAY || 'http://localhost:35001',
 )
 const devServerPort = resolvePort(process.env.VITE_PORT || process.env.PORT, 30001)
 
@@ -58,11 +58,11 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/api/health/detailed': {
-        target: gatewayBackend,
+        target: unifiedBackend,
         changeOrigin: true,
       },
       '/api/health': {
-        target: gatewayBackend,
+        target: unifiedBackend,
         changeOrigin: true,
       },
       '/api': {

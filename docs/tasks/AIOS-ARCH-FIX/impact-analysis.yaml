@@ -1,0 +1,68 @@
+impact:
+  mode: tech-solution
+  platform: multi-module
+  analyzed_at: "2026-04-30"
+  direct_files:
+    - path: "config.yaml"
+      change: rewrite
+      risk: high
+    - path: "frontend/nginx.conf"
+      change: modify
+      risk: medium
+    - path: "go-vllm-api/internal/middleware/admin_whitelist.go"
+      change: add
+      risk: low
+    - path: "app-controller/middleware/admin_whitelist.py"
+      change: create
+      risk: medium
+    - path: "app-controller/main.py"
+      change: modify
+      risk: medium
+    - path: "docker-compose.yml"
+      change: modify
+      risk: medium
+    - path: "frontend/vite.config.ts"
+      change: modify
+      risk: low
+    - path: "frontend/.env.development"
+      change: modify
+      risk: low
+    - path: "go-vllm-api/cmd/server/main.go"
+      change: modify
+      risk: low
+    - path: "aiclient2api/plugins/ai-os-manager/backend-client.js"
+      change: modify
+      risk: low
+  upstream_files:
+    - path: "app-controller/core/config.py"
+      reason: "9 files import config — config_watcher, llm_service_manager, manage.py, redis_client, etc."
+    - path: "go-vllm-api/internal/config/config.go"
+      reason: "8 files use config — main.go, scheduler.go, manage.go, vllm_manager.go, etc."
+    - path: "go-vllm-api/internal/handler/manage/manage.go"
+      reason: "PYTHON_BACKEND_URL env var for proxy"
+    - path: "go-vllm-api/internal/handler/ws/ws.go"
+      reason: "PYTHON_BACKEND_URL env var for WS broadcast"
+  downstream_files:
+    - path: "app-controller/config.yaml"
+      reason: "to be deleted → replaced by root config"
+    - path: "go-vllm-api/configs/config.yaml"
+      reason: "to be deleted → replaced by root config"
+  test_gaps:
+    - file: "app-controller/middleware/admin_whitelist.py"
+      test_path_expected: "app-controller/tests/test_admin_whitelist.py"
+      status: missing
+      priority: P0
+    - file: "app-controller/core/config.py"
+      test_path_expected: "app-controller/tests/test_config_loading.py"
+      status: missing
+      priority: P1
+    - file: "go-vllm-api/internal/middleware/admin_whitelist.go"
+      test_path_expected: "go-vllm-api/internal/middleware/admin_whitelist_test.go"
+      status: missing
+      priority: P1
+    - file: "go-vllm-api/internal/config/config.go"
+      test_path_expected: "go-vllm-api/internal/config/config_test.go"
+      status: missing
+      priority: P2
+  risk: medium
+  risk_reason: "配置统一影响9个Python文件+8个Go文件, Docker网络变更影响全链路, 鉴权新增需全面测试"

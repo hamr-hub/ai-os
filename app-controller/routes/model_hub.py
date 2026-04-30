@@ -22,6 +22,11 @@ class DownloadRequest(BaseModel):
     source: str = Field(default="hf", description="Source: hf, ms, local")
     save_dir: Optional[str] = None
     auto_start: bool = Field(default=True, description="Auto start download task")
+    hf_token: Optional[str] = Field(default=None, description="HuggingFace API token (overrides config/env)")
+    allow_patterns: Optional[List[str]] = Field(default=None, description="File patterns to include in download")
+    ignore_patterns: Optional[List[str]] = Field(default=None, description="File patterns to exclude from download")
+    max_workers: Optional[int] = Field(default=None, description="Max parallel download workers")
+    force_download: bool = Field(default=False, description="Force re-download even if model exists locally")
 
 
 class DeployRequest(BaseModel):
@@ -54,8 +59,8 @@ async def get_model_info(model_name: str):
 
 
 @hub_router.get("/search")
-async def search_models(keyword: str, source: str = "all", limit: int = 10):
-    results = _model_engine_scheduler.search(keyword, source, limit)
+async def search_models(keyword: str, source: str = "all", limit: int = 10, sort: Optional[str] = None):
+    results = _model_engine_scheduler.search(keyword, source, limit, sort=sort)
     serialized = []
     for r in results:
         serialized.append({
@@ -93,6 +98,11 @@ async def download_model(request: DownloadRequest):
     result = _download_task_manager.create_task(
         request.model_name, request.source,
         save_dir=request.save_dir, auto_start=request.auto_start,
+        hf_token=request.hf_token,
+        allow_patterns=request.allow_patterns,
+        ignore_patterns=request.ignore_patterns,
+        max_workers=request.max_workers,
+        force_download=request.force_download,
     )
     return result
 

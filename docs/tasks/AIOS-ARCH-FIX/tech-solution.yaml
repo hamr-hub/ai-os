@@ -1,0 +1,157 @@
+task_id: AIOS-ARCH-FIX
+source: 系统架构完善
+developer: heyongxian
+created_at: 2026-04-30
+
+architecture_summary:
+  c_path: "aiclient2api(Node:3000) → provider → go-vllm-api(:35001) → 推理引擎(:8000)"
+  b_path: "Frontend(:30000)/插件 → Python B端(:35000) → 引擎启停/模型管理"
+  infrastructure: "Redis(:6379) — 限流Key + 缓存数据"
+
+change_strategy: incremental_fix
+risk_level: MEDIUM
+
+file_changes:
+  - path: "config.yaml"
+    action: rewrite
+    module: root
+    description: "统一配置: 合并Python(model_groups/vllm_params/feature_flags) + Go(discovery/llama_cpp) + root(所有模型) 为一份权威配置"
+    risk: high
+    dependencies: ["app-controller/config.yaml", "go-vllm-api/configs/config.yaml"]
+
+  - path: "app-controller/config.yaml"
+    action: delete
+    module: app-controller
+    description: "删除冗余副本, Docker mount root config.yaml 到 /app/config.yaml, 本地开发也引用 root config"
+    risk: medium
+
+  - path: "go-vllm-api/configs/config.yaml"
+    action: delete
+    module: go-vllm-api
+    description: "删除冗余副本, Docker mount root config.yaml 到 /app/configs/config.yaml, 本地开发也引用 root config"
+    risk: medium
+
+  - path: "docker-compose.yml"
+    action: modify
+    module: docker
+    description: "1) go-vllm-api volume 改为 ./config.yaml:/app/configs/config.yaml; 2) aiclient 加 GO_BACKEND_URL/PYTHON_BACKEND_URL; 3) frontend 端口改为 30000:80; 4) go-vllm-api 加 PYTHON_BACKEND_URL=http://ai-controller:35000"
+    risk: medium
+
+  - path: "frontend/Dockerfile"
+    action: modify
+    module: frontend
+    description: "保持 EXPOSE 80, docker-compose 端口改为 30000:80"
+    risk: low
+
+  - path: "frontend/nginx.conf"
+    action: modify
+    module: frontend
+    description: "upstreams 改为 Docker 服务名: ai-controller:35000, go-vllm-api:35001, aiclient:3000; 添加 /ws/ WebSocket 路由(86400s timeout); 添加 /v1/test/ → Python 路由; 监听端口改为 80"
+    risk: medium
+
+  - path: "frontend/vite.config.ts"
+    action: modify
+    module: frontend
+    description: "VITE_BACKEND 默认改为 http://localhost:35000; VITE_GATEWAY 默认改为 http://localhost:35001; /api/health 路由代理到 unifiedBackend(Python)"
+    risk: low
+
+  - path: "frontend/.env.development"
+    action: modify
+    module: frontend
+    description: "添加 VITE_BACKEND=http://localhost:35000; VITE_GATEWAY=http://localhost:35001"
+    risk: low
+
+  - path: "go-vllm-api/cmd/server/main.go"
+    action: modify
+    module: go-vllm-api
+    description: "PYTHON_BACKEND_URL 默认改为 http://localhost:35000(本地); docker-compose 传 http://ai-controller:35000(Docker)"
+    risk: low
+
+  - path: "aiclient2api/plugins/ai-os-manager/backend-client.js"
+    action: modify
+    module: aiclient2api
+    description: "GO_BACKEND_URL/PYTHON_BACKEND_URL 默认改为 localhost:35001/localhost:35000; docker-compose 传 Docker 服务名"
+    risk: low
+
+  - path: "frontend/nginx_30000.conf"
+    action: modify
+    module: frontend
+    description: "upstreams 改为环境变量引用或 localhost(本地部署), 保留 systemd 用途"
+    risk: low
+
+  - path: "go-vllm-api/internal/middleware/admin_whitelist.go"
+    action: add
+    module: go-vllm-api
+    description: "git add 此文件(当前 untracked)"
+    risk: low
+
+  - path: "app-controller/middleware/admin_whitelist.py"
+    action: create
+    module: app-controller
+    description: "Python 侧 IP 白名单鉴权中间件, 与 Go admin_whitelist.go 策略对齐(内网 CIDR + GET/HEAD 只读放行 + 写操作内网限制)"
+    risk: medium
+
+  - path: "app-controller/main.py"
+    action: modify
+    module: app-controller
+    description: "添加 AdminWhitelistMiddleware 到中间件栈, 保护 /manage/* 写操作"
+    risk: medium
+
+  - path: "app-controller/core/config.py"
+    action: modify
+    module: app-controller
+    description: "支持从 root config.yaml 加载(含 model_groups/vllm_params/feature_flags/engines/llama_cpp)"
+    risk: low
+
+  - path: "go-vllm-api/internal/config/config.go"
+    action: modify
+    module: go-vllm-api
+    description: "支持从 root config.yaml 加载(含 discovery/vllm_params/model_groups)"
+    risk: low
+
+state_machine:
+  name: config_drift_resolution
+  initial_state: drifted
+  states:
+    drifted:
+      transitions:
+        - to: unified
+          action: merge_all_configs_into_root
+    unified:
+      transitions:
+        - to: verified
+          action: cross_module_integration_test
+  terminal_state: verified
+
+tracking_points:
+  - event: config_merge
+    fields: ["model_count", "field_count", "drift_count"]
+  - event: docker_fix
+    fields: ["port_mapping", "service_name_count", "env_var_count"]
+  - event: auth_add
+    fields: ["middleware_added", "routes_protected"]
+
+rollback_plan:
+  strategy: git_revert_per_module
+  steps:
+    - "git stash 所有变更"
+    - "恢复各模块原 config.yaml 到 git 历史版本"
+    - "恢复 docker-compose.yml"
+    - "恢复 nginx.conf"
+
+test_points:
+  - path: "app-controller/tests/test_config_loading.py"
+    description: "验证 Python 从 root config.yaml 正确加载所有字段(model_groups/vllm_params/feature_flags/engines/llama_cpp)"
+    type: unit
+
+  - path: "go-vllm-api/cmd/server/main_test.go"
+    description: "验证 Go 从 root config.yaml 正确加载(discovery/vllm_params/model_groups)"
+    type: unit
+
+  - path: "app-controller/tests/test_admin_whitelist.py"
+    description: "验证 IP 白名单中间件: 内网IP放行写操作, 外网IP只允许GET/HEAD"
+    type: unit
+
+  - path: "tests/test_docker_config.py"
+    description: "验证 docker-compose 端口映射/环境变量/Docker 服务名"
+    type: integration

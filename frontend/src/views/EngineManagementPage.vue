@@ -13,8 +13,10 @@ import {
   Server,
   Settings,
   ArrowRight,
+  SlidersHorizontal,
 } from 'lucide-vue-next'
 import type { EngineType } from '@/types'
+import EngineParamEditor from '@/components/EngineParamEditor.vue'
 
 const { engineStatus, engineConfig, loading, switching, error, fetchStatus, fetchConfig, doSwitchEngine, doUpdateConfig } = useEngineManagement()
 const { isSwitching, currentSession, triggerSwitch, triggerCancel } = useModelSwitch()
@@ -23,7 +25,7 @@ const targetModel = ref('')
 const targetEngine: Ref<EngineType> = ref('vllm')
 const targetPort = ref(8000)
 const showSwitchConfirm = ref(false)
-const activeTab = ref<'status' | 'switch' | 'config'>('status')
+const activeTab = ref<'status' | 'switch' | 'config' | 'params'>('status')
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -142,6 +144,9 @@ const saveConfig = async () => {
       </button>
       <button :class="['tab-btn', activeTab === 'config' ? 'active' : '']" @click="activeTab = 'config'">
         <Settings class="w-4 h-4" /> 配置编辑
+      </button>
+      <button :class="['tab-btn', activeTab === 'params' ? 'active' : '']" @click="activeTab = 'params'">
+        <SlidersHorizontal class="w-4 h-4" /> 参数定制
       </button>
     </div>
 
@@ -267,6 +272,33 @@ const saveConfig = async () => {
             <button class="btn btn-ghost" @click="editingConfig = false">取消</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div v-if="activeTab === 'params'" class="params-section">
+      <div v-if="!targetModel" class="empty-state">
+        <SlidersHorizontal class="w-12 h-12 text-muted" />
+        <p>请先在"热切换"面板选择目标模型，或输入模型名称</p>
+        <div class="param-model-input">
+          <label class="form-label">模型名称</label>
+          <input v-model="targetModel" class="form-input" placeholder="输入模型名称" />
+        </div>
+      </div>
+      <div v-else>
+        <div class="param-engine-select">
+          <label class="form-label">目标引擎</label>
+          <select v-model="targetEngine" class="form-input">
+            <option value="vllm">vLLM</option>
+            <option value="sglang">SGLang</option>
+            <option value="llama_cpp">llama.cpp</option>
+          </select>
+        </div>
+        <EngineParamEditor
+          :model-name="targetModel"
+          :engine-type="targetEngine"
+          @saved="() => { fetchStatus(); fetchConfig() }"
+          @error="(msg) => { error = msg }"
+        />
       </div>
     </div>
 
@@ -707,6 +739,24 @@ const saveConfig = async () => {
 
 .btn-danger:hover {
   background: rgba(239, 68, 68, 0.2);
+}
+
+.params-section {
+  margin-top: 16px;
+}
+
+.param-model-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.param-engine-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .tech-border {

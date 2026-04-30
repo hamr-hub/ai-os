@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -219,7 +220,8 @@ func (m *MetricsCollector) GetMetrics() map[string]interface{} {
 			}
 			return float64(m.totalLatency.Load()) / float64(req)
 		}(),
-		"token_stats": m.GetTokenStats(),
+		"token_stats":       m.GetTokenStats(),
+		"active_goroutines": runtime.NumGoroutine(),
 	}
 }
 

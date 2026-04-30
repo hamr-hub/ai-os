@@ -31,11 +31,10 @@ RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /bin/go-vllm-api /usr/local/bin/go-vllm-api
-COPY configs/config.yaml /app/configs/config.yaml
 
 WORKDIR /app
 
 EXPOSE 35001
 
 ENTRYPOINT ["go-vllm-api"]
-CMD ["--config", "configs/config.yaml", "--port", "35001"]
+CMD ["--config", "/app/config.yaml", "--port", "35001"]
