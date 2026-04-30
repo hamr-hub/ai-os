@@ -10,6 +10,7 @@
         ratelimit: 'nav-aios-ratelimit',
     };
     var STYLE_ID = 'aios-manager-styles';
+    var CONTAINER_ID = 'aios-container';
 
     var sectionHTML = '\
 <div id="aios-gpu" class="section" data-section="aios-gpu" style="display: none;">\
@@ -54,18 +55,26 @@
     </div>\
 </div>';
 
+    var _logger = function(message) {
+        console.log('[AI-OS Manager]', message);
+    };
+
     function injectStyles() {
         if (document.getElementById(STYLE_ID)) return true;
         var link = document.createElement('link');
         link.id = STYLE_ID; link.rel = 'stylesheet';
         link.href = '/plugins/ai-os-manager/styles.css';
         document.head.appendChild(link);
+        _logger('Styles injected');
         return true;
     }
 
     function injectMenuItems() {
         var nav = document.querySelector('.sidebar-nav');
-        if (!nav) return false;
+        if (!nav) {
+            _logger('Sidebar not found');
+            return false;
+        }
 
         var items = [
             { id: MENU_IDS.gpu, section: 'aios-gpu', icon: 'fa-microchip', label: 'GPU监控' },
@@ -85,6 +94,7 @@
             var anchor = document.getElementById('nav-plugins');
             if (anchor) anchor.before(pluginDivider);
             else nav.appendChild(pluginDivider);
+            _logger('Divider created');
         }
 
         items.forEach(function(item) {
@@ -97,14 +107,22 @@
             navItem.innerHTML = '<i class="fas ' + item.icon + '" aria-hidden="true"></i> <span>' + item.label + '</span>';
             pluginDivider.after(navItem);
         });
+        _logger('Menu items injected');
         return true;
     }
 
     function injectSections() {
         var cc = document.getElementById('content-container');
-        if (!cc) return false;
-        if (document.getElementById('aios-gpu')) return true;
+        if (!cc) {
+            _logger('Content container not found');
+            return false;
+        }
+        if (document.getElementById('aios-gpu')) {
+            _logger('Sections already present');
+            return true;
+        }
         cc.insertAdjacentHTML('beforeend', sectionHTML);
+        _logger('Sections injected');
         return true;
     }
 
@@ -124,6 +142,7 @@
                 loadData(sectionId);
             });
         });
+        _logger('Navigation initialized');
     }
 
     function getAdminToken() {
@@ -183,6 +202,7 @@
 
     var _activeSection = null;
     var _refreshTimer = null;
+    var _observer = null;
     var REFRESH_INTERVAL = 5000;
 
     function init() {
@@ -190,6 +210,7 @@
         if (injectMenuItems() && injectSections()) {
             initNavigation();
             startAutoRefresh();
+            _logger('Plugin fully initialized');
         }
     }
 
@@ -204,11 +225,65 @@
         if (_refreshTimer) { clearInterval(_refreshTimer); _refreshTimer = null; }
     }
 
-    function tryInit() {
-        if (document.querySelector('.sidebar-nav') && document.getElementById('content-container')) init();
-        else setTimeout(tryInit, 500);
+    function checkDOMAndInit() {
+        var sidebarExists = !!document.querySelector('.sidebar-nav');
+        var contentExists = !!document.getElementById('content-container');
+        if (sidebarExists && contentExists) {
+            _logger('Required elements found, initializing');
+            init();
+            return true;
+        }
+        _logger('DOM not ready: sidebar=' + sidebarExists + ', content=' + contentExists);
+        return false;
     }
 
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tryInit);
-    else tryInit();
+    function setupObserver() {
+        if (!('MutationObserver' in window)) {
+            _logger('MutationObserver not supported');
+            return;
+        }
+        _observer = new MutationObserver(function(mutations) {
+            var injected = document.getElementById('aios-gpu');
+            if (!injected) {
+                checkDOMAndInit();
+            }
+        });
+        _observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        _logger('MutationObserver set up');
+    }
+
+    var _pollInterval = null;
+    function startPolling() {
+        var attempts = 0;
+        _pollInterval = setInterval(function() {
+            attempts++;
+            if (checkDOMAndInit()) {
+                clearInterval(_pollInterval);
+                _pollInterval = null;
+                return;
+            }
+            if (attempts > 60) {
+                clearInterval(_pollInterval);
+                _pollInterval = null;
+                _logger('Polling stopped after ' + attempts + ' attempts');
+            }
+        }, 500);
+    }
+
+    function tryInit() {
+        _logger('Initializing...');
+        if (!checkDOMAndInit()) {
+            setupObserver();
+            startPolling();
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', tryInit);
+    } else {
+        tryInit();
+    }
 })();

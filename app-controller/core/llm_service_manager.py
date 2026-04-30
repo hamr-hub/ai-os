@@ -58,25 +58,45 @@ class LLMServiceManager:
                 return self._config.get('models', {}).get(model_name)
         return None
 
+    def _get_vllm_config(self) -> Dict:
+        if not self._config:
+            return {}
+        if hasattr(self._config, 'vllm'):
+            return self._config.vllm or {}
+        elif isinstance(self._config, dict):
+            return self._config.get('vllm', {})
+        return {}
+
+    def _get_settings(self) -> Dict:
+        if not self._config:
+            return {}
+        if hasattr(self._config, 'settings'):
+            return self._config.settings or {}
+        elif isinstance(self._config, dict):
+            return self._config.get('settings', {})
+        return {}
+
     def _get_model_base_path(self) -> str:
-        if self._config and self._config.vllm:
-            return self._config.vllm.get("model_base_path", "/mnt/pve_models")
-        return "/mnt/pve_models"
+        vllm_config = self._get_vllm_config()
+        return vllm_config.get("model_base_path", "/mnt/pve_models")
 
     def _get_model_path(self, model_name: str) -> str:
         if model_name in self._model_paths:
             return self._model_paths[model_name]
         model_cfg = self._get_model_config(model_name)
-        if model_cfg and model_cfg.model_path:
-            return model_cfg.model_path
+        if model_cfg:
+            if hasattr(model_cfg, 'model_path'):
+                return model_cfg.model_path
+            elif isinstance(model_cfg, dict):
+                return model_cfg.get("model_path", os.path.join(self._get_model_base_path(), model_name))
         return os.path.join(self._get_model_base_path(), model_name)
 
     def _get_vllm_env(self, model_name: str) -> Dict[str, str]:
         env = {**os.environ, **self._VLLM_ENV_VARS}
+        vllm_config = self._get_vllm_config()
         env["HF_ENDPOINT"] = os.environ.get(
             "HF_ENDPOINT",
-            self._config.vllm.get("hf_endpoint", "https://hf-mirror.com")
-            if self._config and self._config.vllm else "https://hf-mirror.com",
+            vllm_config.get("hf_endpoint", "https://hf-mirror.com"),
         )
         model_cfg = self._get_model_config(model_name)
         vllm_params = {}
@@ -87,10 +107,7 @@ class LLMServiceManager:
         attention_backend = vllm_params.get("attention_backend")
         if attention_backend:
             env["VLLM_ATTENTION_BACKEND"] = attention_backend
-        venv_path = (
-            self._config.vllm.get("venv_path")
-            if self._config and self._config.vllm else None
-        )
+        venv_path = vllm_config.get("venv_path")
         if venv_path and os.path.isfile(os.path.join(venv_path, "bin", "activate")):
             env["VLLM_ENV_PATH"] = venv_path
             env["PATH"] = os.path.join(venv_path, "bin") + ":" + env.get("PATH", "")
@@ -359,8 +376,9 @@ class LLMServiceManager:
         return cmd
 
     def _get_gpu_memory_utilization(self) -> float:
-        if self._config:
-            return self._config.settings.gpu_memory_utilization
+        settings = self._get_settings()
+        if settings:
+            return settings.get("gpu_memory_utilization", 0.9)
         return 0.9
 
     def start_service(

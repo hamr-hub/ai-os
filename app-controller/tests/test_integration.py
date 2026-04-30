@@ -55,16 +55,18 @@ class TestIntegration:
 
     def test_chat_completions_too_many_requests(self, client):
         with patch('core.scheduler.Scheduler.acquire_request') as mock_acquire:
-            mock_acquire.return_value = False
-            
-            response = client.post(
-                "/v1/chat/completions",
-                json={
-                    "model": "gemma-4-31b",
-                    "messages": [{"role": "user", "content": "Hello"}]
-                }
-            )
-            assert response.status_code in (429, 500)
+            with patch('core.scheduler.Scheduler.wait_for_slot') as mock_wait:
+                mock_acquire.return_value = False
+                mock_wait.return_value = False
+                
+                response = client.post(
+                    "/v1/chat/completions",
+                    json={
+                        "model": "gemma-4-31b",
+                        "messages": [{"role": "user", "content": "Hello"}]
+                    }
+                )
+                assert response.status_code in (429, 500)
 
     def test_get_gpu_status(self, client):
         response = client.get("/manage/gpu")
