@@ -45,7 +45,7 @@ describe('useLLMService', () => {
   })
 
   it('getLogs只取result.logs', async () => {
-    const result = { logs: ['log1', 'log2'] }
+    const result = { logs: ['log1', 'log2'], count: 2 }
     getLLMServiceLogs.mockResolvedValue(result)
 
     const { getLogs, logs, loading } = useLLMService()
@@ -67,7 +67,7 @@ describe('useLLMService', () => {
   })
 
   it('start返回结果', async () => {
-    const result = { started: true }
+    const result = { status: 'ok', model: 'llama' }
     startModel.mockResolvedValue(result)
 
     const { start } = useLLMService()
@@ -78,7 +78,7 @@ describe('useLLMService', () => {
   })
 
   it('stop返回结果', async () => {
-    const result = { stopped: true }
+    const result = { status: 'ok', model: 'llama' }
     stopModel.mockResolvedValue(result)
 
     const { stop } = useLLMService()
@@ -89,7 +89,7 @@ describe('useLLMService', () => {
   })
 
   it('loadFromPoolService返回结果', async () => {
-    const result = { loaded: true }
+    const result = { success: true, model: 'qwen2', engine: 'vllm', port: 8000 }
     loadFromPool.mockResolvedValue(result)
 
     const { loadFromPoolService } = useLLMService()

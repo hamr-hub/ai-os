@@ -22,7 +22,7 @@ describe('useRateLimit', () => {
 
   it('fetchQueueStatus填充queueStatus', async () => {
     const queue = {
-      qwen2: { active_requests: 5, queued_requests: 2, estimated_wait_seconds: 3 },
+      qwen2: { active_requests: 5, concurrency_limit: 10, can_accept: true },
     }
     getQueueStatus.mockResolvedValue(queue)
 
