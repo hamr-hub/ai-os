@@ -12,8 +12,9 @@ class TestE2EModelTesting:
     @pytest.fixture
     def mock_app(self):
         """Create a mock FastAPI app with testing endpoints"""
-        from main import app
-        return app
+        with patch('middleware.admin_whitelist.AdminWhitelistMiddleware._is_allowed_ip', return_value=True):  # Bypass whitelist in tests
+            from main import app
+            return app
 
     @pytest.mark.asyncio
     async def test_switch_and_test_endpoint(self, mock_app):

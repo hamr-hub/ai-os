@@ -25,9 +25,10 @@ def client():
         with patch('core.sys_ctl.SystemController.is_service_running') as mock_is_running:
             mock_is_running.return_value = True
             
-            from main import app
-            with TestClient(app) as client:
-                yield client
+            with patch('middleware.admin_whitelist.AdminWhitelistMiddleware._is_allowed_ip', return_value=True):  # Bypass whitelist in tests
+                from main import app
+                with TestClient(app) as client:
+                    yield client
 
 def create_test_image():
     img = Image.new('RGB', (100, 100), color='red')
