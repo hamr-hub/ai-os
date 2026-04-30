@@ -90,9 +90,14 @@ class MetricsCollector:
                 self.token_usage = defaultdict(int, data)
 
             token_history_key = self._get_key("token_history")
-            data = redis_client.get_json(token_history_key)
-            if data:
-                self.token_history = data
+            history_data = redis_client.lrange(token_history_key, 0, -1)
+            if history_data:
+                self.token_history = []
+                for item in history_data:
+                    try:
+                        self.token_history.append(json.loads(item))
+                    except (json.JSONDecodeError, ValueError):
+                        pass
         except Exception as e:
             logger.error(f"Failed to load metrics from Redis: {e}")
     
@@ -132,7 +137,11 @@ class MetricsCollector:
             redis_client.set_json(token_usage_key, dict(self.token_usage))
 
             token_history_key = self._get_key("token_history")
-            redis_client.set_json(token_history_key, self.token_history)
+            redis_client.delete(token_history_key)
+            if self.token_history:
+                for entry in self.token_history:
+                    redis_client.lpush(token_history_key, json.dumps(entry))
+                redis_client.ltrim(token_history_key, 0, 1000)
         except Exception as e:
             logger.error(f"Failed to save metrics to Redis: {e}")
     

@@ -331,6 +331,28 @@ class RedisClient:
         except Exception as e:
             logger.warning(f"[Redis] LRANGE 失败 key={key}: {e}")
             return []
+
+    def ltrim(self, key: str, start: int, end: int) -> bool:
+        client = self.get_client()
+        if client is None:
+            return False
+        try:
+            client.ltrim(key, start, end)
+            return True
+        except Exception as e:
+            logger.warning(f"[Redis] LTRIM 失败 key={key}: {e}")
+            return False
+
+    def expire(self, key: str, seconds: int) -> bool:
+        client = self.get_client()
+        if client is None:
+            return False
+        try:
+            client.expire(key, seconds)
+            return True
+        except Exception as e:
+            logger.warning(f"[Redis] EXPIRE 失败 key={key}: {e}")
+            return False
     
     def incr(self, key: str) -> Optional[int]:
         client = self.get_client()
