@@ -45,7 +45,7 @@ describe('usePolling', () => {
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
     })
 
-    const { fetch, loading } = usePolling(fetchFn, 5000)
+    const { fetch } = usePolling(fetchFn, 5000)
     mockOnMounted()
 
     const p1 = fetch()

@@ -212,7 +212,11 @@ class TestScheduler:
         assert count >= 0
 
     def test_can_accept_request(self, scheduler):
-        assert scheduler.can_accept_request("Gemma-4-31B-Abliterated") is True
+        with patch('core.vllm_manager.get_available_models', return_value=[]):
+            with patch('core.scheduler.cache_service') as mock_cache:
+                mock_cache.get.return_value = None
+                mock_cache.set.return_value = None
+                assert scheduler.can_accept_request("Gemma-4-31B-Abliterated") is True
 
     def test_model_name_fuzzy_matching(self, scheduler):
         """测试模型名称模糊匹配功能"""

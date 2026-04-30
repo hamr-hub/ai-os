@@ -72,6 +72,9 @@ export interface GPUSummary {
   status: 'available' | 'unavailable'
   current: GPUSummaryCurrent | null
   history: GPUHistoryEntry[]
+  models?: Record<string, { running: boolean; engine: string; port: number | null; pid: number | null; started_at: string | null }>
+  current_model?: string | null
+  default_model?: string | null
 }
 
 export interface GPUSummaryCurrent {

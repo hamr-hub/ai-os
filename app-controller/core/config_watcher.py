@@ -8,6 +8,7 @@ import json
 import time
 from typing import Dict, Callable, List, Tuple, Optional
 from core.config import load_config as load_app_config, validate_config
+from pydantic import ValidationError
 
 logger = logging.getLogger("ai_controller.config_watcher")
 
@@ -146,14 +147,49 @@ class ConfigWatcher:
             if not isinstance(config, dict):
                 raise ValueError("Config payload must be a dict")
 
+            from core.config import AppConfig as _AppConfig, ModelConfig as _ModelConfig, SettingsConfig as _SettingsConfig
+
+            merged_payload = copy.deepcopy(config)
+            for key in ["models"]:
+                if key not in merged_payload:
+                    raw_config = {}
+                    if os.path.exists(self.config_path):
+                        with open(self.config_path, "r") as f:
+                            raw_config = yaml.safe_load(f) or {}
+                    if key in raw_config:
+                        merged_payload[key] = raw_config[key]
+
+            try:
+                payload_config = _AppConfig(**merged_payload)
+                payload_errors = validate_config(payload_config)
+                if payload_errors:
+                    self._last_error = "; ".join(payload_errors)
+                    logger.error("Refusing to save invalid config payload for %s: %s", self.config_path, self._last_error)
+                    return False
+            except (ValidationError, ValueError) as exc:
+                self._last_error = str(exc)
+                logger.error("Refusing to save invalid config payload for %s: %s", self.config_path, self._last_error)
+                return False
+
+            normalized = load_app_config(self.config_path)
+            errors = validate_config(normalized)
+            if errors:
+                self._last_error = "; ".join(errors)
+                logger.error("Refusing to save invalid config for %s: %s", self.config_path, self._last_error)
+                return False
+
             raw_config = {}
             if os.path.exists(self.config_path):
                 with open(self.config_path, "r") as f:
                     raw_config = yaml.safe_load(f) or {}
 
             merged = copy.deepcopy(raw_config)
-            for key, value in config.items():
+            normalized_dict = normalized.model_dump(exclude_none=True)
+            for key, value in normalized_dict.items():
                 merged[key] = value
+            for key in config:
+                if key not in normalized_dict:
+                    merged[key] = config[key]
 
             temp_path = None
             with tempfile.NamedTemporaryFile(
@@ -166,15 +202,8 @@ class ConfigWatcher:
                 temp_path = f.name
 
             try:
-                normalized = load_app_config(temp_path)
-                errors = validate_config(normalized)
-                if errors:
-                    self._last_error = "; ".join(errors)
-                    logger.error("Refusing to save invalid config for %s: %s", self.config_path, self._last_error)
-                    return False
-
                 os.replace(temp_path, self.config_path)
-                self._config = normalized.model_dump(exclude_none=True)
+                self._config = normalized_dict
                 self._last_modified = os.path.getmtime(self.config_path)
                 self._last_error = None
                 self._version += 1

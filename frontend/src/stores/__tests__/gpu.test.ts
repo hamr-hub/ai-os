@@ -9,8 +9,10 @@ vi.mock('@/api/client', async (importOriginal) => {
   }
 })
 
-import { getGPUSummary } from '@/api/client'
+import * as apiClient from '@/api/client'
 import { useGPUStore } from '@/stores/gpu'
+
+const getGPUSummary = vi.mocked(apiClient.getGPUSummary)
 
 describe('useGPUStore', () => {
   beforeEach(() => {

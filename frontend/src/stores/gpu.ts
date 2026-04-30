@@ -45,7 +45,8 @@ export const useGPUStore = defineStore('gpu', () => {
       gpuSummary.value = {
         current: data.gpu,
         status: data.gpu.status || 'available',
-        models: data.models || gpuSummary.value?.models || {},
+        history: gpuSummary.value?.history || [],
+        models: data.models || gpuSummary.value?.models,
         current_model: data.current_model || gpuSummary.value?.current_model,
         default_model: data.default_model || gpuSummary.value?.default_model,
       }

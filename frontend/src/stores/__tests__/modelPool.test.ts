@@ -16,9 +16,15 @@ vi.mock('@/utils/downloadWebSocket', () => ({
   onDownloadMessage: vi.fn(() => vi.fn()),
 }))
 
-import { getPoolList, deleteFromPool, startDownload, searchModels, recommendModel } from '@/api/client'
+import * as apiClient from '@/api/client'
 import { onDownloadMessage } from '@/utils/downloadWebSocket'
 import { useModelPoolStore } from '@/stores/modelPool'
+
+const getPoolList = vi.mocked(apiClient.getPoolList)
+const deleteFromPool = vi.mocked(apiClient.deleteFromPool)
+const startDownload = vi.mocked(apiClient.startDownload)
+const searchModels = vi.mocked(apiClient.searchModels)
+const recommendModel = vi.mocked(apiClient.recommendModel)
 
 describe('useModelPoolStore', () => {
   beforeEach(() => {

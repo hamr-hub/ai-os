@@ -43,7 +43,7 @@ describe('useRateLimit', () => {
   })
 
   it('fetchConfig填充rateLimitConfig', async () => {
-    const config = { max_requests: 100, max_tokens: 5000 }
+    const config = { ip_qps_limit: 100, ip_qps_window_seconds: 60, concurrency_limit: 10, queue_timeout_seconds: 30, whitelist_ips: [], rate_limited_paths: [] }
     getRateLimitConfig.mockResolvedValue(config)
 
     const { fetchConfig, rateLimitConfig } = useRateLimit()
@@ -53,7 +53,7 @@ describe('useRateLimit', () => {
   })
 
   it('fetchStats填充rateLimitStats', async () => {
-    const stats = { total_requests: 500, rejected: 10 }
+    const stats = { total_rejected: 10, recent_429_count: 5, rejection_by_ip: {}, rejection_by_path: {}, current_queue_depth: 0, timestamp: '2026-01-01' }
     getRateLimitStats.mockResolvedValue(stats)
 
     const { fetchStats, rateLimitStats } = useRateLimit()
@@ -63,14 +63,14 @@ describe('useRateLimit', () => {
   })
 
   it('doUpdateConfig成功时更新rateLimitConfig并返回true', async () => {
-    const newConf = { max_requests: 200 }
-    updateRateLimitConfig.mockResolvedValue(newConf)
+    const newConf = { ip_qps_limit: 200 }
+    updateRateLimitConfig.mockResolvedValue({ ip_qps_limit: 200, ip_qps_window_seconds: 60, concurrency_limit: 10, queue_timeout_seconds: 30, whitelist_ips: [], rate_limited_paths: [] })
 
     const { doUpdateConfig, rateLimitConfig, loading } = useRateLimit()
     const result = await doUpdateConfig(newConf)
 
     expect(result).toBe(true)
-    expect(rateLimitConfig.value).toEqual(newConf)
+    expect(rateLimitConfig.value?.ip_qps_limit).toBe(200)
     expect(loading.value).toBe(false)
   })
 
@@ -78,7 +78,7 @@ describe('useRateLimit', () => {
     updateRateLimitConfig.mockRejectedValue(new Error('参数无效'))
 
     const { doUpdateConfig, error } = useRateLimit()
-    const result = await doUpdateConfig({ max_requests: -1 })
+    const result = await doUpdateConfig({ ip_qps_limit: -1 })
 
     expect(result).toBe(false)
     expect(error.value).toBe('参数无效')

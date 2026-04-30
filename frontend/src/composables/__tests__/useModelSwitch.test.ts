@@ -28,7 +28,6 @@ vi.stubGlobal('WebSocket', class MockWS {
   removeEventListener = vi.fn()
 })
 
-import { getSwitchStatus } from '@/api/client'
 import { useModelSwitch } from '@/composables/useModelSwitch'
 
 describe('useModelSwitch', () => {
