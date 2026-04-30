@@ -10,7 +10,7 @@
 | Python 后端 API | http://localhost:35000 | 35000 |
 | Python API 文档 | http://localhost:35000/docs | 35000 |
 | Go 后端 API | http://localhost:35001 | 35001 |
-| aiclient2api | http://localhost:3000 | 3000 |
+| aiclient2api | http://localhost:3000 | 3000 | 开源项目+GPU插件 (Node后端) | 开源项目+GPU插件 (Node后端, C端推理入口) |
 | Redis | localhost:6379 | 6379 |
 
 ### Docker 环境测试
