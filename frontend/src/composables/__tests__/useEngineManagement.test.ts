@@ -90,7 +90,9 @@ describe('useEngineManagement', () => {
   })
 
   it('doUpdateConfig成功返回true并更新engineConfig', async () => {
-    const newConf = { port: 9000 }
+    const newConf = {
+      vllm: { command: 'python -m vllm', default_params: { port: 9000 } },
+    }
     updateEngineConfig.mockResolvedValue(newConf)
 
     const { doUpdateConfig, engineConfig, loading } = useEngineManagement()
@@ -105,7 +107,9 @@ describe('useEngineManagement', () => {
     updateEngineConfig.mockRejectedValue(new Error('不支持'))
 
     const { doUpdateConfig, error } = useEngineManagement()
-    const result = await doUpdateConfig({ port: 0 })
+    const result = await doUpdateConfig({
+      vllm: { command: 'python -m vllm', default_params: { port: 0 } },
+    })
 
     expect(result).toBe(false)
     expect(error.value).toBe('不支持')
