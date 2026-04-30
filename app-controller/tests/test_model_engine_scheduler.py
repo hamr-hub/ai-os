@@ -1,4 +1,6 @@
 import pytest
+import time
+import signal
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from core.model_engine_scheduler import ModelEngineScheduler
 from core.model_hub import SearchResult
@@ -424,3 +426,95 @@ class TestSyncConfigToRegistry:
         assert "preload-model" in scheduler._engine_model_registry
         assert scheduler._engine_model_registry["preload-model"]["preload_intended"] is True
         assert "no-preload-model" in scheduler._engine_model_registry
+
+
+class TestLLMServiceManagerVllmServe:
+    def test_build_vllm_command_uses_vllm_serve(self):
+        mgr = LLMServiceManager(config=None)
+        cmd = mgr._build_vllm_command("/mnt/models/Qwen3", 8000, {})
+        assert cmd[0] == "vllm"
+        assert cmd[1] == "serve"
+        assert cmd[2] == "/mnt/models/Qwen3"
+        assert "--port" in cmd
+        assert "--host" in cmd
+        assert "0.0.0.0" in cmd
+        assert "--trust-remote-code" in cmd
+        assert "--enforce-eager" in cmd
+
+    def test_build_vllm_command_with_params(self):
+        mgr = LLMServiceManager(config=None)
+        cfg = {"vllm_params": {"gpu_memory_utilization": 0.90, "max_model_len": 40960, "max_num_seqs": 256, "max_num_batched_tokens": 16384, "enable_chunked_prefill": True}}
+        cmd = mgr._build_vllm_command("/mnt/models/Qwen3", 8000, cfg)
+        assert "--gpu-memory-utilization" in cmd
+        assert "0.9" in cmd
+        assert "--max-model-len" in cmd
+        assert "40960" in cmd
+        assert "--max-num-seqs" in cmd
+        assert "--enable-chunked-prefill" in cmd
+
+    def test_build_vllm_command_tool_call(self):
+        mgr = LLMServiceManager(config=None)
+        from core.config import ModelConfig
+        cfg = ModelConfig(service="svc", port=8000, required_memory="8GB", supports_tool_calling=True, vllm_params={"tool_call_parser": "hermes"})
+        cmd = mgr._build_vllm_command("/mnt/models/Qwen3", 8000, cfg)
+        assert "--enable-auto-tool-choice" in cmd
+        assert "--tool-call-parser" in cmd
+        assert "hermes" in cmd
+
+    def test_build_vllm_env_includes_required_vars(self):
+        mgr = LLMServiceManager(config=None)
+        env = mgr._get_vllm_env("test-model")
+        assert env["VLLM_USE_V1"] == "1"
+        assert env["NCCL_P2P_DISABLE"] == "1"
+        assert env["CUDA_MANAGED_FORCE_DEVICE_ALLOC"] == "1"
+        assert env["OMP_NUM_THREADS"] == "16"
+        assert env["VLLM_NO_FLASHINFER"] == "1"
+        assert "HF_ENDPOINT" in env
+
+    def test_build_vllm_env_with_attention_backend(self):
+        from core.config import AppConfig, ModelConfig, SettingsConfig
+        config = AppConfig(
+            models={"Qwen3": ModelConfig(service="svc", port=8000, required_memory="40GB", vllm_params={"attention_backend": "FLASH_ATTN"})},
+            settings=SettingsConfig(),
+        )
+        mgr = LLMServiceManager(config=config)
+        env = mgr._get_vllm_env("Qwen3")
+        assert env["VLLM_ATTENTION_BACKEND"] == "FLASH_ATTN"
+
+    def test_build_vllm_env_no_attention_backend(self):
+        mgr = LLMServiceManager(config=None)
+        env = mgr._get_vllm_env("test-model")
+        assert "VLLM_ATTENTION_BACKEND" not in env
+
+    def test_stop_service_uses_killpg(self):
+        mgr = LLMServiceManager(config=None)
+        mock_process = MagicMock()
+        mock_process.pid = 12345
+        mock_process.wait.side_effect = [None]
+        mgr._processes["test-svc"] = mock_process
+        mgr._pgids["test-svc"] = 12345
+        mgr._engine_types["test-svc"] = "vllm"
+        mgr._ports["test-svc"] = 8000
+        mgr._models["test-svc"] = "test"
+        mgr._start_times["test-svc"] = time.time()
+        mgr._health_status["test-svc"] = "healthy"
+        with patch('os.killpg') as mock_killpg:
+            result = mgr.stop_service("test-svc")
+            mock_killpg.assert_called_with(12345, signal.SIGINT)
+        assert result is True
+
+    def test_get_service_status_includes_pgid(self):
+        mgr = LLMServiceManager(config=None)
+        mock_process = MagicMock()
+        mock_process.pid = 12345
+        mock_process.poll.return_value = None
+        mgr._processes["test-svc"] = mock_process
+        mgr._pgids["test-svc"] = 12345
+        mgr._engine_types["test-svc"] = "vllm"
+        mgr._ports["test-svc"] = 8000
+        mgr._models["test-svc"] = "test"
+        mgr._start_times["test-svc"] = time.time()
+        mgr._health_status["test-svc"] = "healthy"
+        status = mgr.get_service_status("test-svc")
+        assert status["status"] == "running"
+        assert status["pgid"] == 12345

@@ -1,0 +1,297 @@
+taskId: frontend-redesign
+meta:
+  title: "Vue3 前端重新设计 + aiclient 插件功能升级"
+  platform: web
+  source: "docs/agent/prd.md 功能点 14-22"
+  business_goal: "将分散的模型搜索/下载/引擎/显存/模型池功能整合到统一前端管控面板，实现搜索→下载→校验→加载→推理全流程可视化"
+  requirement_version: "v1"
+  requirement_confidence: "high"
+
+scope:
+  in_scope:
+    - "Vue3 前端所有页面重新设计"
+    - "新增/修改 composables"
+    - "API client 前端调用层"
+    - "路由和导航更新"
+    - "TypeScript 类型定义补充"
+    - "aiclient2api 插件前端 UI 升级"
+  out_of_scope:
+    - "Go 后端代码改动"
+    - "Python 后端核心逻辑改动"
+    - "Docker/部署配置改动"
+
+file_changes:
+  - path: "frontend/src/views/Dashboard.vue"
+    change: modify
+    summary: "Dashboard GPU显存告警增强(SGLang/llama.cpp指标卡片+红色告警阈值)"
+    risk: low
+    depends_on: ["frontend/src/composables/useGPU.ts", "frontend/src/components/cards/GpuMetricsCard.vue"]
+  - path: "frontend/src/components/cards/GpuMetricsCard.vue"
+    change: modify
+    summary: "GPU可用显存红色告警标识(utilization>85%醒目)"
+    risk: low
+  - path: "frontend/src/views/ModelManagement.vue"
+    change: modify
+    summary: "引擎面板集成+Phase2.5显存校验步骤+引擎配置编辑Modal"
+    risk: medium
+    depends_on: ["frontend/src/composables/useModelSwitch.ts", "frontend/src/components/EngineSwitchPanel.vue"]
+  - path: "frontend/src/components/EngineSwitchPanel.vue"
+    change: modify
+    summary: "引擎切换流程添加Phase2.5显存校验步骤+多引擎状态展示"
+    risk: medium
+  - path: "frontend/src/views/ModelHubPage.vue"
+    change: modify
+    summary: "搜索可行性徽章+高级过滤器(size/quant/feasible/source)+显存优选面板+WS下载进度+下载→池跳转按钮"
+    risk: medium
+    depends_on: ["frontend/src/composables/useModelSearch.ts", "frontend/src/composables/useModelDownload.ts", "frontend/src/composables/useGPUMemory.ts"]
+  - path: "frontend/src/views/ModelPoolPage.vue"
+    change: modify
+    summary: "模型池统计概览卡片+一键加载流程(显存校验→引擎启动→验证)+引擎选择+WS降级轮询+错误banner"
+    risk: medium
+    depends_on: ["frontend/src/composables/useModelPool.ts", "frontend/src/composables/useGPUMemoryCheck.ts"]
+  - path: "frontend/src/views/EngineManagementPage.vue"
+    change: modify
+    summary: "引擎配置编辑UI(调用已有API)+引擎状态详情增强"
+    risk: low
+    depends_on: ["frontend/src/composables/useEngineManagement.ts", "frontend/src/api/client.ts"]
+  - path: "frontend/src/views/GPUManage.vue"
+    change: modify
+    summary: "SGLang/llama.cpp专项指标展示+引擎状态卡片"
+    risk: low
+  - path: "frontend/src/composables/useModelSearch.ts"
+    change: modify
+    summary: "高级搜索过滤器(size/quant/multimodal/feasible/source)+排序逻辑"
+    risk: low
+  - path: "frontend/src/composables/useModelDownload.ts"
+    change: modify
+    summary: "WS下载进度+断点续传UI+下载任务管理+降级轮询"
+    risk: medium
+  - path: "frontend/src/composables/useGPUMemory.ts"
+    change: modify
+    summary: "显存优选推荐API集成+可用显存醒目展示"
+    risk: low
+  - path: "frontend/src/composables/useModelPool.ts"
+    change: modify
+    summary: "一键加载流程composable(显存校验→引擎启动→就绪验证)"
+    risk: medium
+  - path: "frontend/src/composables/useEngineManagement.ts"
+    change: modify
+    summary: "引擎配置CRUD+引擎状态详情+引擎切换4阶段含Phase2.5"
+    risk: medium
+  - path: "frontend/src/composables/useModelSwitch.ts"
+    change: modify
+    summary: "模型切换进度WebSocket含Phase2.5显存校验步骤"
+    risk: medium
+  - path: "frontend/src/api/client.ts"
+    change: modify
+    summary: "新增引擎配置编辑API调用(getEngineConfig/updateEngineConfig已有)+模型池加载参数增强"
+    risk: low
+  - path: "frontend/src/types/index.ts"
+    change: modify
+    summary: "补充Phase2.5类型定义+引擎配置编辑类型+下载WS消息类型完善"
+    risk: low
+  - path: "frontend/src/views/AgentView.vue"
+    change: modify
+    summary: "Agent图片上传支持(后端supports_images已有)"
+    risk: low
+  - path: "frontend/src/components/AgentChatWindow.vue"
+    change: modify
+    summary: "图片上传按钮+预览+多模态消息格式化"
+    risk: low
+
+api:
+  - name: "getEngineStatus"
+    layer: frontend
+    endpoint: "/manage/engine/status"
+    method: "GET"
+    request_schema: {}
+    response_schema:
+      vllm: "EngineDetail"
+      sglang: "EngineDetail"
+      llama_cpp: "EngineDetail"
+      current_engine: "EngineType"
+    error_codes:
+      - code: "500"
+        meaning: "后端不可用"
+        handling: "空状态+重试按钮"
+    timeout_ms: 5000
+  - name: "switchEngine"
+    layer: frontend
+    endpoint: "/manage/engine/switch"
+    method: "POST"
+    request_schema:
+      model_name: "string"
+      engine_type: "EngineType"
+      port: "number"
+    response_schema:
+      status: "string"
+      session_id: "string?"
+    error_codes:
+      - code: "409"
+        meaning: "切换进行中"
+        handling: "提示等待当前切换完成"
+      - code: "503"
+        meaning: "显存不足"
+        handling: "红色告警+建议可运行模型"
+    timeout_ms: 30000
+  - name: "searchModels"
+    layer: frontend
+    endpoint: "/manage/models/search"
+    method: "GET"
+    request_schema:
+      keyword: "string"
+      source: "string"
+      limit: "number"
+    response_schema:
+      results: "SearchResult[]"
+      total: "number"
+    error_codes:
+      - code: "500"
+        meaning: "搜索服务异常"
+        handling: "空状态+重试"
+    timeout_ms: 10000
+  - name: "recommendModel"
+    layer: frontend
+    endpoint: "/manage/gpu/recommend"
+    method: "GET"
+    request_schema:
+      keyword: "string"
+      source: "string"
+    response_schema:
+      recommended: "SearchResult?"
+      gpu_info: "GPURecommendInfo"
+      candidates: "SearchResult[]"
+    error_codes:
+      - code: "500"
+        meaning: "GPU检测失败"
+        handling: "降级nvidia-smi+提示"
+    timeout_ms: 5000
+  - name: "checkModelMemory"
+    layer: frontend
+    endpoint: "/manage/gpu/memory-check/:model"
+    method: "POST"
+    request_schema: {}
+    response_schema:
+      feasible: "boolean"
+      available_gb: "number"
+      required_gb: "number"
+    error_codes:
+      - code: "404"
+        meaning: "模型不存在"
+        handling: "提示模型名错误"
+      - code: "503"
+        meaning: "显存不足"
+        handling: "告警+建议列表"
+    timeout_ms: 5000
+  - name: "startDownload"
+    layer: frontend
+    endpoint: "/manage/models/download"
+    method: "POST"
+    request_schema:
+      model_name: "string"
+      source: "string"
+      save_dir: "string?"
+    response_schema:
+      task_id: "string"
+      status: "string"
+    error_codes:
+      - code: "409"
+        meaning: "下载任务已存在"
+        handling: "提示跳转到下载进度"
+      - code: "500"
+        meaning: "磁盘空间不足"
+        handling: "告警+终止"
+    timeout_ms: 10000
+  - name: "loadFromPool"
+    layer: frontend
+    endpoint: "/manage/models/pool/:key/load"
+    method: "POST"
+    request_schema:
+      engine: "string"
+    response_schema:
+      success: "boolean"
+      model: "string"
+      engine: "string"
+      port: "number"
+    error_codes:
+      - code: "503"
+        meaning: "显存不足"
+        handling: "拒绝加载+告警+建议列表"
+      - code: "409"
+        meaning: "模型正在加载"
+        handling: "提示等待"
+    timeout_ms: 30000
+  - name: "getEngineConfig"
+    layer: frontend
+    endpoint: "/engines/config"
+    method: "GET"
+    request_schema: {}
+    response_schema:
+      vllm: "EngineConfigDetail"
+      sglang: "EngineConfigDetail"
+      llama_cpp: "EngineConfigDetail"
+    error_codes:
+      - code: "500"
+        meaning: "后端不可用"
+        handling: "空状态"
+    timeout_ms: 5000
+  - name: "updateEngineConfig"
+    layer: frontend
+    endpoint: "/engines/config"
+    method: "PUT"
+    request_schema:
+      vllm: "EngineConfigDetail?"
+      sglang: "EngineConfigDetail?"
+    response_schema:
+      vllm: "EngineConfigDetail"
+      sglang: "EngineConfigDetail"
+    error_codes:
+      - code: "400"
+        meaning: "配置格式错误"
+        handling: "Toast提示+保持原值"
+      - code: "500"
+        meaning: "后端保存失败"
+        handling: "Toast提示+重试"
+    timeout_ms: 5000
+
+validation:
+  acceptance:
+    - ac: "AC-1"
+      test: "引擎面板切换到SGLang，显示4阶段进度含Phase2.5显存校验，完成后SGLang运行"
+      files: ["frontend/src/views/ModelManagement.vue", "frontend/src/components/EngineSwitchPanel.vue", "frontend/src/composables/useModelSwitch.ts"]
+    - ac: "AC-2"
+      test: "输入关键词搜索，结果含可行性徽章，下载时WS实时进度展示"
+      files: ["frontend/src/views/ModelHubPage.vue", "frontend/src/composables/useModelSearch.ts", "frontend/src/composables/useModelDownload.ts"]
+    - ac: "AC-3"
+      test: "点击显存优选，筛选可运行模型+推荐最优"
+      files: ["frontend/src/views/ModelHubPage.vue", "frontend/src/composables/useGPUMemory.ts"]
+    - ac: "AC-4"
+      test: "模型池一键加载，显存校验→引擎启动→就绪验证"
+      files: ["frontend/src/views/ModelPoolPage.vue", "frontend/src/composables/useModelPool.ts"]
+    - ac: "AC-5"
+      test: "Dashboard GPU利用率>85%时可用显存红色告警标识"
+      files: ["frontend/src/views/Dashboard.vue", "frontend/src/components/cards/GpuMetricsCard.vue"]
+    - ac: "AC-6"
+      test: "模型管理页显示引擎状态+切换面板+Phase2.5"
+      files: ["frontend/src/views/ModelManagement.vue", "frontend/src/composables/useEngineManagement.ts"]
+  test_strategy:
+    framework: "vitest"
+    commands:
+      - "cd frontend && pnpm test"
+      - "cd frontend && pnpm build"
+
+risks:
+  - level: P1
+    description: "ModelManagement.vue已达3791行，新增功能可能加剧膨胀"
+    mitigation: "抽取EngineSwitchPanel为独立子组件，功能内聚不拆分主文件"
+  - level: P1
+    description: "useGPUMemory Ref模板类型推导需解构"
+    mitigation: "所有使用处解构为顶层ref，已在上一轮验证"
+  - level: P2
+    description: "WS连接断开时下载进度丢失"
+    mitigation: "降级3s轮询+状态指示灯(绿→黄→红)"
+  - level: P2
+    description: "多下载并行时任务管理复杂"
+    mitigation: "P2优先级，后续版本添加队列管理UI"
+
+open_questions: []

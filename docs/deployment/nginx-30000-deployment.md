@@ -6,13 +6,19 @@
 
 ## 架构说明
 
+Nginx :30000 作为 B端管控面板入口（Frontend/GPU插件），反向代理到 Python B端和 Go 限流代理。
+C端推理流量走独立路径: aiclient2api(:3000) → provider → go-vllm-api(:35001) → 推理引擎。
+
 ```
-用户 → nginx:30000 (前端静态文件 + 反向代理)
-         ↓
-     /api/* → Python 后端 (192.168.7.103:35000)
-     /v1/*  → Go 后端 (192.168.7.103:35001)
-     /ws/*  → Python WebSocket (192.168.7.103:35000)
+用户 → nginx:30000 (B端管控面板 + 反向代理)
+         ↓ (B端管控路径)
+     /api/* → Python B端 (192.168.7.103:35000) — 引擎启停/模型管理
+     /ws/*  → Python WebSocket (192.168.7.103:35000) — GPU监控/切换进度
+     /v1/*  → Go vLLM限流代理 (192.168.7.103:35001) — 推理请求(备用入口)
      /health → Go 健康检查 (192.168.7.103:35001)
+
+C端推理独立路径:
+     aiclient2api(:3000) → provider → go-vllm-api(:35001) → 推理引擎(:8000)
 ```
 
 ## 文件清单
@@ -90,7 +96,7 @@ sudo nginx -t -c /etc/nginx/nginx_30000.conf
 | `/api/health` | `<后端IP>:35001/health` | Go 健康检查 |
 | `/api/health/detailed` | `<后端IP>:35001/health/detailed` | Go 详细健康检查 |
 | `/api/` | `<后端IP>:35000/manage/` | Python 通用接口 |
-| `/v1/` | `<后端IP>:35001/v1/` | Go vLLM 接口 |
+| `/v1/` | `<后端IP>:35001/v1/` | Go vLLM限流代理 (推理请求备用入口) |
 | `/manage/` | `<后端IP>:35000/manage/` | Python 管理接口 |
 | `/ws/` | `<后端IP>:35000/ws/` | Python WebSocket |
 | `/health` | `<后端IP>:35001/health` | Go 健康检查 |

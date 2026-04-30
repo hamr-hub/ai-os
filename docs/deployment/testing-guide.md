@@ -257,7 +257,7 @@ curl -o /dev/null -s -w "Total: %{time_total}s\n" \
 curl -o /dev/null -s -w "Total: %{time_total}s\n" \
   http://localhost:30000/api/models
 
-# 通过 aiclient2api 网关延迟
+# 通过 aiclient2api Node后端延迟 (C端推理路径)
 curl -o /dev/null -s -w "Total: %{time_total}s\n" \
   http://localhost:3000/api/models
 ```
