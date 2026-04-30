@@ -237,6 +237,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Controller API", version="1.0.0", lifespan=lifespan)
 
+app_controller_cfg = config.get("app_controller", {})
 cors_origins = app_controller_cfg.get("cors_origins", ["*"])
 app.add_middleware(
     CORSMiddleware,
@@ -251,7 +252,6 @@ app.middleware("http")(TimeoutHandlerMiddleware(timeout_seconds=60))
 app.middleware("http")(request_tracking_middleware)
 
 trusted_proxies = os.environ.get("TRUSTED_PROXIES", "").split(",") if os.environ.get("TRUSTED_PROXIES") else []
-app_controller_cfg = config.get("app_controller", {})
 whitelist_cfg = app_controller_cfg.get("admin_whitelist", {})
 if whitelist_cfg.get("enabled", True):
     config_allowed_ips = whitelist_cfg.get("allowed_ips", [])

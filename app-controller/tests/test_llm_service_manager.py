@@ -16,6 +16,7 @@ def _make_manager(config=None):
     mgr._restart_counts = {}
     mgr._health_status = {}
     mgr._model_paths = {}
+    mgr._pgids = {}
     return mgr
 
 
