@@ -26,8 +26,13 @@ vi.stubGlobal('WebSocket', class MockWS {
   removeEventListener = vi.fn()
 })
 
-import { startDownload, getDownloadStatus, cancelDownload, listDownloads } from '@/api/client'
+import * as apiClient from '@/api/client'
 import { useModelDownload } from '@/composables/useModelDownload'
+
+const startDownload = vi.mocked(apiClient.startDownload)
+const getDownloadStatus = vi.mocked(apiClient.getDownloadStatus)
+const cancelDownload = vi.mocked(apiClient.cancelDownload)
+const listDownloads = vi.mocked(apiClient.listDownloads)
 
 describe('useModelDownload', () => {
   beforeEach(() => {

@@ -5,8 +5,12 @@ from core.monitor import GPUMonitor
 GPU_OUTPUT = "NVIDIA RTX 4090, 24564, 5000, 19564, 65, 30, 100, 450, 40, 2100, 10000"
 
 class TestGPUMonitor:
+    @patch('core.monitor.NVMLCollector')
     @patch('subprocess.run')
-    def test_check_nvidia_smi_available(self, mock_run):
+    def test_check_nvidia_smi_available(self, mock_run, mock_nvml):
+        mock_nvml_instance = MagicMock()
+        mock_nvml_instance.is_available = False
+        mock_nvml.return_value = mock_nvml_instance
         mock_run.return_value.returncode = 0
         monitor = GPUMonitor()
         assert monitor._nvidia_smi_available is True

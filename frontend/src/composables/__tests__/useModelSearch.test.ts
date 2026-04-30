@@ -6,8 +6,12 @@ vi.mock('@/api/client', () => ({
   checkModelMemory: vi.fn(),
 }))
 
-import { searchModels, recommendModel, checkModelMemory } from '@/api/client'
+import * as apiClient from '@/api/client'
 import { useModelSearch } from '@/composables/useModelSearch'
+
+const searchModels = vi.mocked(apiClient.searchModels)
+const recommendModel = vi.mocked(apiClient.recommendModel)
+const checkModelMemory = vi.mocked(apiClient.checkModelMemory)
 
 describe('useModelSearch', () => {
   beforeEach(() => {

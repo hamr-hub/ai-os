@@ -7,8 +7,13 @@ vi.mock('@/api/client', () => ({
   getHealthHistory: vi.fn(),
 }))
 
-import { getHealthAlert, healthCheck, getHealthDetailed, getHealthHistory } from '@/api/client'
+import * as apiClient from '@/api/client'
 import { useHealthOps } from '@/composables/useHealthOps'
+
+const getHealthAlert = vi.mocked(apiClient.getHealthAlert)
+const healthCheck = vi.mocked(apiClient.healthCheck)
+const getHealthDetailed = vi.mocked(apiClient.getHealthDetailed)
+const getHealthHistory = vi.mocked(apiClient.getHealthHistory)
 
 describe('useHealthOps', () => {
   beforeEach(() => {

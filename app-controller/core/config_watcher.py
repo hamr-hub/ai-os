@@ -151,20 +151,9 @@ class ConfigWatcher:
                 with open(self.config_path, "r") as f:
                     raw_config = yaml.safe_load(f) or {}
 
-            normalized = load_app_config(self.config_path)
-            errors = validate_config(normalized)
-            if errors:
-                self._last_error = "; ".join(errors)
-                logger.error("Refusing to save invalid config for %s: %s", self.config_path, self._last_error)
-                return False
-
             merged = copy.deepcopy(raw_config)
-            normalized_dict = normalized.model_dump(exclude_none=True)
-            for key, value in normalized_dict.items():
+            for key, value in config.items():
                 merged[key] = value
-            for key in config:
-                if key not in normalized_dict:
-                    merged[key] = config[key]
 
             temp_path = None
             with tempfile.NamedTemporaryFile(
@@ -177,8 +166,15 @@ class ConfigWatcher:
                 temp_path = f.name
 
             try:
+                normalized = load_app_config(temp_path)
+                errors = validate_config(normalized)
+                if errors:
+                    self._last_error = "; ".join(errors)
+                    logger.error("Refusing to save invalid config for %s: %s", self.config_path, self._last_error)
+                    return False
+
                 os.replace(temp_path, self.config_path)
-                self._config = normalized_dict
+                self._config = normalized.model_dump(exclude_none=True)
                 self._last_modified = os.path.getmtime(self.config_path)
                 self._last_error = None
                 self._version += 1

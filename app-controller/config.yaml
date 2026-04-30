@@ -6,14 +6,14 @@ engines:
     - local
     - huggingface
     - modelscope
+  llamacpp:
+    default_port: 8001
+    venv_path: /root/ai-os/venvs/llamacpp
   sglang:
     default_gpu_memory_utilization: 0.9
     default_max_model_len: 32768
     default_port: 8100
     venv_path: /root/ai-os/venvs/sglang
-  llamacpp:
-    default_port: 8001
-    venv_path: /root/ai-os/venvs/llamacpp
 feature_flags:
   agent_blocked_commands:
   - rm

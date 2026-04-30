@@ -7,8 +7,13 @@ vi.mock('@/api/client', () => ({
   getRateLimitStats: vi.fn(),
 }))
 
-import { getQueueStatus, getRateLimitConfig, updateRateLimitConfig, getRateLimitStats } from '@/api/client'
+import * as apiClient from '@/api/client'
 import { useRateLimit } from '@/composables/useRateLimit'
+
+const getQueueStatus = vi.mocked(apiClient.getQueueStatus)
+const getRateLimitConfig = vi.mocked(apiClient.getRateLimitConfig)
+const updateRateLimitConfig = vi.mocked(apiClient.updateRateLimitConfig)
+const getRateLimitStats = vi.mocked(apiClient.getRateLimitStats)
 
 describe('useRateLimit', () => {
   beforeEach(() => {

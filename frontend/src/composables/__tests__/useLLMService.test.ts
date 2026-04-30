@@ -8,8 +8,14 @@ vi.mock('@/api/client', () => ({
   loadFromPool: vi.fn(),
 }))
 
-import { startModel, stopModel, getLLMServiceStatus, getLLMServiceLogs, loadFromPool } from '@/api/client'
+import * as apiClient from '@/api/client'
 import { useLLMService } from '@/composables/useLLMService'
+
+const startModel = vi.mocked(apiClient.startModel)
+const stopModel = vi.mocked(apiClient.stopModel)
+const getLLMServiceStatus = vi.mocked(apiClient.getLLMServiceStatus)
+const getLLMServiceLogs = vi.mocked(apiClient.getLLMServiceLogs)
+const loadFromPool = vi.mocked(apiClient.loadFromPool)
 
 describe('useLLMService', () => {
   beforeEach(() => {

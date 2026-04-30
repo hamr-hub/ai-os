@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -25,7 +26,7 @@ from core.deps import (
     download_task_manager, model_engine_scheduler, sse_push_manager, agent_system,
     agent_session_manager,
     VLLM_REQUEST_TIMEOUT, VLLM_STREAM_TIMEOUT, VLLM_CLIENT_LIMITS,
-    _background_tasks, _on_config_changed
+    _background_tasks, _on_config_changed, config
 )
 from core.vllm_manager import switch_vllm_model_with_test
 from middleware.error_handler import (
@@ -237,7 +238,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Controller API", version="1.0.0", lifespan=lifespan)
 
-app_controller_cfg = config.get("app_controller", {})
+app_controller_cfg = config_watcher.get_config().get("app_controller", {})
 cors_origins = app_controller_cfg.get("cors_origins", ["*"])
 app.add_middleware(
     CORSMiddleware,

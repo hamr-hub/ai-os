@@ -7,8 +7,13 @@ vi.mock('@/api/client', () => ({
   deleteFromPool: vi.fn(),
 }))
 
-import { getPoolList, getPoolDetail, loadFromPool, deleteFromPool } from '@/api/client'
+import * as apiClient from '@/api/client'
 import { useModelPool } from '@/composables/useModelPool'
+
+const getPoolList = vi.mocked(apiClient.getPoolList)
+const getPoolDetail = vi.mocked(apiClient.getPoolDetail)
+const loadFromPool = vi.mocked(apiClient.loadFromPool)
+const deleteFromPool = vi.mocked(apiClient.deleteFromPool)
 
 describe('useModelPool', () => {
   beforeEach(() => {
