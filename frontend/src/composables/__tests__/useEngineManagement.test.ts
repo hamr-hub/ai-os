@@ -51,10 +51,14 @@ describe('useEngineManagement', () => {
   })
 
   it('fetchStatus填充engineStatus', async () => {
-    const status = createEngineStatus({
-      vllm: { running: true, pid: 123, port: 8000, model: 'llama', uptime: 60 },
-    })
-    getEngineStatus.mockResolvedValue(status)
+    const backendRaw = {
+      engine_manager_mode: 'subprocess',
+      services: [
+        { status: 'running', engine_type: 'vllm', pid: 123, port: 8000, model: 'llama', uptime_seconds: 60 },
+      ],
+      active_count: 1,
+    }
+    getEngineStatus.mockResolvedValue(backendRaw as any)
 
     const { fetchStatus, engineStatus, loading, error } = useEngineManagement()
     await fetchStatus()
