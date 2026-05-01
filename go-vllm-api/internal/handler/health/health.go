@@ -142,6 +142,12 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 }
 
 func (h *HealthHandler) HealthCheckDetailed(c *gin.Context) {
+	cacheKey := "api:health:detailed"
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		c.JSON(http.StatusOK, cached)
+		return
+	}
+
 	gpuStatus := h.gpuMonitor.GetStatus()
 	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
 	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
@@ -211,6 +217,7 @@ func (h *HealthHandler) HealthCheckDetailed(c *gin.Context) {
 		"timestamp":     time.Now().Format(time.RFC3339),
 	}
 
+	h.cache.Set(cacheKey, result, 5)
 	c.JSON(http.StatusOK, result)
 }
 

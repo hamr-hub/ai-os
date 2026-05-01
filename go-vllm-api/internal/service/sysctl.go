@@ -303,10 +303,13 @@ func (sc *SystemController) IsServiceRunning(name string) bool {
 }
 
 func (sc *SystemController) GetServiceStatus(name string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	cmd := sc.command("systemctl", "is-active", name)
 	if cmd == nil {
 		return "unavailable"
 	}
+	cmd = exec.CommandContext(ctx, cmd.Args[0], cmd.Args[1:]...)
 	output, err := cmd.Output()
 	if err != nil {
 		return "unknown"
@@ -315,10 +318,13 @@ func (sc *SystemController) GetServiceStatus(name string) string {
 }
 
 func (sc *SystemController) GetServiceInfo(name string) map[string]string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	cmd := sc.command("systemctl", "show", name, "--property=ActiveState,SubState,MainPID,MemoryCurrent")
 	if cmd == nil {
 		return map[string]string{"error": "systemctl unavailable"}
 	}
+	cmd = exec.CommandContext(ctx, cmd.Args[0], cmd.Args[1:]...)
 	output, err := cmd.Output()
 	if err != nil {
 		return map[string]string{"error": err.Error()}
