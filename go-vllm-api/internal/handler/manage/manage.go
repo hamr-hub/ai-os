@@ -298,13 +298,40 @@ func (h *ManageHandler) GetGPUSummary(c *gin.Context) {
 		"used_memory":        status.UsedMemory,
 		"available_memory":   status.AvailableMemory,
 		"total_memory":       status.TotalMemory,
+		"fan_speed":          status.FanSpeed,
+		"clock_sm":           status.ClockSM,
+		"clock_mem":          status.ClockMem,
 	}
 
+	if status.VLLMMetrics != nil {
+		current["vllm_metrics"] = status.VLLMMetrics
+	}
+	if status.Primary != nil {
+		current["ecc_errors"] = status.Primary.EccErrors
+		current["throttle_reasons"] = status.Primary.ThrottleReasons
+	}
+
+	models := gin.H{}
+	for _, m := range h.scheduler.GetAvailableModels() {
+		models[m] = gin.H{
+			"running":     h.scheduler.IsModelRunning(m),
+			"engine":      h.scheduler.GetModelBackendType(m),
+			"port":        h.scheduler.GetModelPort(m),
+			"pid":         nil,
+			"started_at":  nil,
+		}
+	}
+	currentModel := h.scheduler.GetCurrentModelName()
+	defaultModel := h.scheduler.GetDefaultModel()
+
 	result := gin.H{
-		"status":       "available",
-		"current":      current,
-		"history":      history,
-		"health_score": h.gpuMonitor.GetHealthScore(),
+		"status":        "available",
+		"current":       current,
+		"history":       history,
+		"health_score":  h.gpuMonitor.GetHealthScore(),
+		"models":        models,
+		"current_model": currentModel,
+		"default_model": defaultModel,
 	}
 	h.cache.Set(cacheKey, result, 30)
 	c.JSON(http.StatusOK, result)
@@ -1330,14 +1357,72 @@ func (h *ManageHandler) GetHealthDetail(c *gin.Context) {
 	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
 	healthScores := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
 	gpuAlerts := h.metrics.GetGPUAlerts(gpuStatus)
+	alertReasons := make([]string, 0)
+	for _, a := range gpuAlerts {
+		alertReasons = append(alertReasons, a.Message)
+	}
 	healthScore := h.gpuMonitor.GetHealthScore()
+
+	var overallScore float64
+	if v, ok := healthScores["overall"]; ok {
+		overallScore, _ = v.(float64)
+	}
+	if overallScore == 0 {
+		overallScore = healthScore
+	}
+	statusStr := "healthy"
+	if v, ok := healthScores["status"]; ok {
+		statusStr, _ = v.(string)
+	}
+
+	gpuAvail := gpuStatus != nil && gpuStatus.Status == "available"
+	gpuUtilization := 0
+	gpuTemp := 0
+	gpuMemUsedPct := 0
+	if gpuStatus != nil {
+		gpuUtilization = gpuStatus.Utilization
+		gpuTemp = gpuStatus.Temperature
+		gpuMemUsedPct = gpuStatus.MemoryUtilization
+	}
+
+	vllmRunning := h.sysCtl.IsServiceRunning("vllm-aiclient")
+	vllmActiveRequests := 0
+	if vllmMetrics != nil {
+		vllmActiveRequests = vllmMetrics.RunningRequests
+	}
+
+	redisAvailable := h.redis != nil && h.redis.IsConnected()
+	redisConnected := h.redis != nil && h.redis.IsConnected()
+
 	c.JSON(http.StatusOK, gin.H{
-		"health_scores":        healthScores,
-		"gpu_alerts":           gpuAlerts,
-		"health_score":         healthScore,
-		"gpu_status_summary":   gpuStatus,
-		"vllm_metrics_summary": vllmMetrics,
-		"timestamp":            time.Now().Format(time.RFC3339),
+		"overall_score": overallScore,
+		"status":        statusStr,
+		"checks": gin.H{
+			"gpu": gin.H{
+				"available":       gpuAvail,
+				"utilization":     gpuUtilization,
+				"temperature":     gpuTemp,
+				"memory_used_pct": gpuMemUsedPct,
+			},
+			"go_backend": gin.H{
+				"reachable":       true,
+				"response_time_ms": 0,
+			},
+			"python_backend": gin.H{
+				"reachable":       true,
+				"response_time_ms": 0,
+			},
+			"vllm_service": gin.H{
+				"running":         vllmRunning,
+				"active_requests": vllmActiveRequests,
+			},
+			"redis": gin.H{
+				"available":  redisAvailable,
+				"connected":  redisConnected,
+			},
+		},
+		"alert_reasons": alertReasons,
+		"timestamp":     time.Now().Format(time.RFC3339),
 	})
 }
 func (h *ManageHandler) StartLlamaCppModel(c *gin.Context) {

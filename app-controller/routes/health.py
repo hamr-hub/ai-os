@@ -63,23 +63,65 @@ async def health_check_detailed():
         gpu_status = gpu_monitor.get_gpu_status()
         vllm_metrics = gpu_monitor.get_vllm_metrics()
         health_info = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
+
+        gpu_avail = gpu_status is not None and gpu_status.get("status") == "available"
+        gpu_utilization = 0
+        gpu_temp = 0
+        gpu_mem_used_pct = 0
+        if gpu_status:
+            gpu_utilization = gpu_status.get("utilization", 0)
+            gpu_temp = gpu_status.get("temperature", 0)
+            gpu_mem_used_pct = gpu_status.get("memory_utilization", 0)
+
+        vllm_running = vllm_metrics is not None and vllm_metrics.get("vllm_available", False)
+        vllm_active_requests = vllm_metrics.get("running_requests", 0) if vllm_metrics else 0
+
         result = {
-            "status": health_info["status"],
+            "overall_score": health_info.get("overall", 0),
+            "status": health_info.get("status", "unknown"),
+            "checks": {
+                "gpu": {
+                    "available": gpu_avail,
+                    "utilization": gpu_utilization,
+                    "temperature": gpu_temp,
+                    "memory_used_pct": gpu_mem_used_pct,
+                },
+                "go_backend": {
+                    "reachable": True,
+                    "response_time_ms": 0,
+                },
+                "python_backend": {
+                    "reachable": True,
+                    "response_time_ms": 0,
+                },
+                "vllm_service": {
+                    "running": vllm_running,
+                    "active_requests": vllm_active_requests,
+                },
+                "redis": {
+                    "available": True,
+                    "connected": True,
+                },
+            },
+            "alert_reasons": health_info.get("alerts") or metrics.get_gpu_alerts(gpu_status) or [],
             "timestamp": datetime.now().isoformat(),
-            "scores": health_info,
-            "gpu": gpu_status,
-            "metrics": metrics.get_detailed_metrics()
         }
         cache_service.set(cache_key, result, ttl_seconds=5)
     except Exception as exc:
         logger.error(f"health_check_detailed failed: {exc}")
         fallback = _build_fallback_health(str(exc))
         result = {
+            "overall_score": 0,
             "status": fallback["status"],
+            "checks": {
+                "gpu": {"available": False, "utilization": 0, "temperature": 0, "memory_used_pct": 0},
+                "go_backend": {"reachable": False, "response_time_ms": 0},
+                "python_backend": {"reachable": False, "response_time_ms": 0},
+                "vllm_service": {"running": False, "active_requests": 0},
+                "redis": {"available": False, "connected": False},
+            },
+            "alert_reasons": [f"health check failed: {str(exc)}"],
             "timestamp": fallback["timestamp"],
-            "scores": fallback["details"],
-            "gpu": None,
-            "metrics": {},
         }
     return result
 

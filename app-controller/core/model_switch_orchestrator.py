@@ -12,6 +12,8 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
+from core.gpu_memory_manager import _HEADROOM_GB
+
 logger = logging.getLogger("ai_controller.model_switch_orchestrator")
 
 
@@ -471,9 +473,54 @@ class ModelSwitchOrchestrator:
         model_name = session.target_model
         model_path = session.target_model_path
 
+        previous_model = session.previous_model
+        is_switch_action = session.action == "switch" and previous_model
+
         feasibility = self._gpu_memory_manager.check_model_feasibility(
             model_name, model_path=model_path
         )
+
+        if is_switch_action and not feasibility.get("feasible"):
+            previous_model_path = session.previous_model_path
+            previous_model_bytes = self._gpu_memory_manager.estimate_model_memory(
+                previous_model, model_path=previous_model_path
+            )
+            info = self._gpu_memory_manager.checker.get_device_info(0)
+            if info:
+                current_effective = self._gpu_memory_manager.get_effective_free_bytes(0)
+                switch_effective = max(current_effective + previous_model_bytes, 0)
+                switch_effective_gb = switch_effective / (1024 ** 3)
+                required_bytes = self._gpu_memory_manager.estimate_model_memory(
+                    model_name, model_path=model_path
+                )
+                headroom = int(_HEADROOM_GB * 1024 ** 3)
+                switch_feasible = switch_effective >= required_bytes + headroom
+                if switch_feasible:
+                    safety_margin = switch_effective - required_bytes - headroom
+                    await self._log(session, phase,
+                                    f"显存校验(含旧模型释放): 旧模型 {previous_model} 释放 ~{previous_model_bytes/(1024**3):.2f}GB, "
+                                    f"切换后可用 {switch_effective_gb:.2f}GB, 需要 {required_bytes/(1024**3):.2f}GB")
+                    feasibility = {
+                        "feasible": True,
+                        "reason": None,
+                        "available_gb": round(switch_effective_gb, 2),
+                        "required_gb": round(required_bytes / (1024 ** 3), 2),
+                        "safety_margin_gb": round(max(safety_margin, 0) / (1024 ** 3), 2),
+                        "gpu_available": True,
+                        "note": f"当前显存不足({current_effective/(1024**3):.2f}GB可用)，但停止旧模型 {previous_model} 后释放 ~{previous_model_bytes/(1024**3):.2f}GB，切换可行",
+                    }
+                else:
+                    total_gb = info.total_bytes / (1024 ** 3)
+                    required_gb = required_bytes / (1024 ** 3)
+                    feasibility = {
+                        "feasible": False,
+                        "reason": "insufficient_memory_even_with_release",
+                        "available_gb": round(switch_effective_gb, 2),
+                        "required_gb": round(required_gb, 2),
+                        "safety_margin_gb": 0,
+                        "gpu_available": True,
+                        "note": f"即使释放旧模型 {previous_model} ({previous_model_bytes/(1024**3):.2f}GB)，可用 {switch_effective_gb:.2f}GB 仍不足 (需要 {required_gb:.2f}GB, GPU总 {total_gb:.2f}GB)",
+                    }
 
         phase.progress = 80
         await self._broadcast(session, phase=0, progress=80, log="显存校验计算完成")

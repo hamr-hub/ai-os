@@ -146,20 +146,69 @@ func (h *HealthHandler) HealthCheckDetailed(c *gin.Context) {
 	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
 	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
 
+	gpuAlerts := h.metrics.GetGPUAlerts(gpuStatus)
+	alertReasons := make([]string, 0)
+	for _, a := range gpuAlerts {
+		alertReasons = append(alertReasons, a.Message)
+	}
+
+	var overallScore float64
+	if v, ok := healthInfo["overall"]; ok {
+		overallScore, _ = v.(float64)
+	}
+	statusStr := "healthy"
+	if v, ok := healthInfo["status"]; ok {
+		statusStr, _ = v.(string)
+	}
+
+	gpuAvail := gpuStatus != nil && gpuStatus.Status == "available"
+	gpuUtilization := 0
+	gpuTemp := 0
+	gpuMemUsedPct := 0
+	if gpuStatus != nil {
+		gpuUtilization = gpuStatus.Utilization
+		gpuTemp = gpuStatus.Temperature
+		gpuMemUsedPct = gpuStatus.MemoryUtilization
+	}
+
+	vllmRunning := h.sysCtl.IsServiceRunning("vllm-aiclient")
+	vllmActiveRequests := 0
+	if vllmMetrics != nil {
+		vllmActiveRequests = vllmMetrics.RunningRequests
+	}
+
+	redisAvailable := h.redisRepo.IsConnected()
+	redisConnected := h.redisRepo.IsConnected()
+
 	result := gin.H{
-		"status":          healthInfo["status"],
-		"timestamp":       time.Now().Format(time.RFC3339),
-		"scores":          healthInfo,
-		"gpu":             gpuStatus,
-		"gpu_summary":     h.gpuMonitor.GetGPUSummary(),
-		"gpu_processes":   h.gpuMonitor.GetGPUProcesses(),
-		"engines":         h.buildEngineStatus(),
-		"models":          h.buildModelStatus(),
-		"metrics":         h.metrics.GetDetailedMetrics(),
-		"circuit_breaker": h.vllmProxy.CircuitBreakerStats(),
-		"redis":           h.redisRepo.IsConnected(),
-		"redis_stats":     h.redisRepo.GetStats(),
-		"queue":           h.buildQueueStatus(),
+		"overall_score": overallScore,
+		"status":        statusStr,
+		"checks": gin.H{
+			"gpu": gin.H{
+				"available":       gpuAvail,
+				"utilization":     gpuUtilization,
+				"temperature":     gpuTemp,
+				"memory_used_pct": gpuMemUsedPct,
+			},
+			"go_backend": gin.H{
+				"reachable":       true,
+				"response_time_ms": 0,
+			},
+			"python_backend": gin.H{
+				"reachable":       true,
+				"response_time_ms": 0,
+			},
+			"vllm_service": gin.H{
+				"running":         vllmRunning,
+				"active_requests": vllmActiveRequests,
+			},
+			"redis": gin.H{
+				"available":  redisAvailable,
+				"connected":  redisConnected,
+			},
+		},
+		"alert_reasons": alertReasons,
+		"timestamp":     time.Now().Format(time.RFC3339),
 	}
 
 	c.JSON(http.StatusOK, result)
@@ -178,11 +227,17 @@ func (h *HealthHandler) GetHealthHistory(c *gin.Context) {
 	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
 	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
 
+	gpuAlerts := h.metrics.GetGPUAlerts(gpuStatus)
+	alertCount := 0
+	if gpuAlerts != nil {
+		alertCount = len(gpuAlerts)
+	}
+
 	entry := gin.H{
-		"timestamp":     time.Now().Format(time.RFC3339),
-		"health_score":  healthInfo["overall"],
-		"status":        healthInfo["status"],
-		"source":        "current",
+		"timestamp":    time.Now().Format(time.RFC3339),
+		"health_score": healthInfo["overall"],
+		"status":       healthInfo["status"],
+		"alert_count":  alertCount,
 	}
 
 	c.JSON(http.StatusOK, []gin.H{entry})

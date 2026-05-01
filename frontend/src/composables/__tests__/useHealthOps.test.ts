@@ -23,13 +23,46 @@ const alert = {
   timestamp: '2026-01-01T00:00:00Z',
 }
 
-const detail = {
+const goDetail = {
+  scores: {
+    overall: 88,
+    status: 'healthy' as const,
+    gpu_overall: 90,
+    service_score: 100,
+    response_time: 10,
+    vllm_inference: 100,
+    alerts: null,
+  },
+  gpu: {
+    status: 'available',
+    gpu_count: 1,
+    name: 'Test GPU',
+    total_memory: 100000000000,
+    used_memory: 42000000000,
+    available_memory: 58000000000,
+    temperature: 68,
+    utilization: 52,
+    memory_utilization: 42,
+  },
+  engines: {
+    vllm: { running: true, port: '8000', status: '' },
+  },
+  models: {
+    test_model: { running: true, active_requests: 1, service: 'vllm' },
+  },
+  redis: true,
+  redis_stats: { hits: 0, misses: 0, sets: 0, deletes: 0 },
+  status: 'healthy',
+  timestamp: '2026-01-01T00:00:00Z',
+}
+
+const normalizedDetail = {
   overall_score: 88,
   status: 'healthy' as const,
   checks: {
     gpu: { available: true, utilization: 52, temperature: 68, memory_used_pct: 42 },
     go_backend: { reachable: true, response_time_ms: 10 },
-    python_backend: { reachable: true, response_time_ms: 12 },
+    python_backend: { reachable: true, response_time_ms: 0 },
     vllm_service: { running: true, active_requests: 1 },
     redis: { available: true, connected: true },
   },
@@ -68,12 +101,12 @@ describe('useHealthOps', () => {
   })
 
   it('fetchDetail填充healthDetail', async () => {
-    getHealthDetailed.mockResolvedValue(detail)
+    getHealthDetailed.mockResolvedValue(goDetail)
 
     const { fetchDetail, healthDetail } = useHealthOps()
     await fetchDetail()
 
-    expect(healthDetail.value).toEqual(detail)
+    expect(healthDetail.value).toEqual(normalizedDetail)
   })
 
   it('fetchHistory填充healthHistory', async () => {
@@ -98,7 +131,7 @@ describe('useHealthOps', () => {
   it('runCheck先调healthCheck再刷新alert+detail', async () => {
     healthCheck.mockResolvedValue({ status: 'ok' })
     getHealthAlert.mockResolvedValue({ ...alert, status: 'healthy', should_alert: false, alert_reasons: [] })
-    getHealthDetailed.mockResolvedValue(detail)
+    getHealthDetailed.mockResolvedValue(goDetail)
 
     const { runCheck, healthAlert, healthDetail, loading, error } = useHealthOps()
     await runCheck()
@@ -107,7 +140,7 @@ describe('useHealthOps', () => {
     expect(getHealthAlert).toHaveBeenCalledOnce()
     expect(getHealthDetailed).toHaveBeenCalledOnce()
     expect(healthAlert.value?.status).toBe('healthy')
-    expect(healthDetail.value).toEqual(detail)
+    expect(healthDetail.value).toEqual(normalizedDetail)
     expect(loading.value).toBe(false)
     expect(error.value).toBeNull()
   })

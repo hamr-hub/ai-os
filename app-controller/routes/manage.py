@@ -241,6 +241,21 @@ async def get_gpu_summary():
         return cached
 
     summary = gpu_monitor.get_gpu_summary()
+
+    models = {}
+    for model in scheduler.get_available_models():
+        models[model] = {
+            "running": scheduler.is_model_running(model),
+            "engine": scheduler.get_model_backend_type(model),
+            "port": scheduler.get_model_port(model),
+            "pid": None,
+            "started_at": None,
+        }
+
+    summary["models"] = models
+    summary["current_model"] = scheduler.get_current_model_name()
+    summary["default_model"] = scheduler.get_default_model()
+
     cache_service.set(cache_key, summary, ttl_seconds=30)
     return summary
 
@@ -783,13 +798,48 @@ async def get_health_detail():
     gpu_status = gpu_monitor.get_gpu_status()
     vllm_metrics = gpu_monitor.get_vllm_metrics()
     health_scores = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
-    gpu_alerts = metrics.check_gpu_alerts(gpu_status or {}, vllm_metrics)
+
+    gpu_avail = gpu_status is not None and gpu_status.get("status") == "available"
+    gpu_utilization = 0
+    gpu_temp = 0
+    gpu_mem_used_pct = 0
+    if gpu_status:
+        gpu_utilization = gpu_status.get("utilization", 0)
+        gpu_temp = gpu_status.get("temperature", 0)
+        gpu_mem_used_pct = gpu_status.get("memory_utilization", 0)
+
+    vllm_running = vllm_metrics is not None and vllm_metrics.get("vllm_available", False)
+    vllm_active_requests = vllm_metrics.get("running_requests", 0) if vllm_metrics else 0
+
     return {
-        "health_scores": health_scores,
-        "gpu_alerts": gpu_alerts,
-        "gpu_status_summary": gpu_status,
-        "vllm_metrics_summary": vllm_metrics,
-        "timestamp": datetime.now().isoformat()
+        "overall_score": health_scores.get("overall", 0),
+        "status": health_scores.get("status", "unknown"),
+        "checks": {
+            "gpu": {
+                "available": gpu_avail,
+                "utilization": gpu_utilization,
+                "temperature": gpu_temp,
+                "memory_used_pct": gpu_mem_used_pct,
+            },
+            "go_backend": {
+                "reachable": True,
+                "response_time_ms": 0,
+            },
+            "python_backend": {
+                "reachable": True,
+                "response_time_ms": 0,
+            },
+            "vllm_service": {
+                "running": vllm_running,
+                "active_requests": vllm_active_requests,
+            },
+            "redis": {
+                "available": True,
+                "connected": True,
+            },
+        },
+        "alert_reasons": health_scores.get("alerts") or [],
+        "timestamp": datetime.now().isoformat(),
     }
 
 
@@ -1594,52 +1644,6 @@ async def update_engines_config(request: Request):
             "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "subprocess"),
         }}
     raise HTTPException(status_code=500, detail="Failed to persist engines config")
-
-
-@manage_router.get("/health/detailed")
-async def get_health_detailed():
-    health = await health_checker.check_health()
-    return {
-        "overall_score": health.health_score,
-        "status": health.status,
-        "checks": {
-            "gpu": {
-                "available": bool(getattr(health, 'details', {}).get('gpu_overall', 0) > 0),
-                "utilization": getattr(gpu_monitor.get_current_metrics(), 'gpu_utilization', 0) if gpu_monitor else 0,
-                "temperature": getattr(gpu_monitor.get_current_metrics(), 'gpu_temperature', 0) if gpu_monitor else 0,
-                "memory_used_pct": getattr(gpu_monitor.get_current_metrics(), 'memory_utilization', 0) if gpu_monitor else 0,
-            },
-            "go_backend": {
-                "reachable": True,
-                "response_time_ms": 0,
-            },
-            "python_backend": {
-                "reachable": True,
-                "response_time_ms": 0,
-            },
-            "vllm_service": {
-                "running": True,
-                "active_requests": 0,
-            },
-            "redis": {
-                "available": True,
-                "connected": True,
-            },
-        },
-        "alert_reasons": health.alert_reasons,
-        "timestamp": health.timestamp.isoformat() if hasattr(health.timestamp, 'isoformat') else str(health.timestamp),
-    }
-
-
-@manage_router.get("/health/history")
-async def get_health_history():
-    current = await health_checker.check_health()
-    return [{
-        "timestamp": current.timestamp.isoformat() if hasattr(current.timestamp, 'isoformat') else str(current.timestamp),
-        "health_score": current.health_score,
-        "status": current.status,
-        "alert_count": len(current.alert_reasons),
-    }]
 
 
 # ===== Model Benchmark =====

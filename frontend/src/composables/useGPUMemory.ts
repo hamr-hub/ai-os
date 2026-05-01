@@ -24,6 +24,19 @@ interface RawEngineStatusResponse {
 
 const ENGINE_TYPES: EngineType[] = ['vllm', 'sglang', 'llama_cpp']
 
+const normalizeGPUMemoryInfo = (raw: any): GPUMemoryInfo => {
+  const gpuData = raw?.gpu ?? {}
+  return {
+    available: raw?.available ?? (gpuData?.free_gb > 0) ?? true,
+    total_gb: gpuData?.total_gb ?? raw?.total_gb ?? 0,
+    used_gb: gpuData?.used_gb ?? raw?.used_gb ?? 0,
+    free_gb: gpuData?.free_gb ?? raw?.free_gb ?? 0,
+    safety_available_gb: gpuData?.free_gb ?? raw?.safety_available_gb ?? raw?.free_gb ?? 0,
+    gpu_name: gpuData?.name ?? raw?.gpu_name ?? '',
+    method: (gpuData?.backend ?? gpuData?.method ?? raw?.method ?? 'pynvml') as GPUMemoryInfo['method'],
+  }
+}
+
 const createEmptyEngineState = () => ({
   running: false,
   pid: null,
@@ -121,7 +134,8 @@ export function useGPUMemory() {
     loading.value = true
     error.value = null
     try {
-      memoryInfo.value = await getGPUMemoryCheck()
+      const raw = await getGPUMemoryCheck()
+      memoryInfo.value = normalizeGPUMemoryInfo(raw)
     } catch (e: any) {
       error.value = e.message || '获取显存信息失败'
       memoryInfo.value = null

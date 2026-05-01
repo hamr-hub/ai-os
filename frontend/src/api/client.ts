@@ -43,7 +43,7 @@ import type {
   RateLimitConfig,
   RateLimitStats,
   SystemConfig,
-  HealthDetail,
+  GoHealthDetail,
   HealthHistoryEntry,
 } from '@/types'
 import { useServerStore } from '@/stores/server'
@@ -739,8 +739,8 @@ export async function updateSystemConfig(newConfig: Partial<SystemConfig>, confi
   return data
 }
 
-export async function getHealthDetailed(config: AxiosRequestConfig = {}): Promise<HealthDetail> {
-  const { data } = await client.get<HealthDetail>('/health/detailed', silentRequestConfig(config))
+export async function getHealthDetailed(config: AxiosRequestConfig = {}): Promise<GoHealthDetail> {
+  const { data } = await client.get<GoHealthDetail>('/health/detailed', silentRequestConfig(config))
   return data
 }
 

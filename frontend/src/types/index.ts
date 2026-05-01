@@ -758,6 +758,35 @@ export interface SystemConfig {
   ws_push_interval_seconds: number
 }
 
+export interface GoHealthDetail {
+  scores: {
+    overall: number
+    status: 'healthy' | 'degraded' | 'unhealthy'
+    gpu_overall: number
+    service_score: number
+    response_time: number
+    vllm_inference: number
+    alerts: Array<{ type: string; severity: string; value: number; threshold: number; message: string }> | null
+  }
+  gpu: {
+    status: string
+    gpu_count: number
+    name: string
+    total_memory: number
+    used_memory: number
+    available_memory: number
+    temperature: number
+    utilization: number
+    memory_utilization: number
+  }
+  engines: Record<string, { running: boolean; port: string; status: string }>
+  models: Record<string, { running: boolean; active_requests: number; service: string }>
+  redis: boolean
+  redis_stats: { hits: number; misses: number; sets: number; deletes: number }
+  status: string
+  timestamp: string
+}
+
 export interface HealthDetail {
   overall_score: number
   status: 'healthy' | 'degraded' | 'unhealthy'
