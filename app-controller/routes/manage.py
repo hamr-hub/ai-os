@@ -1589,7 +1589,47 @@ async def engine_switch(request: Request):
 
 @manage_router.get("/engines/status")
 async def engine_status():
+    import httpx
+    from core.vllm_manager import get_current_model_info
     services = llm_service_manager.list_services()
+    if not services:
+        current_info = get_current_model_info()
+        if current_info and current_info.get("running"):
+            try:
+                import psutil
+                vllm_pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name'])
+                             if p.info['name'] and ('VLLM' in p.info['name'].upper() or 'vllm' in (p.info['name'] or '').lower())]
+                vllm_pid = vllm_pids[0] if vllm_pids else None
+            except Exception:
+                vllm_pid = None
+            except Exception:
+                vllm_pid = None
+            model_name = current_info.get("name", "")
+            engine_type = "vllm"
+            config = scheduler.get_model_config(model_name) or {}
+            service_port = config.get("port", 8000)
+            uptime = None
+            try:
+                async with httpx.AsyncClient(timeout=3) as client:
+                    resp = await client.get(f"http://localhost:{service_port}/v1/models")
+                    if resp.status_code == 200:
+                        health = "healthy"
+                    else:
+                        health = "unhealthy"
+            except Exception:
+                health = "unknown"
+            services.append({
+                "status": "running",
+                "service_name": current_info.get("service", "vllm-aiclient"),
+                "engine_type": engine_type,
+                "engine": engine_type,
+                "pid": vllm_pid,
+                "port": service_port,
+                "model_name": model_name,
+                "model": model_name,
+                "health": health,
+                "uptime_seconds": None,
+            })
     return {
         "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "subprocess"),
         "services": services,

@@ -53,6 +53,21 @@ export default defineConfig({
     port: devServerPort,
     strictPort: true,
     proxy: {
+      '/api/health/detailed': {
+        target: unifiedBackend,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/api/health/alert': {
+        target: unifiedBackend,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '/manage'),
+      },
+      '/api/health/history': {
+        target: unifiedBackend,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '/manage'),
+      },
       '/api/health': {
         target: gatewayBackend,
         changeOrigin: true,

@@ -18,7 +18,7 @@ type SystemController struct {
 	systemctlPath      string
 	systemctlAvailable bool
 	vllmPort           int
-	mu                 sync.Mutex
+	mu                 sync.RWMutex
 }
 
 func NewSystemController(logger *zap.Logger) *SystemController {
@@ -264,14 +264,17 @@ func (sc *SystemController) getServiceStatusLocked(name string) string {
 }
 
 func (sc *SystemController) IsServiceRunning(name string) bool {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
+	sc.mu.RLock()
+	defer sc.mu.RUnlock()
 
 	if sc.systemctlAvailable {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		cmd := sc.command("systemctl", "is-active", name)
 		if cmd == nil {
 			return false
 		}
+		cmd = exec.CommandContext(ctx, cmd.Args[0], cmd.Args[1:]...)
 		output, err := cmd.Output()
 		if err != nil {
 			return false
