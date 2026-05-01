@@ -32,6 +32,25 @@ describe('useGPUMemory', () => {
     vi.clearAllMocks()
   })
 
+  it('normalizeEngineStatus兼容后端engine_type和uptime_seconds字段', async () => {
+    const backendRaw = {
+      engine_manager_mode: 'subprocess',
+      services: [
+        { status: 'running', engine_type: 'vllm', pid: 100, port: 8000, model: 'test-model', uptime_seconds: 300 },
+      ],
+      active_count: 1,
+    }
+    getEngineStatus.mockResolvedValue(backendRaw)
+
+    const { getEngines, engineStatus } = useGPUMemory()
+    await getEngines()
+
+    expect(engineStatus.value?.vllm.running).toBe(true)
+    expect(engineStatus.value?.vllm.model).toBe('test-model')
+    expect(engineStatus.value?.vllm.uptime).toBe(300)
+    expect(engineStatus.value?.current_engine).toBe('vllm')
+  })
+
   it('getGPU填充gpuInfo', async () => {
     const gpuData = {
       status: 'available' as const,

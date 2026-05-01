@@ -29,6 +29,27 @@ describe('useEngineManagement', () => {
     vi.clearAllMocks()
   })
 
+  it('normalizeEngineStatus兼容后端engine_type字段', async () => {
+    const backendRaw = {
+      engine_manager_mode: 'subprocess',
+      services: [
+        { status: 'running', engine_type: 'vllm', pid: 123, port: 8000, model: 'Qwen3-235B', uptime_seconds: 120, health: 'healthy', service_name: 'vllm-aiclient' },
+      ],
+      active_count: 1,
+    }
+    getEngineStatus.mockResolvedValue(backendRaw)
+
+    const { fetchStatus, engineStatus } = useEngineManagement()
+    await fetchStatus()
+
+    expect(engineStatus.value?.vllm.running).toBe(true)
+    expect(engineStatus.value?.vllm.pid).toBe(123)
+    expect(engineStatus.value?.vllm.port).toBe(8000)
+    expect(engineStatus.value?.vllm.model).toBe('Qwen3-235B')
+    expect(engineStatus.value?.vllm.uptime).toBe(120)
+    expect(engineStatus.value?.current_engine).toBe('vllm')
+  })
+
   it('fetchStatus填充engineStatus', async () => {
     const status = createEngineStatus({
       vllm: { running: true, pid: 123, port: 8000, model: 'llama', uptime: 60 },

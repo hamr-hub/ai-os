@@ -4,17 +4,23 @@ import type { EngineType, EngineStatus, EngineConfig, SwitchSession } from '@/ty
 
 interface RawServiceStatus {
   engine?: string | null
+  engine_type?: string | null
   status?: string | null
   port?: number | null
   pid?: number | null
   started_at?: string | null
+  uptime_seconds?: number | null
   model_name?: string | null
   model?: string | null
+  health?: string | null
+  service_name?: string | null
 }
 
 interface RawEngineStatusResponse {
   current_engine?: EngineType
+  engine_manager_mode?: string
   services?: RawServiceStatus[]
+  active_count?: number
 }
 
 interface RawEngineConfigEntry {
@@ -49,18 +55,24 @@ const normalizeEngineStatus = (payload: unknown): EngineStatus => {
 
   if (Array.isArray(raw.services)) {
     for (const service of raw.services) {
-      const engine = service.engine
-      if (!engine || !ENGINE_TYPES.includes(engine as EngineType)) continue
-      const startedAt = service.started_at ? Date.parse(service.started_at) : NaN
-      normalized[engine as EngineType] = {
+      const engine = (service.engine_type ?? service.engine) as EngineType | null
+      if (!engine || !ENGINE_TYPES.includes(engine)) continue
+      let uptime: number | null = null
+      if (service.uptime_seconds != null) {
+        uptime = Math.round(service.uptime_seconds)
+      } else if (service.started_at) {
+        const startedAt = Date.parse(service.started_at)
+        if (Number.isFinite(startedAt)) uptime = Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+      }
+      normalized[engine] = {
         running: service.status === 'running',
         pid: service.pid ?? null,
         port: service.port ?? null,
         model: service.model_name ?? service.model ?? null,
-        uptime: Number.isFinite(startedAt) ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : null,
+        uptime,
       }
       if (service.status === 'running') {
-        normalized.current_engine = engine as EngineType
+        normalized.current_engine = engine
       }
     }
   }
