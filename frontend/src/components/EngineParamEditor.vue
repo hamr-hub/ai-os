@@ -27,8 +27,14 @@ const dirty = computed(() => {
 
 const engineGroups = computed<EngineParamGroup[]>(() => {
   if (!schema.value) return []
-  const key = props.engineType === 'llama_cpp' ? 'llamacpp' : props.engineType
-  return schema.value[key]?.groups || []
+  const keys = props.engineType === 'llama_cpp'
+    ? ['llama_cpp', 'llamacpp']
+    : [props.engineType]
+  for (const key of keys) {
+    const groups = schema.value[key]?.groups
+    if (groups?.length) return groups
+  }
+  return []
 })
 
 const engineLabel = computed(() => {

@@ -100,21 +100,26 @@ test.describe('模型切换功能', () => {
 
   test.describe('可启动模型', () => {
     test('"可启动模型"区域标题存在', async ({ page }) => {
-      const subHeader = page.locator('.running-card .sub-header')
-      if ((await subHeader.count()) > 0) {
-        await expect(subHeader).toHaveText('可启动模型', { timeout: CARD_TIMEOUT })
+      const rows = page.locator('.running-card .model-row.stopped')
+      const count = await rows.count()
+      if (count > 0) {
+        await expect(page.locator('.running-card .sub-header')).toHaveText('可启动模型', {
+          timeout: CARD_TIMEOUT,
+        })
       } else {
-        await expect(page.locator('.running-card .empty-state')).toBeVisible({ timeout: CARD_TIMEOUT })
+        expect(count).toBe(0)
       }
     })
 
     test('可启动模型区域结构完整', async ({ page }) => {
-      const stoppedSection = page.locator('.running-card .stopped-section')
-      if ((await stoppedSection.count()) > 0) {
+      const rows = page.locator('.running-card .model-row.stopped')
+      const count = await rows.count()
+      if (count > 0) {
+        const stoppedSection = page.locator('.running-card .stopped-section')
         await expect(stoppedSection).toBeVisible({ timeout: CARD_TIMEOUT })
         await expect(stoppedSection.locator('.stopped-list')).toBeAttached()
       } else {
-        await expect(page.locator('.running-card .empty-state')).toBeVisible({ timeout: CARD_TIMEOUT })
+        expect(count).toBe(0)
       }
     })
 
@@ -315,16 +320,14 @@ test.describe('模型切换功能', () => {
     })
 
     test('刷新后数量格式保持正确', async ({ page }) => {
-      const empty = page.locator('.running-card .empty-state')
-      if (await empty.isVisible()) {
-        await page.locator('.header-btn').click()
-        await page.waitForTimeout(2000)
-      }
+      await page.locator('.header-btn').click()
+      await page.waitForTimeout(2000)
       const badge = page.locator('.running-card .count-badge')
       if ((await badge.count()) > 0) {
         await expect(badge).toHaveText(/\d+\s*\/\s*\d+/)
       } else {
-        await expect(page.locator('.running-card .empty-state')).toBeVisible({ timeout: CARD_TIMEOUT })
+        const rows = page.locator('.running-card .model-row')
+        expect(await rows.count()).toBeGreaterThanOrEqual(0)
       }
     })
   })

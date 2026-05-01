@@ -116,7 +116,7 @@ const formatPct = (active: number, limit: number) => {
         <Loader2 class="w-8 h-8 animate-spin text-primary" />
         <p>加载中...</p>
       </div>
-      <div v-else-if="!queueEntries.length" class="empty-state">
+      <div v-else-if="!loading && !queueEntries.length" class="empty-state">
         <Gauge class="w-12 h-12 text-muted" />
         <p>暂无排队数据</p>
       </div>
@@ -222,6 +222,24 @@ const formatPct = (active: number, limit: number) => {
           <div class="form-row">
             <label class="form-label">排队超时(秒)</label>
             <input v-model.number="editConfig.queue_timeout_seconds" type="number" class="form-input" />
+          </div>
+          <div class="form-row">
+            <label class="form-label">白名单 IP</label>
+            <textarea
+              :value="(editConfig.whitelist_ips || []).join(', ')"
+              class="form-input"
+              rows="3"
+              @input="editConfig.whitelist_ips = ($event.target as HTMLTextAreaElement).value.split(',').map(item => item.trim()).filter(Boolean)"
+            />
+          </div>
+          <div class="form-row">
+            <label class="form-label">限流路径</label>
+            <textarea
+              :value="(editConfig.rate_limited_paths || []).join(', ')"
+              class="form-input"
+              rows="3"
+              @input="editConfig.rate_limited_paths = ($event.target as HTMLTextAreaElement).value.split(',').map(item => item.trim()).filter(Boolean)"
+            />
           </div>
           <div class="editor-actions">
             <button class="btn btn-primary" @click="saveEdit">保存</button>

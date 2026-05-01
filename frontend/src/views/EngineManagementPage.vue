@@ -55,7 +55,7 @@ const handleSwitch = async () => {
   showSwitchConfirm.value = false
   const result = await doSwitchEngine(targetModel.value, targetEngine.value, targetPort.value)
   if (result?.session_id) {
-    triggerSwitch(targetModel.value)
+    triggerSwitch(targetModel.value, false, 'switch')
     activeTab.value = 'switch'
   }
 }
