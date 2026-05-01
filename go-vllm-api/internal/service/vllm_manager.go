@@ -216,7 +216,15 @@ func (vm *VLLMManager) ScanModels() []ModelScanResult {
 			continue
 		}
 		modelPath := filepath.Join(basePath, entry.Name())
+		if !vm.isModelDirectory(modelPath) {
+			vm.logger.Debug("skipping non-model directory", zap.String("path", modelPath))
+			continue
+		}
 		size := vm.estimateModelSize(modelPath)
+		if size == 0 {
+			vm.logger.Debug("skipping directory with no model weights", zap.String("path", modelPath))
+			continue
+		}
 		estVRAM := vm.formatVRAM(size)
 		results = append(results, ModelScanResult{
 			Name:          entry.Name(),
@@ -226,6 +234,29 @@ func (vm *VLLMManager) ScanModels() []ModelScanResult {
 		})
 	}
 	return results
+}
+
+func (vm *VLLMManager) isModelDirectory(modelPath string) bool {
+	modelMarkers := []string{
+		"config.json",
+		"tokenizer_config.json",
+		"model_config.json",
+		"params.json",
+	}
+	for _, marker := range modelMarkers {
+		if _, err := os.Stat(filepath.Join(modelPath, marker)); err == nil {
+			return true
+		}
+	}
+	ggufPattern := filepath.Join(modelPath, "*.gguf")
+	if matches, _ := filepath.Glob(ggufPattern); len(matches) > 0 {
+		return true
+	}
+	safetensorsPattern := filepath.Join(modelPath, "*.safetensors")
+	if matches, _ := filepath.Glob(safetensorsPattern); len(matches) > 0 {
+		return true
+	}
+	return false
 }
 
 func (vm *VLLMManager) estimateModelSize(modelPath string) int64 {

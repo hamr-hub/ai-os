@@ -60,7 +60,7 @@
 
         var toggle = document.createElement('div');
         toggle.id = TOGGLE_ID;
-        toggle.innerHTML = '<span class="aim-toggle-icon">⚡</span><span class="aim-toggle-label">AI Monitor</span>';
+        toggle.innerHTML = '<span class="aim-toggle-icon"><i class="fas fa-bolt"></i></span><span class="aim-toggle-label">AI Monitor</span>';
         toggle.addEventListener('click', togglePanel);
         document.body.appendChild(toggle);
 
@@ -70,8 +70,8 @@
 <div class="aim-panel-header">\
     <span class="aim-panel-title">AI Monitor</span>\
     <div class="aim-panel-header-actions">\
-        <button class="aim-btn aim-btn-sm" id="aim-refresh-btn" onclick="window.__aiMonitorRefresh()">刷新</button>\
-        <button class="aim-btn aim-btn-sm aim-btn-collapse" onclick="window.__aiMonitorToggle()">✕</button>\
+        <button class="aim-btn aim-btn-sm" id="aim-refresh-btn" onclick="window.__aiMonitorRefresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+        <button class="aim-btn aim-btn-sm aim-btn-collapse" onclick="window.__aiMonitorToggle()"><i class="fas fa-times"></i></button>\
     </div>\
 </div>\
 <div class="aim-panel-body">\
@@ -118,7 +118,7 @@
                 <option value="sglang">SGLang</option>\
                 <option value="llamacpp">llama.cpp</option>\
             </select>\
-            <button class="aim-btn aim-btn-primary aim-btn-block" id="aim-switch-model-btn" onclick="window.__aiMonitorSwitchModel()">切换模型</button>\
+            <button class="aim-btn aim-btn-primary aim-btn-block" id="aim-switch-model-btn" onclick="window.__aiMonitorSwitchModel()"><i class="fas fa-exchange-alt"></i> 切换模型</button>\
         </div>\
     </div>\
     <div class="aim-section">\

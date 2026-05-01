@@ -839,6 +839,9 @@ class GPUMonitor:
                 history_entry["vllm_waiting_requests"] = int(vllm_metrics.get("waiting_requests", 0))
                 history_entry["vllm_gpu_cache_usage"] = float(vllm_metrics.get("gpu_cache_usage", 0))
             
+            health_score = self.get_health_score(status)
+            history_entry["health_score"] = health_score
+            
             self._redis_client.lpush("gpu:history", json.dumps(history_entry))
             self._redis_client.ltrim("gpu:history", 0, max_points - 1)
             ttl_30_days = 30 * 24 * 60 * 60

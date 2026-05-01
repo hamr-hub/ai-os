@@ -208,21 +208,21 @@
                     <div class="aios-engine-icon"><i class="fas fa-bolt"></i></div>\
                     <div class="aios-engine-title">vLLM</div>\
                 </div>\
-                <div class="aios-engine-status" id="aios-engine-vllm-status">未运行</div>\
+                <div class="aios-engine-status-text" id="aios-engine-vllm-status">未运行</div>\
             </div>\
             <div class="aios-engine-card" data-engine="sglang">\
                 <div class="aios-engine-header">\
                     <div class="aios-engine-icon"><i class="fas fa-rocket"></i></div>\
                     <div class="aios-engine-title">SGLang</div>\
                 </div>\
-                <div class="aios-engine-status" id="aios-engine-sglang-status">未运行</div>\
+                <div class="aios-engine-status-text" id="aios-engine-sglang-status">未运行</div>\
             </div>\
             <div class="aios-engine-card" data-engine="llamacpp">\
                 <div class="aios-engine-header">\
                     <div class="aios-engine-icon"><i class="fas fa-leaf"></i></div>\
                     <div class="aios-engine-title">llama.cpp</div>\
                 </div>\
-                <div class="aios-engine-status" id="aios-engine-llamacpp-status">未运行</div>\
+                <div class="aios-engine-status-text" id="aios-engine-llamacpp-status">未运行</div>\
             </div>\
         </div>\
         <div class="aios-action-card">\
@@ -309,7 +309,7 @@
                     <button class="aios-btn aios-btn-primary" onclick="AiosManager.config.setDefaultModel()"><i class="fas fa-check"></i> 设置</button>\
                     <button class="aios-btn aios-btn-danger" onclick="AiosManager.config.clearDefaultModel()"><i class="fas fa-trash"></i> 清除</button>\
                 </div>\
-                <div id="aios-current-default-model" class="aios-config-info">当前默认模型: --</div>\
+                <div id="aios-current-default-model" class="aios-config-info" style="margin-top: var(--space-md);">当前默认模型: --</div>\
             </div>\
         </div>\
     </div>\
@@ -522,6 +522,20 @@
             ctx.textAlign = 'left';
             ctx.fillText(ds.label || ('系列' + (di + 1)), padding, padding - 10 - di * 15);
         });
+    }
+
+    function showToast(msg, type) {
+        var container = document.querySelector('.aios-toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'aios-toast-container';
+            document.body.appendChild(container);
+        }
+        var toast = document.createElement('div');
+        toast.className = 'aios-toast aios-toast-' + (type || 'info');
+        toast.innerHTML = '<span>' + escapeHtml(msg) + '</span><button class="aios-toast-close" onclick="this.parentElement.remove()">&times;</button>';
+        container.appendChild(toast);
+        setTimeout(function() { if (toast.parentElement) toast.remove(); }, 4000);
     }
 
     function injectStyles() {
@@ -739,7 +753,7 @@
                     document.getElementById('aios-gpu-mem-bar').style.width = memPercent + '%';
                     document.getElementById('aios-gpu-mem-bar').className = 'aios-progress-fill ' + (memPercent > 90 ? 'aios-danger' : memPercent > 70 ? 'aios-warning' : 'aios-success');
 
-                    document.getElementById('aios-gpu-temp').textContent = gpu.temperature ? gpu.temperature + '°C' : '--';
+                    document.getElementById('aios-gpu-temp').textContent = gpu.temperature ? gpu.temperature + '\u00B0C' : '--';
                     document.getElementById('aios-gpu-power').textContent = (gpu.powerDraw != null) ? gpu.powerDraw + 'W / ' + (gpu.powerLimit || '--') + 'W' : '--';
 
                     if (data.history && data.history.length > 1) {
@@ -881,7 +895,7 @@
                         allModels.forEach(function(m) {
                             var opt = document.createElement('option');
                             opt.value = m.name;
-                            opt.textContent = m.name + (m.running ? ' (运行中)' : '') + (m.is_current ? ' ★' : '');
+                            opt.textContent = m.name + (m.running ? ' (运行中)' : '') + (m.is_current ? ' \u2605' : '');
                             select.appendChild(opt);
                         });
                         if (currentVal && allModels.some(function(m) { return m.name === currentVal; })) {
@@ -908,7 +922,7 @@
                 var modelName = document.getElementById('aios-quick-switch-model').value;
                 var engineType = document.getElementById('aios-quick-switch-engine').value;
                 var port = parseInt(document.getElementById('aios-quick-switch-port').value) || 8000;
-                if (!modelName) { alert('请选择目标模型'); return; }
+                if (!modelName) { showToast('请选择目标模型', 'warning'); return; }
                 if (!confirm('确定切换到模型 ' + modelName + ' (引擎: ' + engineType + ')?')) return;
                 adminFetch('/api/model-switch/switch', {
                     method: 'POST',
@@ -916,13 +930,13 @@
                     body: JSON.stringify({ modelName: modelName, engineType: engineType, port: port })
                 }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('模型切换已启动: ' + modelName);
+                        showToast('模型切换已启动: ' + modelName, 'success');
                         setTimeout(function() { AiosManager.modelSwitch.refresh(); }, 3000);
                     } else {
-                        alert('切换失败: ' + (data.error || '未知错误'));
+                        showToast('切换失败: ' + (data.error || '未知错误'), 'error');
                     }
                 }).catch(function(err) {
-                    alert('请求失败: ' + err.message);
+                    showToast('请求失败: ' + err.message, 'error');
                 });
             },
 
@@ -930,7 +944,7 @@
                 var modelName = document.getElementById('aios-quick-switch-model').value;
                 var engineType = document.getElementById('aios-quick-switch-engine').value;
                 var port = parseInt(document.getElementById('aios-quick-switch-port').value) || 8000;
-                if (!modelName) { alert('请选择模型'); return; }
+                if (!modelName) { showToast('请选择模型', 'warning'); return; }
                 if (!confirm('确定将模型 ' + modelName + ' 切换到引擎 ' + engineType + '?')) return;
                 adminFetch('/api/engine/switch', {
                     method: 'POST',
@@ -938,13 +952,13 @@
                     body: JSON.stringify({ model_name: modelName, engine_type: engineType, port: port })
                 }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('引擎切换已启动: ' + engineType);
+                        showToast('引擎切换已启动: ' + engineType, 'success');
                         setTimeout(function() { AiosManager.modelSwitch.refresh(); }, 3000);
                     } else {
-                        alert('引擎切换失败: ' + (data.error || '未知错误'));
+                        showToast('引擎切换失败: ' + (data.error || '未知错误'), 'error');
                     }
                 }).catch(function(err) {
-                    alert('请求失败: ' + err.message);
+                    showToast('请求失败: ' + err.message, 'error');
                 });
             },
 
@@ -956,13 +970,13 @@
                     body: JSON.stringify({ modelName: modelName })
                 }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('模型切换已启动: ' + modelName);
+                        showToast('模型切换已启动: ' + modelName, 'success');
                         setTimeout(function() { AiosManager.modelSwitch.refresh(); }, 3000);
                     } else {
-                        alert('切换失败: ' + (data.error || '未知错误'));
+                        showToast('切换失败: ' + (data.error || '未知错误'), 'error');
                     }
                 }).catch(function(err) {
-                    alert('请求失败: ' + err.message);
+                    showToast('请求失败: ' + err.message, 'error');
                 });
             },
 
@@ -974,13 +988,13 @@
                     body: JSON.stringify({ modelName: modelName })
                 }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('模型启动已启动: ' + modelName);
+                        showToast('模型启动已启动: ' + modelName, 'success');
                         setTimeout(function() { AiosManager.modelSwitch.refresh(); }, 5000);
                     } else {
-                        alert('启动失败: ' + (data.error || '未知错误'));
+                        showToast('启动失败: ' + (data.error || '未知错误'), 'error');
                     }
                 }).catch(function(err) {
-                    alert('请求失败: ' + err.message);
+                    showToast('请求失败: ' + err.message, 'error');
                 });
             },
 
@@ -1046,11 +1060,11 @@
                         var card = el ? el.closest('.aios-engine-card') : null;
                         if (engineStatuses[eng] && engineStatuses[eng].status === 'running') {
                             el.textContent = '运行中 (端口: ' + (engineStatuses[eng].port || '--') + ')';
-                            el.className = 'aios-engine-card-status aios-engine-running-text';
+                            el.className = 'aios-engine-status-text aios-engine-running-text';
                             if (card) card.classList.add('aios-engine-running');
                         } else {
                             el.textContent = '未运行';
-                            el.className = 'aios-engine-card-status aios-engine-stopped-text';
+                            el.className = 'aios-engine-status-text aios-engine-stopped-text';
                             if (card) card.classList.add('aios-engine-stopped');
                         }
                     });
@@ -1084,7 +1098,7 @@
                             group.variants.forEach(function(v) {
                                 var opt = document.createElement('option');
                                 opt.value = v.name;
-                                opt.textContent = v.name + (v.running ? ' (运行中)' : '') + (v.is_current ? ' ★' : '');
+                                opt.textContent = v.name + (v.running ? ' (运行中)' : '') + (v.is_current ? ' \u2605' : '');
                                 select.appendChild(opt);
                             });
                         });
@@ -1097,7 +1111,7 @@
                 var modelName = document.getElementById('aios-engine-switch-model').value;
                 var engineType = document.getElementById('aios-engine-switch-type').value;
                 var port = parseInt(document.getElementById('aios-engine-switch-port').value) || 8000;
-                if (!modelName) { alert('请选择模型'); return; }
+                if (!modelName) { showToast('请选择模型', 'warning'); return; }
                 if (!confirm('确定将模型 ' + modelName + ' 切换到引擎 ' + engineType + ' (端口: ' + port + ')?')) return;
                 adminFetch('/api/engine/switch', {
                     method: 'POST',
@@ -1105,13 +1119,13 @@
                     body: JSON.stringify({ model_name: modelName, engine_type: engineType, port: port })
                 }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('引擎切换已启动: ' + engineType);
+                        showToast('引擎切换已启动: ' + engineType, 'success');
                         setTimeout(function() { AiosManager.engine.refresh(); }, 3000);
                     } else {
-                        alert('引擎切换失败: ' + (data.error || '未知错误'));
+                        showToast('引擎切换失败: ' + (data.error || '未知错误'), 'error');
                     }
                 }).catch(function(err) {
-                    alert('请求失败: ' + err.message);
+                    showToast('请求失败: ' + err.message, 'error');
                 });
             }
         },
@@ -1181,26 +1195,26 @@
                     body: JSON.stringify(formData)
                 }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('配置已保存');
+                        showToast('配置已保存', 'success');
                     } else {
-                        alert('保存失败: ' + (data.error || '未知错误'));
+                        showToast('保存失败: ' + (data.error || '未知错误'), 'error');
                     }
                 });
             },
 
             setDefaultModel: function() {
                 var model = document.getElementById('aios-default-model-input').value.trim();
-                if (!model) { alert('请输入模型名称'); return; }
+                if (!model) { showToast('请输入模型名称', 'warning'); return; }
                 adminFetch('/api/config/default-model', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ model: model })
                 }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('默认模型已设置: ' + model);
+                        showToast('默认模型已设置: ' + model, 'success');
                         AiosManager.config.refresh();
                     } else {
-                        alert('设置失败: ' + (data.error || '未知错误'));
+                        showToast('设置失败: ' + (data.error || '未知错误'), 'error');
                     }
                 });
             },
@@ -1208,10 +1222,10 @@
             clearDefaultModel: function() {
                 adminFetch('/api/config/default-model', { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('默认模型已清除');
+                        showToast('默认模型已清除', 'success');
                         AiosManager.config.refresh();
                     } else {
-                        alert('清除失败');
+                        showToast('清除失败', 'error');
                     }
                 });
             }
@@ -1295,10 +1309,10 @@
             runCheck: function() {
                 adminFetch('/api/health/check', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('健康检查完成');
+                        showToast('健康检查完成', 'success');
                         AiosManager.health.refresh();
                     } else {
-                        alert('检查失败: ' + (data.error || '未知错误'));
+                        showToast('检查失败: ' + (data.error || '未知错误'), 'error');
                     }
                 });
             }
@@ -1377,9 +1391,9 @@
                     body: JSON.stringify(formData)
                 }).then(function(r) { return r.json(); }).then(function(data) {
                     if (data.success) {
-                        alert('限流配置已保存');
+                        showToast('限流配置已保存', 'success');
                     } else {
-                        alert('保存失败: ' + (data.error || '未知错误'));
+                        showToast('保存失败: ' + (data.error || '未知错误'), 'error');
                     }
                 });
             }

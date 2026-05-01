@@ -238,10 +238,10 @@ export async function stopModel(name: string): Promise<ActionResponse> {
 
 export async function switchModel(name: string, testEnabled = true): Promise<ActionResponse> {
   void testEnabled
-  const { data } = await client.post<ActionResponse>('/model-switch/switch', {
+  const { data } = await client.post<ActionResponse>('/switch/atomic', {
+    action: 'switch',
     model_name: name,
     set_as_default: true,
-    mode: 'warm',
   })
   return data
 }
@@ -540,14 +540,14 @@ export type { ChatMessage, ChatCompletionRequest, ChatCompletionResponse, AgentT
 
 export async function getSwitchStatus(): Promise<SwitchStatusResponse> {
   const { data } = await client.get<SwitchStatusResponse>(
-    '/model-switch/switch-status',
+    '/switch/status',
     silentRequestConfig()
   )
   return data
 }
 
 export async function cancelSwitch(): Promise<{ status: string }> {
-  const { data } = await client.delete<{ status: string }>('/model-switch/cancel')
+  const { data } = await client.delete<{ status: string }>('/switch/cancel')
   return data
 }
 
