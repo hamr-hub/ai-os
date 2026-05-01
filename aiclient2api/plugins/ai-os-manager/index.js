@@ -1,9 +1,6 @@
 import { gpuMonitorService } from './gpu-monitor.js';
 import { modelSwitchService } from './model-switch.js';
 import { engineManager } from './engine-manager.js';
-import { configManager } from './config-manager.js';
-import { healthMonitor } from './health-monitor.js';
-import { rateLimiter } from './rate-limiter.js';
 import { backendClient } from './backend-client.js';
 import logger from '../../utils/logger.js';
 import fs from 'fs/promises';
@@ -13,16 +10,10 @@ import {
     handleGPUMonitorApiRoutes,
     handleModelSwitchApiRoutes,
     handleEngineApiRoutes,
-    handleConfigApiRoutes,
-    handleHealthApiRoutes,
-    handleRateLimitApiRoutes,
-    handleGPUMonitorUIRoute,
     handleInjectScript,
     handlePluginStyles,
-    handlePluginComponentScript,
     handlePanelRoute,
     handleGetPanelHTML,
-    handleWsStatusRoute,
 } from './api-handler.js';
 
 const INJECT_SCRIPT_TAG = '<script src="/plugins/ai-os-manager/inject.js" defer></script>';
@@ -30,10 +21,8 @@ const INJECT_SCRIPT_TAG = '<script src="/plugins/ai-os-manager/inject.js" defer>
 const EXEMPT_PATHS = [
     '/plugins/ai-os-manager/inject.js',
     '/plugins/ai-os-manager/styles.css',
-    '/plugins/ai-os-manager/components',
     '/gpu-admin',
     '/__panel_html__',
-    '/gpu-monitor.html',
     '/health',
     '/favicon.ico',
     '/index.html',
@@ -45,10 +34,6 @@ const ADMIN_API_PREFIXES = [
     '/api/gpu-monitor',
     '/api/model-switch',
     '/api/engine',
-    '/api/config',
-    '/api/health',
-    '/api/ratelimit',
-    '/api/ws',
 ];
 
 const API_PATHS = ['/v1/', '/openai/'];
@@ -77,8 +62,8 @@ async function ensureInjectedStaticIndex() {
 
 const aiOsManagerPlugin = {
     name: 'ai-os-manager',
-    version: '2.0.0',
-    description: 'AI-OS 统一管理插件 - GPU监控/模型切换/引擎管理/配置管理/健康运维/限流控制',
+    version: '3.0.0',
+    description: 'AI-OS 管理插件 - GPU监控/模型管理',
 
     type: 'auth',
     _priority: 50,
@@ -89,10 +74,7 @@ const aiOsManagerPlugin = {
         await gpuMonitorService.init();
         await modelSwitchService.init();
         await engineManager.init();
-        await configManager.init();
-        await healthMonitor.init();
-        await rateLimiter.init();
-        logger.info('[AI-OS Manager] Initialized successfully (services ready, polling deferred until first API request)');
+        logger.info('[AI-OS Manager] Initialized successfully');
     },
 
     async destroy() {
@@ -100,28 +82,17 @@ const aiOsManagerPlugin = {
         await gpuMonitorService.destroy();
         await modelSwitchService.destroy();
         await engineManager.destroy();
-        await configManager.destroy();
-        await healthMonitor.destroy();
-        await rateLimiter.destroy();
         logger.info('[AI-OS Manager] Destroyed');
     },
-
-    staticPaths: [],
 
     routes: [
         { method: 'GET', path: '/gpu-admin', handler: handlePanelRoute },
         { method: 'GET', path: '/__panel_html__', handler: handleGetPanelHTML },
-        { method: 'GET', path: '/gpu-monitor.html', handler: handleGPUMonitorUIRoute },
         { method: 'GET', path: '/plugins/ai-os-manager/inject.js', handler: handleInjectScript },
         { method: 'GET', path: '/plugins/ai-os-manager/styles.css', handler: handlePluginStyles },
-        { method: 'GET', path: '/plugins/ai-os-manager/components', handler: handlePluginComponentScript },
         { method: '*', path: '/api/gpu-monitor', handler: handleGPUMonitorApiRoutes },
         { method: '*', path: '/api/model-switch', handler: handleModelSwitchApiRoutes },
         { method: '*', path: '/api/engine', handler: handleEngineApiRoutes },
-        { method: '*', path: '/api/config', handler: handleConfigApiRoutes },
-        { method: '*', path: '/api/health', handler: handleHealthApiRoutes },
-        { method: '*', path: '/api/ratelimit', handler: handleRateLimitApiRoutes },
-        { method: 'GET', path: '/api/ws/status', handler: handleWsStatusRoute },
     ],
 
     async authenticate(req, res, requestUrl, config) {
@@ -223,9 +194,6 @@ const aiOsManagerPlugin = {
         gpuMonitorService,
         modelSwitchService,
         engineManager,
-        configManager,
-        healthMonitor,
-        rateLimiter,
         backendClient,
     }
 };

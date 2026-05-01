@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { EngineStatus } from '@/types'
 
 vi.mock('@/api/client', () => ({
   getEngineStatus: vi.fn(),
@@ -15,14 +14,6 @@ const getEngineStatus = vi.mocked(apiClient.getEngineStatus)
 const switchEngine = vi.mocked(apiClient.switchEngine)
 const getEngineConfig = vi.mocked(apiClient.getEngineConfig)
 const updateEngineConfig = vi.mocked(apiClient.updateEngineConfig)
-
-const createEngineStatus = (overrides: Partial<EngineStatus> = {}): EngineStatus => ({
-  current_engine: 'vllm',
-  vllm: { running: false, pid: null, port: null, model: null, uptime: null },
-  sglang: { running: false, pid: null, port: null, model: null, uptime: null },
-  llama_cpp: { running: false, pid: null, port: null, model: null, uptime: null },
-  ...overrides,
-})
 
 describe('useEngineManagement', () => {
   beforeEach(() => {
