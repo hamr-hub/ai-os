@@ -37,7 +37,7 @@ describe('useEngineManagement', () => {
       ],
       active_count: 1,
     }
-    getEngineStatus.mockResolvedValue(backendRaw)
+    getEngineStatus.mockResolvedValue(backendRaw as any)
 
     const { fetchStatus, engineStatus } = useEngineManagement()
     await fetchStatus()

@@ -40,7 +40,7 @@ describe('useGPUMemory', () => {
       ],
       active_count: 1,
     }
-    getEngineStatus.mockResolvedValue(backendRaw)
+    getEngineStatus.mockResolvedValue(backendRaw as any)
 
     const { getEngines, engineStatus } = useGPUMemory()
     await getEngines()
