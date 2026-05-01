@@ -473,6 +473,7 @@
     }
 
     function drawLineChart(canvasId, datasets, labels) {
+        if (window.AiosChart) { window.AiosChart.drawLineChart(canvasId, datasets, {}); return; }
         var canvas = document.getElementById(canvasId);
         if (!canvas) return;
         var ctx = canvas.getContext('2d');
@@ -525,6 +526,7 @@
     }
 
     function showToast(msg, type) {
+        if (window.AiosToast) { window.AiosToast.show(msg, type); return; }
         var container = document.querySelector('.aios-toast-container');
         if (!container) {
             container = document.createElement('div');
@@ -533,7 +535,14 @@
         }
         var toast = document.createElement('div');
         toast.className = 'aios-toast aios-toast-' + (type || 'info');
-        toast.innerHTML = '<span>' + escapeHtml(msg) + '</span><button class="aios-toast-close" onclick="this.parentElement.remove()">&times;</button>';
+        var div = document.createElement('div');
+        div.textContent = String(msg || '');
+        toast.appendChild(div);
+        var btn = document.createElement('button');
+        btn.className = 'aios-toast-close';
+        btn.innerHTML = '&times;';
+        btn.onclick = function() { if (toast.parentElement) toast.remove(); };
+        toast.appendChild(btn);
         container.appendChild(toast);
         setTimeout(function() { if (toast.parentElement) toast.remove(); }, 4000);
     }
@@ -697,8 +706,20 @@
         }, 500);
     }
 
+    function injectComponentScripts() {
+        var scripts = ['toast.js', 'chart.js', 'tabs.js'];
+        scripts.forEach(function(name) {
+            if (document.querySelector('script[data-aios-component="' + name + '"]')) return;
+            var s = document.createElement('script');
+            s.src = '/plugins/ai-os-manager/components/' + name;
+            s.setAttribute('data-aios-component', name);
+            document.body.appendChild(s);
+        });
+    }
+
     function init() {
         injectStyles();
+        injectComponentScripts();
         if (injectMenuItems() && injectSections()) {
             initNavigation();
             startAutoRefresh();

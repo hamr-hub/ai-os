@@ -799,6 +799,11 @@
     50% { opacity: 0.5; transform: scale(1.4); }
 }
 
+@keyframes aios-bg-rotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 /* ===== 配置表单 ===== */
 .aios-config-form {
     display: flex;

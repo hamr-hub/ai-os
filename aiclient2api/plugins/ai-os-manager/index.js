@@ -30,6 +30,7 @@ const INJECT_SCRIPT_TAG = '<script src="/plugins/ai-os-manager/inject.js" defer>
 const EXEMPT_PATHS = [
     '/plugins/ai-os-manager/inject.js',
     '/plugins/ai-os-manager/styles.css',
+    '/plugins/ai-os-manager/components',
     '/gpu-admin',
     '/__panel_html__',
     '/gpu-monitor.html',
