@@ -68,15 +68,18 @@
         panel.id = PANEL_ID;
         panel.innerHTML = '\
 <div class="aim-panel-header">\
-    <span class="aim-panel-title">AI Monitor</span>\
+    <div class="aim-panel-title-wrap">\
+        <span class="aim-panel-title">AI Monitor</span>\
+        <span class="aim-panel-subtitle">实时推理监控</span>\
+    </div>\
     <div class="aim-panel-header-actions">\
-        <button class="aim-btn aim-btn-sm" id="aim-refresh-btn" onclick="window.__aiMonitorRefresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
-        <button class="aim-btn aim-btn-sm aim-btn-collapse" onclick="window.__aiMonitorToggle()"><i class="fas fa-times"></i></button>\
+        <button class="aim-btn aim-btn-sm" id="aim-refresh-btn" onclick="window.__aiMonitorRefresh()" title="刷新"><i class="fas fa-sync-alt"></i></button>
+        <button class="aim-btn aim-btn-sm aim-btn-collapse" onclick="window.__aiMonitorToggle()" title="关闭"><i class="fas fa-times"></i></button>\
     </div>\
 </div>\
 <div class="aim-panel-body">\
     <div class="aim-section">\
-        <div class="aim-section-title">当前引擎</div>\
+        <div class="aim-section-title"><i class="fas fa-server"></i> 当前引擎</div>\
         <div class="aim-engine-cards" id="aim-engine-cards">\
             <div class="aim-engine-card" data-engine="vllm">\
                 <div class="aim-engine-indicator" id="aim-engine-vllm-dot"></div>\
@@ -102,27 +105,29 @@
         </div>\
     </div>\
     <div class="aim-section">\
-        <div class="aim-section-title">运行中的模型</div>\
+        <div class="aim-section-title"><i class="fas fa-cube"></i> 运行中的模型</div>\
         <div id="aim-running-models" class="aim-running-models">\
-            <div class="aim-empty">加载中...</div>\
+            <div class="aim-empty"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>\
         </div>\
     </div>\
     <div class="aim-section">\
-        <div class="aim-section-title">切换模型</div>\
+        <div class="aim-section-title"><i class="fas fa-exchange-alt"></i> 切换模型</div>\
         <div class="aim-switch-form">\
-            <select id="aim-switch-model-select" class="aim-select">\
-                <option value="">选择模型...</option>\
-            </select>\
-            <select id="aim-switch-engine-select" class="aim-select">\
-                <option value="vllm">vLLM</option>\
-                <option value="sglang">SGLang</option>\
-                <option value="llamacpp">llama.cpp</option>\
-            </select>\
+            <div class="aim-form-row">\
+                <select id="aim-switch-model-select" class="aim-select">\
+                    <option value="">选择模型...</option>\
+                </select>\
+                <select id="aim-switch-engine-select" class="aim-select">\
+                    <option value="vllm">vLLM</option>\
+                    <option value="sglang">SGLang</option>\
+                    <option value="llamacpp">llama.cpp</option>\
+                </select>\
+            </div>\
             <button class="aim-btn aim-btn-primary aim-btn-block" id="aim-switch-model-btn" onclick="window.__aiMonitorSwitchModel()"><i class="fas fa-exchange-alt"></i> 切换模型</button>\
         </div>\
     </div>\
     <div class="aim-section">\
-        <div class="aim-section-title">切换引擎</div>\
+        <div class="aim-section-title"><i class="fas fa-random"></i> 切换引擎</div>\
         <div class="aim-engine-switch">\
             <div class="aim-engine-switch-row">\
                 <button class="aim-btn aim-btn-engine" data-engine="vllm" onclick="window.__aiMonitorSwitchEngine(\'vllm\')">\
@@ -204,7 +209,7 @@
 
             if (service && service.status === 'running') {
                 dot.className = 'aim-engine-indicator aim-indicator-running';
-                detail.textContent = '端口 ' + (service.port || '--') + ' · ' + esc(service.model || '--');
+                detail.textContent = '端口 ' + (service.port || '--') + ' \u00b7 ' + esc(service.model || '--');
                 if (card) {
                     card.classList.add('aim-engine-active');
                     card.classList.remove('aim-engine-inactive');
@@ -236,7 +241,7 @@
         var currentModel = data.currentModel;
 
         if (models.length === 0) {
-            container.innerHTML = '<div class="aim-empty">无运行中的模型</div>';
+            container.innerHTML = '<div class="aim-empty"><i class="fas fa-inbox"></i> 无运行中的模型</div>';
             return;
         }
 
@@ -271,7 +276,7 @@
             opt.value = m.name;
             var suffix = '';
             if (m.running) suffix += ' (运行中)';
-            if (m.name === currentModel || m.isCurrent) suffix += ' ★';
+            if (m.name === currentModel || m.isCurrent) suffix += ' \u2605';
             opt.textContent = m.name + suffix;
             select.appendChild(opt);
         });
@@ -297,7 +302,7 @@
 
         _switching = true;
         var btn = document.getElementById('aim-switch-model-btn');
-        btn.textContent = '切换中...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 切换中...';
         btn.disabled = true;
 
         adminFetch('/api/ai-monitor/switch-model', {
@@ -309,13 +314,13 @@
                 showToast('模型切换已启动: ' + modelName, 'success');
                 setTimeout(function() { refresh(); }, 3000);
             } else {
-                showToast('切换失败: ' + (data.error || data.data?.detail || '未知错误'), 'error');
+                showToast('切换失败: ' + (data.error || (data.data && data.data.detail) || '未知错误'), 'error');
             }
         }).catch(function(err) {
             showToast('请求失败: ' + err.message, 'error');
         }).finally(function() {
             _switching = false;
-            btn.textContent = '切换模型';
+            btn.innerHTML = '<i class="fas fa-exchange-alt"></i> 切换模型';
             btn.disabled = false;
         });
     }
@@ -344,7 +349,7 @@
                 showToast('引擎切换已启动: ' + (ENGINE_LABELS[engineType] || engineType), 'success');
                 setTimeout(function() { refresh(); }, 3000);
             } else {
-                showToast('引擎切换失败: ' + (data.error || data.data?.detail || '未知错误'), 'error');
+                showToast('引擎切换失败: ' + (data.error || (data.data && data.data.detail) || '未知错误'), 'error');
             }
         }).catch(function(err) {
             showToast('请求失败: ' + err.message, 'error');
