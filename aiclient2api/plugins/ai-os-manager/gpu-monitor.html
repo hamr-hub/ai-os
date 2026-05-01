@@ -6,66 +6,79 @@
     <title>GPU 监控</title>
     <style>
         :root {
-            --bg-root: #090b0e;
-            --bg-primary: #0d1117;
-            --bg-secondary: #13171f;
-            --bg-tertiary: #1a1e27;
-            --bg-card: #151920;
-            --bg-hover: #1f2430;
+            --bg-primary: #0a0c10;
+            --bg-secondary: #111318;
+            --bg-tertiary: #1a1d24;
+            --bg-card: #14171c;
+            --bg-hover: #1e2128;
             --bg-input: #0d1117;
-            --text-primary: #e8ecf1;
-            --text-secondary: #8b95a5;
-            --text-muted: #5d6878;
-            --border-primary: #252b36;
-            --border-card: #1e2430;
-            --border-hover: #303848;
+            --text-primary: #f0f2f5;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --border-primary: #2d333b;
+            --border-card: #21262d;
+            --border-hover: #30363d;
             --color-primary: #818cf8;
             --color-primary-dark: #6366f1;
             --color-primary-light: #a5b4fc;
             --color-primary-rgb: 99, 102, 241;
             --color-success: #34d399;
             --color-success-dark: #10b981;
-            --color-success-rgb: 16, 185, 129;
             --color-warning: #fbbf24;
-            --color-warning-rgb: 245, 158, 11;
             --color-danger: #f87171;
-            --color-danger-rgb: 239, 68, 68;
-            --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-            --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.5);
-            --shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
-            --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.6);
-            --shadow-glow-sm: 0 0 12px rgba(99, 102, 241, 0.12);
-            --space-xs: 6px;
-            --space-sm: 10px;
-            --space-md: 14px;
-            --space-lg: 20px;
-            --space-xl: 28px;
-            --space-2xl: 36px;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+            --shadow-md: 0 6px 12px rgba(0, 0, 0, 0.5);
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 12px;
+            --space-lg: 16px;
+            --space-xl: 24px;
+            --space-2xl: 32px;
             --radius-sm: 6px;
-            --radius-md: 10px;
-            --radius-lg: 14px;
-            --radius-xl: 18px;
-            --radius-2xl: 24px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --radius-xl: 16px;
             --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
-            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', monospace;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         body {
-            background: linear-gradient(160deg, var(--bg-root) 0%, var(--bg-primary) 40%, var(--bg-secondary) 70%, var(--bg-root) 100%);
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%);
             color: var(--text-primary);
             font-family: var(--font-sans);
             min-height: 100vh;
             overflow-x: hidden;
         }
 
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at center, rgba(99, 102, 241, 0.08) 0%, transparent 50%);
+            animation: bg-rotate 20s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes bg-rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         .gpum-container {
             position: relative;
             z-index: 1;
             padding: var(--space-xl);
-            max-width: 1280px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
@@ -76,10 +89,9 @@
             padding: var(--space-lg) var(--space-xl);
             background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.08) 0%, rgba(var(--color-primary-rgb), 0.02) 100%);
             border: 1px solid var(--border-card);
-            border-radius: var(--radius-2xl);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            box-shadow: var(--shadow-sm);
+            border-radius: var(--radius-xl);
+            backdrop-filter: blur(16px);
+            box-shadow: var(--shadow);
             margin-bottom: var(--space-xl);
         }
 
@@ -90,27 +102,27 @@
             display: flex;
             align-items: center;
             gap: var(--space-sm);
-            letter-spacing: -0.02em;
         }
 
-        .gpum-title i { color: var(--color-primary-light); }
+        .gpum-title i {
+            color: var(--color-primary);
+        }
 
         .gpum-status {
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-muted);
             display: flex;
             align-items: center;
             gap: var(--space-sm);
-            font-weight: 500;
         }
 
         .gpum-status-dot {
-            width: 9px;
-            height: 9px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: var(--color-success);
-            box-shadow: 0 0 10px rgba(var(--color-success-rgb), 0.5);
-            animation: gpum-pulse 2s ease-in-out infinite;
+            box-shadow: 0 0 8px var(--color-success);
+            animation: pulse-dot 2s ease-in-out infinite;
         }
 
         .gpum-status-dot.gpum-offline {
@@ -119,58 +131,55 @@
             animation: none;
         }
 
-        @keyframes gpum-pulse {
+        @keyframes pulse-dot {
             0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.55; transform: scale(1.3); }
+            50% { opacity: 0.7; transform: scale(1.3); }
         }
 
         .gpum-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: var(--space-lg);
             margin-bottom: var(--space-xl);
         }
 
         .gpum-card {
-            background: linear-gradient(160deg, var(--bg-card) 0%, rgba(21, 25, 32, 0.75) 100%);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: linear-gradient(145deg, var(--bg-card) 0%, rgba(20, 23, 28, 0.8) 100%);
+            backdrop-filter: blur(16px);
             border: 1px solid var(--border-card);
             border-radius: var(--radius-2xl);
             padding: var(--space-xl);
-            box-shadow: var(--shadow-xs);
-            transition: all var(--transition);
+            box-shadow: var(--shadow);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
-            animation: gpum-fade-in 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+            animation: fade-in 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         }
-
-        .gpum-card:nth-child(1) { animation-delay: 0.05s; }
-        .gpum-card:nth-child(2) { animation-delay: 0.1s; }
-        .gpum-card:nth-child(3) { animation-delay: 0.15s; }
-        .gpum-card:nth-child(4) { animation-delay: 0.2s; }
-        .gpum-card:nth-child(5) { animation-delay: 0.25s; }
 
         .gpum-card::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; right: 0;
+            top: 0;
+            left: 0;
+            right: 0;
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--color-primary-light), transparent);
             opacity: 0;
-            transition: opacity var(--transition);
+            transition: opacity 0.3s;
         }
 
         .gpum-card:hover {
             transform: translateY(-3px);
-            box-shadow: var(--shadow-md), var(--shadow-glow-sm);
+            box-shadow: var(--shadow-md), 0 0 20px rgba(99, 102, 241, 0.15);
             border-color: var(--border-hover);
         }
 
-        .gpum-card:hover::before { opacity: 0.5; }
+        .gpum-card:hover::before {
+            opacity: 0.6;
+        }
 
-        @keyframes gpum-fade-in {
-            from { opacity: 0; transform: translateY(12px); }
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
@@ -182,40 +191,39 @@
         }
 
         .gpum-icon {
-            width: 50px;
-            height: 50px;
+            width: 48px;
+            height: 48px;
             border-radius: var(--radius-lg);
-            background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15) 0%, rgba(var(--color-primary-rgb), 0.04) 100%);
+            background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15) 0%, rgba(var(--color-primary-rgb), 0.05) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--color-primary-light);
-            font-size: 21px;
+            color: var(--color-primary);
+            font-size: 20px;
             flex-shrink: 0;
-            border: 1px solid rgba(var(--color-primary-rgb), 0.1);
-            box-shadow: var(--shadow-xs);
+            box-shadow: var(--shadow-sm);
         }
 
         .gpum-card-title {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--text-muted);
-            font-weight: 600;
+            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 0.6px;
+            letter-spacing: 0.5px;
         }
 
         .gpum-card-value {
-            font-size: 26px;
-            font-weight: 800;
+            font-size: 24px;
+            font-weight: 700;
             color: var(--text-primary);
             font-family: var(--font-mono);
-            margin-top: 5px;
-            letter-spacing: -0.03em;
+            margin-top: 4px;
+            letter-spacing: -0.02em;
         }
 
         .gpum-progress {
             height: 6px;
-            background: rgba(255, 255, 255, 0.04);
+            background: var(--bg-tertiary);
             border-radius: 3px;
             margin-top: var(--space-md);
             overflow: hidden;
@@ -225,7 +233,7 @@
         .gpum-progress-fill {
             height: 100%;
             border-radius: 3px;
-            transition: width 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
         }
@@ -233,48 +241,52 @@
         .gpum-progress-fill::after {
             content: '';
             position: absolute;
-            inset: 0;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
-            animation: gpum-shimmer 2.8s ease-in-out infinite;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            animation: shimmer 2.5s infinite;
         }
 
-        @keyframes gpum-shimmer {
+        @keyframes shimmer {
             0% { transform: translateX(-100%); }
-            100% { transform: translateX(200%); }
+            100% { transform: translateX(100%); }
         }
 
         .gpum-progress-fill.gpum-success { background: linear-gradient(90deg, var(--color-success) 0%, var(--color-success-dark) 100%); }
         .gpum-progress-fill.gpum-warning { background: linear-gradient(90deg, var(--color-warning) 0%, #f59e0b 100%); }
         .gpum-progress-fill.gpum-danger { background: linear-gradient(90deg, var(--color-danger) 0%, #ef4444 100%); }
+        .gpum-progress-fill { background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-dark) 100%); }
 
         .gpum-table-card {
-            background: linear-gradient(160deg, var(--bg-card) 0%, rgba(21, 25, 32, 0.75) 100%);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: linear-gradient(145deg, var(--bg-card) 0%, rgba(20, 23, 28, 0.8) 100%);
+            backdrop-filter: blur(16px);
             border: 1px solid var(--border-card);
             border-radius: var(--radius-2xl);
-            box-shadow: var(--shadow-xs);
+            box-shadow: var(--shadow);
             overflow: hidden;
-            animation: gpum-fade-in 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) 0.3s both;
+            animation: fade-in 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .gpum-table-header {
-            padding: var(--space-md) var(--space-xl);
-            background: linear-gradient(90deg, rgba(var(--color-primary-rgb), 0.06) 0%, rgba(var(--color-primary-rgb), 0.01) 100%);
+            padding: var(--space-lg) var(--space-xl);
+            background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.06) 0%, rgba(var(--color-primary-rgb), 0.02) 100%);
             border-bottom: 1px solid var(--border-card);
         }
 
         .gpum-table-title {
             color: var(--text-primary);
-            font-size: 14px;
+            font-size: 15px;
             font-weight: 600;
             display: flex;
             align-items: center;
             gap: var(--space-sm);
-            letter-spacing: -0.01em;
         }
 
-        .gpum-table-title i { color: var(--color-primary-light); }
+        .gpum-table-title i {
+            color: var(--color-primary);
+        }
 
         .gpum-table {
             width: 100%;
@@ -290,43 +302,27 @@
         }
 
         .gpum-table th {
-            background: rgba(255, 255, 255, 0.02);
-            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-secondary);
             font-weight: 600;
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.6px;
+            letter-spacing: 0.5px;
         }
 
-        .gpum-table td { color: var(--text-primary); }
+        .gpum-table tr:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
 
-        .gpum-table tbody tr { transition: background 0.15s ease; }
-
-        .gpum-table tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
-
-        .gpum-table tbody tr:last-child td { border-bottom: none; }
+        .gpum-table tbody tr:last-child td {
+            border-bottom: none;
+        }
 
         .gpum-empty {
             text-align: center;
             color: var(--text-muted);
             padding: var(--space-2xl);
-            font-size: 13px;
         }
-
-        .gpum-error {
-            color: var(--color-danger);
-            padding: var(--space-lg) var(--space-xl);
-            background: rgba(var(--color-danger-rgb), 0.06);
-            border: 1px solid rgba(var(--color-danger-rgb), 0.15);
-            border-radius: var(--radius-lg);
-            margin: var(--space-lg);
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-            font-size: 13px;
-        }
-
-        .gpum-error::before { content: '\26A0'; font-size: 1.2em; }
 
         .gpum-loading {
             display: flex;
@@ -336,20 +332,38 @@
             gap: var(--space-md);
             padding: var(--space-3xl);
             color: var(--text-secondary);
-            font-size: 13px;
         }
 
         .gpum-loading::before {
             content: '';
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             border: 3px solid var(--border-primary);
             border-top-color: var(--color-primary);
             border-radius: 50%;
-            animation: gpum-spin 0.8s linear infinite;
+            animation: spin 1s linear infinite;
         }
 
-        @keyframes gpum-spin { to { transform: rotate(360deg); } }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .gpum-error {
+            color: var(--color-danger);
+            padding: var(--space-lg) var(--space-xl);
+            background: rgba(248, 113, 113, 0.08);
+            border: 1px solid rgba(248, 113, 113, 0.2);
+            border-radius: var(--radius-lg);
+            margin: var(--space-lg);
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .gpum-error::before {
+            content: '⚠';
+            font-size: 1.2em;
+        }
 
         .gpum-btn {
             display: inline-flex;
@@ -357,15 +371,16 @@
             justify-content: center;
             gap: 6px;
             padding: 8px 16px;
-            border: 1px solid var(--border-primary);
+            border: 1px solid transparent;
             border-radius: var(--radius-md);
             cursor: pointer;
             font-size: 13px;
             font-weight: 500;
-            transition: all 0.2s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             font-family: var(--font-sans);
             background: var(--bg-tertiary);
             color: var(--text-secondary);
+            border-color: var(--border-primary);
         }
 
         .gpum-btn:hover {
@@ -375,7 +390,9 @@
             transform: translateY(-1px);
         }
 
-        .gpum-btn:active { transform: scale(0.97); }
+        .gpum-btn:active {
+            transform: scale(0.98);
+        }
 
         .gpum-btn-primary {
             background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
@@ -385,23 +402,41 @@
         }
 
         .gpum-btn-primary:hover {
-            box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.4);
+            box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.4);
         }
 
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: var(--bg-root); }
-        ::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--color-primary-dark); }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--color-primary-dark);
+        }
 
         @media (max-width: 768px) {
-            .gpum-container { padding: var(--space-md); }
-            .gpum-grid { grid-template-columns: repeat(2, 1fr); }
-            .gpum-header { flex-direction: column; align-items: flex-start; gap: var(--space-sm); }
-            .gpum-card-value { font-size: 22px; }
-        }
+            .gpum-container {
+                padding: var(--space-md);
+            }
 
-        @media (max-width: 480px) {
-            .gpum-grid { grid-template-columns: 1fr; }
+            .gpum-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .gpum-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--space-sm);
+            }
         }
     </style>
 </head>
@@ -409,31 +444,49 @@
     <div class="gpum-container">
         <div class="gpum-header">
             <div class="gpum-title">
-                <i class="fas fa-microchip"></i> GPU 监控
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                    <rect x="9" y="9" width="6" height="6"></rect>
+                    <line x1="9" y1="1" x2="9" y2="4"></line>
+                    <line x1="15" y1="1" x2="15" y2="4"></line>
+                    <line x1="9" y1="20" x2="9" y2="23"></line>
+                    <line x1="15" y1="20" x2="15" y2="23"></line>
+                    <line x1="20" y1="9" x2="23" y2="9"></line>
+                    <line x1="20" y1="14" x2="23" y2="14"></line>
+                    <line x1="1" y1="9" x2="4" y2="9"></line>
+                    <line x1="1" y1="14" x2="4" y2="14"></line>
+                </svg>
+                GPU 监控
             </div>
             <div class="gpum-status">
                 <div class="gpum-status-dot" id="status-dot"></div>
-                <span id="status-text">连接中...</span>
-                <button class="gpum-btn gpum-btn-primary" onclick="fetchData()" style="margin-left: 8px;">
-                    <i class="fas fa-sync-alt"></i> 刷新
-                </button>
+                <span id="status-text">加载中...</span>
             </div>
         </div>
 
         <div class="gpum-grid">
             <div class="gpum-card">
                 <div class="gpum-card-header">
-                    <div class="gpum-icon"><i class="fas fa-memory"></i></div>
+                    <div class="gpum-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    </div>
                 </div>
-                <div class="gpum-card-title">GPU 型号</div>
+                <div class="gpum-card-title">GPU型号</div>
                 <div class="gpum-card-value" id="gpu-name">--</div>
             </div>
 
             <div class="gpum-card">
                 <div class="gpum-card-header">
-                    <div class="gpum-icon"><i class="fas fa-tachometer-alt"></i></div>
+                    <div class="gpum-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                        </svg>
+                    </div>
                 </div>
-                <div class="gpum-card-title">GPU 利用率</div>
+                <div class="gpum-card-title">GPU利用率</div>
                 <div class="gpum-card-value" id="gpu-util">--</div>
                 <div class="gpum-progress">
                     <div class="gpum-progress-fill" id="gpu-util-bar"></div>
@@ -442,7 +495,13 @@
 
             <div class="gpum-card">
                 <div class="gpum-card-header">
-                    <div class="gpum-icon"><i class="fas fa-database"></i></div>
+                    <div class="gpum-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <path d="M16 10a4 4 0 0 1-8 0"></path>
+                        </svg>
+                    </div>
                 </div>
                 <div class="gpum-card-title">显存使用</div>
                 <div class="gpum-card-value" id="gpu-mem">--</div>
@@ -453,7 +512,11 @@
 
             <div class="gpum-card">
                 <div class="gpum-card-header">
-                    <div class="gpum-icon"><i class="fas fa-thermometer-half"></i></div>
+                    <div class="gpum-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
+                        </svg>
+                    </div>
                 </div>
                 <div class="gpum-card-title">温度</div>
                 <div class="gpum-card-value" id="gpu-temp">--</div>
@@ -461,7 +524,11 @@
 
             <div class="gpum-card">
                 <div class="gpum-card-header">
-                    <div class="gpum-icon"><i class="fas fa-bolt"></i></div>
+                    <div class="gpum-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                    </div>
                 </div>
                 <div class="gpum-card-title">功耗</div>
                 <div class="gpum-card-value" id="gpu-power">--</div>
@@ -471,12 +538,24 @@
         <div class="gpum-table-card">
             <div class="gpum-table-header">
                 <div class="gpum-table-title">
-                    <i class="fas fa-tasks"></i> GPU 进程
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                    GPU进程
                 </div>
             </div>
             <table class="gpum-table" id="gpu-processes">
                 <thead>
-                    <tr><th>PID</th><th>进程名</th><th>显存占用</th></tr>
+                    <tr>
+                        <th>PID</th>
+                        <th>进程名</th>
+                        <th>显存占用</th>
+                    </tr>
                 </thead>
                 <tbody>
                     <tr><td colspan="3" class="gpum-empty">加载中...</td></tr>
@@ -486,131 +565,66 @@
     </div>
 
     <script>
-        var API_BASE = '/api/ai-os-manager';
-        var refreshTimer = null;
-
-        function esc(str) {
-            return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        }
-
-        function formatBytes(bytes) {
-            if (!bytes || bytes === 0) return '0 B';
-            var k = 1024;
-            var sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-            var i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        function getAdminToken() {
-            try { return localStorage.getItem('aios_admin_token') || ''; } catch(e) { return ''; }
-        }
-
-        function adminFetch(url, options) {
-            options = options || {};
-            var token = getAdminToken();
-            if (token) {
-                options.headers = options.headers || {};
-                options.headers['X-Admin-Token'] = token;
-            }
-            return fetch(url, options);
-        }
-
-        function setStatus(online) {
-            var dot = document.getElementById('status-dot');
-            var text = document.getElementById('status-text');
-            if (online) {
-                dot.classList.remove('gpum-offline');
-                text.textContent = '在线';
-            } else {
-                dot.classList.add('gpum-offline');
-                text.textContent = '离线';
-            }
-        }
-
-        function setEl(id, value) {
-            var el = document.getElementById(id);
-            if (el) el.textContent = value;
-        }
-
-        function setBar(id, percent, thresholds) {
-            var bar = document.getElementById(id);
-            if (!bar) return;
-            bar.style.width = percent + '%';
-            var cls = 'gpum-success';
-            if (thresholds) {
-                if (percent > thresholds[1]) cls = 'gpum-danger';
-                else if (percent > thresholds[0]) cls = 'gpum-warning';
-            }
-            bar.className = 'gpum-progress-fill ' + cls;
-        }
+        const API_BASE = '/api/ai-os-manager';
+        let refreshInterval = null;
 
         async function fetchData() {
             try {
-                var res = await adminFetch('/api/gpu-monitor/info');
-                if (res.status === 401) { setStatus(false); return; }
-                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const res = await fetch(API_BASE + '/gpu/status');
+                const data = await res.json();
 
-                var data = await res.json();
-                if (!data || !data.data) { setStatus(false); return; }
-
-                setStatus(true);
-                var gpuList = null;
-                var inner = data.data;
-                if (Array.isArray(inner)) gpuList = inner;
-                else if (inner && Array.isArray(inner.data)) gpuList = inner.data;
-                else if (inner && inner.data && inner.data.data) gpuList = inner.data.data;
-
-                if (!gpuList || !gpuList.length) { setStatus(false); return; }
-
-                var gpu = gpuList[0];
-                setEl('gpu-name', gpu.name || '--');
-
-                var util = gpu.gpuUtilization || gpu.gpu_utilization || 0;
-                setEl('gpu-util', (typeof util === 'number' ? util.toFixed(1) : util) + '%');
-                setBar('gpu-util-bar', util, [50, 80]);
-
-                var memUsed = gpu.memoryUsed || gpu.memory_used_gb || gpu.memory_used || 0;
-                var memTotal = gpu.memoryTotal || gpu.memory_total_gb || gpu.memory_total || 1;
-                var memPercent = memTotal > 0 ? (memUsed / memTotal * 100) : 0;
-
-                if (gpu.memory_used_gb !== undefined || gpu.memory_total_gb !== undefined) {
-                    setEl('gpu-mem', memUsed.toFixed(1) + ' / ' + memTotal.toFixed(1) + ' GB');
-                } else if (typeof memUsed === 'number' && typeof memTotal === 'number') {
-                    setEl('gpu-mem', formatBytes(memUsed) + ' / ' + formatBytes(memTotal));
-                } else {
-                    setEl('gpu-mem', memUsed + ' / ' + memTotal);
+                if (!data.success) {
+                    document.getElementById('status-dot').classList.add('gpum-offline');
+                    document.getElementById('status-text').textContent = '离线';
+                    return;
                 }
-                setBar('gpu-mem-bar', memPercent, [70, 90]);
 
-                var temp = gpu.temperature || gpu.temp || 0;
-                setEl('gpu-temp', (temp || '--') + (temp ? '\u00B0C' : ''));
+                document.getElementById('status-dot').classList.remove('gpum-offline');
+                document.getElementById('status-text').textContent = '在线';
 
-                var power = gpu.powerDraw || gpu.power || gpu.power_draw || 0;
-                var powerLimit = gpu.powerLimit || gpu.power_limit || 0;
-                setEl('gpu-power', power ? (power + 'W' + (powerLimit ? ' / ' + powerLimit + 'W' : '')) : '--');
+                const info = data.info;
+                document.getElementById('gpu-name').textContent = info.gpu_name || '--';
 
-                var procs = gpu.processes || gpu.gpu_processes || [];
-                var tbody = document.querySelector('#gpu-processes tbody');
-                if (procs.length > 0) {
-                    tbody.innerHTML = procs.map(function(p) {
-                        var mem = p.gpu_memory_usage || p.used_memory || p.gpu_memory || 0;
-                        return '<tr><td>' + (p.pid || '--') + '</td><td>' + esc(p.name || '--') + '</td><td>' + formatBytes(mem) + '</td></tr>';
-                    }).join('');
+                const utilization = info.gpu_utilization || 0;
+                document.getElementById('gpu-util').textContent = utilization.toFixed(1) + '%';
+                const utilBar = document.getElementById('gpu-util-bar');
+                utilBar.style.width = utilization + '%';
+                utilBar.className = 'gpum-progress-fill ' + (utilization > 80 ? 'gpum-danger' : utilization > 50 ? 'gpum-warning' : 'gpum-success');
+
+                const memUsed = info.memory_used_gb || 0;
+                const memTotal = info.memory_total_gb || 0;
+                const memPercent = memTotal > 0 ? (memUsed / memTotal * 100) : 0;
+                document.getElementById('gpu-mem').textContent = memUsed.toFixed(1) + ' / ' + memTotal.toFixed(1) + ' GB';
+                const memBar = document.getElementById('gpu-mem-bar');
+                memBar.style.width = memPercent + '%';
+                memBar.className = 'gpum-progress-fill ' + (memPercent > 80 ? 'gpum-danger' : memPercent > 50 ? 'gpum-warning' : 'gpum-success');
+
+                const temp = info.temperature || 0;
+                document.getElementById('gpu-temp').textContent = temp + '°C';
+
+                const power = info.power_usage ? (info.power_usage / 1000).toFixed(1) + ' W' : '--';
+                document.getElementById('gpu-power').textContent = power;
+
+                const tbody = document.querySelector('#gpu-processes tbody');
+                if (info.processes && info.processes.length > 0) {
+                    tbody.innerHTML = info.processes.map(p =>
+                        '<tr><td>' + p.pid + '</td><td>' + p.name + '</td><td>' + (p.gpu_memory || 0).toFixed(1) + ' GB</td></tr>'
+                    ).join('');
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="3" class="gpum-empty">无活跃 GPU 进程</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="3" class="gpum-empty">无进程</td></tr>';
                 }
 
             } catch (e) {
-                setStatus(false);
-                console.error('[GPU Monitor]', e.message);
+                document.getElementById('status-dot').classList.add('gpum-offline');
+                document.getElementById('status-text').textContent = '离线';
             }
         }
 
         fetchData();
-        refreshTimer = setInterval(fetchData, 5000);
+        refreshInterval = setInterval(fetchData, 5000);
 
-        window.addEventListener('beforeunload', function() {
-            if (refreshTimer) clearInterval(refreshTimer);
+        window.addEventListener('beforeunload', () => {
+            if (refreshInterval) clearInterval(refreshInterval);
         });
     </script>
 </body>

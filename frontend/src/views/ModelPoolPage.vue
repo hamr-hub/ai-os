@@ -126,31 +126,33 @@ const poolStats = computed(() => {
 </script>
 
 <template>
-  <div class="model-pool-page">
+  <div class="model-pool-page fade-in">
     <div class="page-header">
       <div class="header-title">
-        <Database class="w-6 h-6 text-primary" />
+        <div class="icon-box gradient-purple">
+          <Database class="w-5 h-5" />
+        </div>
         <h1 class="digital-font">Model Pool</h1>
       </div>
       <p class="header-subtitle">本地模型池 · 引擎管理 · 服务调度</p>
-      <button class="btn btn-ghost" @click="handleRefresh">
+      <button class="btn btn-secondary" @click="handleRefresh">
         <RefreshCw v-if="poolLoading" class="w-4 h-4 animate-spin" />
         <RefreshCw v-else class="w-4 h-4" /> 刷新
       </button>
     </div>
 
-    <div v-if="poolError || serviceError" class="error-banner">
+    <div v-if="poolError || serviceError" class="error-banner toast-error">
       <AlertTriangle class="w-4 h-4" />
       {{ poolError || serviceError }}
-      <button class="btn btn-sm btn-ghost" style="margin-left:auto" @click="handleRefresh">
+      <button class="btn btn-sm btn-secondary" style="margin-left:auto" @click="handleRefresh">
         <RefreshCw class="w-3.5 h-3.5" /> 重试
       </button>
     </div>
 
-    <div v-if="loadError" class="error-banner memory-warn">
+    <div v-if="loadError" class="error-banner toast-warning">
       <Cpu class="w-4 h-4" />
       {{ loadError }}
-      <button class="btn btn-sm btn-ghost" @click="loadError = null">关闭</button>
+      <button class="btn btn-sm btn-secondary" @click="loadError = null">关闭</button>
     </div>
 
     <div class="pool-controls">
@@ -164,49 +166,49 @@ const poolStats = computed(() => {
         <option value="vllm">vLLM</option>
         <option value="sglang">SGLang</option>
       </select>
-      <span class="total-count">共 {{ total }} 个模型</span>
+      <span class="total-count tag tag-purple">共 {{ total }} 个模型</span>
       <span class="ws-poll-badge">
         <span class="ws-poll-dot"></span> 3s 自动刷新
       </span>
     </div>
 
     <div v-if="poolList.length" class="stats-overview">
-      <div class="stat-card">
+      <div class="stat-card card-base card-hover scale-in stagger-1">
         <Database class="w-4 h-4 stat-icon" />
         <div class="stat-info">
-          <span class="stat-num">{{ poolStats.total }}</span>
+          <span class="stat-num digital-font">{{ poolStats.total }}</span>
           <span class="stat-desc">总模型数</span>
         </div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card card-base card-hover scale-in stagger-2">
         <Cpu class="w-4 h-4 stat-icon" />
         <div class="stat-info">
-          <span class="stat-num">{{ formatSize(poolStats.totalSize) }}</span>
+          <span class="stat-num digital-font">{{ formatSize(poolStats.totalSize) }}</span>
           <span class="stat-desc">总大小</span>
         </div>
       </div>
-      <div class="stat-card stat-green">
+      <div class="stat-card card-base card-hover card-glow-green scale-in stagger-3">
         <CheckCircle class="w-4 h-4 stat-icon" />
         <div class="stat-info">
-          <span class="stat-num">{{ poolStats.runningCount }}</span>
+          <span class="stat-num digital-font">{{ poolStats.runningCount }}</span>
           <span class="stat-desc">运行中</span>
         </div>
       </div>
-      <div class="stat-card stat-blue">
+      <div class="stat-card card-base card-hover card-glow-primary scale-in stagger-4">
         <Server class="w-4 h-4 stat-icon" />
         <div class="stat-info">
-          <span class="stat-num">{{ poolStats.feasibleCount }}</span>
+          <span class="stat-num digital-font">{{ poolStats.feasibleCount }}</span>
           <span class="stat-desc">可运行</span>
         </div>
       </div>
-      <div class="stat-card stat-red">
+      <div class="stat-card card-base card-hover card-glow-red scale-in stagger-5">
         <XCircle class="w-4 h-4 stat-icon" />
         <div class="stat-info">
-          <span class="stat-num">{{ poolStats.notFeasibleCount }}</span>
+          <span class="stat-num digital-font">{{ poolStats.notFeasibleCount }}</span>
           <span class="stat-desc">显存不足</span>
         </div>
       </div>
-      <div class="stat-card source-distribution">
+      <div class="stat-card card-base source-distribution scale-in stagger-6">
         <span class="stat-label">来源分布</span>
         <div class="source-bar">
           <span v-for="(count, src) in poolStats.sourceMap" :key="src" class="source-seg" :style="{ width: (count / poolStats.total * 100) + '%' }">
@@ -226,7 +228,7 @@ const poolStats = computed(() => {
       <p>模型池为空，请先在 Model Hub 中搜索下载模型</p>
     </div>
 
-    <div v-else class="pool-table">
+    <div v-else class="pool-table card-base">
       <div class="table-header">
         <span>模型</span>
         <span>来源</span>
@@ -240,19 +242,19 @@ const poolStats = computed(() => {
       <div v-for="model in poolList" :key="model.config_key || model.name" class="table-row">
         <span class="model-name">{{ model.name }}</span>
         <span class="source-tag">{{ sourceIcon(model.source) }} {{ model.source }}</span>
-        <span>{{ formatSize(model.size_b) }}</span>
+        <span class="mono">{{ formatSize(model.size_b) }}</span>
         <span>
-          <span v-if="model.feasible" style="color: #4ade80">
-            <CheckCircle class="w-3.5 h-3.5 inline" /> {{ model.required_gb }} GB
+          <span v-if="model.feasible" class="tag tag-green">
+            <CheckCircle class="w-3 h-3 inline" /> {{ model.required_gb }} GB
           </span>
-          <span v-else-if="model.feasible === false" style="color: #f87171">
-            <XCircle class="w-3.5 h-3.5 inline" /> {{ model.required_gb }} GB
+          <span v-else-if="model.feasible === false" class="tag tag-orange">
+            <XCircle class="w-3 h-3 inline" /> {{ model.required_gb }} GB
           </span>
           <span v-else>{{ model.required_gb ? model.required_gb + ' GB' : '--' }}</span>
         </span>
         <span :style="{ color: downloadStatusColor(model.download_status) }">{{ model.download_status }}</span>
         <span :style="{ color: runningStatusColor(model.running_status) }">{{ model.running_status }}</span>
-        <span>{{ model.port || '--' }}</span>
+        <span class="mono">{{ model.port || '--' }}</span>
         <span class="actions-cell">
           <button
             v-if="model.download_status === 'completed' && model.running_status !== 'running'"
@@ -270,7 +272,7 @@ const poolStats = computed(() => {
           </button>
           <button
             v-if="model.download_status === 'completed'"
-            class="btn btn-sm btn-ghost"
+            class="btn btn-sm btn-secondary"
             @click="showDeleteConfirm = model.config_key || model.name"
           >
             <Trash2 class="w-3.5 h-3.5" />
@@ -280,36 +282,36 @@ const poolStats = computed(() => {
     </div>
 
     <div v-if="showDeleteConfirm" class="confirm-modal">
-      <div class="confirm-content tech-border">
-        <h3>确认删除</h3>
+      <div class="confirm-content glass-card tech-border">
+        <h3 class="digital-font">确认删除</h3>
         <p>是否同时删除本地文件？</p>
         <div class="confirm-actions">
           <button class="btn btn-danger" @click="handleDelete(showDeleteConfirm!, true)">
             删除模型+文件
           </button>
-          <button class="btn btn-ghost" @click="handleDelete(showDeleteConfirm!, false)">
+          <button class="btn btn-secondary" @click="handleDelete(showDeleteConfirm!, false)">
             仅从池移除
           </button>
-          <button class="btn btn-ghost" @click="showDeleteConfirm = null">取消</button>
+          <button class="btn btn-secondary" @click="showDeleteConfirm = null">取消</button>
         </div>
       </div>
     </div>
 
     <div v-if="Object.keys(services).length" class="service-section">
       <h3 class="section-title">
-        <Server class="w-5 h-5" /> 运行中的服务
+        <Server class="w-5 h-5 text-primary" /> 运行中的服务
       </h3>
       <div class="service-list">
-        <div v-for="(svc, name) in services" :key="name" class="service-card tech-border">
+        <div v-for="(svc, name) in services" :key="name" class="service-card card-base card-hover tech-border">
           <div class="svc-header">
             <span class="svc-name">{{ name }}</span>
-            <span :class="['svc-status', svc.running ? 'running' : 'stopped']">
+            <span :class="['svc-status tag', svc.running ? 'tag-green' : 'tag-orange']">
               {{ svc.running ? '运行中' : '已停止' }}
             </span>
           </div>
           <div class="svc-meta">
             <span>引擎: {{ svc.engine }}</span>
-            <span v-if="svc.port">端口: {{ svc.port }}</span>
+            <span v-if="svc.port" class="mono">端口: {{ svc.port }}</span>
             <span v-if="svc.started_at">启动: {{ svc.started_at }}</span>
           </div>
           <div class="svc-actions">
@@ -333,13 +335,24 @@ const poolStats = computed(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
 }
 
 .header-title h1 {
@@ -357,8 +370,6 @@ const poolStats = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-danger);
   padding: 10px 16px;
   border-radius: 8px;
   margin-bottom: 16px;
@@ -380,15 +391,20 @@ const poolStats = computed(() => {
 
 .source-select {
   background: var(--bg-input);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-primary);
   color: var(--text-primary);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 12px;
   font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.source-select:focus {
+  border-color: var(--color-primary);
+  outline: none;
 }
 
 .total-count {
-  color: var(--text-muted);
   font-size: 14px;
 }
 
@@ -398,9 +414,10 @@ const poolStats = computed(() => {
   gap: 4px;
   font-size: 12px;
   color: var(--text-muted);
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
   background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
 }
 
 .ws-poll-dot {
@@ -428,8 +445,6 @@ const poolStats = computed(() => {
 }
 
 .pool-table {
-  background: var(--bg-card);
-  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -438,8 +453,10 @@ const poolStats = computed(() => {
   grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 0.5fr 1.5fr;
   padding: 12px 16px;
   font-size: 12px;
+  font-weight: 600;
   color: var(--text-muted);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border-card);
+  background: var(--bg-secondary);
 }
 
 .table-row {
@@ -450,10 +467,19 @@ const poolStats = computed(() => {
   color: var(--text-primary);
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   align-items: center;
+  transition: background 0.2s;
+}
+
+.table-row:hover {
+  background: var(--bg-hover);
 }
 
 .model-name {
   font-weight: 600;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 .source-tag {
@@ -472,27 +498,31 @@ const poolStats = computed(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 999;
+  animation: fade-in 0.2s ease-out;
 }
 
 .confirm-content {
-  background: var(--bg-card);
-  padding: 24px;
-  border-radius: 12px;
+  padding: 28px;
+  max-width: 420px;
+  animation: scale-in 0.25s ease-out;
 }
 
 .confirm-content h3 {
   color: var(--text-primary);
   margin-bottom: 12px;
+  font-size: 18px;
 }
 
 .confirm-content p {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-bottom: 16px;
+  font-size: 14px;
 }
 
 .confirm-actions {
@@ -519,16 +549,14 @@ const poolStats = computed(() => {
 }
 
 .service-card {
-  background: var(--bg-card);
   padding: 16px;
-  border-radius: 12px;
 }
 
 .svc-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .svc-name {
@@ -536,20 +564,12 @@ const poolStats = computed(() => {
   color: var(--text-primary);
 }
 
-.svc-status.running {
-  color: #4ade80;
-}
-
-.svc-status.stopped {
-  color: var(--text-muted);
-}
-
 .svc-meta {
   display: flex;
   gap: 12px;
   font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .svc-actions {
@@ -562,11 +582,11 @@ const poolStats = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   border: 1px solid transparent;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .btn-sm {
@@ -574,24 +594,9 @@ const poolStats = computed(() => {
   font-size: 12px;
 }
 
-.btn-primary {
-  background: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-dark);
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text-muted);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-danger {
@@ -604,25 +609,18 @@ const poolStats = computed(() => {
   background: rgba(239, 68, 68, 0.2);
 }
 
-.tech-border {
-  border: 1px solid rgba(99, 102, 241, 0.1);
-}
-
 .stats-overview {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
 .stat-card {
-  background: var(--bg-card);
-  border-radius: 10px;
-  padding: 12px;
+  padding: 14px;
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .stat-icon {
@@ -630,9 +628,9 @@ const poolStats = computed(() => {
   flex-shrink: 0;
 }
 
-.stat-card.stat-green .stat-icon { color: #4ade80; }
-.stat-card.stat-blue .stat-icon { color: var(--color-primary-light); }
-.stat-card.stat-red .stat-icon { color: #f87171; }
+.stat-card:nth-child(3) .stat-icon { color: #4ade80; }
+.stat-card:nth-child(4) .stat-icon { color: var(--color-primary-light); }
+.stat-card:nth-child(5) .stat-icon { color: #f87171; }
 
 .stat-info {
   display: flex;
@@ -661,7 +659,7 @@ const poolStats = computed(() => {
   display: flex;
   width: 100%;
   height: 24px;
-  border-radius: 4px;
+  border-radius: 6px;
   overflow: hidden;
   background: var(--bg-secondary);
 }
@@ -672,7 +670,7 @@ const poolStats = computed(() => {
   justify-content: center;
   font-size: 11px;
   color: var(--text-primary);
-  background: rgba(99, 102, 241, 0.15);
+  background: rgba(139, 92, 246, 0.15);
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   overflow: hidden;
   white-space: nowrap;
