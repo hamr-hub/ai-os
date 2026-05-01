@@ -924,23 +924,42 @@ async def get_python_service_status(refresh: Optional[bool] = False):
         if cached is not None:
             return cached
 
-    service_name = "aiclient-python"
-    status = sys_controller.get_service_status(service_name)
-    service_info = sys_controller.get_service_info(service_name)
-    current_config = config_watcher.get_config()
+    services = {}
+    for service in llm_service_manager.list_services():
+        service_name = service.get("service_name") or f"service-{len(services)}"
+        engine = service.get("engine_type") or "unknown"
+        services[service_name] = {
+            "running": service.get("status") == "running",
+            "engine": engine,
+            "port": service.get("port"),
+            "pid": service.get("pid"),
+            "started_at": datetime.fromtimestamp(
+                time.time() - float(service.get("uptime_seconds", 0) or 0)
+            ).isoformat() if service.get("status") == "running" else None,
+        }
 
-    result = {
-        "service": service_name,
-        "status": status,
-        "running": status == "active",
-        "info": service_info,
-        "config": current_config,
-        "config_file": config_watcher.config_path,
-        "timestamp": datetime.now().isoformat()
-    }
+    if not services:
+        service_name = "aiclient-python"
+        status = sys_controller.get_service_status(service_name)
+        service_info = sys_controller.get_service_info(service_name) or {}
+        pid_raw = service_info.get("ExecMainPID") or service_info.get("MainPID")
+        pid = None
+        try:
+            if pid_raw is not None:
+                parsed_pid = int(pid_raw)
+                pid = parsed_pid if parsed_pid > 0 else None
+        except (TypeError, ValueError):
+            pid = None
+        services[service_name] = {
+            "running": status == "active",
+            "engine": "python",
+            "port": None,
+            "pid": pid,
+            "started_at": None,
+        }
 
-    cache_service.set(cache_key, result, ttl_seconds=5)
-    return result
+    cache_service.set(cache_key, services, ttl_seconds=5)
+    return services
 
 
 @manage_router.post("/service/start")
@@ -1416,8 +1435,8 @@ async def cancel_download(task_id: str):
 
 
 @manage_router.get("/models/downloads")
-async def list_downloads():
-    return download_task_manager.list_tasks()
+async def list_downloads(status_filter: Optional[str] = None):
+    return download_task_manager.list_tasks(status_filter)
 
 
 @manage_router.post("/models/download/{task_id}/retry")

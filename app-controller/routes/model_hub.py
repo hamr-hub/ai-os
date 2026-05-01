@@ -74,7 +74,7 @@ async def search_models(keyword: str, source: str = "all", limit: int = 10, sort
             "local_path": r.local_path,
             "description": r.description,
         })
-    return {"results": serialized, "keyword": keyword, "source": source}
+    return {"results": serialized, "total": len(serialized), "keyword": keyword, "source": source}
 
 
 @hub_router.get("/recommend")

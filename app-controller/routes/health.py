@@ -125,6 +125,7 @@ async def get_health_history(count: int = 60):
                     "timestamp": ts,
                     "health_score": score,
                     "status": "healthy" if score >= 90 else "degraded" if score >= 70 else "critical",
+                    "alert_count": len(entry.get("alert_reasons") or []),
                     "source": "gpu_history",
                 })
     except Exception as exc:
@@ -139,6 +140,7 @@ async def get_health_history(count: int = 60):
                 "timestamp": datetime.now().isoformat(),
                 "health_score": health_info.get("overall", 0),
                 "status": health_info.get("status", "unknown"),
+                "alert_count": len(health_info.get("alerts") or []),
                 "source": "current",
             })
         except Exception as exc:
