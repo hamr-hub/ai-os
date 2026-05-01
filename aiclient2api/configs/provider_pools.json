@@ -10,7 +10,7 @@
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "97c731f8-8290-4959-8c4f-960fb4b3184c",
       "isHealthy": true,
-      "lastUsed": null,
+      "lastUsed": "2026-05-01T15:52:11.902Z",
       "usageCount": 0,
       "errorCount": 0,
       "lastErrorTime": null,
@@ -23,7 +23,7 @@
       "lastHealthCheckModel": "Gemma-4-31B-Abliterated",
       "lastErrorMessage": null,
       "lastRefreshTime": 1777543718202,
-      "_lastSelectionSeq": 1,
+      "_lastSelectionSeq": 2,
       "lastModelSwitchTime": "2026-04-29T04:51:41.923Z"
     }
   ]
