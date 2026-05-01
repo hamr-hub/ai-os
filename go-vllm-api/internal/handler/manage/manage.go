@@ -1653,7 +1653,7 @@ func (h *ManageHandler) ProxyEngineSwitch(c *gin.Context) {
 	if err := c.ShouldBindJSON(&body); err != nil {
 		body = map[string]interface{}{}
 	}
-	h.proxyPythonManage(c, "POST", "/manage/engine/switch", body)
+	h.proxyPythonManage(c, "POST", "/manage/engines/switch", body)
 }
 
 func (h *ManageHandler) ProxyEngineStatus(c *gin.Context) {

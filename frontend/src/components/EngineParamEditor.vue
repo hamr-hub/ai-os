@@ -112,18 +112,20 @@ const formatDefault = (param: EngineParamDef): string => {
 </script>
 
 <template>
-  <div class="param-editor">
+  <div class="param-editor card-base tech-border fade-in">
     <div class="editor-header">
       <div class="header-left">
-        <Settings class="w-5 h-5 text-primary" />
+        <div class="icon-box gradient-primary">
+          <Settings class="w-4 h-4" />
+        </div>
         <h3>{{ engineLabel }} 参数配置</h3>
-        <span class="model-label">{{ modelName }}</span>
+        <span class="model-label tag tag-blue">{{ modelName }}</span>
       </div>
       <div class="header-actions">
-        <button class="btn btn-ghost btn-sm" title="重置为默认值" @click="resetToDefaults">
+        <button class="btn btn-secondary btn-sm" title="重置为默认值" @click="resetToDefaults">
           <RotateCcw class="w-3.5 h-3.5" /> 默认值
         </button>
-        <button class="btn btn-ghost btn-sm" title="撤销修改" @click="resetParams">
+        <button class="btn btn-secondary btn-sm" title="撤销修改" @click="resetParams">
           <RotateCcw class="w-3.5 h-3.5" /> 撤销
         </button>
         <button class="btn btn-primary btn-sm" :disabled="!dirty || saving" @click="saveParams">
@@ -134,7 +136,7 @@ const formatDefault = (param: EngineParamDef): string => {
       </div>
     </div>
 
-    <div v-if="error" class="error-banner">
+    <div v-if="error" class="error-banner toast-error">
       <AlertTriangle class="w-4 h-4" /> {{ error }}
     </div>
 
@@ -153,7 +155,7 @@ const formatDefault = (param: EngineParamDef): string => {
           <ChevronDown v-if="expandedGroups[group.name]" class="w-4 h-4" />
           <ChevronRight v-else class="w-4 h-4" />
           <span class="group-name">{{ group.name }}</span>
-          <span class="group-count">{{ group.params.length }}项</span>
+          <span class="group-count tag tag-cyan">{{ group.params.length }}项</span>
         </button>
 
         <div v-if="expandedGroups[group.name]" class="group-body">
@@ -217,10 +219,8 @@ const formatDefault = (param: EngineParamDef): string => {
 
 <style scoped>
 .param-editor {
-  background: var(--bg-card);
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 24px;
+  animation: fade-in 0.25s ease-out;
 }
 
 .editor-header {
@@ -233,21 +233,24 @@ const formatDefault = (param: EngineParamDef): string => {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.icon-box {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.3);
 }
 
 .header-left h3 {
   font-size: 16px;
   color: var(--text-primary);
   font-weight: 600;
-}
-
-.model-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  background: var(--bg-secondary);
-  padding: 2px 8px;
-  border-radius: 4px;
 }
 
 .header-actions {
@@ -259,8 +262,6 @@ const formatDefault = (param: EngineParamDef): string => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-danger);
   padding: 10px 16px;
   border-radius: 8px;
   font-size: 14px;
@@ -283,18 +284,23 @@ const formatDefault = (param: EngineParamDef): string => {
 }
 
 .param-group {
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 12px;
+  transition: border-color 0.2s;
+}
+
+.param-group:hover {
+  border-color: var(--border-primary);
 }
 
 .group-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 12px 14px;
   cursor: pointer;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: 12px 12px 0 0;
   width: 100%;
   color: var(--text-primary);
   font-size: 14px;
@@ -303,7 +309,7 @@ const formatDefault = (param: EngineParamDef): string => {
 }
 
 .group-header:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-tertiary);
 }
 
 .group-name {
@@ -311,26 +317,30 @@ const formatDefault = (param: EngineParamDef): string => {
 }
 
 .group-count {
-  font-size: 12px;
-  color: var(--text-muted);
   margin-left: auto;
 }
 
 .group-body {
-  padding: 12px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .param-row {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.param-row:last-child {
+  border-bottom: none;
 }
 
 .param-info {
-  min-width: 180px;
+  min-width: 200px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -353,29 +363,31 @@ const formatDefault = (param: EngineParamDef): string => {
 .param-cli {
   font-size: 11px;
   color: rgba(99, 102, 241, 0.6);
-  font-family: monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 .param-input {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
 }
 
 .param-select, .param-number, .param-text {
   background: var(--bg-input);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-primary);
   color: var(--text-primary);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 8px;
+  padding: 7px 12px;
   font-size: 13px;
   min-width: 160px;
+  transition: border-color 0.2s;
 }
 
 .param-select:focus, .param-number:focus, .param-text:focus {
   border-color: var(--color-primary);
   outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.1);
 }
 
 .param-default {
@@ -388,40 +400,20 @@ const formatDefault = (param: EngineParamDef): string => {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
   border: 1px solid transparent;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .btn-sm {
-  padding: 4px 10px;
+  padding: 5px 10px;
   font-size: 12px;
-}
-
-.btn-primary {
-  background: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-dark);
 }
 
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text-muted);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
 }
 </style>

@@ -81,20 +81,22 @@ const formatPct = (active: number, limit: number) => {
 </script>
 
 <template>
-  <div class="ratelimit-page">
+  <div class="ratelimit-page fade-in">
     <div class="page-header">
       <div class="header-title">
-        <Gauge class="w-6 h-6 text-primary" />
+        <div class="icon-box gradient-cyan">
+          <Gauge class="w-5 h-5" />
+        </div>
         <h1 class="digital-font">Rate Limit</h1>
       </div>
       <p class="header-subtitle">限流控制 · 排队管理 · 流量统计</p>
-      <button class="btn btn-ghost" @click="handleRefresh">
+      <button class="btn btn-secondary" @click="handleRefresh">
         <RefreshCw v-if="loading" class="w-4 h-4 animate-spin" />
         <RefreshCw v-else class="w-4 h-4" /> 刷新
       </button>
     </div>
 
-    <div v-if="error" class="error-banner">
+    <div v-if="error" class="error-banner toast-error">
       <AlertTriangle class="w-4 h-4" />
       {{ error }}
     </div>
@@ -122,37 +124,37 @@ const formatPct = (active: number, limit: number) => {
       </div>
       <div v-else>
         <div class="stats-overview">
-          <div class="stat-card">
-            <Activity class="w-4 h-4 stat-icon" />
+          <div class="stat-card card-base card-hover scale-in stagger-1">
+            <Activity class="w-5 h-5 stat-icon text-primary" />
             <div class="stat-info">
-              <span class="stat-num">{{ totalActiveRequests }}</span>
+              <span class="stat-num digital-font">{{ totalActiveRequests }}</span>
               <span class="stat-desc">活跃请求</span>
             </div>
           </div>
-          <div class="stat-card">
-            <Gauge class="w-4 h-4 stat-icon" />
+          <div class="stat-card card-base card-hover scale-in stagger-2">
+            <Gauge class="w-5 h-5 stat-icon text-secondary" />
             <div class="stat-info">
-              <span class="stat-num">{{ totalConcurrency }}</span>
+              <span class="stat-num digital-font">{{ totalConcurrency }}</span>
               <span class="stat-desc">并发上限</span>
             </div>
           </div>
-          <div class="stat-card stat-green">
-            <CheckCircle class="w-4 h-4 stat-icon" />
+          <div class="stat-card card-base card-hover card-glow-green scale-in stagger-3">
+            <CheckCircle class="w-5 h-5 stat-icon" />
             <div class="stat-info">
-              <span class="stat-num">{{ totalCanAccept }}</span>
+              <span class="stat-num digital-font">{{ totalCanAccept }}</span>
               <span class="stat-desc">可接受</span>
             </div>
           </div>
-          <div class="stat-card stat-red">
-            <XCircle class="w-4 h-4 stat-icon" />
+          <div class="stat-card card-base card-hover card-glow-red scale-in stagger-4">
+            <XCircle class="w-5 h-5 stat-icon" />
             <div class="stat-info">
-              <span class="stat-num">{{ queueEntries.length - totalCanAccept }}</span>
+              <span class="stat-num digital-font">{{ queueEntries.length - totalCanAccept }}</span>
               <span class="stat-desc">已满</span>
             </div>
           </div>
         </div>
 
-        <div class="queue-table">
+        <div class="queue-table card-base">
           <div class="table-header">
             <span>模型</span>
             <span>活跃请求</span>
@@ -162,10 +164,15 @@ const formatPct = (active: number, limit: number) => {
           </div>
           <div v-for="entry in queueEntries" :key="entry.name" class="table-row">
             <span class="model-name">{{ entry.name }}</span>
-            <span>{{ entry.active_requests }}</span>
-            <span>{{ entry.concurrency_limit }}</span>
-            <span>{{ formatPct(entry.active_requests, entry.concurrency_limit) }}</span>
-            <span :class="['status-tag', entry.can_accept ? 'available' : 'full']">
+            <span class="mono">{{ entry.active_requests }}</span>
+            <span class="mono">{{ entry.concurrency_limit }}</span>
+            <span>
+              <div class="usage-bar">
+                <div class="progress-track"><div :class="['progress-fill', entry.active_requests / entry.concurrency_limit > 0.9 ? 'red' : entry.active_requests / entry.concurrency_limit > 0.7 ? 'yellow' : 'green']" :style="{ width: formatPct(entry.active_requests, entry.concurrency_limit) }"></div></div>
+                <span class="usage-text">{{ formatPct(entry.active_requests, entry.concurrency_limit) }}</span>
+              </div>
+            </span>
+            <span :class="['status-tag', entry.can_accept ? 'tag-green' : 'tag-orange']">
               <CheckCircle v-if="entry.can_accept" class="w-3.5 h-3.5" />
               <XCircle v-else class="w-3.5 h-3.5" />
               {{ entry.can_accept ? '可接受' : '已满' }}
@@ -179,20 +186,20 @@ const formatPct = (active: number, limit: number) => {
       <div v-if="!rateLimitConfig" class="loading-state">
         <Loader2 class="w-8 h-8 animate-spin text-primary" />
       </div>
-      <div v-else class="config-panel card-base">
-        <h3 class="section-title"><Settings class="w-5 h-5" /> 限流配置</h3>
+      <div v-else class="config-panel card-base tech-border fade-in">
+        <h3 class="section-title"><Settings class="w-5 h-5 text-primary" /> 限流配置</h3>
         <div v-if="!editing" class="config-display">
           <div class="config-row">
             <span class="config-label">IP QPS 限制</span>
-            <span class="config-value">{{ rateLimitConfig.ip_qps_limit }} 次/{{ rateLimitConfig.ip_qps_window_seconds }}秒</span>
+            <span class="config-value digital-font">{{ rateLimitConfig.ip_qps_limit }} 次/{{ rateLimitConfig.ip_qps_window_seconds }}秒</span>
           </div>
           <div class="config-row">
             <span class="config-label">并发上限</span>
-            <span class="config-value">{{ rateLimitConfig.concurrency_limit }}</span>
+            <span class="config-value digital-font">{{ rateLimitConfig.concurrency_limit }}</span>
           </div>
           <div class="config-row">
             <span class="config-label">排队超时</span>
-            <span class="config-value">{{ rateLimitConfig.queue_timeout_seconds }} 秒</span>
+            <span class="config-value digital-font">{{ rateLimitConfig.queue_timeout_seconds }} 秒</span>
           </div>
           <div class="config-row">
             <span class="config-label">白名单 IP</span>
@@ -243,7 +250,7 @@ const formatPct = (active: number, limit: number) => {
           </div>
           <div class="editor-actions">
             <button class="btn btn-primary" @click="saveEdit">保存</button>
-            <button class="btn btn-ghost" @click="editing = false">取消</button>
+            <button class="btn btn-secondary" @click="editing = false">取消</button>
           </div>
         </div>
       </div>
@@ -253,34 +260,34 @@ const formatPct = (active: number, limit: number) => {
       <div v-if="!rateLimitStats" class="loading-state">
         <Loader2 class="w-8 h-8 animate-spin text-primary" />
       </div>
-      <div v-else class="stats-panel card-base">
-        <h3 class="section-title"><Shield class="w-5 h-5" /> 流量统计</h3>
+      <div v-else class="stats-panel card-base tech-border fade-in">
+        <h3 class="section-title"><Shield class="w-5 h-5 text-primary" /> 流量统计</h3>
         <div class="stats-grid">
-          <div class="stats-item">
+          <div class="stats-item card-base card-hover card-glow-red scale-in stagger-1">
             <span class="stats-label">总拒绝数</span>
-            <span class="stats-num">{{ rateLimitStats.total_rejected }}</span>
+            <span class="stats-num digital-font">{{ rateLimitStats.total_rejected }}</span>
           </div>
-          <div class="stats-item">
+          <div class="stats-item card-base card-hover card-glow-orange scale-in stagger-2">
             <span class="stats-label">近期429</span>
-            <span class="stats-num">{{ rateLimitStats.recent_429_count }}</span>
+            <span class="stats-num digital-font">{{ rateLimitStats.recent_429_count }}</span>
           </div>
-          <div class="stats-item">
+          <div class="stats-item card-base card-hover card-glow-cyan scale-in stagger-3">
             <span class="stats-label">当前排队</span>
-            <span class="stats-num">{{ rateLimitStats.current_queue_depth }}</span>
+            <span class="stats-num digital-font">{{ rateLimitStats.current_queue_depth }}</span>
           </div>
         </div>
-        <div v-if="Object.keys(rateLimitStats.rejection_by_ip).length" class="stats-detail">
+        <div v-if="Object.keys(rateLimitStats.rejection_by_ip).length" class="stats-detail card-base">
           <h4>按IP拒绝统计</h4>
           <div v-for="(count, ip) in rateLimitStats.rejection_by_ip" :key="ip" class="detail-row">
-            <span>{{ ip }}</span>
-            <span>{{ count }} 次</span>
+            <span class="mono">{{ ip }}</span>
+            <span class="tag tag-orange">{{ count }} 次</span>
           </div>
         </div>
-        <div v-if="Object.keys(rateLimitStats.rejection_by_path).length" class="stats-detail">
+        <div v-if="Object.keys(rateLimitStats.rejection_by_path).length" class="stats-detail card-base">
           <h4>按路径拒绝统计</h4>
           <div v-for="(count, path) in rateLimitStats.rejection_by_path" :key="path" class="detail-row">
-            <span>{{ path }}</span>
-            <span>{{ count }} 次</span>
+            <span class="mono">{{ path }}</span>
+            <span class="tag tag-orange">{{ count }} 次</span>
           </div>
         </div>
       </div>
@@ -298,13 +305,24 @@ const formatPct = (active: number, limit: number) => {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
 }
 
 .header-title h1 {
@@ -322,8 +340,6 @@ const formatPct = (active: number, limit: number) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-danger);
   padding: 10px 16px;
   border-radius: 8px;
   margin-bottom: 16px;
@@ -332,7 +348,7 @@ const formatPct = (active: number, limit: number) => {
 
 .tab-controls {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 24px;
 }
 
@@ -341,19 +357,25 @@ const formatPct = (active: number, limit: number) => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
   color: var(--text-muted);
   background: var(--bg-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .tab-btn.active {
-  background: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(6, 182, 212, 0.08) 100%);
+  color: #22d3ee;
+  border-color: rgba(6, 182, 212, 0.3);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.1);
 }
 
 .loading-state,
@@ -370,66 +392,78 @@ const formatPct = (active: number, limit: number) => {
 .stats-overview {
   display: flex;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .stat-card {
-  background: var(--bg-card);
-  padding: 12px;
-  border-radius: 10px;
+  padding: 16px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 12px;
+  flex: 1;
 }
 
-.stat-card.stat-green { border-color: rgba(74, 222, 128, 0.2); }
-.stat-card.stat-red { border-color: rgba(248, 113, 113, 0.2); }
-
 .stat-icon { color: var(--color-primary); }
-.stat-card.stat-green .stat-icon { color: #4ade80; }
-.stat-card.stat-red .stat-icon { color: #f87171; }
+.stat-card .stat-icon:nth-child(1) { color: #22d3ee; }
+.stat-card:nth-child(3) .stat-icon { color: #4ade80; }
+.stat-card:nth-child(4) .stat-icon { color: #f87171; }
 
 .stat-info { display: flex; flex-direction: column; }
-.stat-num { font-size: 18px; font-weight: 600; color: var(--text-primary); }
-.stat-desc { font-size: 12px; color: var(--text-muted); }
+.stat-num { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+.stat-desc { font-size: 13px; color: var(--text-muted); }
 
 .queue-table {
-  background: var(--bg-card);
-  border-radius: 12px;
   overflow: hidden;
 }
 
 .table-header {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr 1fr;
   padding: 12px 16px;
   font-size: 12px;
+  font-weight: 600;
   color: var(--text-muted);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border-card);
+  background: var(--bg-secondary);
 }
 
 .table-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr 1fr;
   padding: 12px 16px;
   font-size: 13px;
   color: var(--text-primary);
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   align-items: center;
+  transition: background 0.2s;
+}
+
+.table-row:hover {
+  background: var(--bg-hover);
 }
 
 .model-name { font-weight: 600; }
 
-.status-tag {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-.status-tag.available { color: #4ade80; }
-.status-tag.full { color: #f87171; }
+.usage-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.usage-bar .progress-track {
+  flex: 1;
+  height: 6px;
+}
+
+.usage-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
 
 .section-title {
   display: flex;
@@ -440,17 +474,10 @@ const formatPct = (active: number, limit: number) => {
   font-size: 16px;
 }
 
-.card-base {
-  background: var(--bg-card);
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
 .config-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: 10px 0;
   font-size: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
@@ -473,18 +500,25 @@ const formatPct = (active: number, limit: number) => {
 
 .form-input {
   background: var(--bg-input);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-primary);
   color: var(--text-primary);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 12px;
   font-size: 14px;
   flex: 1;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.1);
 }
 
 .editor-actions {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .stats-grid {
@@ -495,31 +529,34 @@ const formatPct = (active: number, limit: number) => {
 }
 
 .stats-item {
-  background: var(--bg-secondary);
-  padding: 12px;
-  border-radius: 8px;
+  padding: 20px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.stats-label { font-size: 12px; color: var(--text-muted); }
-.stats-num { font-size: 24px; font-weight: 600; color: var(--text-primary); }
+.stats-label { font-size: 13px; color: var(--text-muted); }
+.stats-num { font-size: 28px; font-weight: 700; color: var(--text-primary); }
 
 .stats-detail {
   margin-top: 16px;
+  padding: 16px;
 }
 
 .stats-detail h4 {
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   font-size: 14px;
+  font-weight: 600;
 }
 
 .detail-row {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
-  padding: 6px 0;
-  color: var(--text-muted);
+  padding: 8px 0;
+  color: var(--text-secondary);
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
@@ -528,30 +565,15 @@ const formatPct = (active: number, limit: number) => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   border: 1px solid transparent;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
-.btn-primary {
-  background: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-dark);
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text-muted);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

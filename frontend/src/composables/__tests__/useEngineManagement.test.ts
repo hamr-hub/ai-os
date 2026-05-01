@@ -22,17 +22,21 @@ describe('useEngineManagement', () => {
 
   it('fetchStatus填充engineStatus', async () => {
     const status = {
-      vllm: { running: true, pid: 123, port: 8000, model: 'llama', uptime: 10 },
-      sglang: { running: false, pid: null, port: null, model: null, uptime: null },
-      llama_cpp: { running: false, pid: null, port: null, model: null, uptime: null },
       current_engine: 'vllm' as const,
+      services: [
+        { engine: 'vllm', status: 'running', pid: 123, port: 8000, model_name: 'llama', started_at: '2026-01-01T00:00:00Z' },
+      ],
     }
     getEngineStatus.mockResolvedValue(status)
 
     const { fetchStatus, engineStatus, loading, error } = useEngineManagement()
     await fetchStatus()
 
-    expect(engineStatus.value).toEqual(status)
+    expect(engineStatus.value?.current_engine).toBe('vllm')
+    expect(engineStatus.value?.vllm.running).toBe(true)
+    expect(engineStatus.value?.vllm.pid).toBe(123)
+    expect(engineStatus.value?.vllm.port).toBe(8000)
+    expect(engineStatus.value?.vllm.model).toBe('llama')
     expect(loading.value).toBe(false)
     expect(error.value).toBeNull()
   })

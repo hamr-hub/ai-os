@@ -117,20 +117,22 @@ const saveConfig = async () => {
 </script>
 
 <template>
-  <div class="engine-page">
+  <div class="engine-page fade-in">
     <div class="page-header">
       <div class="header-title">
-        <Zap class="w-6 h-6 text-primary" />
+        <div class="icon-box gradient-primary">
+          <Zap class="w-5 h-5" />
+        </div>
         <h1 class="digital-font">Engine Management</h1>
       </div>
       <p class="header-subtitle">推理引擎管理 · 热切换 · 配置编辑</p>
-      <button class="btn btn-ghost" @click="handleRefresh">
+      <button class="btn btn-secondary" @click="handleRefresh">
         <RefreshCw v-if="loading" class="w-4 h-4 animate-spin" />
         <RefreshCw v-else class="w-4 h-4" /> 刷新
       </button>
     </div>
 
-    <div v-if="error" class="error-banner">
+    <div v-if="error" class="error-banner toast-error">
       <AlertTriangle class="w-4 h-4" />
       {{ error }}
     </div>
@@ -160,10 +162,13 @@ const saveConfig = async () => {
         <p>无法获取引擎状态</p>
       </div>
       <div v-else class="engine-cards">
-        <div v-for="eng in engineList" :key="eng" :class="['engine-card', engineStatus?.current_engine === eng ? 'current' : '']">
+        <div v-for="eng in engineList" :key="eng" :class="['engine-card card-base card-hover', engineStatus?.current_engine === eng ? 'current card-glow-primary' : '']" >
           <div class="engine-header">
-            <span class="engine-name">{{ engineDisplayName(eng) }}</span>
-            <span v-if="engineStatus?.current_engine === eng" class="current-badge">当前引擎</span>
+            <div class="engine-name-row">
+              <span :class="['status-dot', engineStatus?.[eng]?.running ? 'online' : 'offline']"></span>
+              <span class="engine-name">{{ engineDisplayName(eng) }}</span>
+            </div>
+            <span v-if="engineStatus?.current_engine === eng" class="current-badge tag tag-purple">当前引擎</span>
           </div>
           <div class="engine-body">
             <div class="engine-field">
@@ -176,11 +181,11 @@ const saveConfig = async () => {
             </div>
             <div class="engine-field">
               <span class="field-label">PID</span>
-              <span class="field-value">{{ engineStatus?.[eng]?.pid ?? '--' }}</span>
+              <span class="field-value mono">{{ engineStatus?.[eng]?.pid ?? '--' }}</span>
             </div>
             <div class="engine-field">
               <span class="field-label">端口</span>
-              <span class="field-value">{{ engineStatus?.[eng]?.port ?? '--' }}</span>
+              <span class="field-value mono">{{ engineStatus?.[eng]?.port ?? '--' }}</span>
             </div>
             <div class="engine-field">
               <span class="field-label">模型</span>
@@ -195,9 +200,9 @@ const saveConfig = async () => {
       </div>
     </div>
 
-    <div v-if="activeTab === 'switch'" class="switch-section">
-      <div class="switch-form card-base">
-        <h3 class="section-title"><ArrowRight class="w-5 h-5" /> 引擎热切换</h3>
+    <div v-if="activeTab === 'switch'" class="switch-section fade-in">
+      <div class="switch-form card-base tech-border">
+        <h3 class="section-title"><ArrowRight class="w-5 h-5 text-primary" /> 引擎热切换</h3>
         <div class="form-row">
           <label class="form-label">目标模型</label>
           <input v-model="targetModel" class="form-input" placeholder="输入模型名称" />
@@ -221,34 +226,34 @@ const saveConfig = async () => {
         </button>
       </div>
 
-      <div v-if="isSwitching || currentSession" class="switch-progress card-base">
-        <h3 class="section-title"><RefreshCw class="w-5 h-5 animate-spin" /> 切换进度</h3>
+      <div v-if="isSwitching || currentSession" class="switch-progress card-base tech-border">
+        <h3 class="section-title"><RefreshCw class="w-5 h-5 animate-spin text-primary" /> 切换进度</h3>
         <div class="progress-phases">
           <div v-for="phase in [1, 2, 3, 4]" :key="phase" :class="['phase-item', currentSession?.overall_phase === `phase${phase}` ? 'active' : '', currentSession?.phases?.[phase - 1]?.status === 'success' ? 'done' : '', currentSession?.phases?.[phase - 1]?.status === 'failed' ? 'failed' : '']">
-            <div class="phase-num">{{ phase }}</div>
+            <div :class="['phase-num', currentSession?.phases?.[phase - 1]?.status === 'success' ? 'gradient-green' : 'gradient-primary']">{{ phase }}</div>
             <div class="phase-info">
               <span class="phase-name">{{ phaseLabel(phase) }}</span>
               <span class="phase-status">{{ currentSession?.phases?.[phase - 1]?.status || 'pending' }}</span>
             </div>
             <div v-if="currentSession?.phases?.[phase - 1]?.status === 'running'" class="phase-progress-bar">
-              <div class="progress-track"><div class="progress-fill" :style="{ width: (currentSession?.phases?.[phase - 1]?.progress || 0) + '%' }"></div></div>
+              <div class="progress-track"><div class="progress-fill indigo" :style="{ width: (currentSession?.phases?.[phase - 1]?.progress || 0) + '%' }"></div></div>
             </div>
           </div>
         </div>
         <div class="overall-progress">
           <span>总进度: {{ currentSession?.overall_progress || 0 }}%</span>
-          <span :class="['overall-phase', currentSession?.overall_phase]">{{ currentSession?.overall_phase }}</span>
+          <span :class="['overall-phase tag', currentSession?.overall_phase ? 'tag-blue' : 'tag-cyan']">{{ currentSession?.overall_phase }}</span>
         </div>
       </div>
     </div>
 
-    <div v-if="activeTab === 'config'" class="config-section">
+    <div v-if="activeTab === 'config'" class="config-section fade-in">
       <div v-if="!engineConfig" class="empty-state">
         <Settings class="w-12 h-12 text-muted" />
         <p>无法获取引擎配置</p>
       </div>
-      <div v-else class="config-panel card-base">
-        <h3 class="section-title"><Settings class="w-5 h-5" /> 引擎配置</h3>
+      <div v-else class="config-panel card-base tech-border">
+        <h3 class="section-title"><Settings class="w-5 h-5 text-primary" /> 引擎配置</h3>
         <div v-if="!editingConfig" class="config-display">
           <div v-for="(engConfig, engName) in engineConfig" :key="engName" class="config-block">
             <h4>{{ engineDisplayName(engName as EngineType) }}</h4>
@@ -269,13 +274,13 @@ const saveConfig = async () => {
           <textarea v-model="editedConfig" class="config-textarea" rows="20"></textarea>
           <div class="editor-actions">
             <button class="btn btn-primary" @click="saveConfig">保存</button>
-            <button class="btn btn-ghost" @click="editingConfig = false">取消</button>
+            <button class="btn btn-secondary" @click="editingConfig = false">取消</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div v-if="activeTab === 'params'" class="params-section">
+    <div v-if="activeTab === 'params'" class="params-section fade-in">
       <div v-if="!targetModel" class="empty-state">
         <SlidersHorizontal class="w-12 h-12 text-muted" />
         <p>请先在"热切换"面板选择目标模型，或输入模型名称</p>
@@ -303,13 +308,13 @@ const saveConfig = async () => {
     </div>
 
     <div v-if="showSwitchConfirm" class="confirm-modal">
-      <div class="confirm-content tech-border">
-        <h3>确认引擎切换</h3>
+      <div class="confirm-content glass-card tech-border">
+        <h3 class="digital-font">确认引擎切换</h3>
         <p>目标模型: {{ targetModel }}，引擎: {{ engineDisplayName(targetEngine) }}，端口: {{ targetPort }}</p>
         <p class="warn-text">切换过程中将停止当前服务，请确保无活跃请求</p>
         <div class="confirm-actions">
           <button class="btn btn-primary" @click="handleSwitch">确认切换</button>
-          <button class="btn btn-ghost" @click="showSwitchConfirm = false">取消</button>
+          <button class="btn btn-secondary" @click="showSwitchConfirm = false">取消</button>
         </div>
       </div>
     </div>
@@ -326,13 +331,24 @@ const saveConfig = async () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.3);
 }
 
 .header-title h1 {
@@ -350,8 +366,6 @@ const saveConfig = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-danger);
   padding: 10px 16px;
   border-radius: 8px;
   margin-bottom: 16px;
@@ -360,7 +374,7 @@ const saveConfig = async () => {
 
 .tab-controls {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 24px;
 }
 
@@ -369,19 +383,25 @@ const saveConfig = async () => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
   color: var(--text-muted);
   background: var(--bg-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .tab-btn.active {
-  background: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15) 0%, rgba(var(--color-primary-rgb), 0.08) 100%);
+  color: var(--color-primary-light);
+  border-color: rgba(var(--color-primary-rgb), 0.3);
+  box-shadow: 0 0 12px rgba(var(--color-primary-rgb), 0.1);
 }
 
 .loading-state,
@@ -402,37 +422,31 @@ const saveConfig = async () => {
 }
 
 .engine-card {
-  background: var(--bg-card);
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.2s;
+  padding: 20px;
+  animation: scale-in 0.3s ease-out both;
 }
 
 .engine-card.current {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+  border-color: rgba(var(--color-primary-rgb), 0.3);
 }
 
 .engine-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.engine-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .engine-name {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.current-badge {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--color-primary);
-  color: white;
 }
 
 .engine-body {
@@ -445,6 +459,8 @@ const saveConfig = async () => {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .field-label {
@@ -466,6 +482,10 @@ const saveConfig = async () => {
   color: var(--text-muted);
 }
 
+.field-value.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
 .section-title {
   display: flex;
   align-items: center;
@@ -473,13 +493,6 @@ const saveConfig = async () => {
   color: var(--text-primary);
   margin-bottom: 16px;
   font-size: 16px;
-}
-
-.card-base {
-  background: var(--bg-card);
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .switch-form .form-row {
@@ -497,53 +510,62 @@ const saveConfig = async () => {
 
 .form-input {
   background: var(--bg-input);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-primary);
   color: var(--text-primary);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 12px;
   font-size: 14px;
   flex: 1;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.1);
 }
 
 .progress-phases {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .phase-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
   background: var(--bg-secondary);
-  transition: all 0.2s;
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
 }
 
 .phase-item.active {
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(var(--color-primary-rgb), 0.08);
+  border-color: rgba(var(--color-primary-rgb), 0.2);
 }
 
 .phase-item.done {
-  background: rgba(74, 222, 128, 0.1);
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.15);
 }
 
 .phase-item.failed {
-  background: rgba(248, 113, 113, 0.1);
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.15);
 }
 
 .phase-num {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--color-primary);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -567,19 +589,6 @@ const saveConfig = async () => {
   margin-left: auto;
 }
 
-.progress-track {
-  height: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-}
-
-.progress-fill {
-  height: 4px;
-  background: var(--color-primary);
-  border-radius: 2px;
-  transition: width 0.3s;
-}
-
 .overall-progress {
   display: flex;
   justify-content: space-between;
@@ -589,27 +598,21 @@ const saveConfig = async () => {
   color: var(--text-muted);
 }
 
-.overall-phase {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--bg-secondary);
-}
-
 .config-block {
   margin-bottom: 24px;
 }
 
 .config-block h4 {
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  font-size: 15px;
 }
 
 .config-field {
   display: flex;
   gap: 8px;
   font-size: 13px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .config-key {
@@ -624,69 +627,35 @@ const saveConfig = async () => {
 .config-pre {
   font-size: 12px;
   background: var(--bg-secondary);
-  padding: 8px;
-  border-radius: 8px;
+  padding: 10px;
+  border-radius: 10px;
   color: var(--text-primary);
   overflow-x: auto;
+  border: 1px solid var(--border-primary);
 }
 
 .config-textarea {
   width: 100%;
   background: var(--bg-input);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-primary);
   color: var(--text-primary);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: 10px;
+  padding: 14px;
   font-size: 13px;
-  font-family: monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   resize: vertical;
+}
+
+.config-textarea:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.1);
 }
 
 .editor-actions {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
-}
-
-.confirm-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 999;
-}
-
-.confirm-content {
-  background: var(--bg-card);
-  padding: 24px;
-  border-radius: 12px;
-  max-width: 400px;
-}
-
-.confirm-content h3 {
-  color: var(--text-primary);
-  margin-bottom: 12px;
-}
-
-.confirm-content p {
-  color: var(--text-muted);
-  margin-bottom: 8px;
-  font-size: 14px;
-}
-
-.warn-text {
-  color: #f59e0b;
-}
-
-.confirm-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 16px;
+  margin-top: 14px;
 }
 
 .btn {
@@ -694,11 +663,11 @@ const saveConfig = async () => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   border: 1px solid transparent;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .btn-sm {
@@ -706,29 +675,9 @@ const saveConfig = async () => {
   font-size: 12px;
 }
 
-.btn-primary {
-  background: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-dark);
-}
-
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text-muted);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
 }
 
 .btn-danger {
@@ -759,7 +708,46 @@ const saveConfig = async () => {
   margin-bottom: 16px;
 }
 
-.tech-border {
-  border: 1px solid rgba(99, 102, 241, 0.1);
+.confirm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  animation: fade-in 0.2s ease-out;
+}
+
+.confirm-content {
+  padding: 28px;
+  max-width: 420px;
+  animation: scale-in 0.25s ease-out;
+}
+
+.confirm-content h3 {
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  font-size: 18px;
+}
+
+.confirm-content p {
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.warn-text {
+  color: #fbbf24;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
 }
 </style>

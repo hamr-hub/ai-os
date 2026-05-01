@@ -853,25 +853,43 @@
                     }
 
                     var allModels = [];
-                    var html = '';
+                    var html = '<div class="aios-models-shell">';
                     data.data.groups.forEach(function(group) {
-                        html += '<div class="aios-model-group"><h5>' + escapeHtml(group.base_name) + '</h5>';
+                        var runningCount = group.variants.filter(function(variant) { return variant.running; }).length;
+                        html += '<div class="aios-model-group">';
+                        html += '<div class="aios-model-group-head">';
+                        html += '<div class="aios-model-group-title">';
+                        html += '<span class="aios-model-group-name">' + escapeHtml(group.base_name) + '</span>';
+                        html += '<span class="aios-model-group-count">' + group.variants.length + ' 个变体</span>';
+                        html += '</div>';
+                        html += '<div class="aios-model-group-stats">';
+                        html += '<span class="aios-model-group-stat">运行 ' + runningCount + '</span>';
+                        html += '<span class="aios-model-group-stat">就绪 ' + group.variants.filter(function(variant) { return variant.path_exists; }).length + '</span>';
+                        html += '</div>';
+                        html += '</div>';
+                        html += '<div class="aios-model-grid">';
                         group.variants.forEach(function(v) {
                             allModels.push(v);
                             var statusClass = v.running ? 'aios-running' : 'aios-stopped';
                             var isCurrent = v.is_current ? ' aios-current-model' : '';
                             html += '<div class="aios-model-item' + isCurrent + '">';
                             html += '<div class="aios-model-header">';
+                            html += '<div class="aios-model-title-wrap">';
                             html += '<span class="aios-model-name">' + escapeHtml(v.name) + '</span>';
+                            html += '<div class="aios-model-tags">';
                             html += '<span class="aios-model-status ' + statusClass + '">' + (v.running ? '运行中' : '已停止') + '</span>';
+                            html += '<span class="aios-model-chip">' + escapeHtml(v.backend_type || 'vllm') + '</span>';
                             if (v.is_current) html += '<span class="aios-badge aios-badge-primary">当前</span>';
                             html += '</div>';
-                            html += '<div class="aios-model-info">';
-                            html += '<span>后端: ' + escapeHtml(v.backend_type || 'vllm') + '</span>';
-                            html += '<span>端口: ' + (v.port || '--') + '</span>';
-                            html += '<span>显存: ' + (v.required_memory || '--') + '</span>';
+                            html += '</div>';
+                            html += '</div>';
+                            html += '<div class="aios-model-info-grid">';
+                            html += '<div class="aios-model-info-card"><span class="aios-model-info-label">端口</span><span class="aios-model-info-value">' + (v.port || '--') + '</span></div>';
+                            html += '<div class="aios-model-info-card"><span class="aios-model-info-label">显存</span><span class="aios-model-info-value">' + (v.required_memory || '--') + '</span></div>';
+                            html += '<div class="aios-model-info-card"><span class="aios-model-info-label">状态</span><span class="aios-model-info-value">' + (v.path_exists ? '可切换' : '未就绪') + '</span></div>';
                             html += '</div>';
                             html += '<div class="aios-model-actions">';
+                            html += '<button class="aios-btn aios-btn-sm aios-btn-info" onclick="AiosManager.modelSwitch.openDetail(\'' + escapeHtml(v.name) + '\')">详情</button>';
                             if (!v.running) {
                                 html += '<button class="aios-btn aios-btn-sm aios-btn-success" onclick="AiosManager.modelSwitch.startModel(\'' + escapeHtml(v.name) + '\')">启动</button>';
                             }
@@ -883,8 +901,9 @@
                             }
                             html += '</div></div>';
                         });
-                        html += '</div>';
+                        html += '</div></div>';
                     });
+                    html += '</div>';
                     document.getElementById('aios-models-container').innerHTML = html;
 
                     AiosManager.modelSwitch._allModels = allModels;
@@ -960,6 +979,14 @@
                 }).catch(function(err) {
                     showToast('请求失败: ' + err.message, 'error');
                 });
+            },
+
+            openDetail: function(modelName) {
+                var baseUrl = window.location.origin.indexOf(':30001') !== -1
+                    ? window.location.origin.replace(':30001', ':30000')
+                    : window.location.origin;
+                var detailUrl = baseUrl + '/modelcenter?tab=schedule&model=' + encodeURIComponent(modelName);
+                window.open(detailUrl, '_blank', 'noopener');
             },
 
             switchModel: function(modelName) {
