@@ -62,18 +62,28 @@ const statusLabel = computed(() => {
   return '--'
 })
 
+const statusTag = computed(() => {
+  const status = healthAlert.value?.status
+  if (status === 'healthy') return 'tag-green'
+  if (status === 'degraded' || status === 'warning') return 'tag-orange'
+  if (status === 'unhealthy') return 'tag-orange'
+  return 'tag-cyan'
+})
+
 const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
 </script>
 
 <template>
-  <div class="health-page">
+  <div class="health-page fade-in">
     <div class="page-header">
       <div class="header-title">
-        <Heart class="w-6 h-6 text-primary" />
+        <div class="icon-box gradient-green">
+          <Heart class="w-5 h-5" />
+        </div>
         <h1 class="digital-font">Health Ops</h1>
       </div>
       <p class="header-subtitle">健康运维 · 告警监控 · 服务状态</p>
-      <button class="btn btn-ghost" @click="handleRefresh">
+      <button class="btn btn-secondary" @click="handleRefresh">
         <RefreshCw v-if="loading" class="w-4 h-4 animate-spin" />
         <RefreshCw v-else class="w-4 h-4" /> 刷新
       </button>
@@ -82,7 +92,7 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
       </button>
     </div>
 
-    <div v-if="error" class="error-banner">
+    <div v-if="error" class="error-banner toast-error">
       <AlertTriangle class="w-4 h-4" />
       {{ error }}
     </div>
@@ -95,7 +105,7 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
         <Server class="w-4 h-4" /> 服务状态
       </button>
       <button :class="['tab-btn', activeTab === 'history' ? 'active' : '']" @click="activeTab = 'history'">
-        <Activity class="w-4 h-4" /> 健康趋势
+        <Activity class="w-4 h-4" /> 告警趋势
       </button>
     </div>
 
@@ -103,13 +113,13 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
       <div v-if="loading && !healthAlert" class="loading-state">
         <Loader2 class="w-8 h-8 animate-spin text-primary" />
       </div>
-      <div v-else-if="healthAlert" class="overview-card card-base">
+      <div v-else-if="healthAlert" class="overview-card card-base tech-border fade-in">
         <div class="health-score-row">
           <div class="health-score">
-            <span class="score-num" :style="{ color: statusColor }">{{ healthAlert.health_score }}</span>
+            <span class="score-num digital-font" :style="{ color: statusColor }">{{ healthAlert.health_score }}</span>
             <span class="score-label">健康评分</span>
           </div>
-          <div :class="['status-badge', healthAlert.status]">
+          <div :class="['status-badge tag', statusTag]">
             <component :is="healthAlert.health_score >= 80 ? CheckCircle : healthAlert.health_score >= 50 ? AlertTriangle : XCircle" class="w-4 h-4" />
             {{ statusLabel }}
           </div>
@@ -131,9 +141,9 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
       <div v-if="loading && !healthDetail" class="loading-state">
         <Loader2 class="w-8 h-8 animate-spin text-primary" />
       </div>
-      <div v-else-if="healthDetail" class="detail-grid">
-        <div class="check-card card-base">
-          <h4 class="check-title"><Cpu class="w-4 h-4" /> GPU</h4>
+      <div v-else-if="healthDetail" class="detail-grid fade-in">
+        <div class="check-card card-base card-hover scale-in stagger-1">
+          <h4 class="check-title"><Cpu class="w-4 h-4 text-primary" /> GPU</h4>
           <div class="check-rows">
             <div class="check-row">
               <span class="check-label">可用</span>
@@ -141,20 +151,20 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
             </div>
             <div class="check-row">
               <span class="check-label">利用率</span>
-              <span class="check-val">{{ healthDetail.checks.gpu.utilization }}%</span>
+              <span class="check-val mono">{{ healthDetail.checks.gpu.utilization }}%</span>
             </div>
             <div class="check-row">
               <span class="check-label">温度</span>
-              <span class="check-val">{{ healthDetail.checks.gpu.temperature }}°C</span>
+              <span class="check-val mono">{{ healthDetail.checks.gpu.temperature }}°C</span>
             </div>
             <div class="check-row">
               <span class="check-label">显存使用</span>
-              <span class="check-val">{{ healthDetail.checks.gpu.memory_used_pct }}%</span>
+              <span class="check-val mono">{{ healthDetail.checks.gpu.memory_used_pct }}%</span>
             </div>
           </div>
         </div>
-        <div class="check-card card-base">
-          <h4 class="check-title"><Server class="w-4 h-4" /> Go 后端</h4>
+        <div class="check-card card-base card-hover scale-in stagger-2">
+          <h4 class="check-title"><Server class="w-4 h-4 text-primary" /> Go 后端</h4>
           <div class="check-rows">
             <div class="check-row">
               <span class="check-label">可达</span>
@@ -162,12 +172,12 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
             </div>
             <div class="check-row">
               <span class="check-label">响应时间</span>
-              <span class="check-val">{{ healthDetail.checks.go_backend.response_time_ms }}ms</span>
+              <span class="check-val mono">{{ healthDetail.checks.go_backend.response_time_ms }}ms</span>
             </div>
           </div>
         </div>
-        <div class="check-card card-base">
-          <h4 class="check-title"><Server class="w-4 h-4" /> Python 后端</h4>
+        <div class="check-card card-base card-hover scale-in stagger-3">
+          <h4 class="check-title"><Server class="w-4 h-4 text-primary" /> Python 后端</h4>
           <div class="check-rows">
             <div class="check-row">
               <span class="check-label">可达</span>
@@ -175,12 +185,12 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
             </div>
             <div class="check-row">
               <span class="check-label">响应时间</span>
-              <span class="check-val">{{ healthDetail.checks.python_backend.response_time_ms }}ms</span>
+              <span class="check-val mono">{{ healthDetail.checks.python_backend.response_time_ms }}ms</span>
             </div>
           </div>
         </div>
-        <div class="check-card card-base">
-          <h4 class="check-title"><Zap class="w-4 h-4" /> vLLM 服务</h4>
+        <div class="check-card card-base card-hover scale-in stagger-4">
+          <h4 class="check-title"><Zap class="w-4 h-4 text-primary" /> vLLM 服务</h4>
           <div class="check-rows">
             <div class="check-row">
               <span class="check-label">运行</span>
@@ -188,12 +198,12 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
             </div>
             <div class="check-row">
               <span class="check-label">活跃请求</span>
-              <span class="check-val">{{ healthDetail.checks.vllm_service.active_requests }}</span>
+              <span class="check-val mono">{{ healthDetail.checks.vllm_service.active_requests }}</span>
             </div>
           </div>
         </div>
-        <div class="check-card card-base">
-          <h4 class="check-title"><Activity class="w-4 h-4" /> Redis</h4>
+        <div class="check-card card-base card-hover scale-in stagger-5">
+          <h4 class="check-title"><Activity class="w-4 h-4 text-primary" /> Redis</h4>
           <div class="check-rows">
             <div class="check-row">
               <span class="check-label">可用</span>
@@ -214,7 +224,7 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
         <Activity v-else class="w-12 h-12 text-muted" />
         <p v-if="!loading">暂无健康历史数据</p>
       </div>
-      <div v-else class="history-table card-base">
+      <div v-else class="history-table card-base fade-in">
         <div class="table-header">
           <span>时间</span>
           <span>评分</span>
@@ -223,9 +233,9 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
         </div>
         <div v-for="entry in healthHistory" :key="entry.timestamp" class="table-row">
           <span>{{ entry.timestamp }}</span>
-          <span :style="{ color: entry.health_score >= 80 ? '#4ade80' : entry.health_score >= 50 ? '#f59e0b' : '#f87171' }">{{ entry.health_score }}</span>
-          <span>{{ entry.status }}</span>
-          <span>{{ entry.alert_count }}</span>
+          <span class="mono" :style="{ color: entry.health_score >= 80 ? '#4ade80' : entry.health_score >= 50 ? '#f59e0b' : '#f87171' }">{{ entry.health_score }}</span>
+          <span :class="['tag', entry.status === 'healthy' ? 'tag-green' : entry.status === 'degraded' || entry.status === 'warning' ? 'tag-orange' : 'tag-orange']">{{ entry.status }}</span>
+          <span class="mono">{{ entry.alert_count }}</span>
         </div>
       </div>
     </div>
@@ -242,13 +252,24 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .header-title h1 {
@@ -266,8 +287,6 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-danger);
   padding: 10px 16px;
   border-radius: 8px;
   margin-bottom: 16px;
@@ -276,7 +295,7 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
 
 .tab-controls {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 24px;
 }
 
@@ -285,19 +304,25 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
   color: var(--text-muted);
   background: var(--bg-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .tab-btn.active {
-  background: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.08) 100%);
+  color: #4ade80;
+  border-color: rgba(34, 197, 94, 0.3);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.1);
 }
 
 .loading-state,
@@ -318,13 +343,6 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   color: var(--text-primary);
   margin-bottom: 16px;
   font-size: 16px;
-}
-
-.card-base {
-  background: var(--bg-card);
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .health-score-row {
@@ -349,21 +367,6 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   color: var(--text-muted);
 }
 
-.status-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.status-badge.healthy { background: rgba(74, 222, 128, 0.1); color: #4ade80; }
-.status-badge.degraded { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-.status-badge.warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-.status-badge.unhealthy { background: rgba(248, 113, 113, 0.1); color: #f87171; }
-
 .alert-reasons {
   margin-top: 16px;
 }
@@ -380,7 +383,7 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   gap: 6px;
   padding: 6px 0;
   font-size: 13px;
-  color: #f59e0b;
+  color: #fbbf24;
 }
 
 .timestamp {
@@ -393,6 +396,10 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
+}
+
+.check-card {
+  padding: 16px;
 }
 
 .check-title {
@@ -415,10 +422,16 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .check-label { color: var(--text-muted); }
 .check-val { color: var(--text-primary); }
+
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
 
 .text-green { color: #4ade80; }
 .text-red { color: #f87171; }
@@ -432,8 +445,10 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   grid-template-columns: 2fr 1fr 1fr 1fr;
   padding: 12px 16px;
   font-size: 12px;
+  font-weight: 600;
   color: var(--text-muted);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border-card);
+  background: var(--bg-secondary);
 }
 
 .table-row {
@@ -444,6 +459,11 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   color: var(--text-primary);
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   align-items: center;
+  transition: background 0.2s;
+}
+
+.table-row:hover {
+  background: var(--bg-hover);
 }
 
 .btn {
@@ -451,30 +471,15 @@ const checkIcon = (available: boolean) => available ? CheckCircle : XCircle
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   border: 1px solid transparent;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
-.btn-primary {
-  background: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-dark);
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text-muted);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

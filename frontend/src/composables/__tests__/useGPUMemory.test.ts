@@ -95,11 +95,14 @@ describe('useGPUMemory', () => {
   it('doSwitchEngine成功后乐观更新current_engine', async () => {
     const engineData = {
       current_engine: 'vllm' as const,
+      vllm: { running: false, pid: null, port: null, model: null, uptime: null },
+      sglang: { running: false, pid: null, port: null, model: null, uptime: null },
+      llama_cpp: { running: false, pid: null, port: null, model: null, uptime: null },
       services: [
         { engine: 'vllm', status: 'running', pid: 123, port: 8000, model_name: 'llama', started_at: '2026-01-01T00:00:00Z' },
       ],
     }
-    getEngineStatus.mockResolvedValue(engineData)
+    getEngineStatus.mockResolvedValue(engineData as any)
     switchEngine.mockResolvedValue({ status: 'ok' })
 
     const { getEngines, doSwitchEngine, engineStatus } = useGPUMemory()

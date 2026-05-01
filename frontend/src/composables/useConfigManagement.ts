@@ -9,7 +9,50 @@ import {
   getSystemConfig,
   updateSystemConfig,
 } from '@/api/client'
-import type { VLLMDefaultConfig, EngineConfig, SystemConfig } from '@/types'
+import type { VLLMDefaultConfig, EngineConfig, SystemConfig, EngineType } from '@/types'
+
+interface RawEngineConfigEntry {
+  command?: string
+  default_params?: Record<string, unknown>
+}
+
+interface RawEngineConfigResponse {
+  vllm?: RawEngineConfigEntry
+  sglang?: RawEngineConfigEntry
+  llama_cpp?: RawEngineConfigEntry
+}
+
+const normalizeEngineConfig = (payload: unknown): EngineConfig => {
+  const raw = (payload ?? {}) as RawEngineConfigResponse
+  return {
+    vllm: {
+      command: raw.vllm?.command ?? '',
+      default_params: raw.vllm?.default_params ?? {},
+    },
+    sglang: {
+      command: raw.sglang?.command ?? '',
+      default_params: raw.sglang?.default_params ?? {},
+    },
+    llama_cpp: {
+      command: raw.llama_cpp?.command ?? '',
+      default_params: raw.llama_cpp?.default_params ?? {},
+    },
+  }
+}
+
+const toEngineConfigPayload = (payload: Partial<EngineConfig>) => {
+  const result: Partial<Record<EngineType, RawEngineConfigEntry>> = {}
+  const engineTypes: EngineType[] = ['vllm', 'sglang', 'llama_cpp']
+  for (const engineType of engineTypes) {
+    const config = payload[engineType]
+    if (!config) continue
+    result[engineType] = {
+      command: config.command,
+      default_params: config.default_params,
+    }
+  }
+  return result
+}
 
 export function useConfigManagement() {
   const vllmDefaultConfig: Ref<VLLMDefaultConfig | null> = ref(null)
@@ -24,7 +67,7 @@ export function useConfigManagement() {
     error.value = null
     try {
       vllmDefaultConfig.value = await getVLLMDefaultConfig()
-      engineConfig.value = await getEngineConfig()
+      engineConfig.value = normalizeEngineConfig(await getEngineConfig())
       systemConfig.value = await getSystemConfig()
       const dm = await getDefaultModel()
       defaultModel.value = dm?.default_model ?? null
@@ -39,7 +82,8 @@ export function useConfigManagement() {
     loading.value = true
     error.value = null
     try {
-      engineConfig.value = await updateEngineConfig(newConfig)
+      const response = await updateEngineConfig(toEngineConfigPayload(newConfig) as Partial<EngineConfig>)
+      engineConfig.value = normalizeEngineConfig(response)
       return true
     } catch (e: unknown) {
       error.value = (e as Error).message || '更新引擎配置失败'

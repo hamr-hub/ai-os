@@ -47,20 +47,22 @@ const handleClearDefault = async () => {
 </script>
 
 <template>
-  <div class="config-page">
+  <div class="config-page fade-in">
     <div class="page-header">
       <div class="header-title">
-        <Settings class="w-6 h-6 text-primary" />
+        <div class="icon-box gradient-primary">
+          <Settings class="w-5 h-5" />
+        </div>
         <h1 class="digital-font">Config Center</h1>
       </div>
       <p class="header-subtitle">配置中心 · 全局参数 · 默认模型</p>
-      <button class="btn btn-ghost" @click="handleRefresh">
+      <button class="btn btn-secondary" @click="handleRefresh">
         <RefreshCw v-if="loading" class="w-4 h-4 animate-spin" />
         <RefreshCw v-else class="w-4 h-4" /> 刷新
       </button>
     </div>
 
-    <div v-if="error" class="error-banner">
+    <div v-if="error" class="error-banner toast-error">
       <AlertTriangle class="w-4 h-4" />
       {{ error }}
     </div>
@@ -85,32 +87,32 @@ const handleClearDefault = async () => {
       <p>加载中...</p>
     </div>
 
-    <div v-if="activeTab === 'vllm' && vllmDefaultConfig" class="config-panel card-base">
-      <h3 class="section-title"><Settings class="w-5 h-5" /> vLLM 默认配置</h3>
+    <div v-if="activeTab === 'vllm' && vllmDefaultConfig" class="config-panel card-base tech-border fade-in">
+      <h3 class="section-title"><Settings class="w-5 h-5 text-primary" /> vLLM 默认配置</h3>
       <div class="config-row">
         <span class="config-label">GPU 显存利用率</span>
-        <span class="config-value">{{ vllmDefaultConfig.gpu_memory_utilization }}</span>
+        <span class="config-value digital-font">{{ vllmDefaultConfig.gpu_memory_utilization }}</span>
       </div>
       <div class="config-row">
         <span class="config-label">最大模型长度</span>
-        <span class="config-value">{{ vllmDefaultConfig.max_model_len }}</span>
+        <span class="config-value digital-font">{{ vllmDefaultConfig.max_model_len }}</span>
       </div>
       <div class="config-row">
         <span class="config-label">最大并发序列</span>
-        <span class="config-value">{{ vllmDefaultConfig.max_num_seqs }}</span>
+        <span class="config-value digital-font">{{ vllmDefaultConfig.max_num_seqs }}</span>
       </div>
       <div class="config-row">
         <span class="config-label">最大批处理Token</span>
-        <span class="config-value">{{ vllmDefaultConfig.max_num_batched_tokens }}</span>
+        <span class="config-value digital-font">{{ vllmDefaultConfig.max_num_batched_tokens }}</span>
       </div>
       <div class="config-row">
         <span class="config-label">Tensor并行数</span>
-        <span class="config-value">{{ vllmDefaultConfig.tensor_parallel_size }}</span>
+        <span class="config-value digital-font">{{ vllmDefaultConfig.tensor_parallel_size }}</span>
       </div>
     </div>
 
-    <div v-if="activeTab === 'engine' && engineConfig" class="config-panel card-base">
-      <h3 class="section-title"><Settings class="w-5 h-5" /> 引擎配置</h3>
+    <div v-if="activeTab === 'engine' && engineConfig" class="config-panel card-base tech-border fade-in">
+      <h3 class="section-title"><Settings class="w-5 h-5 text-primary" /> 引擎配置</h3>
       <div v-for="(conf, name) in engineConfig" :key="name" class="config-block">
         <h4 class="engine-name">{{ name }}</h4>
         <div class="config-row">
@@ -121,8 +123,8 @@ const handleClearDefault = async () => {
       </div>
     </div>
 
-    <div v-if="activeTab === 'system'" class="config-panel card-base">
-      <h3 class="section-title"><Settings class="w-5 h-5" /> 系统配置</h3>
+    <div v-if="activeTab === 'system'" class="config-panel card-base tech-border fade-in">
+      <h3 class="section-title"><Settings class="w-5 h-5 text-primary" /> 系统配置</h3>
       <div v-if="!systemConfig" class="empty-state">
         <Settings class="w-12 h-12 text-muted" />
         <p>无法获取系统配置</p>
@@ -130,11 +132,11 @@ const handleClearDefault = async () => {
       <div v-else-if="!editingSystem" class="config-display">
         <div class="config-row">
           <span class="config-label">健康检查间隔</span>
-          <span class="config-value">{{ systemConfig.health_check_interval_seconds }} 秒</span>
+          <span class="config-value digital-font">{{ systemConfig.health_check_interval_seconds }} 秒</span>
         </div>
         <div class="config-row">
           <span class="config-label">缓存 TTL</span>
-          <span class="config-value">{{ systemConfig.cache_ttl_seconds }} 秒</span>
+          <span class="config-value digital-font">{{ systemConfig.cache_ttl_seconds }} 秒</span>
         </div>
         <div class="config-row">
           <span class="config-label">日志级别</span>
@@ -142,11 +144,11 @@ const handleClearDefault = async () => {
         </div>
         <div class="config-row">
           <span class="config-label">GPU轮询间隔</span>
-          <span class="config-value">{{ systemConfig.gpu_poll_interval_seconds }} 秒</span>
+          <span class="config-value digital-font">{{ systemConfig.gpu_poll_interval_seconds }} 秒</span>
         </div>
         <div class="config-row">
           <span class="config-label">WS推送间隔</span>
-          <span class="config-value">{{ systemConfig.ws_push_interval_seconds }} 秒</span>
+          <span class="config-value digital-font">{{ systemConfig.ws_push_interval_seconds }} 秒</span>
         </div>
         <button class="btn btn-primary" @click="startEditSystem">
           <Save class="w-4 h-4" /> 编辑配置
@@ -180,16 +182,16 @@ const handleClearDefault = async () => {
         </div>
         <div class="editor-actions">
           <button class="btn btn-primary" @click="saveSystem">保存</button>
-          <button class="btn btn-ghost" @click="editingSystem = false">取消</button>
+          <button class="btn btn-secondary" @click="editingSystem = false">取消</button>
         </div>
       </div>
     </div>
 
-    <div v-if="activeTab === 'default'" class="config-panel card-base">
-      <h3 class="section-title"><Star class="w-5 h-5" /> 默认模型管理</h3>
+    <div v-if="activeTab === 'default'" class="config-panel card-base tech-border fade-in">
+      <h3 class="section-title"><Star class="w-5 h-5 text-primary" /> 默认模型管理</h3>
       <div v-if="defaultModel" class="current-default">
         <span class="default-label">当前默认模型</span>
-        <span class="default-name">{{ defaultModel }}</span>
+        <span class="default-name tag tag-green">{{ defaultModel }}</span>
         <button class="btn btn-sm btn-danger" @click="handleClearDefault">
           <Trash2 class="w-3.5 h-3.5" /> 清除
         </button>
@@ -217,13 +219,24 @@ const handleClearDefault = async () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.3);
 }
 
 .header-title h1 {
@@ -241,8 +254,6 @@ const handleClearDefault = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-danger);
   padding: 10px 16px;
   border-radius: 8px;
   margin-bottom: 16px;
@@ -251,7 +262,7 @@ const handleClearDefault = async () => {
 
 .tab-controls {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 24px;
 }
 
@@ -260,19 +271,25 @@ const handleClearDefault = async () => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
   color: var(--text-muted);
   background: var(--bg-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .tab-btn.active {
-  background: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15) 0%, rgba(var(--color-primary-rgb), 0.08) 100%);
+  color: var(--color-primary-light);
+  border-color: rgba(var(--color-primary-rgb), 0.3);
+  box-shadow: 0 0 12px rgba(var(--color-primary-rgb), 0.1);
 }
 
 .loading-state,
@@ -295,17 +312,10 @@ const handleClearDefault = async () => {
   font-size: 16px;
 }
 
-.card-base {
-  background: var(--bg-card);
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
 .config-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: 10px 0;
   font-size: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
@@ -319,7 +329,7 @@ const handleClearDefault = async () => {
 
 .engine-name {
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   font-size: 15px;
   font-weight: 600;
 }
@@ -327,10 +337,11 @@ const handleClearDefault = async () => {
 .config-pre {
   font-size: 12px;
   background: var(--bg-secondary);
-  padding: 8px;
-  border-radius: 8px;
+  padding: 10px;
+  border-radius: 10px;
   color: var(--text-primary);
   overflow-x: auto;
+  border: 1px solid var(--border-primary);
 }
 
 .form-row {
@@ -348,28 +359,36 @@ const handleClearDefault = async () => {
 
 .form-input {
   background: var(--bg-input);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-primary);
   color: var(--text-primary);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 12px;
   font-size: 14px;
   flex: 1;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.1);
 }
 
 .editor-actions {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .current-default {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
-  background: rgba(74, 222, 128, 0.1);
-  border-radius: 8px;
+  padding: 12px 16px;
+  border-radius: 10px;
   margin-bottom: 16px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.15);
 }
 
 .default-label { color: var(--text-muted); font-size: 14px; }
@@ -378,10 +397,11 @@ const handleClearDefault = async () => {
 .no-default {
   display: flex;
   align-items: center;
-  padding: 12px;
+  padding: 12px 16px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: 10px;
   margin-bottom: 16px;
+  border: 1px solid var(--border-secondary);
 }
 
 .set-default-form {
@@ -394,11 +414,11 @@ const handleClearDefault = async () => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   border: 1px solid transparent;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .btn-sm {
@@ -406,34 +426,18 @@ const handleClearDefault = async () => {
   font-size: 12px;
 }
 
-.btn-primary {
-  background: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background: var(--color-primary-dark);
-}
-
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--text-muted);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
 }
 
 .btn-danger {
   background: rgba(239, 68, 68, 0.1);
   color: #f87171;
   border-color: rgba(239, 68, 68, 0.2);
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
 }
 </style>

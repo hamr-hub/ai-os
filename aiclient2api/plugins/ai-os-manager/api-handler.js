@@ -110,6 +110,21 @@ export async function handlePluginStyles(method, urlPath, req, res, config) {
     }
 }
 
+export async function handlePluginComponentScript(method, urlPath, req, res, config) {
+    if (method !== 'GET') return false;
+    const match = urlPath.match(/^\/plugins\/ai-os-manager\/components\/([a-zA-Z0-9_-]+\.js)$/);
+    if (!match) return false;
+    try {
+        const script = await fs.readFile(pathModule.join(pluginDir, 'components', match[1]), 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/javascript', 'Access-Control-Allow-Origin': '*' });
+        res.end(script);
+        return true;
+    } catch (error) {
+        sendJSONResponse(res, 404, { success: false, error: 'Component not found' });
+        return true;
+    }
+}
+
 export async function handleGPUMonitorApiRoutes(method, urlPath, req, res, config) {
     if (!urlPath.startsWith('/api/gpu-monitor')) return false;
     try {

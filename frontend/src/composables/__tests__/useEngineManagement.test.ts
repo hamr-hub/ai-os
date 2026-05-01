@@ -23,6 +23,9 @@ describe('useEngineManagement', () => {
   it('fetchStatus填充engineStatus', async () => {
     const status = {
       current_engine: 'vllm' as const,
+      vllm: { running: false, pid: null, port: null, model: null, uptime: null },
+      sglang: { running: false, pid: null, port: null, model: null, uptime: null },
+      llama_cpp: { running: false, pid: null, port: null, model: null, uptime: null },
       services: [
         { engine: 'vllm', status: 'running', pid: 123, port: 8000, model_name: 'llama', started_at: '2026-01-01T00:00:00Z' },
       ],
