@@ -39,6 +39,24 @@ function sendHTMLResponse(res, html) {
     res.end(html);
 }
 
+async function proxyToBackend(res, path, method = 'GET', body = null) {
+    try {
+        const options = { method };
+        if (body) {
+            options.headers = { 'Content-Type': 'application/json' };
+            options.body = JSON.stringify(body);
+        }
+        const response = await backendClient.fetchWithFallback(path, options);
+        const text = await response.text();
+        let data;
+        try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+        sendJSONResponse(res, response.status, data || { success: response.ok });
+    } catch (error) {
+        sendJSONResponse(res, 500, { success: false, error: error.message });
+    }
+    return true;
+}
+
 export async function handleGetPanelHTML(method, urlPath, req, res) {
     if (method !== 'GET' || urlPath !== '/__panel_html__') return false;
     try {
@@ -169,10 +187,23 @@ export async function handleModelSwitchApiRoutes(method, urlPath, req, res, conf
         }
         if (urlPath === '/api/model-switch/download' && method === 'POST') {
             const body = await parseRequestBody(req);
-            if (!body.modelId) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelId' }); return true; }
-            const result = await backendClient.proxyRequest('/manage/models/download', 'POST', body);
-            sendJSONResponse(res, 200, result);
-            return true;
+            if (!body.model_name) { sendJSONResponse(res, 400, { success: false, error: 'Missing model_name' }); return true; }
+            return await proxyToBackend(res, '/manage/models/download', 'POST', body);
+        }
+        if (urlPath.match(/^\/api\/model-switch\/download\/([^/]+)\/status$/) && method === 'GET') {
+            const taskId = urlPath.split('/api/model-switch/download/')[1].replace('/status', '');
+            return await proxyToBackend(res, `/manage/models/download/${taskId}/status`);
+        }
+        if (urlPath.match(/^\/api\/model-switch\/download\/([^/]+)\/retry$/) && method === 'POST') {
+            const taskId = urlPath.split('/api/model-switch/download/')[1].replace('/retry', '');
+            return await proxyToBackend(res, `/manage/models/download/${taskId}/retry`, 'POST');
+        }
+        if (urlPath.match(/^\/api\/model-switch\/download\/([^/]+)$/) && method === 'DELETE') {
+            const taskId = urlPath.split('/api/model-switch/download/')[1];
+            return await proxyToBackend(res, `/manage/models/download/${taskId}`, 'DELETE');
+        }
+        if (urlPath === '/api/model-switch/downloads' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/models/downloads');
         }
         return false;
     } catch (error) {
