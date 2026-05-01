@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { EngineStatus } from '@/types'
 
 vi.mock('@/api/client', () => ({
   getEngineStatus: vi.fn(),
@@ -15,21 +16,23 @@ const switchEngine = vi.mocked(apiClient.switchEngine)
 const getEngineConfig = vi.mocked(apiClient.getEngineConfig)
 const updateEngineConfig = vi.mocked(apiClient.updateEngineConfig)
 
+const createEngineStatus = (overrides: Partial<EngineStatus> = {}): EngineStatus => ({
+  current_engine: 'vllm',
+  vllm: { running: false, pid: null, port: null, model: null, uptime: null },
+  sglang: { running: false, pid: null, port: null, model: null, uptime: null },
+  llama_cpp: { running: false, pid: null, port: null, model: null, uptime: null },
+  ...overrides,
+})
+
 describe('useEngineManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('fetchStatus填充engineStatus', async () => {
-    const status = {
-      current_engine: 'vllm' as const,
-      vllm: { running: false, pid: null, port: null, model: null, uptime: null },
-      sglang: { running: false, pid: null, port: null, model: null, uptime: null },
-      llama_cpp: { running: false, pid: null, port: null, model: null, uptime: null },
-      services: [
-        { engine: 'vllm', status: 'running', pid: 123, port: 8000, model_name: 'llama', started_at: '2026-01-01T00:00:00Z' },
-      ],
-    }
+    const status = createEngineStatus({
+      vllm: { running: true, pid: 123, port: 8000, model: 'llama', uptime: 60 },
+    })
     getEngineStatus.mockResolvedValue(status)
 
     const { fetchStatus, engineStatus, loading, error } = useEngineManagement()

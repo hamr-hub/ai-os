@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { EngineStatus } from '@/types'
 
 vi.mock('@/api/client', () => ({
   getGPUSummary: vi.fn(),
@@ -17,6 +18,14 @@ const recommendModel = vi.mocked(apiClient.recommendModel)
 const checkModelMemory = vi.mocked(apiClient.checkModelMemory)
 const getEngineStatus = vi.mocked(apiClient.getEngineStatus)
 const switchEngine = vi.mocked(apiClient.switchEngine)
+
+const createEngineStatus = (overrides: Partial<EngineStatus> = {}): EngineStatus => ({
+  current_engine: 'vllm',
+  vllm: { running: false, pid: null, port: null, model: null, uptime: null },
+  sglang: { running: false, pid: null, port: null, model: null, uptime: null },
+  llama_cpp: { running: false, pid: null, port: null, model: null, uptime: null },
+  ...overrides,
+})
 
 describe('useGPUMemory', () => {
   beforeEach(() => {
@@ -93,16 +102,10 @@ describe('useGPUMemory', () => {
   })
 
   it('doSwitchEngine成功后乐观更新current_engine', async () => {
-    const engineData = {
-      current_engine: 'vllm' as const,
-      vllm: { running: false, pid: null, port: null, model: null, uptime: null },
-      sglang: { running: false, pid: null, port: null, model: null, uptime: null },
-      llama_cpp: { running: false, pid: null, port: null, model: null, uptime: null },
-      services: [
-        { engine: 'vllm', status: 'running', pid: 123, port: 8000, model_name: 'llama', started_at: '2026-01-01T00:00:00Z' },
-      ],
-    }
-    getEngineStatus.mockResolvedValue(engineData as any)
+    const engineData = createEngineStatus({
+      vllm: { running: true, pid: 123, port: 8000, model: 'llama', uptime: 60 },
+    })
+    getEngineStatus.mockResolvedValue(engineData)
     switchEngine.mockResolvedValue({ status: 'ok' })
 
     const { getEngines, doSwitchEngine, engineStatus } = useGPUMemory()
