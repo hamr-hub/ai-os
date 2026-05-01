@@ -1596,49 +1596,49 @@ async def update_engines_config(request: Request):
     raise HTTPException(status_code=500, detail="Failed to persist engines config")
 
 
-@manage_router.get(/health/detailed)
+@manage_router.get("/health/detailed")
 async def get_health_detailed():
     health = await health_checker.check_health()
     return {
-        overall_score: health.health_score,
-        status: health.status,
-        checks: {
-            gpu: {
-                available: bool(getattr(health, 'details', {}).get('gpu_overall', 0) > 0),
-                utilization: getattr(gpu_monitor.get_current_metrics(), 'gpu_utilization', 0) if gpu_monitor else 0,
-                temperature: getattr(gpu_monitor.get_current_metrics(), 'gpu_temperature', 0) if gpu_monitor else 0,
-                memory_used_pct: getattr(gpu_monitor.get_current_metrics(), 'memory_utilization', 0) if gpu_monitor else 0,
+        "overall_score": health.health_score,
+        "status": health.status,
+        "checks": {
+            "gpu": {
+                "available": bool(getattr(health, 'details', {}).get('gpu_overall', 0) > 0),
+                "utilization": getattr(gpu_monitor.get_current_metrics(), 'gpu_utilization', 0) if gpu_monitor else 0,
+                "temperature": getattr(gpu_monitor.get_current_metrics(), 'gpu_temperature', 0) if gpu_monitor else 0,
+                "memory_used_pct": getattr(gpu_monitor.get_current_metrics(), 'memory_utilization', 0) if gpu_monitor else 0,
             },
-            go_backend: {
-                reachable: True,
-                response_time_ms: 0,
+            "go_backend": {
+                "reachable": True,
+                "response_time_ms": 0,
             },
-            python_backend: {
-                reachable: True,
-                response_time_ms: 0,
+            "python_backend": {
+                "reachable": True,
+                "response_time_ms": 0,
             },
-            vllm_service: {
-                running: True,
-                active_requests: 0,
+            "vllm_service": {
+                "running": True,
+                "active_requests": 0,
             },
-            redis: {
-                available: True,
-                connected: True,
+            "redis": {
+                "available": True,
+                "connected": True,
             },
         },
-        alert_reasons: health.alert_reasons,
-        timestamp: health.timestamp.isoformat() if hasattr(health.timestamp, 'isoformat') else str(health.timestamp),
+        "alert_reasons": health.alert_reasons,
+        "timestamp": health.timestamp.isoformat() if hasattr(health.timestamp, 'isoformat') else str(health.timestamp),
     }
 
 
-@manage_router.get(/health/history)
+@manage_router.get("/health/history")
 async def get_health_history():
     current = await health_checker.check_health()
     return [{
-        timestamp: current.timestamp.isoformat() if hasattr(current.timestamp, 'isoformat') else str(current.timestamp),
-        health_score: current.health_score,
-        status: current.status,
-        alert_count: len(current.alert_reasons),
+        "timestamp": current.timestamp.isoformat() if hasattr(current.timestamp, 'isoformat') else str(current.timestamp),
+        "health_score": current.health_score,
+        "status": current.status,
+        "alert_count": len(current.alert_reasons),
     }]
 
 
