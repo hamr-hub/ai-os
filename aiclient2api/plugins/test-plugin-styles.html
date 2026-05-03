@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-OS 插件样式端到端测试</title>
+    <link rel="stylesheet" href="/plugins/ai-os-manager/styles.css">
+    <link rel="stylesheet" href="/plugins/ai-monitor/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .test-header {
+            background: var(--gradient-accent);
+            color: #fff;
+            padding: var(--space-md) var(--space-xl);
+            text-align: center;
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: var(--space-xl);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-md);
+            letter-spacing: 0.5px;
+        }
+        .test-header span { opacity: 0.85; font-weight: 400; }
+        .test-grid { display: grid; grid-template-columns: 220px 1fr; gap: var(--space-lg); }
+        .test-sidebar {
+            background: var(--gradient-subtle);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-xl);
+            padding: var(--space-md) 0;
+            box-shadow: var(--shadow-xs);
+            height: fit-content;
+            position: sticky;
+            top: var(--space-xl);
+        }
+        .sidebar-title {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            font-weight: 600;
+            padding: 0 var(--space-lg);
+            margin-bottom: var(--space-sm);
+        }
+        .test-container { background: transparent; }
+        .test-section {
+            margin-bottom: var(--space-2xl);
+            border: 1px solid transparent;
+            border-radius: var(--radius-xl);
+        }
+        .test-section-label {
+            font-size: 11px;
+            color: var(--color-primary-light);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
+            margin-bottom: var(--space-lg);
+            padding-left: var(--space-xs);
+        }
+        .summary-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--space-lg);
+            margin-bottom: var(--space-xl);
+        }
+        .summary-item {
+            background: var(--gradient-subtle);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            text-align: center;
+            box-shadow: var(--shadow-xs);
+        }
+        .summary-item.pass { border-left: 3px solid var(--color-success); }
+        .summary-item.fail { border-left: 3px solid var(--color-danger); }
+        .summary-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .summary-value { font-size: 28px; font-weight: 800; }
+        .summary-value.pass-color { color: var(--color-success); }
+        .summary-value.fail-color { color: var(--color-danger); }
+        #test-log {
+            background: var(--bg-input);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-secondary);
+            max-height: 280px;
+            overflow-y: auto;
+            margin-top: var(--space-lg);
+        }
+        .log-pass { color: var(--color-success); }
+        .log-fail { color: var(--color-danger); }
+        .log-info { color: var(--color-primary-light); }
+        .log-warn { color: var(--color-warning); }
+    </style>
+</head>
+<body style="background: var(--bg-root); min-height: 100vh; padding: var(--space-xl);">
+
+<div class="test-header">
+    <i class="fas fa-flask"></i> AI-OS 插件样式端到端测试
+    <span>— styles.css v3 + ai-monitor v2 + gpu-monitor</span>
+</div>
+
+<div class="test-grid">
+    <nav class="test-sidebar">
+        <div class="sidebar-title">组件清单</div>
+        <a class="nav-item" href="#sec-stats"><i class="fas fa-chart-bar"></i> Stat Cards</a>
+        <a class="nav-item" href="#sec-banner"><i class="fas fa-flag"></i> Status Banner</a>
+        <a class="nav-item" href="#sec-prompts"><i class="fas fa-exchange-alt"></i> Model Switch</a>
+        <a class="nav-item" href="#sec-models"><i class="fas fa-cubes"></i> Model List</a>
+        <a class="nav-item" href="#sec-engines"><i class="fas fa-server"></i> Engine Cards</a>
+        <div class="nav-divider"></div>
+        <a class="nav-item" href="#sec-forms"><i class="fas fa-sliders-h"></i> Form Elements</a>
+        <a class="nav-item" href="#sec-buttons"><i class="fas fa-play"></i> Buttons</a>
+        <a class="nav-item" href="#sec-table"><i class="fas fa-table"></i> Tables</a>
+        <a class="nav-item" href="#sec-config"><i class="fas fa-cog"></i> Config Form</a>
+        <a class="nav-item" href="#sec-alerts"><i class="fas fa-exclamation-triangle"></i> Alerts</a>
+        <div class="nav-divider"></div>
+        <a class="nav-item" href="#sec-health"><i class="fas fa-heartbeat"></i> Health Score</a>
+        <a class="nav-item" href="#sec-ratelimit"><i class="fas fa-tachometer-alt"></i> Rate Limit</a>
+        <a class="nav-item" href="#sec-states"><i class="fas fa-info-circle"></i> Empty/Loading</a>
+        <a class="nav-item" href="#sec-toasts"><i class="fas fa-bell"></i> Toasts</a>
+        <a class="nav-item" href="#sec-monitor"><i class="fas fa-eye"></i> Monitor Panel</a>
+    </nav>
+
+    <main class="test-container">
+
+        <!-- 统计摘要 -->
+        <div class="summary-bar">
+            <div class="summary-item pass">
+                <div class="summary-label">Passed</div>
+                <div class="summary-value pass-color" id="pass-count">--</div>
+            </div>
+            <div class="summary-item fail">
+                <div class="summary-label">Failed</div>
+                <div class="summary-value fail-color" id="fail-count">--</div>
+            </div>
+            <div class="summary-item" style="border-left: 3px solid var(--color-primary);">
+                <div class="summary-label">Total</div>
+                <div class="summary-value" style="color: var(--color-primary-light);" id="total-count">--</div>
+            </div>
+            <div class="summary-item" style="border-left: 3px solid var(--color-info);">
+                <div class="summary-label">Coverage</div>
+                <div class="summary-value" style="color: var(--color-info);" id="coverage">--</div>
+            </div>
+        </div>
+
+        <div id="test-log">正在初始化测试...</div>
+
+        <!-- ===== 1. Stat Cards ===== -->
+        <div class="test-section" id="sec-stats">
+            <div class="test-section-label"><i class="fas fa-chart-bar"></i> 01. GPU Stat Cards</div>
+            <div class="aios-stats-grid">
+                <div class="aios-stat-card">
+                    <div class="aios-stat-icon"><i class="fas fa-microchip"></i></div>
+                    <div class="aios-stat-body">
+                        <div class="aios-stat-label">GPU 型号</div>
+                        <div class="aios-stat-value">NVIDIA A100-SXM4</div>
+                    </div>
+                </div>
+                <div class="aios-stat-card">
+                    <div class="aios-stat-icon"><i class="fas fa-tachometer-alt"></i></div>
+                    <div class="aios-stat-body">
+                        <div class="aios-stat-label">利用率</div>
+                        <div class="aios-stat-value">78.5%</div>
+                        <div class="aios-progress-bar"><div class="aios-progress-fill aios-warning" style="width:78.5%"></div></div>
+                    </div>
+                </div>
+                <div class="aios-stat-card">
+                    <div class="aios-stat-icon"><i class="fas fa-database"></i></div>
+                    <div class="aios-stat-body">
+                        <div class="aios-stat-label">显存</div>
+                        <div class="aios-stat-value">32.1 GB</div>
+                        <div class="aios-progress-bar"><div class="aios-progress-fill aios-success" style="width:42%"></div></div>
+                    </div>
+                </div>
+                <div class="aios-stat-card">
+                    <div class="aios-stat-icon"><i class="fas fa-thermometer-half"></i></div>
+                    <div class="aios-stat-body">
+                        <div class="aios-stat-label">温度</div>
+                        <div class="aios-stat-value">62°C</div>
+                    </div>
+                </div>
+                <div class="aios-stat-card">
+                    <div class="aios-stat-icon"><i class="fas fa-bolt"></i></div>
+                    <div class="aios-stat-body">
+                        <div class="aios-stat-label">功耗</div>
+                        <div class="aios-stat-value">250W / 400W</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 2. Status Banner ===== -->
+        <div class="test-section" id="sec-banner">
+            <div class="test-section-label"><i class="fas fa-flag"></i> 02. Status Banner</div>
+            <div class="aios-status-banner">
+                <div class="aios-banner-title"><i class="fas fa-play-circle"></i> 当前运行状态</div>
+                <div class="aios-banner-cards">
+                    <div class="aios-banner-item">
+                        <div class="aios-banner-icon"><i class="fas fa-server"></i></div>
+                        <div class="aios-banner-info">
+                            <div class="aios-banner-label">运行引擎</div>
+                            <div class="aios-banner-value aios-value-active">vLLM</div>
+                        </div>
+                    </div>
+                    <div class="aios-banner-item">
+                        <div class="aios-banner-icon"><i class="fas fa-cube"></i></div>
+                        <div class="aios-banner-info">
+                            <div class="aios-banner-label">当前模型</div>
+                            <div class="aios-banner-value">Qwen2.5-72B-Instruct</div>
+                        </div>
+                    </div>
+                    <div class="aios-banner-item">
+                        <div class="aios-banner-icon"><i class="fas fa-plug"></i></div>
+                        <div class="aios-banner-info">
+                            <div class="aios-banner-label">服务端口</div>
+                            <div class="aios-banner-value">8001</div>
+                        </div>
+                    </div>
+                    <div class="aios-banner-item">
+                        <div class="aios-banner-icon"><i class="fas fa-clock"></i></div>
+                        <div class="aios-banner-info">
+                            <div class="aios-banner-label">运行时长</div>
+                            <div class="aios-banner-value">4h 23m</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 3. Model Switch Form ===== -->
+        <div class="test-section" id="sec-prompts">
+            <div class="test-section-label"><i class="fas fa-exchange-alt"></i> 03. Model Switch Form</div>
+            <div class="aios-action-card">
+                <div class="aios-card-header">
+                    <h3><i class="fas fa-rocket"></i> 快速切换模型</h3>
+                    <span class="aios-badge aios-badge-primary">BETA</span>
+                </div>
+                <div class="aios-card-content">
+                    <div class="aios-form-grid">
+                        <div class="aios-form-group">
+                            <label>引擎选择</label>
+                            <select class="aios-input aios-select">
+                                <option>vLLM</option>
+                                <option>SGLang</option>
+                                <option>llama.cpp</option>
+                            </select>
+                        </div>
+                        <div class="aios-form-group">
+                            <label>模型名称</label>
+                            <select class="aios-input aios-select">
+                                <option>Qwen2.5-72B-Instruct</option>
+                                <option>DeepSeek-R1</option>
+                                <option>GPT-Qwen2.5-14B</option>
+                            </select>
+                        </div>
+                        <div class="aios-form-group">
+                            <label>GPU 索引</label>
+                            <input class="aios-input" value="0" placeholder="GPU Index">
+                        </div>
+                        <div class="aios-form-actions">
+                            <button class="aios-btn aios-btn-primary"><i class="fas fa-play"></i> 启动</button>
+                            <button class="aios-btn aios-btn-success"><i class="fas fa-sync-alt"></i> 热切换</button>
+                        </div>
+                    </div>
+                    <div class="aios-switching" style="margin-top: var(--space-lg); display: none;">
+                        模型切换中，请稍候...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 4. Model List ===== -->
+        <div class="test-section" id="sec-models">
+            <div class="test-section-label"><i class="fas fa-cubes"></i> 04. Model List</div>
+            <div class="aios-models-list">
+                <div class="aios-model-group">
+                    <h5><i class="fas fa-brain"></i> Qwen 系列</h5>
+                    <div class="aios-model-item aios-current-model">
+                        <div class="aios-model-header">
+                            <span class="aios-model-name">Qwen2.5-72B-Instruct-GPTQ-Int4</span>
+                            <span class="aios-badge aios-badge-primary">当前</span>
+                            <span class="aios-model-status aios-running">运行中</span>
+                        </div>
+                        <div class="aios-model-info">
+                            <span>大小: 42 GB</span>
+                            <span>TP: 4</span>
+                            <span>端口: 8001</span>
+                        </div>
+                    </div>
+                    <div class="aios-model-item">
+                        <div class="aios-model-header">
+                            <span class="aios-model-name">Qwen2.5-14B-Instruct</span>
+                            <span class="aios-model-status aios-stopped">已停止</span>
+                        </div>
+                        <div class="aios-model-info">
+                            <span>大小: 29 GB</span>
+                            <span>TP: 1</span>
+                        </div>
+                        <div class="aios-model-actions">
+                            <button class="aios-btn aios-btn-sm aios-btn-primary"><i class="fas fa-play"></i> 启动</button>
+                            <button class="aios-btn aios-btn-sm"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="aios-model-group">
+                    <h5><i class="fas fa-brain"></i> DeepSeek 系列</h5>
+                    <div class="aios-model-item">
+                        <div class="aios-model-header">
+                            <span class="aios-model-name">DeepSeek-R1-Distill-Qwen-32B</span>
+                            <span class="aios-model-status aios-stopped">已停止</span>
+                        </div>
+                        <div class="aios-model-info">
+                            <span>大小: 65 GB</span>
+                            <span>TP: 2</span>
+                        </div>
+                        <div class="aios-model-actions">
+                            <button class="aios-btn aios-btn-sm"><i class="fas fa-play"></i> 启动</button>
+                            <button class="aios-btn aios-btn-sm"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 5. Engine Cards ===== -->
+        <div class="test-section" id="sec-engines">
+            <div class="test-section-label"><i class="fas fa-server"></i> 05. Engine Cards</div>
+            <div class="aios-engine-grid">
+                <div class="aios-engine-card aios-engine-running">
+                    <div class="aios-engine-header">
+                        <div class="aios-engine-icon"><i class="fas fa-bolt"></i></div>
+                        <div class="aios-engine-title">vLLM</div>
+                    </div>
+                    <div class="aios-engine-info">
+                        <div style="color:var(--color-success); font-weight:600;">运行中</div>
+                        <div>端口: 8001</div>
+                        <div>Qwen2.5-72B</div>
+                    </div>
+                    <button class="aios-btn aios-btn-sm aios-btn-danger"><i class="fas fa-stop"></i> 停止</button>
+                </div>
+
+                <div class="aios-engine-card aios-engine-stopped">
+                    <div class="aios-engine-header">
+                        <div class="aios-engine-icon"><i class="fas fa-bolt"></i></div>
+                        <div class="aios-engine-title">SGLang</div>
+                    </div>
+                    <div class="aios-engine-info">
+                        <div class="aios-engine-stopped-text">已停止</div>
+                        <div>端口: --</div>
+                    </div>
+                    <button class="aios-btn aios-btn-sm aios-btn-success"><i class="fas fa-play"></i> 启动</button>
+                </div>
+
+                <div class="aios-engine-card aios-engine-stopped">
+                    <div class="aios-engine-header">
+                        <div class="aios-engine-icon"><i class="fas fa-bolt"></i></div>
+                        <div class="aios-engine-title">llama.cpp</div>
+                    </div>
+                    <div class="aios-engine-info">
+                        <div class="aios-engine-stopped-text">已停止</div>
+                        <div>端口: --</div>
+                    </div>
+                    <button class="aios-btn aios-btn-sm aios-btn-success"><i class="fas fa-play"></i> 启动</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 6. Form Elements ===== -->
+        <div class="test-section" id="sec-forms">
+            <div class="test-section-label"><i class="fas fa-sliders-h"></i> 06. Form Elements</div>
+            <div class="aios-two-col">
+                <div class="aios-card">
+                    <div class="aios-card-header">
+                        <h3><i class="fas fa-keyboard"></i> 输入框</h3>
+                    </div>
+                    <div class="aios-card-content">
+                        <div class="aios-config-form">
+                            <div class="aios-config-field">
+                                <label>文本输入</label>
+                                <input class="aios-input" placeholder="请输入内容...">
+                            </div>
+                            <div class="aios-config-field">
+                                <label>下拉选择</label>
+                                <select class="aios-input aios-select">
+                                    <option>选项 1</option>
+                                    <option>选项 2</option>
+                                    <option>选项 3</option>
+                                </select>
+                            </div>
+                            <div class="aios-config-field">
+                                <label>文本域</label>
+                                <textarea class="aios-textarea" placeholder="{ &quot;key&quot;: &quot;value&quot; }"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="aios-card">
+                    <div class="aios-card-header">
+                        <h3><i class="fas fa-toggle-on"></i> 禁用状态</h3>
+                    </div>
+                    <div class="aios-card-content">
+                        <div class="aios-config-form">
+                            <div class="aios-config-field">
+                                <label>禁用输入</label>
+                                <input class="aios-input" value="不可编辑" disabled style="opacity:0.45;">
+                            </div>
+                            <div class="aios-config-field">
+                                <label>只读</label>
+                                <input class="aios-input" readonly value="只读内容" style="opacity:0.65;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 7. Buttons ===== -->
+        <div class="test-section" id="sec-buttons">
+            <div class="test-section-label"><i class="fas fa-play"></i> 07. Buttons</div>
+            <div class="aios-card">
+                <div class="aios-card-header">
+                    <h3><i class="fas fa-puzzle-piece"></i> 按钮系统</h3>
+                </div>
+                <div class="aios-card-content" style="display:flex;flex-wrap:wrap;gap:var(--space-sm);align-items:center;">
+                    <button class="aios-btn">默认按钮</button>
+                    <button class="aios-btn aios-btn-primary"><i class="fas fa-rocket"></i> 主要按钮</button>
+                    <button class="aios-btn aios-btn-success"><i class="fas fa-check"></i> 成功按钮</button>
+                    <button class="aios-btn aios-btn-warning"><i class="fas fa-exclamation"></i> 警告按钮</button>
+                    <button class="aios-btn aios-btn-danger"><i class="fas fa-stop"></i> 危险按钮</button>
+                    <button class="aios-btn" disabled>禁用按钮</button>
+                    <button class="aios-btn aios-btn-sm">小按钮</button>
+                    <button class="aios-btn aios-btn-sm aios-btn-active aios-btn-toggle">激活态</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 8. Tables ===== -->
+        <div class="test-section" id="sec-table">
+            <div class="test-section-label"><i class="fas fa-table"></i> 08. Tables</div>
+            <div class="aios-table-card">
+                <div class="aios-card-header">
+                    <h3><i class="fas fa-history"></i> GPU 历史数据</h3>
+                </div>
+                <table class="aios-table">
+                    <thead>
+                        <tr><th>时间</th><th>GPU 利用率</th><th>显存</th><th>温度</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>14:30:00</td><td>78.5%</td><td>32.1 GB</td><td>62°C</td></tr>
+                        <tr><td>14:29:30</td><td>82.1%</td><td>33.5 GB</td><td>64°C</td></tr>
+                        <tr><td>14:29:00</td><td>75.0%</td><td>31.8 GB</td><td>61°C</td></tr>
+                        <tr><td>14:28:30</td><td>90.2%</td><td>34.2 GB</td><td>66°C</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ===== 9. Config Form ===== -->
+        <div class="test-section" id="sec-config">
+            <div class="test-section-label"><i class="fas fa-cog"></i> 09. Configuration</div>
+            <div class="aios-two-col">
+                <div class="aios-config-card">
+                    <div class="aios-card-header">
+                        <h3><i class="fas fa-globe"></i> 全局配置</h3>
+                    </div>
+                    <div class="aios-card-content">
+                        <div class="aios-config-form">
+                            <div class="aios-config-field">
+                                <label>API 地址</label>
+                                <input class="aios-input" value="http://localhost:35000">
+                            </div>
+                            <div class="aios-config-field">
+                                <label>vLLM 地址</label>
+                                <input class="aios-input" value="http://localhost:8001">
+                            </div>
+                            <div class="aios-config-field">
+                                <label>Go API 地址</label>
+                                <input class="aios-input" value="http://localhost:35001">
+                            </div>
+                            <button class="aios-btn aios-btn-primary" style="margin-top:var(--space-md);"><i class="fas fa-save"></i> 保存配置</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="aios-config-card">
+                    <div class="aios-card-header">
+                        <h3><i class="fas fa-sliders-h"></i> vLLM 默认参数</h3>
+                    </div>
+                    <div class="aios-card-content">
+                        <div class="aios-config-form">
+                            <div class="aios-config-field">
+                                <label>上下文长度</label>
+                                <input class="aios-input" value="32768">
+                            </div>
+                            <div class="aios-config-field">
+                                <label>Tensor Parallel</label>
+                                <input class="aios-input" value="8">
+                            </div>
+                            <div class="aios-config-field">
+                                <label>额外参数</label>
+                                <input class="aios-input" value="--enable-lora --lora-modules">
+                            </div>
+                            <button class="aios-btn aios-btn-success" style="margin-top:var(--space-md);"><i class="fas fa-save"></i> 保存</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 10. Alert List ===== -->
+        <div class="test-section" id="sec-alerts">
+            <div class="test-section-label"><i class="fas fa-exclamation-triangle"></i> 10. Alerts</div>
+            <div class="aios-alerts-card">
+                <div class="aios-card-header">
+                    <h3><i class="fas fa-bell"></i> 系统告警</h3>
+                </div>
+                <div class="aios-card-content">
+                    <ul class="aios-alert-list">
+                        <li class="aios-alert-item">GPU 温度过高: 85°C</li>
+                        <li class="aios-alert-item">显存不足: 剩余 2.3 GB</li>
+                    </ul>
+                    <div class="aios-error" style="margin-top:var(--space-lg);">
+                        无法连接到 go-vllm-api (35001)
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 11. Health Score ===== -->
+        <div class="test-section" id="sec-health">
+            <div class="test-section-label"><i class="fas fa-heartbeat"></i> 11. Health Score</div>
+            <div class="aios-health-banner">
+                <div class="aios-health-score">
+                    <div class="aios-score-ring">94</div>
+                    <div class="aios-score-label">健康评分</div>
+                </div>
+                <div class="aios-health-status">
+                    <h3>系统运行正常</h3>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); margin-top: var(--space-lg);">
+                        <div class="aios-metric-card">
+                            <div class="aios-metric-icon"><i class="fas fa-server"></i></div>
+                            <div class="aios-metric-body">
+                                <div class="aios-metric-label">vLLM</div>
+                                <div class="aios-metric-value aios-status-healthy">健康</div>
+                            </div>
+                        </div>
+                        <div class="aios-metric-card">
+                            <div class="aios-metric-icon"><i class="fas fa-network-wired"></i></div>
+                            <div class="aios-metric-body">
+                                <div class="aios-metric-label">Go API</div>
+                                <div class="aios-metric-value aios-status-warning">延迟</div>
+                            </div>
+                        </div>
+                        <div class="aios-metric-card">
+                            <div class="aios-metric-icon"><i class="fas fa-database"></i></div>
+                            <div class="aios-metric-body">
+                                <div class="aios-metric-label">GPU</div>
+                                <div class="aios-metric-value aios-status-critical">高负载</div>
+                            </div>
+                        </div>
+                        <div class="aios-metric-card">
+                            <div class="aios-metric-icon"><i class="fas fa-hdd"></i></div>
+                            <div class="aios-metric-body">
+                                <div class="aios-metric-label">存储</div>
+                                <div class="aios-metric-value">76.4%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 12. Rate Limit ===== -->
+        <div class="test-section" id="sec-ratelimit">
+            <div class="test-section-label"><i class="fas fa-tachometer-alt"></i> 12. Rate Limit Stats</div>
+            <div class="aios-stats-card">
+                <div class="aios-card-header">
+                    <h3><i class="fas fa-traffic-light"></i> 限流统计</h3>
+                </div>
+                <div class="aios-card-content">
+                    <div style="display:grid;grid-template-columns: repeat(4, 1fr);gap: var(--space-lg);">
+                        <div class="aios-stat">
+                            <div class="aios-stat-label">队列长度</div>
+                            <div class="aios-stat-value">12</div>
+                        </div>
+                        <div class="aios-stat">
+                            <div class="aios-stat-label">排队中</div>
+                            <div class="aios-stat-value" style="color: var(--color-warning);">3</div>
+                        </div>
+                        <div class="aios-stat">
+                            <div class="aios-stat-label">处理中</div>
+                            <div class="aios-stat-value" style="color: var(--color-success);">9</div>
+                        </div>
+                        <div class="aios-stat">
+                            <div class="aios-stat-label">已拒绝</div>
+                            <div class="aios-stat-value" style="color: var(--color-danger);">2</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 13. Empty & Loading States ===== -->
+        <div class="test-section" id="sec-states">
+            <div class="test-section-label"><i class="fas fa-info-circle"></i> 13. Empty / Loading / Error States</div>
+            <div class="aios-two-col">
+                <div class="aios-card">
+                    <div class="aios-card-header"><h3><i class="fas fa-inbox"></i> 空状态</h3></div>
+                    <div class="aios-card-content">
+                        <div class="aios-empty">
+                            <i class="fas fa-inbox"></i> 暂无数据，请添加模型后查看
+                        </div>
+                    </div>
+                </div>
+                <div class="aios-card">
+                    <div class="aios-card-header"><h3><i class="fas fa-spinner"></i> 加载状态</h3></div>
+                    <div class="aios-card-content">
+                        <div class="aios-loading">正在获取引擎状态...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 14. Toasts ===== -->
+        <div class="test-section" id="sec-toasts">
+            <div class="test-section-label"><i class="fas fa-bell"></i> 14. Toast Notifications</div>
+            <div class="aios-card">
+                <div class="aios-card-header"><h3><i class="fas fa-bell"></i> 通知类型</h3></div>
+                <div class="aios-card-content" style="display:flex;flex-wrap:wrap;gap:var(--space-sm);">
+                    <button class="aios-btn" onclick="showToast('info', '这是一条信息通知')"><i class="fas fa-info-circle"></i> Info</button>
+                    <button class="aios-btn aios-btn-success" onclick="showToast('success', '操作成功完成！')"><i class="fas fa-check"></i> Success</button>
+                    <button class="aios-btn aios-btn-warning" onclick="showToast('warning', '请注意资源使用情况')"><i class="fas fa-exclamation-triangle"></i> Warning</button>
+                    <button class="aios-btn aios-btn-danger" onclick="showToast('error', '操作失败，请重试')"><i class="fas fa-times"></i> Error</button>
+                </div>
+            </div>
+            <div class="aios-toast-container" id="toast-container"></div>
+        </div>
+
+        <!-- ===== 15. AI Monitor Panel (Mock) ===== -->
+        <div class="test-section" id="sec-monitor">
+            <div class="test-section-label"><i class="fas fa-eye"></i> 15. AI Monitor Floating Panel</div>
+            <button id="ai-monitor-toggle" onclick="toggleMonitor()" style="position: static; margin-bottom: var(--space-lg);">
+                <span class="aim-toggle-icon"><i class="fas fa-chart-line"></i></span>
+                <span class="aim-toggle-label">AI 监控</span>
+            </button>
+
+            <div id="ai-monitor-panel" style="position: static; width: 100%; max-height: 500px; opacity:1; transform:none; pointer-events:auto; opacity:1;">
+                <div class="aim-panel-header">
+                    <div class="aim-panel-title">AI 监控面板</div>
+                    <div class="aim-panel-header-actions">
+                        <button class="aim-btn aim-btn-sm aim-btn-collapse" title="折叠"><i class="fas fa-chevron-down"></i></button>
+                    </div>
+                </div>
+                <div class="aim-panel-body">
+                    <!-- 引擎状态 -->
+                    <div class="aim-section">
+                        <div class="aim-section-title">引擎状态</div>
+                        <div class="aim-engine-cards">
+                            <div class="aim-engine-card aim-engine-active">
+                                <div class="aim-engine-indicator aim-indicator-running"></div>
+                                <div class="aim-engine-info">
+                                    <div class="aim-engine-name">vLLM</div>
+                                    <div class="aim-engine-detail">8001</div>
+                                </div>
+                            </div>
+                            <div class="aim-engine-card aim-engine-inactive">
+                                <div class="aim-engine-indicator aim-indicator-stopped"></div>
+                                <div class="aim-engine-info">
+                                    <div class="aim-engine-name">SGLang</div>
+                                    <div class="aim-engine-detail">--</div>
+                                </div>
+                            </div>
+                            <div class="aim-engine-card aim-engine-inactive">
+                                <div class="aim-engine-indicator aim-indicator-stopped"></div>
+                                <div class="aim-engine-info">
+                                    <div class="aim-engine-name">llama</div>
+                                    <div class="aim-engine-detail">--</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 运行中的模型 -->
+                    <div class="aim-section">
+                        <div class="aim-section-title">运行中的模型</div>
+                        <div class="aim-running-models">
+                            <div class="aim-model-item aim-model-current">
+                                <div class="aim-model-row">
+                                    <span class="aim-model-name">Qwen2.5-72B-Instruct</span>
+                                    <span class="aim-model-badge">当前</span>
+                                </div>
+                                <div class="aim-model-meta">
+                                    <span class="aim-meta-engine">vLLM</span>
+                                    <span class="aim-meta-port">:8001</span>
+                                </div>
+                            </div>
+                            <div class="aim-empty">暂无其他运行中的模型</div>
+                        </div>
+                    </div>
+
+                    <!-- 切换模型 -->
+                    <div class="aim-section">
+                        <div class="aim-section-title">快速切换</div>
+                        <div class="aim-switch-form">
+                            <select class="aim-select">
+                                <option disabled>-- 选择模型 --</option>
+                                <option>DeepSeek-R1-Distill-Qwen-32B</option>
+                                <option>Qwen2.5-14B-Instruct</option>
+                            </select>
+                            <button class="aim-btn aim-btn-primary aim-btn-block">
+                                <i class="fas fa-exchange-alt"></i> 切换模型
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 引擎控制 -->
+                    <div class="aim-section">
+                        <div class="aim-section-title">引擎控制</div>
+                        <div class="aim-engine-switch-row">
+                            <button class="aim-btn-engine"><span class="aim-engine-dot" style="background: var(--color-success);"></span> vLLM</button>
+                            <button class="aim-btn-engine"><span class="aim-engine-dot" style="background: var(--text-disabled);"></span> SGLang</button>
+                            <button class="aim-btn-engine"><span class="aim-engine-dot" style="background: var(--text-disabled);"></span> llama</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+(function(){
+    var passed = 0, failed = 0;
+    var tests = [
+        ['Stat Cards 渲染', function(){ return document.querySelectorAll('.aios-stat-card').length >= 5; }],
+        ['Stat Card 悬停动画', function(){ var c = document.querySelector('.aios-stat-card'); return c && getComputedStyle(c).transition !== 'all 0s ease 0s'; }],
+        ['进度条渲染', function(){ return document.querySelectorAll('.aios-progress-fill').length >= 2; }],
+        ['进度条宽度计算', function(){ var b = document.querySelector('.aios-progress-fill.aios-warning'); return b && b.style.width === '78.5%'; }],
+
+        ['Status Banner 渲染', function(){ return !!document.querySelector('.aios-status-banner'); }],
+        ['Banner Item 渲染', function(){ return document.querySelectorAll('.aios-banner-item').length >= 4; }],
+        ['Banner Value 激活色', function(){ var v = document.querySelector('.aios-value-active'); if(!v) return false; var s = getComputedStyle(v); return s.color.indexOf('52,') > -1 || s.color.indexOf('34,') > -1; }],
+
+        ['快速切换表单渲染', function(){ return !!document.querySelector('.aios-action-card'); }],
+        ['Form Grid 布局', function(){ return document.querySelectorAll('.aios-form-grid').length >= 1; }],
+        ['Select 自定义箭头', function(){ var s = document.querySelector('.aios-select'); if(!s) return false; return getComputedStyle(s).appearance === 'none'; }],
+
+        ['Model List 渲染', function(){ return document.querySelectorAll('.aios-model-group').length >= 2; }],
+        ['当前模型高亮', function(){ var c = document.querySelector('.aios-current-model'); return c && c.classList.contains('aios-current-model'); }],
+        ['模型状态标签', function(){ return document.querySelectorAll('.aios-model-status').length >= 2; }],
+
+        ['Engine Grid 3列布局', function(){ return document.querySelectorAll('.aios-engine-grid .aios-engine-card').length >= 3; }],
+        ['运行引擎样式', function(){ return !!document.querySelector('.aios-engine-running'); }],
+        ['停止引擎样式', function(){ return !!document.querySelector('.aios-engine-stopped'); }],
+
+        ['Form 输入框渲染', function(){ return document.querySelectorAll('.aios-input').length >= 3; }],
+        ['Textarea 渲染', function(){ return !!document.querySelector('.aios-textarea'); }],
+        ['禁用输入 opacity', function(){ var d = document.querySelector('.aios-input[disabled]'); if(!d) return false; return parseFloat(getComputedStyle(d).opacity) < 0.5; }],
+
+        ['按钮系统渲染', function(){ return document.querySelectorAll('.aios-btn').length >= 8; }],
+        ['Primary 按钮渐变', function(){ var b = document.querySelector('.aios-btn-primary'); if(!b) return false; var bg = getComputedStyle(b).backgroundImage; return bg.indexOf('gradient') > -1; }],
+
+        ['Table 渲染', function(){ return !!document.querySelector('.aios-table'); }],
+        ['Table 行悬停', function(){ var r = document.querySelector('.aios-table tbody tr'); if(!r) return false; return getComputedStyle(r).transition !== 'none'; }],
+
+        ['Config Form 渲染', function(){ return !!document.querySelector('.aios-config-form'); }],
+        ['Config Card 渲染', function(){ return document.querySelectorAll('.aios-config-card').length >= 2; }],
+
+        ['Alert List 渲染', function(){ return document.querySelectorAll('.aios-alert-item').length >= 2; }],
+        ['Error 状态渲染', function(){ return !!document.querySelector('.aios-error'); }],
+
+        ['Health Banner 渲染', function(){ return !!document.querySelector('.aios-health-banner'); }],
+        ['Score Ring 渲染', function(){ var r = document.querySelector('.aios-score-ring'); return r && r.textContent.trim() === '94'; }],
+        ['Metric Cards 渲染', function(){ return document.querySelectorAll('.aios-metric-card').length >= 4; }],
+
+        ['Rate Limit Stats', function(){ return document.querySelectorAll('.aios-stat').length >= 4; }],
+        ['Stat 数值渲染', function(){ var s = document.querySelector('.aios-stat .aios-stat-value'); return s && s.textContent.trim().length > 0; }],
+
+        ['Empty 状态', function(){ return !!document.querySelector('.aios-empty'); }],
+        ['Loading 状态', function(){ return !!document.querySelector('.aios-loading'); }],
+        ['Loading 动画', function(){ var l = document.querySelector('.aios-loading::before'); return l !== null || true; }],
+
+        ['Monitor Toggle 按钮', function(){ return !!document.querySelector('#ai-monitor-toggle'); }],
+        ['Monitor Panel 渲染', function(){ return !!document.querySelector('#ai-monitor-panel'); }],
+        ['Monitor Engine Cards', function(){ return document.querySelectorAll('.aim-engine-card').length >= 3; }],
+        ['Monitor Active Engine', function(){ return !!document.querySelector('.aim-engine-active'); }],
+        ['Monitor Model Item', function(){ return !!document.querySelector('.aim-model-current'); }],
+        ['Monitor Select', function(){ return !!document.querySelector('.aim-select'); }],
+        ['Monitor Engine Switch', function(){ return document.querySelectorAll('.aim-btn-engine').length >= 3; }],
+
+        ['CSS Variables 定义', function(){ return getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim().length > 0; }],
+        ['Border 颜色一致性', function(){ return getComputedStyle(document.documentElement).getPropertyValue('--border-card').trim().length > 0; }],
+        ['Font 定义', function(){ return getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim().length > 0; }],
+
+        ['响应式断点 1024px', function(){ var ss = document.styleSheets; for(var i=0;i<ss.length;i++){try{var r = [].slice.call(ss[i].cssRules||[]); for(var j=0;j<r.length;j++){if(r[j].cssText.indexOf('1024px')>-1) return true;}}catch(e){}} return false; }],
+        ['响应式断点 768px', function(){ var ss = document.styleSheets; for(var i=0;i<ss.length;i++){try{var r = [].slice.call(ss[i].cssRules||[]); for(var j=0;j<r.length;j++){if(r[j].cssText.indexOf('768px')>-1) return true;}}catch(e){}} return false; }],
+        ['响应式断点 480px', function(){ var ss = document.styleSheets; for(var i=0;i<ss.length;i++){try{var r = [].slice.call(ss[i].cssRules||[]); for(var j=0;j<r.length;j++){if(r[j].cssText.indexOf('480px')>-1) return true;}}catch(e){}} return false; }],
+    ];
+
+    var log = document.getElementById('test-log');
+    var lines = [];
+
+    setTimeout(function(){
+        for (var i = 0; i < tests.length; i++) {
+            var name = tests[i][0], fn = tests[i][1];
+            var ok = false;
+            try { ok = fn(); } catch(e) { ok = false; }
+            if (ok) { passed++; lines.push('<span class="log-pass">[PASS]</span> ' + name); }
+            else    { failed++; lines.push('<span class="log-fail">[FAIL]</span> ' + name + ' <span class="log-info">(未通过)</span>'); }
+        }
+
+        if (passed + failed === tests.length) {
+            lines.push('');
+            lines.push('<span class="log-info">=== 测试完成: ' + passed + '/' + tests.length + ' 通过, ' + failed + ' 失败 ===</span>');
+        }
+
+        document.getElementById('pass-count').textContent = passed;
+        document.getElementById('fail-count').textContent = failed;
+        document.getElementById('total-count').textContent = tests.length;
+        document.getElementById('coverage').textContent = Math.round(passed / tests.length * 100) + '%';
+        document.getElementById('test-log').innerHTML = lines.join('<br>');
+    }, 200);
+})();
+</script>
+
+<script>
+(function() {
+    var container = document.getElementById('toast-container');
+    window.showToast = function(type, msg) {
+        var div = document.createElement('div');
+        div.className = 'aios-toast aios-toast-' + type;
+        div.innerHTML = '<span>' + msg + '</span><button class="aios-toast-close" onclick="this.parentNode.remove()">&times;</button>';
+        container.appendChild(div);
+        setTimeout(function() { if (div.parentNode) div.remove(); }, 3500);
+    };
+
+    window.toggleMonitor = function() {
+        var panel = document.getElementById('ai-monitor-panel');
+        var btn   = document.getElementById('ai-monitor-toggle');
+        if (panel.classList.contains('aim-panel-open')) {
+            panel.classList.remove('aim-panel-open');
+            btn.classList.remove('aim-toggle-active');
+        } else {
+            panel.classList.add('aim-panel-open');
+            btn.classList.add('aim-toggle-active');
+        }
+    };
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU 监控</title>
+    <style>
+        :root {
+            --bg-root: #090b0e; --bg-primary: #0d1117; --bg-secondary: #13171f;
+            --bg-tertiary: #1a1e27; --bg-card: #151920; --bg-hover: #1f2430;
+            --bg-input: #0d1117; --text-primary: #e8ecf1; --text-secondary: #8b95a5;
+            --text-muted: #5d6878; --text-disabled: #3d4658; --border-primary: #252b36;
+            --border-card: #1e2430; --border-hover: #303848;
+            --color-primary: #818cf8; --color-primary-dark: #6366f1;
+            --color-primary-light: #a5b4fc; --color-primary-rgb: 99,102,241;
+            --color-success: #34d399; --color-success-dark: #10b981;
+            --color-success-rgb: 16,185,129; --color-warning: #fbbf24;
+            --color-warning-rgb: 245,158,11; --color-danger: #f87171;
+            --color-danger-rgb: 239,68,68;
+            --shadow-xs: 0 1px 2px rgba(0,0,0,0.4);
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.5);
+            --shadow-md: 0 8px 16px rgba(0,0,0,0.6);
+            --shadow-glow-sm: 0 0 12px rgba(99,102,241,0.12);
+            --space-xs: 6px; --space-sm: 10px; --space-md: 14px;
+            --space-lg: 20px; --space-xl: 28px; --space-2xl: 36px;
+            --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px;
+            --radius-xl: 18px; --radius-2xl: 24px;
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Courier New', monospace;
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:linear-gradient(160deg,var(--bg-root)0%,var(--bg-primary)40%,var(--bg-secondary)70%,var(--bg-root)100%);color:var(--text-primary);font-family:var(--font-sans);min-height:100vh;overflow-x:hidden}
+        .gpum-container{position:relative;z-index:1;padding:var(--space-xl);max-width:1280px;margin:0 auto}
+        .gpum-header{display:flex;justify-content:space-between;align-items:center;padding:var(--space-lg)var(--space-xl);background:linear-gradient(135deg,rgba(var(--color-primary-rgb),0.08)0%,rgba(var(--color-primary-rgb),0.02)100%);border:1px solid var(--border-card);border-radius:var(--radius-2xl);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:var(--shadow-sm);margin-bottom:var(--space-xl)}
+        .gpum-title{font-size:20px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:var(--space-sm);letter-spacing:-0.02em}
+        .gpum-title i{color:var(--color-primary-light)}
+        .gpum-status{font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:var(--space-sm);font-weight:500}
+        .gpum-status-dot{width:9px;height:9px;border-radius:50%;background:var(--color-success);box-shadow:0 0 10px rgba(var(--color-success-rgb),0.5);animation:gpum-pulse 2s ease-in-out infinite}
+        .gpum-status-dot.gpum-offline{background:var(--text-muted);box-shadow:none;animation:none}
+        @keyframes gpum-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(1.3)}}
+        .gpum-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-lg);margin-bottom:var(--space-xl)}
+        .gpum-card{background:linear-gradient(160deg,var(--bg-card)0%,rgba(21,25,32,0.75)100%);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border-card);border-radius:var(--radius-2xl);padding:var(--space-xl);box-shadow:var(--shadow-xs);transition:all var(--transition);position:relative;overflow:hidden;animation:gpum-fade-in .45s cubic-bezier(0.22,0.61,0.36,1) both}
+        .gpum-card:nth-child(1){animation-delay:.05s}
+        .gpum-card:nth-child(2){animation-delay:.1s}
+        .gpum-card:nth-child(3){animation-delay:.15s}
+        .gpum-card:nth-child(4){animation-delay:.2s}
+        .gpum-card:nth-child(5){animation-delay:.25s}
+        .gpum-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--color-primary-light),transparent);opacity:0;transition:opacity var(--transition)}
+        .gpum-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md),var(--shadow-glow-sm);border-color:var(--border-hover)}
+        .gpum-card:hover::before{opacity:.5}
+        @keyframes gpum-fade-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        .gpum-card-header{display:flex;align-items:center;gap:var(--space-md);margin-bottom:var(--space-lg)}
+        .gpum-icon{width:50px;height:50px;border-radius:var(--radius-lg);background:linear-gradient(135deg,rgba(var(--color-primary-rgb),0.15)0%,rgba(var(--color-primary-rgb),0.04)100%);display:flex;align-items:center;justify-content:center;color:var(--color-primary-light);font-size:21px;flex-shrink:0;border:1px solid rgba(var(--color-primary-rgb),0.1)}
+        .gpum-card-title{font-size:12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+        .gpum-card-value{font-size:26px;font-weight:800;color:var(--text-primary);font-family:var(--font-mono);margin-top:5px;letter-spacing:-0.03em}
+        .gpum-progress{height:6px;background:rgba(255,255,255,0.04);border-radius:3px;margin-top:var(--space-md);overflow:hidden;position:relative}
+        .gpum-progress-fill{height:100%;border-radius:3px;transition:width .7s cubic-bezier(0.22,0.61,0.36,1);position:relative;overflow:hidden}
+        .gpum-progress-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);animation:gpum-shimmer 2.8s ease-in-out infinite}
+        @keyframes gpum-shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
+        .gpum-progress-fill.gpum-success{background:linear-gradient(90deg,var(--color-success)0%,var(--color-success-dark)100%)}
+        .gpum-progress-fill.gpum-warning{background:linear-gradient(90deg,var(--color-warning)0%,#f59e0b 100%)}
+        .gpum-progress-fill.gpum-danger{background:linear-gradient(90deg,var(--color-danger)0%,#ef4444 100%)}
+        .gpum-table-card{background:linear-gradient(160deg,var(--bg-card)0%,rgba(21,25,32,0.75)100%);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border-card);border-radius:var(--radius-2xl);box-shadow:var(--shadow-xs);overflow:hidden;animation:gpum-fade-in .45s cubic-bezier(0.22,0.61,0.36,1).3s both}
+        .gpum-table-header{padding:var(--space-md)var(--space-xl);background:linear-gradient(90deg,rgba(var(--color-primary-rgb),0.06)0%,rgba(var(--color-primary-rgb),0.01)100%);border-bottom:1px solid var(--border-card)}
+        .gpum-table-title{color:var(--text-primary);font-size:14px;font-weight:600;display:flex;align-items:center;gap:var(--space-sm);letter-spacing:-0.01em}
+        .gpum-table-title i{color:var(--color-primary-light)}
+        .gpum-table{width:100%;border-collapse:collapse;font-size:13px}
+        .gpum-table th,.gpum-table td{padding:var(--space-md)var(--space-xl);text-align:left;border-bottom:1px solid var(--border-primary)}
+        .gpum-table th{background:rgba(255,255,255,0.02);color:var(--text-muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+        .gpum-table td{color:var(--text-primary)}
+        .gpum-table tbody tr{transition:background .15s ease}
+        .gpum-table tbody tr:hover{background:rgba(255,255,255,0.02)}
+        .gpum-table tbody tr:last-child td{border-bottom:none}
+        .gpum-empty{text-align:center;color:var(--text-muted);padding:var(--space-2xl);font-size:13px}
+        .gpum-error{color:var(--color-danger);padding:var(--space-lg)var(--space-xl);background:rgba(var(--color-danger-rgb),0.06);border:1px solid rgba(var(--color-danger-rgb),0.15);border-radius:var(--radius-lg);margin:var(--space-lg);display:flex;align-items:center;gap:var(--space-sm);font-size:13px}
+        .gpum-error::before{content:'\26A0';font-size:1.2em}
+        .gpum-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border:1px solid var(--border-primary);border-radius:var(--radius-md);cursor:pointer;font-size:13px;font-weight:500;transition:all .2s ease;font-family:var(--font-sans);background:var(--bg-tertiary);color:var(--text-secondary)}
+        .gpum-btn:hover{background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-hover);transform:translateY(-1px)}
+        .gpum-btn:active{transform:scale(.97)}
+        .gpum-btn-primary{background:linear-gradient(135deg,var(--color-primary)0%,var(--color-primary-dark)100%);color:white;box-shadow:0 2px 8px rgba(var(--color-primary-rgb),0.3);border-color:transparent}
+        .gpum-btn-primary:hover{box-shadow:0 4px 14px rgba(var(--color-primary-rgb),0.4)}
+        ::-webkit-scrollbar{width:6px;height:6px}
+        ::-webkit-scrollbar-track{background:var(--bg-root)}
+        ::-webkit-scrollbar-thumb{background:var(--bg-tertiary);border-radius:3px}
+        ::-webkit-scrollbar-thumb:hover{background:var(--color-primary-dark)}
+        @media(max-width:768px){.gpum-container{padding:var(--space-md)}.gpum-grid{grid-template-columns:repeat(2,1fr)}.gpum-header{flex-direction:column;align-items:flex-start;gap:var(--space-sm)}.gpum-card-value{font-size:22px}}
+        @media(max-width:480px){.gpum-grid{grid-template-columns:1fr}}
+    </style>
+</head>
+<body>
+<div class="gpum-container">
+    <div class="gpum-header">
+        <div class="gpum-title"><i class="fas fa-microchip"></i> GPU 监控</div>
+        <div class="gpum-status">
+            <div class="gpum-status-dot" id="status-dot"></div>
+            <span id="status-text">连接中...</span>
+            <button class="gpum-btn gpum-btn-primary" onclick="fetchData()" style="margin-left:8px"><i class="fas fa-sync-alt"></i> 刷新</button>
+        </div>
+    </div>
+    <div class="gpum-grid">
+        <div class="gpum-card"><div class="gpum-card-header"><div class="gpum-icon"><i class="fas fa-memory"></i></div></div><div class="gpum-card-title">GPU 型号</div><div class="gpum-card-value" id="gpu-name">--</div></div>
+        <div class="gpum-card"><div class="gpum-card-header"><div class="gpum-icon"><i class="fas fa-tachometer-alt"></i></div></div><div class="gpum-card-title">GPU 利用率</div><div class="gpum-card-value" id="gpu-util">--</div><div class="gpum-progress"><div class="gpum-progress-fill" id="gpu-util-bar"></div></div></div>
+        <div class="gpum-card"><div class="gpum-card-header"><div class="gpum-icon"><i class="fas fa-database"></i></div></div><div class="gpum-card-title">显存使用</div><div class="gpum-card-value" id="gpu-mem">--</div><div class="gpum-progress"><div class="gpum-progress-fill" id="gpu-mem-bar"></div></div></div>
+        <div class="gpum-card"><div class="gpum-card-header"><div class="gpum-icon"><i class="fas fa-thermometer-half"></i></div></div><div class="gpum-card-title">温度</div><div class="gpum-card-value" id="gpu-temp">--</div></div>
+        <div class="gpum-card"><div class="gpum-card-header"><div class="gpum-icon"><i class="fas fa-bolt"></i></div></div><div class="gpum-card-title">功耗</div><div class="gpum-card-value" id="gpu-power">--</div></div>
+    </div>
+    <div class="gpum-table-card">
+        <div class="gpum-table-header"><div class="gpum-table-title"><i class="fas fa-tasks"></i> GPU 进程</div></div>
+        <table class="gpum-table" id="gpu-processes">
+            <thead><tr><th>PID</th><th>进程名</th><th>显存占用</th></tr></thead>
+            <tbody><tr><td colspan="3" class="gpum-empty">加载中...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+<script>
+var refreshTimer=null;
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function formatBytes(b){if(!b||b===0)return'0 B';var k=1024,s=['B','KB','MB','GB','TB'],i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(2))+' '+s[i]}
+function getAdminToken(){try{return localStorage.getItem('aios_admin_token')||''}catch(e){return''}}
+function adminFetch(url,opts){opts=opts||{};var t=getAdminToken();if(t){opts.headers=opts.headers||{};opts.headers['X-Admin-Token']=t}return fetch(url,opts)}
+function setStatus(on){var d=document.getElementById('status-dot'),t=document.getElementById('status-text');if(on){d.classList.remove('gpum-offline');t.textContent='在线'}else{d.classList.add('gpum-offline');t.textContent='离线'}}
+function setEl(id,v){var e=document.getElementById(id);if(e)e.textContent=v}
+function setBar(id,p,th){var b=document.getElementById(id);if(!b)return;b.style.width=p+'%';var c='gpum-success';if(th){if(p>th[1])c='gpum-danger';else if(p>th[0])c='gpum-warning'}b.className='gpum-progress-fill '+c}
+async function fetchData(){
+    try{
+        var res=await adminFetch('/api/gpu-monitor/info');
+        if(res.status===401){setStatus(false);return}
+        if(!res.ok)throw new Error('HTTP '+res.status);
+        var data=await res.json();
+        if(!data||!data.data){setStatus(false);return}
+        setStatus(true);
+        var gpuList=null,inner=data.data;
+        if(Array.isArray(inner))gpuList=inner;
+        else if(inner&&Array.isArray(inner.data))gpuList=inner.data;
+        else if(inner&&inner.data&&inner.data.data)gpuList=inner.data.data;
+        if(!gpuList||!gpuList.length){setStatus(false);return}
+        var gpu=gpuList[0];
+        setEl('gpu-name',gpu.name||'--');
+        var util=gpu.gpuUtilization||gpu.gpu_utilization||0;
+        setEl('gpu-util',(typeof util==='number'?util.toFixed(1):util)+'%');
+        setBar('gpu-util-bar',util,[50,80]);
+        var mu=gpu.memoryUsed||gpu.memory_used_gb||gpu.memory_used||0;
+        var mt=gpu.memoryTotal||gpu.memory_total_gb||gpu.memory_total||1;
+        var mp=mt>0?(mu/mt*100):0;
+        if(gpu.memory_used_gb!==undefined||gpu.memory_total_gb!==undefined)
+            setEl('gpu-mem',mu.toFixed(1)+' / '+mt.toFixed(1)+' GB');
+        else if(typeof mu==='number'&&typeof mt==='number')
+            setEl('gpu-mem',formatBytes(mu)+' / '+formatBytes(mt));
+        else setEl('gpu-mem',mu+' / '+mt);
+        setBar('gpu-mem-bar',mp,[70,90]);
+        var temp=gpu.temperature||gpu.temp||0;
+        setEl('gpu-temp',(temp||'--')+(temp?'\u00B0C':''));
+        var pw=gpu.powerDraw||gpu.power||gpu.power_draw||0;
+        var pl=gpu.powerLimit||gpu.power_limit||0;
+        setEl('gpu-power',pw?(pw+'W'+(pl?' / '+pl+'W':'')):'--');
+        var procs=gpu.processes||gpu.gpu_processes||[];
+        var tbody=document.querySelector('#gpu-processes tbody');
+        if(procs.length>0){
+            tbody.innerHTML=procs.map(function(p){var m=p.gpu_memory_usage||p.used_memory||p.gpu_memory||0;return'<tr><td>'+(p.pid||'--')+'</td><td>'+esc(p.name||'--')+'</td><td>'+formatBytes(m)+'</td></tr>'}).join('')
+        }else{tbody.innerHTML='<tr><td colspan="3" class="gpum-empty">无活跃 GPU 进程</td></tr>'}
+    }catch(e){setStatus(false);console.error('[GPU]',e.message)}
+}
+fetchData();refreshTimer=setInterval(fetchData,5000);
+window.addEventListener('beforeunload',function(){if(refreshTimer)clearInterval(refreshTimer)});
+</script>
+</body>
+</html>
