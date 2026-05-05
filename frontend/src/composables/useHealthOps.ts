@@ -1,16 +1,27 @@
 import { ref, type Ref } from 'vue'
 import { getHealthAlert, healthCheck, getHealthDetailed, getHealthHistory } from '@/api/client'
-import type { HealthAlert, HealthDetail, HealthHistoryEntry, GoHealthDetail } from '@/types'
+import type { HealthAlert, HealthDetail, HealthHistoryEntry } from '@/types'
 
 interface RawGoHealthHistory {
   timestamp?: string
   health_score?: number
   status?: string
   source?: string
+  alert_count?: number
 }
 
-const normalizeHealthDetail = (raw: GoHealthDetail): HealthDetail | null => {
+const normalizeHealthDetail = (raw: any): HealthDetail | null => {
   if (!raw) return null
+
+  if ('overall_score' in raw && 'checks' in raw) {
+    return {
+      overall_score: raw.overall_score ?? 0,
+      status: raw.status ?? 'healthy',
+      checks: raw.checks ?? {},
+      alert_reasons: Array.isArray(raw.alert_reasons) ? raw.alert_reasons : [],
+      timestamp: raw.timestamp ?? new Date().toISOString(),
+    }
+  }
 
   const scores = raw.scores || {}
   const gpu = raw.gpu || {}
@@ -63,7 +74,7 @@ const normalizeHealthHistory = (payload: unknown): HealthHistoryEntry[] => {
         timestamp: raw.timestamp || '',
         health_score: raw.health_score ?? 0,
         status: raw.status || 'unknown',
-        alert_count: 0,
+        alert_count: raw.alert_count ?? 0,
       }
     })
   }

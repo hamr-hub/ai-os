@@ -54,6 +54,8 @@ class DownloadTask:
             "completed_at": self.completed_at,
             "error_message": self.error_message,
             "retry_count": self.retry_count,
+            "allow_patterns": self.allow_patterns,
+            "ignore_patterns": self.ignore_patterns,
         }
 
 

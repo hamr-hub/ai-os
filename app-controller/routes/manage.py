@@ -1100,16 +1100,18 @@ async def system_status(include_history: bool = False, history_count: int = 60):
 @manage_router.get("/system/history")
 async def get_system_history(count: int = 60):
     from core.deps import system_monitor
+    history = system_monitor.get_system_history(count)
     return {
-        "history": system_monitor.get_system_history(count),
-        "count": count
+        "history": history,
+        "count": len(history)
     }
 
 @manage_router.get("/token/history")
 async def get_token_history(count: int = 60):
+    history = metrics.get_token_history(count)
     return {
-        "history": metrics.get_token_history(count),
-        "count": count
+        "history": history,
+        "count": len(history)
     }
 
 
@@ -1600,8 +1602,6 @@ async def engine_status():
                 vllm_pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name'])
                              if p.info['name'] and ('VLLM' in p.info['name'].upper() or 'vllm' in (p.info['name'] or '').lower())]
                 vllm_pid = vllm_pids[0] if vllm_pids else None
-            except Exception:
-                vllm_pid = None
             except Exception:
                 vllm_pid = None
             model_name = current_info.get("name", "")

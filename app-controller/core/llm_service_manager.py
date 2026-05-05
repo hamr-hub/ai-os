@@ -498,14 +498,17 @@ class LLMServiceManager:
         self._cleanup_service(service_name)
         return True
 
-    def _cleanup_service(self, service_name: str):
+    def _cleanup_service(self, service_name: str, keep_restart_info: bool = False):
         self._processes.pop(service_name, None)
         self._pgids.pop(service_name, None)
-        self._engine_types.pop(service_name, None)
-        self._ports.pop(service_name, None)
-        self._models.pop(service_name, None)
-        self._start_times.pop(service_name, None)
-        self._health_status.pop(service_name, None)
+        if not keep_restart_info:
+            self._engine_types.pop(service_name, None)
+            self._ports.pop(service_name, None)
+            self._models.pop(service_name, None)
+            self._model_paths.pop(service_name, None)
+            self._start_times.pop(service_name, None)
+            self._health_status.pop(service_name, None)
+            self._restart_counts.pop(service_name, None)
 
     def get_service_status(self, service_name: str) -> Dict:
         process = self._processes.get(service_name)
@@ -514,7 +517,7 @@ class LLMServiceManager:
 
         poll_result = process.poll()
         if poll_result is not None:
-            self._cleanup_service(service_name)
+            self._cleanup_service(service_name, keep_restart_info=True)
             return {
                 "status": "stopped",
                 "service_name": service_name,

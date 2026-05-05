@@ -1,6 +1,7 @@
 package health
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -230,22 +231,68 @@ func (h *HealthHandler) GetMetricsMetadata(c *gin.Context) {
 }
 
 func (h *HealthHandler) GetHealthHistory(c *gin.Context) {
-	gpuStatus := h.gpuMonitor.GetStatus()
-	vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
-	healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
-
-	gpuAlerts := h.metrics.GetGPUAlerts(gpuStatus)
-	alertCount := 0
-	if gpuAlerts != nil {
-		alertCount = len(gpuAlerts)
+	limit := 60
+	if v := c.Query("count"); v != "" {
+		if n, err := fmt.Sscanf(v, "%d", &limit); err == nil && n > 0 {
+			_ = n
+		}
 	}
 
-	entry := gin.H{
-		"timestamp":    time.Now().Format(time.RFC3339),
-		"health_score": healthInfo["overall"],
-		"status":       healthInfo["status"],
-		"alert_count":  alertCount,
+	gpuHistory := h.metrics.GetGPUHistory(limit)
+	history := make([]gin.H, 0)
+
+	for _, entry := range gpuHistory {
+		memUtil := entry.MemoryUtilization
+		temp := entry.Temperature
+		score := 100.0 - float64(memUtil)*0.5 - float64(temp)*0.5
+		if temp > 85 {
+			score -= float64(temp - 85) * 5
+		}
+		if memUtil > 90 {
+			score -= float64(memUtil - 90) * 10
+		}
+		score = max(0, min(100, score))
+
+		alertCount := 0
+		if temp > 85 || memUtil > 90 {
+			alertCount = 1
+		}
+		if temp > 95 || memUtil > 95 {
+			alertCount = 2
+		}
+
+		statusStr := "healthy"
+		if score < 70 {
+			statusStr = "degraded"
+		}
+		if score < 50 {
+			statusStr = "unhealthy"
+		}
+
+		history = append(history, gin.H{
+			"timestamp":    entry.Timestamp,
+			"health_score": score,
+			"status":       statusStr,
+			"alert_count":  alertCount,
+		})
 	}
 
-	c.JSON(http.StatusOK, []gin.H{entry})
+	if len(history) == 0 {
+		gpuStatus := h.gpuMonitor.GetStatus()
+		vllmMetrics := h.gpuMonitor.GetVLLMMetrics()
+		healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
+		gpuAlerts := h.metrics.GetGPUAlerts(gpuStatus)
+		alertCount := 0
+		if gpuAlerts != nil {
+			alertCount = len(gpuAlerts)
+		}
+		history = append(history, gin.H{
+			"timestamp":    time.Now().Format(time.RFC3339),
+			"health_score": healthInfo["overall"],
+			"status":       healthInfo["status"],
+			"alert_count":  alertCount,
+		})
+	}
+
+	c.JSON(http.StatusOK, history)
 }

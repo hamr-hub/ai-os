@@ -40,6 +40,7 @@ import type {
   EngineParamSchema,
   ModelEngineParams,
   GPUMemoryInfo,
+  GPURecommendInfo,
   RateLimitConfig,
   RateLimitStats,
   SystemConfig,
@@ -559,11 +560,57 @@ export async function searchModels(keyword: string, source: string = 'all', limi
   return data
 }
 
+interface RawGPURecommendInfo {
+  backend?: string
+  device_count?: number
+  devices?: Array<{
+    device_id: number
+    total_gb: number
+    used_gb: number
+    free_gb: number
+    effective_free_gb: number
+    loaded_models_memory_gb: number
+    utilization_pct: number
+  }>
+  loaded_models?: unknown[]
+  total_loaded_memory_gb?: number
+  available?: boolean
+  name?: string
+  total_gb?: number
+  used_gb?: number
+  free_gb?: number
+  safety_available_gb?: number
+}
+
+const normalizeGPURecommendInfo = (raw: RawGPURecommendInfo): GPURecommendInfo => {
+  if (raw.name && raw.total_gb) {
+    return {
+      available: raw.available ?? true,
+      name: raw.name,
+      total_gb: raw.total_gb,
+      used_gb: raw.used_gb ?? 0,
+      free_gb: raw.free_gb ?? 0,
+      safety_available_gb: raw.safety_available_gb ?? raw.free_gb ?? 0,
+    }
+  }
+  const primaryDevice = raw.devices?.[0]
+  return {
+    available: raw.available ?? true,
+    name: primaryDevice?.device_id != null ? `GPU #${primaryDevice.device_id}` : undefined,
+    total_gb: primaryDevice?.total_gb ?? raw.total_gb ?? 0,
+    used_gb: primaryDevice?.used_gb ?? raw.used_gb ?? 0,
+    free_gb: primaryDevice?.free_gb ?? raw.free_gb ?? 0,
+    safety_available_gb: primaryDevice?.effective_free_gb ?? raw.safety_available_gb ?? primaryDevice?.free_gb ?? 0,
+  }
+}
+
 export async function recommendModel(keyword: string, source: string = 'all', config: AxiosRequestConfig = {}): Promise<RecommendResult> {
   const { data } = await client.get<RecommendResult>(
     `/gpu/recommend?keyword=${encodeURIComponent(keyword)}&source=${source}`,
     silentRequestConfig(config)
   )
+  const rawGpuInfo = (data.gpu_info ?? {}) as RawGPURecommendInfo
+  data.gpu_info = normalizeGPURecommendInfo(rawGpuInfo)
   return data
 }
 

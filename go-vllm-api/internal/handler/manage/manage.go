@@ -952,8 +952,24 @@ func (h *ManageHandler) SystemStatus(c *gin.Context) {
 		return
 	}
 	result := h.sysCollector.GetSystemStatus()
-	h.cache.Set(cacheKey, result, 10)
-	c.JSON(http.StatusOK, result)
+	models := h.scheduler.GetAvailableModels()
+	queue := make(map[string]interface{})
+	for _, m := range models {
+		queue[m] = gin.H{
+			"active_requests":   h.scheduler.GetActiveRequests(m),
+			"concurrency_limit": h.scheduler.GetConcurrencyLimit(),
+			"can_accept":        h.scheduler.CanAcceptRequest(m),
+		}
+	}
+	resultMap := gin.H{
+		"cpu":       result.Cpu,
+		"memory":    result.Memory,
+		"disk":      result.Disk,
+		"queue":     queue,
+		"timestamp": result.Timestamp,
+	}
+	h.cache.Set(cacheKey, resultMap, 10)
+	c.JSON(http.StatusOK, resultMap)
 }
 
 func (h *ManageHandler) GetSystemHistory(c *gin.Context) {
@@ -996,12 +1012,20 @@ func (h *ManageHandler) GetTokenHistory(c *gin.Context) {
 
 	frontendHistory := make([]gin.H, len(history))
 	for i, entry := range history {
+		models := gin.H{}
+		if entry.ModelName != "" {
+			models[entry.ModelName] = gin.H{
+				"prompt_tokens":     entry.Prompt,
+				"completion_tokens": entry.Completion,
+				"total_tokens":      entry.Total,
+			}
+		}
 		frontendHistory[i] = gin.H{
 			"timestamp":         entry.Timestamp,
 			"total_tokens":      entry.Total,
 			"prompt_tokens":     entry.Prompt,
 			"completion_tokens": entry.Completion,
-			"model_name":        entry.ModelName,
+			"models":            models,
 		}
 	}
 

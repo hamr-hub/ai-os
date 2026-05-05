@@ -85,6 +85,7 @@ model_switch_orchestrator = ModelSwitchOrchestrator(
     model_base_path=MODEL_BASE_PATH,
     gpu_memory_manager=None,
     engine_manager_mode=_engine_manager_mode,
+    config=config,
 )
 
 from core.gpu_memory_manager import GPUMemoryManager
@@ -121,6 +122,7 @@ model_engine_scheduler = ModelEngineScheduler(
     download_manager=download_task_manager, model_pool=model_pool_manager,
     llm_service_manager=llm_service_manager,
 )
+model_engine_scheduler._orchestrator = model_switch_orchestrator
 
 from core.agent_system import AgentSystem, AgentSessionManager
 agent_system = AgentSystem(config, sse_push=sse_push_manager)
@@ -152,6 +154,9 @@ def _on_config_changed(new_config):
     structured_logger.info(f"Configuration updated, models={model_count}, keys={list(new_config.get('models', {}).keys())[:5]}", action="config_reload")
     cache_service.delete_pattern("ai_controller:cache:*")
     scheduler.set_config(new_config)
+    llm_service_manager._config = new_config
+    model_switch_orchestrator._config = new_config
+    model_switch_orchestrator._llm_service_manager = llm_service_manager
     try:
         model_pool_manager.scan_and_sync()
         structured_logger.info("Model pool synced after config change", action="config_reload")

@@ -45,6 +45,7 @@ class ConfigWatcher:
                 return False, {}
             normalized = config.model_dump(exclude_none=True)
             self._last_error = None
+            self._config = normalized
             if normalized.get("version", 0) > self._version:
                 self._version = normalized.get("version", 0)
             return True, normalized

@@ -654,6 +654,9 @@ class ModelEngineScheduler:
                                 reg["status"] = "crashed"
                                 reg["exit_code"] = exit_code
                         if self._llm_mgr.get_restart_count(name) < _MAX_RESTART_ATTEMPTS:
+                            if self._orchestrator and self._orchestrator.is_switching:
+                                logger.info("Skipping auto-restart for %s: model switch in progress", name)
+                                continue
                             result = self._llm_mgr.auto_restart(name)
                             if result.get("status") == "started":
                                 logger.info("Auto-restarted service %s (pid=%s)", name, result.get("pid"))

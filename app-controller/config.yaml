@@ -421,4 +421,4 @@ vllm:
   model_state_file: /root/ai-os/app-controller/scripts/.vllm_model_path
   service_name: vllm-aiclient
   start_script: /root/ai-os/app-controller/scripts/start_vllm_aiclient.sh
-  venv_path: /root/ai-os/venvs/vllm
+  venv_path: /root/ai-suite/vllm_env

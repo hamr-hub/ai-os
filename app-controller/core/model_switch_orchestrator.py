@@ -12,7 +12,7 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
-from core.gpu_memory_manager import _HEADROOM_GB
+from core.gpu_memory_manager import _HEADROOM_GB, _SAFETY_RATIO
 
 logger = logging.getLogger("ai_controller.model_switch_orchestrator")
 
@@ -151,7 +151,7 @@ class ModelSwitchOrchestrator:
     PHASE2_KILL_TIMEOUT = 60
     PHASE2_VERIFY_TIMEOUT = 15
     PHASE3_START_TIMEOUT = 300
-    PHASE3_PORT_WAIT_TIMEOUT = 120
+    PHASE3_PORT_WAIT_TIMEOUT = 300
     PHASE4_TEST_RETRIES = 3
     PHASE4_TEST_TIMEOUT = 15
 
@@ -170,13 +170,14 @@ class ModelSwitchOrchestrator:
         "memory alloc",
     ]
 
-    def __init__(self, ws_manager, vllm_service_name: str, vllm_port: int, model_base_path: str, gpu_memory_manager=None, engine_manager_mode: str = "systemd"):
+    def __init__(self, ws_manager, vllm_service_name: str, vllm_port: int, model_base_path: str, gpu_memory_manager=None, engine_manager_mode: str = "systemd", config=None):
         self._ws_manager = ws_manager
         self._vllm_service_name = vllm_service_name
         self._vllm_port = vllm_port
         self._model_base_path = model_base_path
         self._gpu_memory_manager = gpu_memory_manager
         self._engine_manager_mode = engine_manager_mode
+        self._config = config
         self._llm_service_manager = None
         self._global_lock = asyncio.Lock()
         self._current_session: Optional[SwitchSession] = None
@@ -453,6 +454,77 @@ class ModelSwitchOrchestrator:
                 return p
         raise ValueError(f"Phase {phase_num} not found in session")
 
+    async def _kill_external_vllm_processes(self, session: SwitchSession, phase: PhaseDetail):
+        import subprocess as _sp
+        try:
+            tracked_pids = set()
+            if self._llm_service_manager:
+                for svc in self._llm_service_manager.list_services():
+                    p = self._llm_service_manager._processes.get(svc["service_name"])
+                    if p and p.poll() is None:
+                        tracked_pids.add(str(p.pid))
+                        pgid = self._llm_service_manager._pgids.get(svc["service_name"])
+                        if pgid and pgid > 0:
+                            try:
+                                os.killpg(pgid, signal.SIGINT)
+                            except OSError:
+                                pass
+                        else:
+                            p.send_signal(signal.SIGINT)
+            result = _sp.run(
+                ["pgrep", "-f", "vllm serve"],
+                capture_output=True, text=True, timeout=5,
+            )
+            all_vllm_pids = [p for p in result.stdout.strip().split() if p]
+            external_pids = [p for p in all_vllm_pids if p not in tracked_pids]
+            if external_pids:
+                await self._log(session, phase, f"发现外部vLLM进程: {external_pids}")
+                for pid in external_pids:
+                    try:
+                        pgid = _sp.run(["ps", "-o", "pgid=", "-p", pid], capture_output=True, text=True, timeout=2).stdout.strip()
+                        if pgid and int(pgid) > 0:
+                            _sp.run(["kill", "-9", f"-{pgid}"], capture_output=True, timeout=3)
+                        else:
+                            _sp.run(["kill", "-9", pid], capture_output=True, timeout=3)
+                    except Exception:
+                        pass
+                await self._log(session, phase, f"已强制终止外部vLLM进程: {external_pids}")
+                await asyncio.sleep(5)
+                remaining = _sp.run(["pgrep", "-f", "vllm serve"], capture_output=True, text=True, timeout=5)
+                if remaining.stdout.strip():
+                    await self._log(session, phase, f"警告: 仍有vLLM进程残留")
+            else:
+                await self._log(session, phase, "无外部vLLM进程需要终止")
+        except Exception as e:
+            await self._log(session, phase, f"清理外部进程失败: {e}")
+
+    def _get_model_gpu_memory_utilization(self, model_name: str) -> float:
+        default_gmu = 0.9
+        if not self._config:
+            return default_gmu
+        models_dict = {}
+        if hasattr(self._config, 'models'):
+            models_dict = self._config.models if isinstance(self._config.models, dict) else {}
+        elif isinstance(self._config, dict):
+            models_dict = self._config.get('models', {})
+        model_cfg = models_dict.get(model_name, {})
+        vllm_params = model_cfg.get('vllm_params', {})
+        if hasattr(model_cfg, 'vllm_params'):
+            vp = model_cfg.vllm_params
+            if hasattr(vp, 'gpu_memory_utilization'):
+                return vp.gpu_memory_utilization
+            elif isinstance(vp, dict):
+                return vp.get('gpu_memory_utilization', default_gmu)
+        gmu = vllm_params.get('gpu_memory_utilization', None)
+        if gmu is not None:
+            return gmu
+        settings = {}
+        if hasattr(self._config, 'settings'):
+            settings = self._config.settings if isinstance(self._config.settings, dict) else {}
+        elif isinstance(self._config, dict):
+            settings = self._config.get('settings', {})
+        return settings.get('default_gpu_memory_utilization', default_gmu)
+
     async def _phase0_gpu_memory_check(self, session: SwitchSession):
         phase = self._get_phase(session, 0)
         phase.status = PhaseStatus.RUNNING
@@ -480,46 +552,63 @@ class ModelSwitchOrchestrator:
             model_name, model_path=model_path
         )
 
-        if is_switch_action and not feasibility.get("feasible"):
+        gmu = self._get_model_gpu_memory_utilization(model_name)
+        await self._log(session, phase, f"模型 {model_name} gpu_memory_utilization={gmu}")
+
+        should_check_with_release = (is_switch_action or (session.action == "start" and not feasibility.get("feasible"))) and not feasibility.get("feasible")
+        if should_check_with_release:
             previous_model_path = session.previous_model_path
-            previous_model_bytes = self._gpu_memory_manager.estimate_model_memory(
-                previous_model, model_path=previous_model_path
-            )
             info = self._gpu_memory_manager.checker.get_device_info(0)
             if info:
-                current_effective = self._gpu_memory_manager.get_effective_free_bytes(0)
-                switch_effective = max(current_effective + previous_model_bytes, 0)
-                switch_effective_gb = switch_effective / (1024 ** 3)
-                required_bytes = self._gpu_memory_manager.estimate_model_memory(
+                model_weight_bytes = self._gpu_memory_manager.estimate_model_memory(
                     model_name, model_path=model_path
                 )
                 headroom = int(_HEADROOM_GB * 1024 ** 3)
-                switch_feasible = switch_effective >= required_bytes + headroom
-                if switch_feasible:
-                    safety_margin = switch_effective - required_bytes - headroom
-                    await self._log(session, phase,
-                                    f"显存校验(含旧模型释放): 旧模型 {previous_model} 释放 ~{previous_model_bytes/(1024**3):.2f}GB, "
-                                    f"切换后可用 {switch_effective_gb:.2f}GB, 需要 {required_bytes/(1024**3):.2f}GB")
+                total_bytes = info.total_bytes
+                total_available = int(total_bytes * _SAFETY_RATIO)
+                vllm_required = int(total_bytes * gmu)
+                total_gb = total_bytes / (1024 ** 3)
+                model_weight_gb = model_weight_bytes / (1024 ** 3)
+                vllm_required_gb = vllm_required / (1024 ** 3)
+                safety_available_gb = total_available / (1024 ** 3)
+
+                if vllm_required > total_available:
                     feasibility = {
-                        "feasible": True,
-                        "reason": None,
-                        "available_gb": round(switch_effective_gb, 2),
-                        "required_gb": round(required_bytes / (1024 ** 3), 2),
-                        "safety_margin_gb": round(max(safety_margin, 0) / (1024 ** 3), 2),
+                        "feasible": False,
+                        "reason": "gpu_memory_utilization_exceeds_safety",
+                        "available_gb": round(safety_available_gb, 2),
+                        "required_gb": round(vllm_required_gb, 2),
+                        "safety_margin_gb": 0,
                         "gpu_available": True,
-                        "note": f"当前显存不足({current_effective/(1024**3):.2f}GB可用)，但停止旧模型 {previous_model} 后释放 ~{previous_model_bytes/(1024**3):.2f}GB，切换可行",
+                        "note": f"vLLM gpu_memory_utilization={gmu} 需要 {vllm_required_gb:.2f}GB (GPU总×{gmu}), 但安全阈值仅 {safety_available_gb:.2f}GB (GPU总×{_SAFETY_RATIO}), 即即使释放旧模型 {previous_model} 全部显存也无法运行",
                     }
-                else:
-                    total_gb = info.total_bytes / (1024 ** 3)
-                    required_gb = required_bytes / (1024 ** 3)
+                    await self._log(session, phase,
+                                    f"显存校验失败: vLLM需要 {vllm_required_gb:.2f}GB (gpu_memory_utilization={gmu}), 安全阈值 {safety_available_gb:.2f}GB (_SAFETY_RATIO={_SAFETY_RATIO})")
+                elif model_weight_bytes + headroom > total_available:
+                    required_gb = model_weight_bytes / (1024 ** 3)
                     feasibility = {
                         "feasible": False,
                         "reason": "insufficient_memory_even_with_release",
-                        "available_gb": round(switch_effective_gb, 2),
+                        "available_gb": round(safety_available_gb, 2),
                         "required_gb": round(required_gb, 2),
                         "safety_margin_gb": 0,
                         "gpu_available": True,
-                        "note": f"即使释放旧模型 {previous_model} ({previous_model_bytes/(1024**3):.2f}GB)，可用 {switch_effective_gb:.2f}GB 仍不足 (需要 {required_gb:.2f}GB, GPU总 {total_gb:.2f}GB)",
+                        "note": f"即使释放旧模型 {previous_model} 全部显存，模型权重 {model_weight_gb:.2f}GB + {_HEADROOM_GB}GB余量仍超过可用 {safety_available_gb:.2f}GB",
+                    }
+                else:
+                    current_effective = self._gpu_memory_manager.get_effective_free_bytes(0)
+                    safety_margin = total_available - model_weight_bytes - headroom
+                    await self._log(session, phase,
+                                    f"显存校验(含旧模型释放): 停止旧模型后可用 {safety_available_gb:.2f}GB, "
+                                    f"模型权重 {model_weight_gb:.2f}GB, vLLM总需求 {vllm_required_gb:.2f}GB")
+                    feasibility = {
+                        "feasible": True,
+                        "reason": None,
+                        "available_gb": round(safety_available_gb, 2),
+                        "required_gb": round(model_weight_bytes / (1024 ** 3), 2),
+                        "safety_margin_gb": round(max(safety_margin, 0) / (1024 ** 3), 2),
+                        "gpu_available": True,
+                        "note": f"停止旧模型 {previous_model} 后可用 {safety_available_gb:.2f}GB, 模型权重 {model_weight_gb:.2f}GB + {_HEADROOM_GB}GB余量可满足 (vLLM实际占用约 {vllm_required_gb:.2f}GB)",
                     }
 
         phase.progress = 80
@@ -638,8 +727,32 @@ class ModelSwitchOrchestrator:
                 self._llm_service_manager.stop_service(svc["service_name"])
                 await self._log(session, phase, f"已停止服务: {svc['service_name']}")
 
+            await self._kill_external_vllm_processes(session, phase)
+
+            if self._gpu_memory_manager:
+                gpu_wait_start = time.time()
+                gpu_wait_max = 30
+                await self._log(session, phase, "等待GPU显存释放...")
+                while time.time() - gpu_wait_start < gpu_wait_max:
+                    try:
+                        free_gb = self._gpu_memory_manager.get_effective_free_bytes(0) / (1024**3)
+                        total_gb = 0
+                        info = self._gpu_memory_manager.checker.get_device_info(0)
+                        if info:
+                            total_gb = info.total_bytes / (1024**3)
+                        if free_gb >= total_gb * 0.8:
+                            await self._log(session, phase, f"GPU显存已释放 (可用 {free_gb:.1f}GB / 总 {total_gb:.1f}GB)")
+                            break
+                        await self._log(session, phase, f"等待GPU释放... 可用 {free_gb:.1f}GB / 总 {total_gb:.1f}GB")
+                    except Exception:
+                        pass
+                    await asyncio.sleep(2)
+            else:
+                await asyncio.sleep(5)
+
             result = self._llm_service_manager.start_service(
-                session.target_model, session.target_model, "vllm", self._vllm_port
+                session.target_model, session.target_model, "vllm", self._vllm_port,
+                model_path=session.target_model_path,
             )
             if result.get("status") != "started":
                 error_msg = f"subprocess启动失败: {result.get('message', 'unknown')}"
@@ -717,6 +830,7 @@ class ModelSwitchOrchestrator:
             if self._engine_manager_mode == "subprocess":
                 port = self._vllm_port
                 health_url = f"http://127.0.0.1:{port}/health"
+                base_url = f"http://127.0.0.1:{port}"
             else:
                 from core.vllm_manager import discover_vllm_port
                 port = discover_vllm_port()
@@ -737,6 +851,21 @@ class ModelSwitchOrchestrator:
                 async with httpx.AsyncClient(timeout=3) as client:
                     resp = await client.get(health_url)
                     if resp.status_code == 200:
+                        try:
+                            models_resp = await client.get(f"{base_url}/v1/models")
+                            if models_resp.status_code == 200:
+                                models_data = models_resp.json()
+                                registered_ids = [m.get("id", "") for m in models_data.get("data", [])]
+                                if registered_ids:
+                                    actual_id = registered_ids[0]
+                                    target_name = session.target_model
+                                    if actual_id != session.target_model_path and (target_name not in actual_id):
+                                        await self._log(session, phase,
+                                                        f"模型ID不匹配: vLLM返回 {actual_id}, 目标 {target_name} ({session.target_model_path})")
+                                        continue
+                        except Exception as e:
+                            await self._log(session, phase, f"模型ID验证失败(继续等待): {e}")
+                            continue
                         phase.status = PhaseStatus.SUCCESS
                         phase.progress = 100
                         phase.finished_at = datetime.now().isoformat()
@@ -792,6 +921,15 @@ class ModelSwitchOrchestrator:
                         if actual_model_id != session.target_model_path:
                             await self._log(session, phase,
                                            f"vLLM 模型ID: {actual_model_id} (配置路径: {session.target_model_path})")
+                            target_model_name = session.target_model
+                            if actual_model_id and target_model_name not in actual_model_id and actual_model_id != session.target_model_path:
+                                error_msg = f"模型验证失败: vLLM加载的是 {actual_model_id}，但目标模型是 {target_model_name} ({session.target_model_path})"
+                                phase.status = PhaseStatus.FAILED
+                                phase.error = error_msg
+                                phase.finished_at = datetime.now().isoformat()
+                                await self._log(session, phase, error_msg)
+                                await self._rollback(session, error_msg)
+                                raise _SwitchAborted(error_msg)
         except Exception as e:
             await self._log(session, phase, f"查询模型ID失败，使用路径: {e}")
 
@@ -889,7 +1027,8 @@ class ModelSwitchOrchestrator:
         if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
             await self._log(session, phase, "subprocess模式启动引擎")
             result = self._llm_service_manager.start_service(
-                session.target_model, session.target_model, "vllm", self._vllm_port
+                session.target_model, session.target_model, "vllm", self._vllm_port,
+                model_path=session.target_model_path,
             )
             if result.get("status") != "started":
                 error_msg = f"subprocess启动失败: {result.get('message', 'unknown')}"
@@ -997,20 +1136,70 @@ class ModelSwitchOrchestrator:
             from core.vllm_manager import _cleanup_runtime_override
             _cleanup_runtime_override()
 
-            if session.previous_model_path and session.previous_model:
+            for svc in self._llm_service_manager.list_services():
+                self._llm_service_manager.stop_service(svc["service_name"])
+            await self._log(session, self._get_phase(session, 0), "rollback: 已停止所有追踪的服务")
+
+            import subprocess as _sp
+            try:
+                result = _sp.run(["pgrep", "-f", "vllm serve"], capture_output=True, text=True, timeout=5)
+                remaining_pids = [p for p in result.stdout.strip().split() if p]
+                if remaining_pids:
+                    await self._log(session, self._get_phase(session, 0), f"rollback: 发现残留vLLM进程 {remaining_pids}，正在终止")
+                    for pid in remaining_pids:
+                        try:
+                            pgid = _sp.run(["ps", "-o", "pgid=", "-p", pid], capture_output=True, text=True, timeout=2).stdout.strip()
+                            if pgid and int(pgid) > 0:
+                                _sp.run(["kill", "-9", f"-{pgid}"], capture_output=True, timeout=3)
+                            else:
+                                _sp.run(["kill", "-9", pid], capture_output=True, timeout=3)
+                        except Exception:
+                            pass
+                    await asyncio.sleep(5)
+                    verify = _sp.run(["pgrep", "-f", "vllm serve"], capture_output=True, text=True, timeout=5)
+                    if verify.stdout.strip():
+                        await self._log(session, self._get_phase(session, 0), f"rollback: 警告 - 仍有残留进程")
+                    else:
+                        await self._log(session, self._get_phase(session, 0), "rollback: 残留进程已清理")
+            except Exception as e:
+                await self._log(session, self._get_phase(session, 0), f"rollback: 清理残留进程失败 {e}")
+
+            gpu_wait_start = time.time()
+            gpu_wait_max = 30
+            if self._gpu_memory_manager:
+                await self._log(session, self._get_phase(session, 0), "rollback: 等待GPU显存释放...")
+                while time.time() - gpu_wait_start < gpu_wait_max:
+                    try:
+                        free_gb = self._gpu_memory_manager.get_effective_free_bytes(0) / (1024**3)
+                        total_gb = 0
+                        info = self._gpu_memory_manager.checker.get_device_info(0)
+                        if info:
+                            total_gb = info.total_bytes / (1024**3)
+                        if free_gb >= total_gb * 0.8:
+                            await self._log(session, self._get_phase(session, 0), f"rollback: GPU显存已释放 (可用 {free_gb:.1f}GB / 总 {total_gb:.1f}GB)")
+                            break
+                    except Exception:
+                        pass
+                    await asyncio.sleep(2)
+
+            if session.action == "start":
+                await self._broadcast(session, phase=0, progress=50,
+                                      log="start action rollback: 不恢复旧模型，服务保持停止状态", level="warning")
+            elif session.previous_model_path and session.previous_model:
                 await self._broadcast(session, phase=0, progress=20,
                                       log=f"subprocess模式回滚: {session.previous_model}",
                                       level="warning")
-                for svc in self._llm_service_manager.list_services():
-                    self._llm_service_manager.stop_service(svc["service_name"])
 
                 result = self._llm_service_manager.start_service(
-                    session.previous_model, session.previous_model, "vllm", self._vllm_port
+                    session.previous_model, session.previous_model, "vllm", self._vllm_port,
+                    model_path=session.previous_model_path,
                 )
                 if result.get("status") == "started":
                     await self._broadcast(session, phase=0, progress=80,
                                           log="旧模型subprocess已启动，等待就绪", level="warning")
-                    for _ in range(10):
+                    rollback_wait_max = 120
+                    rollback_start = time.time()
+                    while time.time() - rollback_start < rollback_wait_max:
                         await asyncio.sleep(3)
                         try:
                             async with httpx.AsyncClient(timeout=3) as client:

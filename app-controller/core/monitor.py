@@ -634,14 +634,19 @@ class GPUMonitor:
                            "performance_state", "encoder_utilization", "decoder_utilization"]:
                     if k in primary:
                         current[k] = primary[k]
-            
+
+            vllm_metrics = self.get_vllm_metrics()
+            if vllm_metrics:
+                current["vllm_metrics"] = vllm_metrics
+
             health_score = self.get_health_score(status)
-            
+            history = self.get_gpu_history(20)
+
             return {
                 "status": status.get("status", "unavailable"),
                 "current": current,
                 "health_score": health_score,
-                "history": [],
+                "history": history,
             }
         return {
             "status": "unavailable",

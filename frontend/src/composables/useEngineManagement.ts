@@ -26,12 +26,24 @@ interface RawEngineStatusResponse {
 interface RawEngineConfigEntry {
   command?: string
   default_params?: Record<string, unknown>
+  default_gpu_memory_utilization?: number
+  default_max_model_len?: number
+  default_port?: number
+  engine_manager_mode?: string
+  env_vars?: Record<string, string>
+  hf_endpoint?: string
+  model_base_path?: string
+  service_name?: string
+  start_script?: string
+  venv_path?: string
 }
 
 interface RawEngineConfigResponse {
   vllm?: RawEngineConfigEntry
   sglang?: RawEngineConfigEntry
   llama_cpp?: RawEngineConfigEntry
+  default_engine?: string
+  engine_manager_mode?: string
 }
 
 const ENGINE_TYPES: EngineType[] = ['vllm', 'sglang', 'llama_cpp']
@@ -82,19 +94,28 @@ const normalizeEngineStatus = (payload: unknown): EngineStatus => {
 
 const normalizeEngineConfig = (payload: unknown): EngineConfig => {
   const raw = (payload ?? {}) as RawEngineConfigResponse
+  const normalizeEntry = (entry?: RawEngineConfigEntry): { command: string; default_params: Record<string, unknown> } => {
+    if (!entry) return { command: '', default_params: {} }
+    if (entry.command && entry.default_params) {
+      return { command: entry.command, default_params: entry.default_params }
+    }
+    const params: Record<string, unknown> = {}
+    if (entry.default_gpu_memory_utilization != null) params.gpu_memory_utilization = entry.default_gpu_memory_utilization
+    if (entry.default_max_model_len != null) params.max_model_len = entry.default_max_model_len
+    if (entry.default_port != null) params.port = entry.default_port
+    if (entry.engine_manager_mode) params.engine_manager_mode = entry.engine_manager_mode
+    if (entry.env_vars) params.env_vars = entry.env_vars
+    if (entry.hf_endpoint) params.hf_endpoint = entry.hf_endpoint
+    if (entry.model_base_path) params.model_base_path = entry.model_base_path
+    if (entry.service_name) params.service_name = entry.service_name
+    if (entry.start_script) params.start_script = entry.start_script
+    if (entry.venv_path) params.venv_path = entry.venv_path
+    return { command: entry.start_script ?? '', default_params: params }
+  }
   return {
-    vllm: {
-      command: raw.vllm?.command ?? '',
-      default_params: raw.vllm?.default_params ?? {},
-    },
-    sglang: {
-      command: raw.sglang?.command ?? '',
-      default_params: raw.sglang?.default_params ?? {},
-    },
-    llama_cpp: {
-      command: raw.llama_cpp?.command ?? '',
-      default_params: raw.llama_cpp?.default_params ?? {},
-    },
+    vllm: normalizeEntry(raw.vllm),
+    sglang: normalizeEntry(raw.sglang),
+    llama_cpp: normalizeEntry(raw.llama_cpp),
   }
 }
 
