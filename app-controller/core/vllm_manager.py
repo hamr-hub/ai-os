@@ -779,14 +779,22 @@ def stop_vllm_service() -> bool:
 
 def restart_vllm_service() -> bool:
     """
-    重启 vLLM 服务
+    重启 vLLM 服务（异步，不等待完成）
+    systemctl restart 会等待旧进程退出，vLLM卸载模型耗时长，用 --no-block 异步发送
     """
     try:
         result = subprocess.run(
-            [SYSTEMCTL_BIN, 'restart', VLLM_SERVICE_NAME],
-            capture_output=True, text=True, timeout=30
+            [SYSTEMCTL_BIN, 'restart', '--no-block', VLLM_SERVICE_NAME],
+            capture_output=True, text=True, timeout=10
         )
-        return result.returncode == 0
+        if result.returncode != 0:
+            logger.warning("systemctl restart --no-block failed (rc=%d): %s", result.returncode, result.stderr)
+            result2 = subprocess.run(
+                [SYSTEMCTL_BIN, 'restart', VLLM_SERVICE_NAME],
+                capture_output=True, text=True, timeout=120
+            )
+            return result2.returncode == 0
+        return True
     except Exception as e:
         logger.error("Failed to restart vLLM service: %s", e)
         return False

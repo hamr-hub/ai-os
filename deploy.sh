@@ -225,18 +225,21 @@ start_services() {
 
 start_docker_services() {
     log_info "=== 使用 Docker Compose 启动服务 ==="
-    
+
     log_info "检查并更新 .env 文件"
     if [ ! -f ".env" ]; then
         cp .env.example .env
     fi
-    
+
+    log_info "拉取最新 Docker 镜像"
+    docker-compose pull aiclient
+
     log_info "启动所有服务"
     docker-compose up -d
-    
+
     log_info "等待服务启动..."
     sleep 15
-    
+
     log_info "检查服务状态"
     docker-compose ps
 }
@@ -313,15 +316,27 @@ show_help() {
     echo "  --build-python  仅设置 Python 服务"
     echo "  --build-frontend 仅构建前端"
     echo "  --start         启动所有服务（本地模式）"
-    echo "  --docker        使用 Docker Compose 启动服务"
+    echo "  --docker        使用 Docker Compose 启动服务（含拉取最新 aiclient 镜像）"
     echo "  --stop          停止所有服务"
     echo "  --health        执行健康检查"
+    echo "  --update-plugin 更新 aiclient 插件（同步插件文件后重启容器）"
     echo "  --help          显示此帮助信息"
     echo ""
     echo "示例:"
-    echo "  $0 --all          # 完整部署"
-    echo "  $0 --docker       # 使用 Docker 部署"
-    echo "  $0 --stop         # 停止服务"
+    echo "  $0 --all            # 完整部署"
+    echo "  $0 --docker         # 使用 Docker 部署（自动拉取最新 aiclient 镜像）"
+    echo "  $0 --update-plugin  # 热更新插件代码"
+    echo "  $0 --stop           # 停止服务"
+}
+
+update_plugin() {
+    log_info "=== 更新 aiclient 插件 ==="
+
+    log_info "重启 aiclient 容器以加载最新插件"
+    docker-compose restart aiclient
+
+    sleep 5
+    log_info "插件更新完成"
 }
 
 main() {
@@ -368,6 +383,9 @@ main() {
             ;;
         --health)
             check_health
+            ;;
+        --update-plugin)
+            update_plugin
             ;;
         --help)
             show_help

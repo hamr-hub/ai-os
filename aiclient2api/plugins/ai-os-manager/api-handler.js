@@ -237,3 +237,62 @@ export async function handleEngineApiRoutes(method, urlPath, req, res, config) {
         return true;
     }
 }
+
+export async function handleHealthApiRoutes(method, urlPath, req, res, config) {
+    if (!urlPath.startsWith('/api/health')) return false;
+    try {
+        if (urlPath === '/api/health' && method === 'GET') {
+            return await proxyToBackend(res, '/health');
+        }
+        if (urlPath === '/api/health/detailed' && method === 'GET') {
+            return await proxyToBackend(res, '/health/detailed');
+        }
+        if (urlPath === '/api/health/history' && method === 'GET') {
+            return await proxyToBackend(res, '/health/history');
+        }
+        return false;
+    } catch (error) {
+        logger.error('[Health API]', error.message);
+        sendJSONResponse(res, 500, { success: false, error: error.message });
+        return true;
+    }
+}
+
+export async function handleRateLimitApiRoutes(method, urlPath, req, res, config) {
+    if (!urlPath.startsWith('/api/ratelimit')) return false;
+    try {
+        if (urlPath === '/api/ratelimit/config' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/ratelimit/config');
+        }
+        if (urlPath === '/api/ratelimit/config' && method === 'PUT') {
+            const body = await parseRequestBody(req);
+            return await proxyToBackend(res, '/manage/ratelimit/config', 'PUT', body);
+        }
+        if (urlPath === '/api/ratelimit/stats' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/ratelimit/stats');
+        }
+        return false;
+    } catch (error) {
+        logger.error('[RateLimit API]', error.message);
+        sendJSONResponse(res, 500, { success: false, error: error.message });
+        return true;
+    }
+}
+
+export async function handleConfigApiRoutes(method, urlPath, req, res, config) {
+    if (!urlPath.startsWith('/api/config')) return false;
+    try {
+        if (urlPath === '/api/config' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/config');
+        }
+        if (urlPath === '/api/config' && method === 'PUT') {
+            const body = await parseRequestBody(req);
+            return await proxyToBackend(res, '/manage/config', 'PUT', body);
+        }
+        return false;
+    } catch (error) {
+        logger.error('[Config API]', error.message);
+        sendJSONResponse(res, 500, { success: false, error: error.message });
+        return true;
+    }
+}

@@ -19,7 +19,7 @@ const switchError = ref<string | null>(null)
 const engineOptions: { key: EngineType; label: string; icon: string }[] = [
   { key: 'vllm', label: 'vLLM', icon: '⚡' },
   { key: 'sglang', label: 'SGLang', icon: '🔥' },
-  { key: 'llama_cpp', label: 'llama.cpp', icon: '🦙' },
+  { key: 'llamacpp', label: 'llama.cpp', icon: '🦙' },
 ]
 
 const currentEngine = computed(() => engineStatus.value?.current_engine ?? 'vllm')

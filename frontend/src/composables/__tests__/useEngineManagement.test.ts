@@ -77,7 +77,7 @@ describe('useEngineManagement', () => {
     const config = {
       vllm: { command: 'python -m vllm', default_params: {} },
       sglang: { command: 'python -m sglang', default_params: {} },
-      llama_cpp: { command: 'llama-server', default_params: {} },
+      llamacpp: { command: 'llama-server', default_params: {} },
     }
     getEngineConfig.mockResolvedValue(config)
 
@@ -119,7 +119,7 @@ describe('useEngineManagement', () => {
     const newConf = {
       vllm: { command: 'python -m vllm', default_params: { port: 9000 } },
       sglang: { command: 'python -m sglang', default_params: {} },
-      llama_cpp: { command: 'llama-server', default_params: {} },
+      llamacpp: { command: 'llama-server', default_params: {} },
     }
     updateEngineConfig.mockResolvedValue(newConf)
 
@@ -138,7 +138,7 @@ describe('useEngineManagement', () => {
     const result = await doUpdateConfig({
       vllm: { command: 'python -m vllm', default_params: { port: 0 } },
       sglang: { command: 'python -m sglang', default_params: {} },
-      llama_cpp: { command: 'llama-server', default_params: {} },
+      llamacpp: { command: 'llama-server', default_params: {} },
     })
 
     expect(result).toBe(false)

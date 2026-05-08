@@ -72,7 +72,16 @@ export interface GPUSummary {
   status: 'available' | 'unavailable'
   current: GPUSummaryCurrent | null
   history: GPUHistoryEntry[]
-  models?: Record<string, { running: boolean; engine: string; port: number | null; pid: number | null; started_at: string | null }>
+  models?: Record<
+    string,
+    {
+      running: boolean
+      engine: string
+      port: number | null
+      pid: number | null
+      started_at: string | null
+    }
+  >
   current_model?: string | null
   default_model?: string | null
 }
@@ -530,8 +539,15 @@ export interface VLLMConfigUpdateRequest {
 
 export type SwitchPhaseStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
 export type SwitchOverallPhase =
-  | 'idle' | 'phase1' | 'phase2' | 'phase3' | 'phase4'
-  | 'rolling_back' | 'rolled_back' | 'completed' | 'failed'
+  | 'idle'
+  | 'phase1'
+  | 'phase2'
+  | 'phase3'
+  | 'phase4'
+  | 'rolling_back'
+  | 'rolled_back'
+  | 'completed'
+  | 'failed'
 export type SwitchLogLevel = 'info' | 'warning' | 'error' | 'success'
 
 export interface SwitchPhaseDetail {
@@ -561,7 +577,12 @@ export interface SwitchSession {
 }
 
 export interface SwitchProgressMessage {
-  type: 'switch_progress' | 'switch_failed' | 'rollback_started' | 'rollback_completed' | 'switch_state_sync'
+  type:
+    | 'switch_progress'
+    | 'switch_failed'
+    | 'rollback_started'
+    | 'rollback_completed'
+    | 'switch_state_sync'
   timestamp: string
   session_id: string
   overall_phase: SwitchOverallPhase
@@ -583,19 +604,37 @@ export interface SwitchStatusResponse {
   timestamp: string
 }
 
-export type EngineType = 'vllm' | 'sglang' | 'llama_cpp'
+export type EngineType = 'vllm' | 'sglang' | 'llamacpp'
 
 export interface EngineStatus {
-  vllm: { running: boolean; pid: number | null; port: number | null; model: string | null; uptime: number | null }
-  sglang: { running: boolean; pid: number | null; port: number | null; model: string | null; uptime: number | null }
-  llama_cpp: { running: boolean; pid: number | null; port: number | null; model: string | null; uptime: number | null }
+  vllm: {
+    running: boolean
+    pid: number | null
+    port: number | null
+    model: string | null
+    uptime: number | null
+  }
+  sglang: {
+    running: boolean
+    pid: number | null
+    port: number | null
+    model: string | null
+    uptime: number | null
+  }
+  llamacpp: {
+    running: boolean
+    pid: number | null
+    port: number | null
+    model: string | null
+    uptime: number | null
+  }
   current_engine: EngineType
 }
 
 export interface EngineConfig {
   vllm: { command: string; default_params: Record<string, unknown> }
   sglang: { command: string; default_params: Record<string, unknown> }
-  llama_cpp: { command: string; default_params: Record<string, unknown> }
+  llamacpp: { command: string; default_params: Record<string, unknown> }
 }
 
 export interface EngineParamDef {
@@ -766,7 +805,13 @@ export interface GoHealthDetail {
     service_score: number
     response_time: number
     vllm_inference: number
-    alerts: Array<{ type: string; severity: string; value: number; threshold: number; message: string }> | null
+    alerts: Array<{
+      type: string
+      severity: string
+      value: number
+      threshold: number
+      message: string
+    }> | null
   }
   gpu: {
     status: string

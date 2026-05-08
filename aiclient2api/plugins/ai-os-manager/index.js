@@ -10,6 +10,9 @@ import {
     handleGPUMonitorApiRoutes,
     handleModelSwitchApiRoutes,
     handleEngineApiRoutes,
+    handleHealthApiRoutes,
+    handleRateLimitApiRoutes,
+    handleConfigApiRoutes,
     handleInjectScript,
     handlePluginStyles,
     handlePanelRoute,
@@ -34,6 +37,9 @@ const ADMIN_API_PREFIXES = [
     '/api/gpu-monitor',
     '/api/model-switch',
     '/api/engine',
+    '/api/health',
+    '/api/ratelimit',
+    '/api/config',
 ];
 
 const API_PATHS = ['/v1/', '/openai/'];
@@ -93,6 +99,9 @@ const aiOsManagerPlugin = {
         { method: '*', path: '/api/gpu-monitor', handler: handleGPUMonitorApiRoutes },
         { method: '*', path: '/api/model-switch', handler: handleModelSwitchApiRoutes },
         { method: '*', path: '/api/engine', handler: handleEngineApiRoutes },
+        { method: '*', path: '/api/health', handler: handleHealthApiRoutes },
+        { method: '*', path: '/api/ratelimit', handler: handleRateLimitApiRoutes },
+        { method: '*', path: '/api/config', handler: handleConfigApiRoutes },
     ],
 
     async authenticate(req, res, requestUrl, config) {

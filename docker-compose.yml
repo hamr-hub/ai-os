@@ -108,6 +108,7 @@ services:
     volumes:
       - ./aiclient2api/data:/app/data
       - ./aiclient2api/configs:/app/configs
+      - ./aiclient2api/plugins:/app/src/plugins
     depends_on:
       ai-controller:
         condition: service_healthy

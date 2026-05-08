@@ -41,12 +41,12 @@ interface RawEngineConfigEntry {
 interface RawEngineConfigResponse {
   vllm?: RawEngineConfigEntry
   sglang?: RawEngineConfigEntry
-  llama_cpp?: RawEngineConfigEntry
+  llamacpp?: RawEngineConfigEntry
   default_engine?: string
   engine_manager_mode?: string
 }
 
-const ENGINE_TYPES: EngineType[] = ['vllm', 'sglang', 'llama_cpp']
+const ENGINE_TYPES: EngineType[] = ['vllm', 'sglang', 'llamacpp']
 
 const createEmptyEngineState = () => ({
   running: false,
@@ -61,7 +61,7 @@ const normalizeEngineStatus = (payload: unknown): EngineStatus => {
   const normalized: EngineStatus = {
     vllm: createEmptyEngineState(),
     sglang: createEmptyEngineState(),
-    llama_cpp: createEmptyEngineState(),
+    llamacpp: createEmptyEngineState(),
     current_engine: raw.current_engine ?? 'vllm',
   }
 
@@ -115,7 +115,7 @@ const normalizeEngineConfig = (payload: unknown): EngineConfig => {
   return {
     vllm: normalizeEntry(raw.vllm),
     sglang: normalizeEntry(raw.sglang),
-    llama_cpp: normalizeEntry(raw.llama_cpp),
+    llamacpp: normalizeEntry(raw.llamacpp),
   }
 }
 

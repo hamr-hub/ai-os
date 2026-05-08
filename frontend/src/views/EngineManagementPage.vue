@@ -54,7 +54,7 @@ const handleSwitch = async () => {
   if (!targetModel.value) return
   showSwitchConfirm.value = false
   const result = await doSwitchEngine(targetModel.value, targetEngine.value, targetPort.value)
-  if (result?.session_id) {
+  if (result) {
     triggerSwitch(targetModel.value, false, 'switch')
     activeTab.value = 'switch'
   }
@@ -62,7 +62,7 @@ const handleSwitch = async () => {
 
 const engineList = computed(() => {
   if (!engineStatus.value) return []
-  return ['vllm', 'sglang', 'llama_cpp'] as EngineType[]
+  return ['vllm', 'sglang', 'llamacpp'] as EngineType[]
 })
 
 const formatUptime = (seconds: number | null) => {
@@ -77,7 +77,7 @@ const engineDisplayName = (type: EngineType) => {
   const names: Record<EngineType, string> = {
     vllm: 'vLLM',
     sglang: 'SGLang',
-    llama_cpp: 'llama.cpp',
+    llamacpp: 'llama.cpp',
   }
   return names[type] || type
 }
@@ -212,7 +212,7 @@ const saveConfig = async () => {
           <select v-model="targetEngine" class="form-input">
             <option value="vllm">vLLM</option>
             <option value="sglang">SGLang</option>
-            <option value="llama_cpp">llama.cpp</option>
+            <option value="llamacpp">llama.cpp</option>
           </select>
         </div>
         <div class="form-row">
@@ -295,7 +295,7 @@ const saveConfig = async () => {
           <select v-model="targetEngine" class="form-input">
             <option value="vllm">vLLM</option>
             <option value="sglang">SGLang</option>
-            <option value="llama_cpp">llama.cpp</option>
+            <option value="llamacpp">llama.cpp</option>
           </select>
         </div>
         <EngineParamEditor

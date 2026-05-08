@@ -35,7 +35,7 @@ describe('useConfigManagement', () => {
     const engConf = {
       vllm: { command: 'python -m vllm.entrypoints.openai.api_server', default_params: {} },
       sglang: { command: 'python -m sglang.launch_server', default_params: {} },
-      llama_cpp: { command: 'llama-server', default_params: {} },
+      llamacpp: { command: 'llama-server', default_params: {} },
     }
     const sysConf = {
       health_check_interval_seconds: 30,
@@ -74,7 +74,7 @@ describe('useConfigManagement', () => {
     const newConf = {
       vllm: { command: 'python -m vllm', default_params: { port: 9000 } },
       sglang: { command: 'python -m sglang', default_params: {} },
-      llama_cpp: { command: 'llama-server', default_params: {} },
+      llamacpp: { command: 'llama-server', default_params: {} },
     }
     updateEngineConfig.mockResolvedValue(newConf)
 
@@ -150,7 +150,7 @@ describe('useConfigManagement', () => {
     getEngineConfig.mockResolvedValue({
       vllm: { command: 'python -m vllm', default_params: {} },
       sglang: { command: 'python -m sglang', default_params: {} },
-      llama_cpp: { command: 'llama-server', default_params: {} },
+      llamacpp: { command: 'llama-server', default_params: {} },
     })
     getSystemConfig.mockResolvedValue({
       health_check_interval_seconds: 30,

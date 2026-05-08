@@ -403,7 +403,7 @@ vllm:
   default_gpu_memory_utilization: 0.92
   default_max_model_len: 32768
   default_port: 8000
-  engine_manager_mode: subprocess
+  engine_manager_mode: systemd
   env_vars:
     CUDA_MANAGED_FORCE_DEVICE_ALLOC: '1'
     FLASHINFER_DISABLE: '1'

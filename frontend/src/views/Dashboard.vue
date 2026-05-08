@@ -110,7 +110,7 @@ onUnmounted(() => {
 const engineLabels: Record<string, string> = {
   vllm: 'vLLM',
   sglang: 'SGLang',
-  llama_cpp: 'llama.cpp',
+  llamacpp: 'llama.cpp',
 }
 
 const gpu = computed(() => gpuSummary.value?.current ?? null)
@@ -375,7 +375,7 @@ const handleScale = (cardId: string, delta: number) => {
                 <CircleDot v-if="gpuEngineStatus[gpuEngineStatus.current_engine]?.running" class="w-4 h-4" style="color:#4ade80" />
               </div>
               <div class="engine-list">
-                <div v-for="eng in (['vllm', 'sglang', 'llama_cpp'] as EngineType[])" :key="eng" class="engine-row">
+                <div v-for="eng in (['vllm', 'sglang', 'llamacpp'] as EngineType[])" :key="eng" class="engine-row">
                   <span :class="gpuEngineStatus[eng]?.running ? 'engine-dot running' : 'engine-dot stopped'"></span>
                   <span class="engine-name">{{ engineLabels[eng] }}</span>
                   <span :class="gpuEngineStatus[eng]?.running ? 'engine-status running' : 'engine-status stopped'">

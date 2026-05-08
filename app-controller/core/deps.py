@@ -58,6 +58,10 @@ config_ok, config = config_watcher.load_config_with_status()
 if not config_ok:
     config = {}
 
+_cfg_engine_mode = config.get("vllm", {}).get("engine_manager_mode") if isinstance(config, dict) else None
+if _cfg_engine_mode:
+    os.environ["ENGINE_MANAGER_MODE"] = _cfg_engine_mode
+
 # 从配置中获取日志目录
 log_dir = config.get('settings', {}).get('logging', {}).get('log_dir', None)
 

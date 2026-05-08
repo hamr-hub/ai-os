@@ -22,7 +22,7 @@ interface RawEngineStatusResponse {
   active_count?: number
 }
 
-const ENGINE_TYPES: EngineType[] = ['vllm', 'sglang', 'llama_cpp']
+const ENGINE_TYPES: EngineType[] = ['vllm', 'sglang', 'llamacpp']
 
 const normalizeGPUMemoryInfo = (raw: any): GPUMemoryInfo => {
   const gpuData = raw?.gpu ?? {}
@@ -50,7 +50,7 @@ const normalizeEngineStatus = (payload: unknown): EngineStatus => {
   const normalized: EngineStatus = {
     vllm: createEmptyEngineState(),
     sglang: createEmptyEngineState(),
-    llama_cpp: createEmptyEngineState(),
+    llamacpp: createEmptyEngineState(),
     current_engine: raw.current_engine ?? 'vllm',
   }
 
@@ -167,7 +167,7 @@ export function useGPUMemory() {
         engineStatus.value?.[currentEngine]?.model ??
         engineStatus.value?.vllm.model ??
         engineStatus.value?.sglang.model ??
-        engineStatus.value?.llama_cpp.model
+        engineStatus.value?.llamacpp.model
       const currentPort =
         engineStatus.value?.[targetEngine]?.port ??
         engineStatus.value?.[currentEngine]?.port ??

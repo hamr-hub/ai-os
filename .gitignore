@@ -14,3 +14,4 @@ aiclient2api/configs/
 aiclient2api/data/
 frontend/dist_30000
 venvs/
+.playwright-mcp/

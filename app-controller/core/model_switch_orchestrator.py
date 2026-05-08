@@ -144,13 +144,13 @@ class _SwitchAborted(Exception):
 
 
 class ModelSwitchOrchestrator:
-    SWITCH_MAX_TIMEOUT = 300
+    SWITCH_MAX_TIMEOUT = 600
     PHASE0_GPU_CHECK_TIMEOUT = 10
     PHASE1_STOP_TIMEOUT = 30
     PHASE1_PORT_CHECK_TIMEOUT = 15
     PHASE2_KILL_TIMEOUT = 60
     PHASE2_VERIFY_TIMEOUT = 15
-    PHASE3_START_TIMEOUT = 300
+    PHASE3_START_TIMEOUT = 480
     PHASE3_PORT_WAIT_TIMEOUT = 300
     PHASE4_TEST_RETRIES = 3
     PHASE4_TEST_TIMEOUT = 15
@@ -572,7 +572,19 @@ class ModelSwitchOrchestrator:
                 vllm_required_gb = vllm_required / (1024 ** 3)
                 safety_available_gb = total_available / (1024 ** 3)
 
-                if vllm_required > total_available:
+                if is_switch_action and vllm_required > total_bytes:
+                    feasibility = {
+                        "feasible": False,
+                        "reason": "gpu_memory_utilization_exceeds_total",
+                        "available_gb": round(total_gb, 2),
+                        "required_gb": round(vllm_required_gb, 2),
+                        "safety_margin_gb": 0,
+                        "gpu_available": True,
+                        "note": f"vLLM gpu_memory_utilization={gmu} 需要 {vllm_required_gb:.2f}GB (GPU总×{gmu}), 超过GPU总显存 {total_gb:.2f}GB, 即使释放旧模型 {previous_model} 全部显存也无法运行",
+                    }
+                    await self._log(session, phase,
+                                    f"显存校验失败: vLLM需要 {vllm_required_gb:.2f}GB (gpu_memory_utilization={gmu}), GPU总显存 {total_gb:.2f}GB")
+                elif not is_switch_action and vllm_required > total_available:
                     feasibility = {
                         "feasible": False,
                         "reason": "gpu_memory_utilization_exceeds_safety",
@@ -584,6 +596,17 @@ class ModelSwitchOrchestrator:
                     }
                     await self._log(session, phase,
                                     f"显存校验失败: vLLM需要 {vllm_required_gb:.2f}GB (gpu_memory_utilization={gmu}), 安全阈值 {safety_available_gb:.2f}GB (_SAFETY_RATIO={_SAFETY_RATIO})")
+                elif is_switch_action and model_weight_bytes + headroom > total_bytes:
+                    required_gb = model_weight_bytes / (1024 ** 3)
+                    feasibility = {
+                        "feasible": False,
+                        "reason": "insufficient_memory_even_with_release",
+                        "available_gb": round(total_gb, 2),
+                        "required_gb": round(required_gb, 2),
+                        "safety_margin_gb": 0,
+                        "gpu_available": True,
+                        "note": f"即使释放旧模型 {previous_model} 全部显存，模型权重 {model_weight_gb:.2f}GB + {_HEADROOM_GB}GB余量仍超过GPU总显存 {total_gb:.2f}GB",
+                    }
                 elif model_weight_bytes + headroom > total_available:
                     required_gb = model_weight_bytes / (1024 ** 3)
                     feasibility = {
@@ -597,18 +620,25 @@ class ModelSwitchOrchestrator:
                     }
                 else:
                     current_effective = self._gpu_memory_manager.get_effective_free_bytes(0)
-                    safety_margin = total_available - model_weight_bytes - headroom
+                    if is_switch_action:
+                        available_for_check = total_bytes
+                        available_gb_for_check = total_gb
+                        safety_margin = total_bytes - model_weight_bytes - headroom
+                    else:
+                        available_for_check = total_available
+                        available_gb_for_check = safety_available_gb
+                        safety_margin = total_available - model_weight_bytes - headroom
                     await self._log(session, phase,
-                                    f"显存校验(含旧模型释放): 停止旧模型后可用 {safety_available_gb:.2f}GB, "
+                                    f"显存校验(含旧模型释放): 停止旧模型后可用 {available_gb_for_check:.2f}GB, "
                                     f"模型权重 {model_weight_gb:.2f}GB, vLLM总需求 {vllm_required_gb:.2f}GB")
                     feasibility = {
                         "feasible": True,
                         "reason": None,
-                        "available_gb": round(safety_available_gb, 2),
+                        "available_gb": round(available_gb_for_check, 2),
                         "required_gb": round(model_weight_bytes / (1024 ** 3), 2),
                         "safety_margin_gb": round(max(safety_margin, 0) / (1024 ** 3), 2),
                         "gpu_available": True,
-                        "note": f"停止旧模型 {previous_model} 后可用 {safety_available_gb:.2f}GB, 模型权重 {model_weight_gb:.2f}GB + {_HEADROOM_GB}GB余量可满足 (vLLM实际占用约 {vllm_required_gb:.2f}GB)",
+                        "note": f"停止旧模型 {previous_model} 后可用 {available_gb_for_check:.2f}GB, 模型权重 {model_weight_gb:.2f}GB + {_HEADROOM_GB}GB余量可满足 (vLLM实际占用约 {vllm_required_gb:.2f}GB)",
                     }
 
         phase.progress = 80
@@ -832,9 +862,10 @@ class ModelSwitchOrchestrator:
                 health_url = f"http://127.0.0.1:{port}/health"
                 base_url = f"http://127.0.0.1:{port}"
             else:
-                from core.vllm_manager import discover_vllm_port
+                from core.vllm_manager import discover_vllm_port, _build_vllm_health_url
                 port = discover_vllm_port()
                 health_url = _build_vllm_health_url(port)
+                base_url = f"http://127.0.0.1:{port}"
 
             is_port_open = self._is_port_alive(port)
             if is_port_open:

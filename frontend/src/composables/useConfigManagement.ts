@@ -29,7 +29,7 @@ interface RawEngineConfigEntry {
 interface RawEngineConfigResponse {
   vllm?: RawEngineConfigEntry
   sglang?: RawEngineConfigEntry
-  llama_cpp?: RawEngineConfigEntry
+  llamacpp?: RawEngineConfigEntry
   default_engine?: string
   engine_manager_mode?: string
 }
@@ -57,13 +57,13 @@ const normalizeEngineConfig = (payload: unknown): EngineConfig => {
   return {
     vllm: normalizeEntry(raw.vllm),
     sglang: normalizeEntry(raw.sglang),
-    llama_cpp: normalizeEntry(raw.llama_cpp),
+    llamacpp: normalizeEntry(raw.llamacpp),
   }
 }
 
 const toEngineConfigPayload = (payload: Partial<EngineConfig>) => {
   const result: Partial<Record<EngineType, RawEngineConfigEntry>> = {}
-  const engineTypes: EngineType[] = ['vllm', 'sglang', 'llama_cpp']
+  const engineTypes: EngineType[] = ['vllm', 'sglang', 'llamacpp']
   for (const engineType of engineTypes) {
     const config = payload[engineType]
     if (!config) continue
