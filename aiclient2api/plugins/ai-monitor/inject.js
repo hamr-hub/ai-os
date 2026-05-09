@@ -70,7 +70,7 @@
 <div class="aim-panel-header">\
     <span class="aim-panel-title">AI Monitor</span>\
     <div class="aim-panel-header-actions">\
-        <button class="aim-btn aim-btn-sm" id="aim-refresh-btn" onclick="window.__aiMonitorRefresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+        <button class="aim-btn aim-btn-sm" id="aim-refresh-btn" onclick="window.__aiMonitorRefresh()"><i class="fas fa-sync-alt"></i> 刷新</button>\
         <button class="aim-btn aim-btn-sm aim-btn-collapse" onclick="window.__aiMonitorToggle()"><i class="fas fa-times"></i></button>\
     </div>\
 </div>\

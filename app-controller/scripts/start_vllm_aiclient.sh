@@ -54,11 +54,11 @@ export FLASHINFER_DISABLE=1
 # ===== 5. 模型路径（从环境变量读取，提供默认值）=====
 MODEL_STATE_FILE="${VLLM_MODEL_STATE_FILE:-$SCRIPT_DIR/.vllm_model_path}"
 if [ -n "${VLLM_MODEL_PATH:-}" ]; then
-    MODEL_PATH="${VLLM_MODEL_PATH}"
+    MODEL_PATH="/mnt/pve_models/Qwen3.6-35B-A3B"
 elif [ -f "$MODEL_STATE_FILE" ]; then
-    MODEL_PATH="$(tr -d '\r\n' < "$MODEL_STATE_FILE")"
+    MODEL_PATH="/mnt/pve_models/Qwen3.6-35B-A3B" -n 1 "$MODEL_STATE_FILE" | tr -d '\r\n')"
 else
-    MODEL_PATH="/mnt/pve_models/Gemma-4-31B-Abliterated"
+    MODEL_PATH="/mnt/pve_models/Qwen3.6-35B-A3B"
 fi
 
 # ===== 6. 日志配置 =====

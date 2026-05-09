@@ -82,7 +82,13 @@ export async function handlePanelRoute(method, urlPath, req, res) {
 }
 
 export async function handleInjectScript(method, urlPath, req, res) {
-    if (method !== 'GET' || urlPath !== '/plugins/ai-os-manager/inject.js') return false;
+    if (urlPath !== '/plugins/ai-os-manager/inject.js') return false;
+    if (method === 'HEAD') {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+        res.end();
+        return true;
+    }
+    if (method !== 'GET') return false;
     try {
         const script = await fs.readFile(pathModule.join(pluginDir, 'inject.js'), 'utf8');
         res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
@@ -95,10 +101,16 @@ export async function handleInjectScript(method, urlPath, req, res) {
 }
 
 export async function handlePluginStyles(method, urlPath, req, res) {
-    if (method !== 'GET' || urlPath !== '/plugins/ai-os-manager/styles.css') return false;
+    if (urlPath !== '/plugins/ai-os-manager/styles.css') return false;
+    if (method === 'HEAD') {
+        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+        res.end();
+        return true;
+    }
+    if (method !== 'GET') return false;
     try {
         const css = await fs.readFile(pathModule.join(pluginDir, 'styles.css'), 'utf8');
-        res.writeHead(200, { 'Content-Type': 'text/css', 'Access-Control-Allow-Origin': '*' });
+        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
         res.end(css);
         return true;
     } catch (error) {
