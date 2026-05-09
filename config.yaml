@@ -39,7 +39,7 @@ engines:
   vllm:
     default_port: 8000
     enabled: true
-    venv_path: /root/ai-os/venvs/vllm
+  venv_path: /root/ai-suite/vllm_env
 feature_flags:
   agent_blocked_commands:
   - rm
@@ -430,7 +430,7 @@ vllm:
   default_gpu_memory_utilization: 0.92
   default_max_model_len: 32768
   default_port: 8000
-  engine_manager_mode: subprocess
+  engine_manager_mode: systemd
   env_vars:
     CUDA_MANAGED_FORCE_DEVICE_ALLOC: '1'
     FLASHINFER_DISABLE: '1'
@@ -445,4 +445,4 @@ vllm:
   model_base_path: /mnt/pve_models
   service_name: vllm-aiclient
   start_script: /root/ai-os/app-controller/scripts/start_vllm_aiclient.sh
-  venv_path: /root/ai-os/venvs/vllm
+  venv_path: /root/ai-suite/vllm_env
