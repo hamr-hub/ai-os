@@ -85,7 +85,7 @@ export async function handleInjectScript(method, urlPath, req, res) {
     if (method !== 'GET' || urlPath !== '/plugins/ai-os-manager/inject.js') return false;
     try {
         const script = await fs.readFile(pathModule.join(pluginDir, 'inject.js'), 'utf8');
-        res.writeHead(200, { 'Content-Type': 'application/javascript', 'Access-Control-Allow-Origin': '*' });
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
         res.end(script);
         return true;
     } catch (error) {
