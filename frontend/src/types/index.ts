@@ -527,6 +527,7 @@ export interface VLLMDefaultConfig {
   max_num_seqs: number
   max_num_batched_tokens: number
   tensor_parallel_size: number
+  version?: number
 }
 
 export interface VLLMConfigUpdateRequest {
@@ -795,6 +796,7 @@ export interface SystemConfig {
   log_level: string
   gpu_poll_interval_seconds: number
   ws_push_interval_seconds: number
+  version?: number
 }
 
 export interface GoHealthDetail {

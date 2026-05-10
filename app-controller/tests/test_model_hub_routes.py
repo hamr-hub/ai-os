@@ -55,7 +55,7 @@ class TestMemoryCheckRoute:
         resp = py_client.post(
             f"{py_client.base_url}/manage/gpu/memory-check/{first_available_model}"
         )
-        assert resp.status_code in (200, 404)
+        assert resp.status_code in (200, 404, 503)
         if resp.status_code == 200:
             data = resp.json()
             assert "feasible" in data

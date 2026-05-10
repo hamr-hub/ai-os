@@ -157,6 +157,11 @@ const handleCancelDownload = (taskId: string) => {
   listDownloads()
 }
 
+const handleRetryDownload = (task: { model_name: string; source: string }) => {
+  startDownload(task.model_name, task.source)
+  startPolling()
+}
+
 const formatSize = (bytes: number | null) => {
   if (!bytes) return '--'
   if (bytes > 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB'
@@ -341,6 +346,13 @@ const sourceIcon = (source: string) => {
                 @click="handleCancelDownload(task.task_id)"
               >
                 取消
+              </button>
+              <button
+                v-if="task.status === 'failed'"
+                class="btn btn-sm btn-primary"
+                @click="handleRetryDownload(task)"
+              >
+                <RefreshCw class="w-3.5 h-3.5" /> 重试
               </button>
               <button
                 v-if="task.status === 'completed'"

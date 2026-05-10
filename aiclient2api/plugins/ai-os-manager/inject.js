@@ -2,15 +2,64 @@
     const CSS_LINK = '<link rel="stylesheet" href="/plugins/ai-os-manager/styles.css">';
     const TOAST_CONTAINER = '<div class="aios-toast-container" id="aios-toast-container"></div>';
 
+    function showTokenModal() {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'aios-p-modal-overlay';
+
+            const modal = document.createElement('div');
+            modal.className = 'aios-p-modal';
+
+            const header = document.createElement('div');
+            header.className = 'aios-p-modal-header';
+            header.textContent = '管理员验证:';
+
+            const input = document.createElement('input');
+            input.className = 'aios-p-input';
+            input.type = 'password';
+            input.placeholder = '请输入 Admin Token';
+            input.style.width = '100%';
+
+            const actions = document.createElement('div');
+            actions.className = 'aios-p-modal-actions';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'aios-p-btn';
+            cancelBtn.textContent = '取消';
+
+            const submitBtn = document.createElement('button');
+            submitBtn.className = 'aios-p-btn aios-p-btn-primary';
+            submitBtn.textContent = '确认';
+
+            actions.appendChild(cancelBtn);
+            actions.appendChild(submitBtn);
+            modal.appendChild(header);
+            modal.appendChild(input);
+            modal.appendChild(actions);
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            input.focus();
+            const cleanup = (value) => { overlay.remove(); resolve(value); };
+            cancelBtn.onclick = () => cleanup(null);
+            submitBtn.onclick = () => cleanup(input.value || null);
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') cleanup(input.value || null);
+                if (e.key === 'Escape') cleanup(null);
+            };
+        });
+    }
+
     function adminFetch(url, options = {}) {
         const token = localStorage.getItem('aios_admin_token') || '';
         const headers = { 'Content-Type': 'application/json', ...options.headers };
         if (token) headers['X-Admin-Token'] = token;
         return fetch(url, { ...options, headers }).then(r => {
             if (r.status === 401) {
-                const newToken = prompt('请输入 Admin Token:');
-                if (newToken) { localStorage.setItem('aios_admin_token', newToken); return adminFetch(url, options); }
-                throw new Error('Unauthorized');
+                return showTokenModal().then(newToken => {
+                    if (newToken) { localStorage.setItem('aios_admin_token', newToken); return adminFetch(url, options); }
+                    throw new Error('Unauthorized');
+                });
             }
             return r.json();
         });
@@ -27,15 +76,15 @@
     }
 
     function loadingHTML(text = '加载中...') {
-        return `<div class="aios-loading">${text}</div>`;
+        return `<div class="aios-p-loading">${text}</div>`;
     }
 
     function emptyHTML(text = '暂无数据') {
-        return `<div class="aios-empty"><i class="fas fa-inbox"></i><span>${text}</span></div>`;
+        return `<div class="aios-p-empty"><i class="fas fa-inbox"></i><span>${text}</span></div>`;
     }
 
     function errorHTML(msg) {
-        return `<div class="aios-error">${msg}</div>`;
+        return `<div class="aios-p-error">${msg}</div>`;
     }
 
     function formatBytes(bytes) {
@@ -44,6 +93,21 @@
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatNumber(value, digits = 2) {
+        if (value === null || value === undefined || value === '') return '-';
+        const num = Number(value);
+        return Number.isFinite(num) ? num.toFixed(digits) : String(value);
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     function engineDisplayName(type) {
@@ -94,17 +158,17 @@
     <div class="section-header">
         <h2><i class="fas fa-microchip"></i> GPU 监控</h2>
         <div class="section-actions">
-            <button class="aios-btn aios-btn-sm" onclick="AiosManager.gpu.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+            <button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.gpu.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
         </div>
     </div>
-    <div class="aios-stats-grid" id="aios-gpu-stats">${loadingHTML()}</div>
-    <div class="aios-card aios-chart-card" style="margin-top:var(--space-lg);">
-        <div class="aios-card-header"><h3><i class="fas fa-chart-area"></i> GPU 历史趋势</h3></div>
-        <div class="aios-card-content"><canvas id="aios-gpu-chart" style="height:80px;"></canvas></div>
+    <div class="aios-p-stats-grid" id="aios-gpu-stats">${loadingHTML()}</div>
+    <div class="aios-p-card aios-p-chart-card" style="margin-top:var(--space-lg);">
+        <div class="aios-p-card-header"><h3><i class="fas fa-chart-area"></i> GPU 历史趋势</h3></div>
+        <div class="aios-p-card-content"><canvas id="aios-gpu-chart" style="height:80px;"></canvas></div>
     </div>
-    <div class="aios-card aios-status-card" style="margin-top:var(--space-lg);">
-        <div class="aios-card-header"><h3><i class="fas fa-bolt"></i> 引擎状态</h3></div>
-        <div class="aios-card-content" id="aios-engine-status">${loadingHTML()}</div>
+    <div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-lg);">
+        <div class="aios-p-card-header"><h3><i class="fas fa-bolt"></i> 引擎状态</h3></div>
+        <div class="aios-p-card-content" id="aios-engine-status">${loadingHTML()}</div>
     </div>
 </div>`;
 
@@ -113,61 +177,140 @@
     <div class="section-header">
         <h2><i class="fas fa-cubes"></i> 模型管理</h2>
         <div class="section-actions">
-            <button class="aios-btn aios-btn-sm" onclick="AiosManager.model.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+            <button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.model.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
         </div>
     </div>
-    <div class="aios-status-banner" id="aios-model-banner">${loadingHTML()}</div>
-    <div id="aios-switching-banner" style="margin-bottom:var(--space-lg);"></div>
-    <div class="aios-card aios-action-card">
-        <div class="aios-card-header"><h3><i class="fas fa-exchange-alt"></i> 快速切换</h3></div>
-        <div class="aios-card-content">
-            <div class="aios-form-grid">
-                <div class="aios-form-group">
+    <div class="aios-p-status-banner" id="aios-model-banner">${loadingHTML()}</div>
+    <div id="aios-p-switching-banner" style="margin-bottom:var(--space-lg);"></div>
+    <div class="aios-p-card aios-p-action-card">
+        <div class="aios-p-card-header"><h3><i class="fas fa-exchange-alt"></i> 快速切换</h3></div>
+        <div class="aios-p-card-content">
+            <div class="aios-p-form-grid">
+                <div class="aios-p-form-group">
                     <label>模型</label>
-                    <select id="aios-switch-model" class="aios-input aios-select"></select>
+                    <select id="aios-switch-model" class="aios-p-input aios-p-select"></select>
                 </div>
-                <div class="aios-form-group">
+                <div class="aios-p-form-group">
                     <label>引擎</label>
-                    <select id="aios-switch-engine" class="aios-input aios-select">
+                    <select id="aios-switch-engine" class="aios-p-input aios-p-select">
                         <option value="vllm">vLLM</option>
                         <option value="sglang">SGLang</option>
                         <option value="llamacpp">llama.cpp</option>
                     </select>
                 </div>
-                <div class="aios-form-group">
+                <div class="aios-p-form-group">
                     <label>端口</label>
-                    <input id="aios-switch-port" class="aios-input" type="number" placeholder="自动(8000)">
+                    <input id="aios-switch-port" class="aios-p-input" type="number" placeholder="自动(8000)">
                 </div>
-                <div class="aios-form-actions">
-                    <button class="aios-btn aios-btn-primary" onclick="AiosManager.model.switchModel()"><i class="fas fa-play"></i> 切换</button>
+                <div class="aios-p-form-actions">
+                    <button class="aios-p-btn aios-p-btn-primary" onclick="AiosManager.model.switchModel()"><i class="fas fa-play"></i> 切换</button>
                 </div>
             </div>
             <div id="aios-switch-status" style="margin-top:var(--space-md);"></div>
         </div>
     </div>
-    <div class="aios-models-shell" style="margin-top:var(--space-lg);">
+    <div class="aios-p-models-shell" style="margin-top:var(--space-lg);">
         <div id="aios-model-list">${loadingHTML()}</div>
     </div>
-    <div class="aios-card aios-action-card" style="margin-top:var(--space-lg);">
-        <div class="aios-card-header"><h3><i class="fas fa-download"></i> 模型下载</h3></div>
-        <div class="aios-card-content">
-            <div class="aios-form-grid">
-                <div class="aios-form-group" style="flex:2;">
+    <div class="aios-p-card aios-p-action-card" style="margin-top:var(--space-lg);">
+        <div class="aios-p-card-header"><h3><i class="fas fa-download"></i> 模型下载</h3></div>
+        <div class="aios-p-card-content">
+            <div class="aios-p-form-grid">
+                <div class="aios-p-form-group" style="flex:2;">
                     <label>模型ID (HuggingFace / ModelScope)</label>
-                    <input id="aios-download-model-name" class="aios-input" placeholder="如: Qwen/Qwen2.5-7B-Instruct" style="width:100%;">
+                    <input id="aios-download-model-name" class="aios-p-input" placeholder="如: Qwen/Qwen2.5-7B-Instruct" style="width:100%;">
                 </div>
-                <div class="aios-form-group">
+                <div class="aios-p-form-group">
                     <label>来源</label>
-                    <select id="aios-download-source" class="aios-input aios-select">
+                    <select id="aios-download-source" class="aios-p-input aios-p-select">
                         <option value="hf">HuggingFace</option>
                         <option value="ms">ModelScope</option>
                     </select>
                 </div>
-                <div class="aios-form-actions">
-                    <button class="aios-btn aios-btn-primary" onclick="AiosManager.model.download()"><i class="fas fa-cloud-download-alt"></i> 下载</button>
+                <div class="aios-p-form-actions">
+                    <button class="aios-p-btn aios-p-btn-primary" onclick="AiosManager.model.download()"><i class="fas fa-cloud-download-alt"></i> 下载</button>
                 </div>
             </div>
             <div id="aios-download-tasks" style="margin-top:var(--space-lg);"></div>
+        </div>
+    </div>
+</div>`;
+
+    const HEALTH_HTML = `
+<div class="section" id="section-aios-health" style="display:none;">
+    <div class="section-header">
+        <h2><i class="fas fa-heartbeat"></i> 健康运维</h2>
+        <div class="section-actions">
+            <button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.health.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+        </div>
+    </div>
+    <div class="aios-p-status-banner" id="aios-health-banner">${loadingHTML()}</div>
+    <div class="aios-p-card" style="margin-top:var(--space-lg);">
+        <div class="aios-p-card-header"><h3><i class="fas fa-stethoscope"></i> 详细检查</h3></div>
+        <div class="aios-p-card-content" id="aios-health-details">${loadingHTML()}</div>
+    </div>
+    <div class="aios-p-card" style="margin-top:var(--space-lg);">
+        <div class="aios-p-card-header"><h3><i class="fas fa-history"></i> 历史摘要</h3></div>
+        <div class="aios-p-card-content" id="aios-health-history">${loadingHTML()}</div>
+    </div>
+</div>`;
+
+    const RATELIMIT_HTML = `
+<div class="section" id="section-aios-ratelimit" style="display:none;">
+    <div class="section-header">
+        <h2><i class="fas fa-tachometer-alt"></i> 限流控制</h2>
+        <div class="section-actions">
+            <button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.ratelimit.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+            <button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" onclick="AiosManager.ratelimit.save()"><i class="fas fa-save"></i> 保存</button>
+        </div>
+    </div>
+    <div class="aios-p-stats-grid" id="aios-ratelimit-stats">${loadingHTML()}</div>
+    <div class="aios-p-card" style="margin-top:var(--space-lg);">
+        <div class="aios-p-card-header"><h3><i class="fas fa-sliders-h"></i> 限流配置</h3></div>
+        <div class="aios-p-card-content">
+            <div class="aios-p-form-grid">
+                <div class="aios-p-form-group">
+                    <label>IP QPS 限制</label>
+                    <input id="aios-rl-ip-limit" class="aios-p-input" type="number" min="0">
+                </div>
+                <div class="aios-p-form-group">
+                    <label>统计窗口(秒)</label>
+                    <input id="aios-rl-window" class="aios-p-input" type="number" min="1">
+                </div>
+                <div class="aios-p-form-group">
+                    <label>并发上限</label>
+                    <input id="aios-rl-concurrency" class="aios-p-input" type="number" min="1">
+                </div>
+                <div class="aios-p-form-group">
+                    <label>排队超时(秒)</label>
+                    <input id="aios-rl-timeout" class="aios-p-input" type="number" min="1">
+                </div>
+                <div class="aios-p-form-group" style="flex:1 1 100%;">
+                    <label>白名单 IP（逗号分隔）</label>
+                    <input id="aios-rl-whitelist" class="aios-p-input" type="text" placeholder="127.0.0.1,localhost">
+                </div>
+                <div class="aios-p-form-group" style="flex:1 1 100%;">
+                    <label>限流路径（逗号分隔）</label>
+                    <input id="aios-rl-paths" class="aios-p-input" type="text" placeholder="/v1/chat/completions,/v1/embeddings">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>`;
+
+    const CONFIG_HTML = `
+<div class="section" id="section-aios-config" style="display:none;">
+    <div class="section-header">
+        <h2><i class="fas fa-cog"></i> 配置中心</h2>
+        <div class="section-actions">
+            <button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.config.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+            <button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" onclick="AiosManager.config.save()"><i class="fas fa-save"></i> 保存</button>
+        </div>
+    </div>
+    <div class="aios-p-card">
+        <div class="aios-p-card-header"><h3><i class="fas fa-file-code"></i> 当前配置</h3></div>
+        <div class="aios-p-card-content">
+            <textarea id="aios-config-editor" class="aios-p-input" style="min-height:360px;font-family:Menlo,monospace;resize:vertical;"></textarea>
         </div>
     </div>
 </div>`;
@@ -198,6 +341,9 @@
         const menuItems = [
             '<a class="nav-item" id="nav-aios-gpu" href="#" onclick="return false;"><i class="fas fa-microchip"></i> GPU监控</a>',
             '<a class="nav-item" id="nav-aios-model" href="#" onclick="return false;"><i class="fas fa-cubes"></i> 模型管理</a>',
+            '<a class="nav-item" id="nav-aios-health" href="#" onclick="return false;"><i class="fas fa-heartbeat"></i> 健康运维</a>',
+            '<a class="nav-item" id="nav-aios-ratelimit" href="#" onclick="return false;"><i class="fas fa-tachometer-alt"></i> 限流控制</a>',
+            '<a class="nav-item" id="nav-aios-config" href="#" onclick="return false;"><i class="fas fa-cog"></i> 配置中心</a>',
         ];
         const menuHTML = dividerHTML + menuItems.join('');
         if (divider) {
@@ -205,13 +351,28 @@
         } else {
             navContainer.insertAdjacentHTML('beforeend', menuHTML);
         }
-        contentContainer.insertAdjacentHTML('beforeend', GPU_HTML);
-        contentContainer.insertAdjacentHTML('beforeend', MODEL_HTML);
+        const aiosScope = document.createElement('div');
+        aiosScope.className = 'aios-p-scope';
+        contentContainer.appendChild(aiosScope);
+        aiosScope.insertAdjacentHTML('beforeend', GPU_HTML);
+        aiosScope.insertAdjacentHTML('beforeend', MODEL_HTML);
+        aiosScope.insertAdjacentHTML('beforeend', HEALTH_HTML);
+        aiosScope.insertAdjacentHTML('beforeend', RATELIMIT_HTML);
+        aiosScope.insertAdjacentHTML('beforeend', CONFIG_HTML);
         document.getElementById('nav-aios-gpu').addEventListener('click', (e) => {
             e.preventDefault(); showSection('aios-gpu'); AiosManager.gpu.refresh();
         });
         document.getElementById('nav-aios-model').addEventListener('click', (e) => {
             e.preventDefault(); showSection('aios-model'); AiosManager.model.refresh();
+        });
+        document.getElementById('nav-aios-health').addEventListener('click', (e) => {
+            e.preventDefault(); showSection('aios-health'); AiosManager.health.refresh();
+        });
+        document.getElementById('nav-aios-ratelimit').addEventListener('click', (e) => {
+            e.preventDefault(); showSection('aios-ratelimit'); AiosManager.ratelimit.refresh();
+        });
+        document.getElementById('nav-aios-config').addEventListener('click', (e) => {
+            e.preventDefault(); showSection('aios-config'); AiosManager.config.refresh();
         });
         AiosManager.gpu.refresh();
     }
@@ -262,8 +423,8 @@
                     { icon: 'fa-plug', label: '功耗', value: `${power}W` },
                 ];
                 document.getElementById('aios-gpu-stats').innerHTML = cards.map(c => {
-                    const prog = c.progress != null ? `<div class="aios-progress-bar"><div class="aios-progress-fill aios-${c.ptype}" style="width:${Math.min(c.progress, 100)}%"></div></div>` : '';
-                    return `<div class="aios-stat-card"><div class="aios-stat-icon"><i class="fas ${c.icon}"></i></div><div class="aios-stat-body"><div class="aios-stat-label">${c.label}</div><div class="aios-stat-value">${c.value}</div>${prog}</div></div>`;
+                    const prog = c.progress != null ? `<div class="aios-p-progress-bar"><div class="aios-p-progress-fill aios-${c.ptype}" style="width:${Math.min(c.progress, 100)}%"></div></div>` : '';
+                    return `<div class="aios-p-stat-card"><div class="aios-p-stat-icon"><i class="fas ${c.icon}"></i></div><div class="aios-p-stat-body"><div class="aios-p-stat-label">${c.label}</div><div class="aios-p-stat-value">${c.value}</div>${prog}</div></div>`;
                 }).join('');
             },
             renderEngineStatus(data) {
@@ -286,18 +447,18 @@
                     const pid = s.pid ?? null;
                     return { engineType, status, running, svcName, model, port, uptime, health, pid };
                 });
-                const html = `<div class="aios-engine-grid">${engines.map(e => `
-                    <div class="aios-engine-card ${e.running ? 'aios-engine-running' : (e.status === 'not_found' ? 'aios-engine-stopped' : 'aios-engine-stopped')}" onclick="AiosManager.gpu.switchEngine('${e.engineType}')">
-                        <div class="aios-engine-header">
-                            <div class="aios-engine-icon"><i class="fas fa-bolt"></i></div>
-                            <div class="aios-engine-title">${engineDisplayName(e.engineType)}</div>
+                const html = `<div class="aios-p-engine-grid">${engines.map(e => `
+                    <div class="aios-p-engine-card ${e.running ? 'aios-p-engine-running' : (e.status === 'not_found' ? 'aios-p-engine-stopped' : 'aios-p-engine-stopped')}" onclick="AiosManager.gpu.switchEngine('${e.engineType}')">
+                        <div class="aios-p-engine-header">
+                            <div class="aios-p-engine-icon"><i class="fas fa-bolt"></i></div>
+                            <div class="aios-p-engine-title">${engineDisplayName(e.engineType)}</div>
                         </div>
-                        <div class="aios-engine-status-text ${e.running ? 'aios-engine-running-text' : 'aios-engine-stopped-text'}">
+                        <div class="aios-p-engine-status-text ${e.running ? 'aios-p-engine-running-text' : 'aios-p-engine-stopped-text'}">
                             ${e.running ? '运行中' : (e.status === 'not_found' ? '未安装' : '已停止')}
                         </div>
-                        ${e.running ? `<div class="aios-engine-info"><div>模型: ${e.model}</div><div>端口: ${e.port}</div>${e.uptime !== '-' ? `<div>运行: ${e.uptime}</div>` : ''}${e.pid ? `<div>PID: ${e.pid}</div>` : ''}</div>` : ''}
+                        ${e.running ? `<div class="aios-p-engine-info"><div>模型: ${e.model}</div><div>端口: ${e.port}</div>${e.uptime !== '-' ? `<div>运行: ${e.uptime}</div>` : ''}${e.pid ? `<div>PID: ${e.pid}</div>` : ''}</div>` : ''}
                         <div style="margin-top:auto;padding-top:var(--space-sm);">
-                            <button class="aios-btn aios-btn-sm ${e.running ? 'aios-btn-success' : ''}" style="width:100%;">
+                            <button class="aios-p-btn aios-p-btn-sm ${e.running ? 'aios-p-btn-success' : ''}" style="width:100%;">
                                 <i class="fas ${e.running ? 'fa-check-circle' : 'fa-play'}"></i> ${e.running ? '当前引擎' : '切换到此引擎'}
                             </button>
                         </div>
@@ -391,34 +552,33 @@
                 const modelDisplay = currentModel || '-';
                 const engineDisplay = engineDisplayName(currentEngine);
                 document.getElementById('aios-model-banner').innerHTML = `
-                    <div class="aios-banner-title">当前运行状态</div>
-                    <div class="aios-banner-cards">
-                        <div class="aios-banner-item"><div class="aios-banner-icon"><i class="fas fa-bolt"></i></div><div class="aios-banner-info"><div class="aios-banner-label">引擎</div><div class="aios-banner-value aios-value-active">${engineDisplay}</div></div></div>
-                        <div class="aios-banner-item"><div class="aios-banner-icon"><i class="fas fa-cube"></i></div><div class="aios-banner-info"><div class="aios-banner-label">模型</div><div class="aios-banner-value aios-value-active">${modelDisplay}</div></div></div>
-                        <div class="aios-banner-item"><div class="aios-banner-icon"><i class="fas fa-hashtag"></i></div><div class="aios-banner-info"><div class="aios-banner-label">端口</div><div class="aios-banner-value">${currentPort}</div></div></div>
+                    <div class="aios-p-banner-title">当前运行状态</div>
+                    <div class="aios-p-banner-cards">
+                        <div class="aios-p-banner-item"><div class="aios-p-banner-icon"><i class="fas fa-bolt"></i></div><div class="aios-p-banner-info"><div class="aios-p-banner-label">引擎</div><div class="aios-p-banner-value aios-p-value-active">${engineDisplay}</div></div></div>
+                        <div class="aios-p-banner-item"><div class="aios-p-banner-icon"><i class="fas fa-cube"></i></div><div class="aios-p-banner-info"><div class="aios-p-banner-label">模型</div><div class="aios-p-banner-value aios-p-value-active">${modelDisplay}</div></div></div>
+                        <div class="aios-p-banner-item"><div class="aios-p-banner-icon"><i class="fas fa-hashtag"></i></div><div class="aios-p-banner-info"><div class="aios-p-banner-label">端口</div><div class="aios-p-banner-value">${currentPort}</div></div></div>
                     </div>`;
             },
             renderSwitchingStatus(switchData) {
                 const data = switchData.data || switchData;
-                const el = document.getElementById('aios-switching-banner');
+                const el = document.getElementById('aios-p-switching-banner');
                 if (!el) return;
                 const isSwitching = data.is_switching ?? false;
                 const session = data.session || null;
                 if (isSwitching && session) {
-                    const phase = session.overall_phase || 'unknown';
                     const progress = session.overall_progress ?? 0;
                     const target = session.target_model || '-';
                     const phasesHtml = (session.phases || []).map(p => {
                         const statusIcon = p.status === 'running' ? 'fa-spinner fa-spin' : p.status === 'success' ? 'fa-check' : p.status === 'failed' ? 'fa-times' : 'fa-clock';
                         return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><i class="fas ${statusIcon}" style="width:16px;"></i><span style="font-size:12px;color:var(--text-secondary);">${p.name}</span></div>`;
                     }).join('');
-                    el.innerHTML = `<div class="aios-status-banner" style="border-color:rgba(var(--color-warning-rgb),0.3);">
-                        <div class="aios-banner-title" style="color:var(--color-warning);">正在${session.action === 'switch' ? '切换' : session.action === 'start' ? '启动' : '停止'}模型</div>
+                    el.innerHTML = `<div class="aios-p-status-banner" style="border-color:rgba(var(--color-warning-rgb),0.3);">
+                        <div class="aios-p-banner-title" style="color:var(--color-warning);">正在${session.action === 'switch' ? '切换' : session.action === 'start' ? '启动' : '停止'}模型</div>
                         <div style="display:flex;align-items:center;gap:var(--space-lg);">
                             <div style="flex:1;"><div style="font-size:14px;font-weight:600;color:var(--text-primary);">${target}</div><div style="margin-top:8px;">${phasesHtml}</div></div>
-                            <div style="width:100px;"><div class="aios-progress-bar" style="height:8px;"><div class="aios-progress-fill aios-warning" style="width:${progress}%"></div></div><div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px;">${progress}%</div></div>
+                            <div style="width:100px;"><div class="aios-p-progress-bar" style="height:8px;"><div class="aios-p-progress-fill aios-p-warning" style="width:${progress}%"></div></div><div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px;">${progress}%</div></div>
                         </div>
-                        <div style="margin-top:var(--space-md);"><button class="aios-btn aios-btn-sm aios-btn-danger" onclick="AiosManager.model.cancelSwitch()"><i class="fas fa-times"></i> 取消</button></div>
+                        <div style="margin-top:var(--space-md);"><button class="aios-p-btn aios-p-btn-sm aios-p-btn-danger" onclick="AiosManager.model.cancelSwitch()"><i class="fas fa-times"></i> 取消</button></div>
                     </div>`;
                 } else {
                     el.innerHTML = '';
@@ -454,23 +614,23 @@
                     document.getElementById('aios-model-list').innerHTML = emptyHTML('暂无模型，请通过模型下载添加');
                     return;
                 }
-                const html = `<div class="aios-models-list">${groups.map(g => {
+                const html = `<div class="aios-p-models-list">${groups.map(g => {
                     const variants = g.variants || [];
                     const groupName = g.base_name;
                     const runningCount = variants.filter(v => v.running || v.is_current).length;
                     const totalSize = g.total_size_mb ? `${(g.total_size_mb / 1024).toFixed(1)}GB` : '-';
-                    return `<div class="aios-model-group">
-                        <div class="aios-model-group-head">
-                            <div class="aios-model-group-title">
-                                <span class="aios-model-group-name">${groupName}</span>
-                                <span class="aios-model-group-count">${variants.length} 个变体</span>
+                    return `<div class="aios-p-model-group">
+                        <div class="aios-p-model-group-head">
+                            <div class="aios-p-model-group-title">
+                                <span class="aios-p-model-group-name">${groupName}</span>
+                                <span class="aios-p-model-group-count">${variants.length} 个变体</span>
                             </div>
-                            <div class="aios-model-group-stats">
-                                <span class="aios-model-group-stat">${runningCount > 0 ? `<span style="color:var(--color-success);">${runningCount} 运行</span>` : '未运行'}</span>
-                                <span class="aios-model-group-stat">总大小: ${totalSize}</span>
+                            <div class="aios-p-model-group-stats">
+                                <span class="aios-p-model-group-stat">${runningCount > 0 ? `<span style="color:var(--color-success);">${runningCount} 运行</span>` : '未运行'}</span>
+                                <span class="aios-p-model-group-stat">总大小: ${totalSize}</span>
                             </div>
                         </div>
-                        <div class="aios-model-grid">${variants.map(v => {
+                        <div class="aios-p-model-grid">${variants.map(v => {
                             const isRunning = v.running || false;
                             const isCurrent = v.is_current || false;
                             const vName = v.name || groupName;
@@ -480,28 +640,28 @@
                             const vReqMem = v.required_memory || '-';
                             const vPathExists = v.path_exists !== false;
                             const vMultimodal = v.multimodal || v.supports_images || false;
-                            return `<div class="aios-model-item ${isCurrent ? 'aios-current-model' : ''}">
-                                <div class="aios-model-header">
-                                    <div class="aios-model-title-wrap">
-                                        <div class="aios-model-name">${vName}</div>
-                                        <div class="aios-model-tags">
-                                            <span class="aios-model-status ${isRunning ? 'aios-running' : 'aios-stopped'}">${isRunning ? '运行中' : (vPathExists ? '已下载' : '未下载')}</span>
-                                            ${isCurrent ? '<span class="aios-badge aios-badge-primary">当前</span>' : ''}
-                                            <span class="aios-model-chip">${engineDisplayName(vEngine)}</span>
-                                            ${vMultimodal ? '<span class="aios-model-chip" style="background:rgba(var(--color-success-rgb),0.08);border-color:rgba(var(--color-success-rgb),0.18);color:var(--color-success);">多模态</span>' : ''}
+                            return `<div class="aios-p-model-item ${isCurrent ? 'aios-p-current-model' : ''}">
+                                <div class="aios-p-model-header">
+                                    <div class="aios-p-model-title-wrap">
+                                        <div class="aios-p-model-name">${vName}</div>
+                                        <div class="aios-p-model-tags">
+                                            <span class="aios-p-model-status ${isRunning ? 'aios-p-running' : 'aios-p-stopped'}">${isRunning ? '运行中' : (vPathExists ? '已下载' : '未下载')}</span>
+                                            ${isCurrent ? '<span class="aios-p-badge aios-p-badge-primary">当前</span>' : ''}
+                                            <span class="aios-p-model-chip">${engineDisplayName(vEngine)}</span>
+                                            ${vMultimodal ? '<span class="aios-p-model-chip" style="background:rgba(var(--color-success-rgb),0.08);border-color:rgba(var(--color-success-rgb),0.18);color:var(--color-success);">多模态</span>' : ''}
                                         </div>
                                     </div>
                                 </div>
-                                <div class="aios-model-info-grid">
-                                    <div class="aios-model-info-card"><div class="aios-model-info-label">端口</div><div class="aios-model-info-value">${vPort}</div></div>
-                                    <div class="aios-model-info-card"><div class="aios-model-info-label">大小</div><div class="aios-model-info-value">${vSize}</div></div>
-                                    <div class="aios-model-info-card"><div class="aios-model-info-label">需显存</div><div class="aios-model-info-value">${vReqMem}</div></div>
+                                <div class="aios-p-model-info-grid">
+                                    <div class="aios-p-model-info-card"><div class="aios-p-model-info-label">端口</div><div class="aios-p-model-info-value">${vPort}</div></div>
+                                    <div class="aios-p-model-info-card"><div class="aios-p-model-info-label">大小</div><div class="aios-p-model-info-value">${vSize}</div></div>
+                                    <div class="aios-p-model-info-card"><div class="aios-p-model-info-label">需显存</div><div class="aios-p-model-info-value">${vReqMem}</div></div>
                                 </div>
-                                <div class="aios-model-actions">
-                                    ${!vPathExists ? `<button class="aios-btn aios-btn-sm" onclick="AiosManager.model.downloadByName('${vName}')"><i class="fas fa-cloud-download-alt"></i> 下载</button>` : ''}
-                                    ${vPathExists && !isRunning ? `<button class="aios-btn aios-btn-sm aios-btn-success" onclick="AiosManager.model.start('${vName}')"><i class="fas fa-play"></i> 启动</button>` : ''}
-                                    ${isRunning && !isCurrent ? `<button class="aios-btn aios-btn-sm aios-btn-primary" onclick="AiosManager.model.switchTo('${vName}','${vEngine}')"><i class="fas fa-exchange-alt"></i> 切换</button>` : ''}
-                                    ${isRunning ? `<button class="aios-btn aios-btn-sm aios-btn-danger" onclick="AiosManager.model.stop('${vName}')"><i class="fas fa-stop"></i> 停止</button>` : ''}
+                                <div class="aios-p-model-actions">
+                                    ${!vPathExists ? `<button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.model.downloadByName('${vName}')"><i class="fas fa-cloud-download-alt"></i> 下载</button>` : ''}
+                                    ${vPathExists && !isRunning ? `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-success" onclick="AiosManager.model.start('${vName}')"><i class="fas fa-play"></i> 启动</button>` : ''}
+                                    ${isRunning && !isCurrent ? `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" onclick="AiosManager.model.switchTo('${vName}','${vEngine}')"><i class="fas fa-exchange-alt"></i> 切换</button>` : ''}
+                                    ${isRunning ? `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-danger" onclick="AiosManager.model.stop('${vName}')"><i class="fas fa-stop"></i> 停止</button>` : ''}
                                 </div>
                             </div>`;
                         }).join('')}</div>
@@ -663,19 +823,19 @@
                             ['failed', 'error'].includes(t.status) ? 'var(--color-danger)' :
                             ['pending', 'queued'].includes(t.status) ? 'var(--color-warning)' : 'var(--text-secondary)';
                         const progressBar = ['downloading', 'pending', 'retrying'].includes(t.status) ?
-                            `<div class="aios-progress-bar" style="height:6px;margin-top:6px;"><div class="aios-progress-fill aios-${pct > 80 ? 'success' : 'warning'}" style="width:${pct}%"></div></div>` : '';
+                            `<div class="aios-p-progress-bar" style="height:6px;margin-top:6px;"><div class="aios-p-progress-fill aios-${pct > 80 ? 'success' : 'warning'}" style="width:${pct}%"></div></div>` : '';
                         const actions = t.status === 'downloading' || t.status === 'pending' ?
-                            `<button class="aios-btn aios-btn-sm aios-btn-danger" onclick="AiosManager.model.cancelDownload('${t.task_id}')"><i class="fas fa-times"></i> 取消</button>` :
+                            `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-danger" onclick="AiosManager.model.cancelDownload('${t.task_id}')"><i class="fas fa-times"></i> 取消</button>` :
                             t.status === 'failed' ?
-                            `<button class="aios-btn aios-btn-sm aios-btn-primary" onclick="AiosManager.model.retryDownload('${t.task_id}')"><i class="fas fa-redo"></i> 重试</button>` : '';
-                        return `<div class="aios-banner-item" style="flex-wrap:wrap;">
-                            <div class="aios-banner-info" style="flex:2;min-width:200px;">
-                                <div class="aios-banner-label">${t.model_name || '-'} (${t.source || 'hf'})</div>
+                            `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" onclick="AiosManager.model.retryDownload('${t.task_id}')"><i class="fas fa-redo"></i> 重试</button>` : '';
+                        return `<div class="aios-p-banner-item" style="flex-wrap:wrap;">
+                            <div class="aios-p-banner-info" style="flex:2;min-width:200px;">
+                                <div class="aios-p-banner-label">${t.model_name || '-'} (${t.source || 'hf'})</div>
                                 <div style="font-size:12px;color:${statusColor};font-weight:600;">${statusText}${speed > 0 ? ` | ${speed}MB/s | ETA ${etaStr}` : ''}${t.downloaded_bytes ? ` | ${downloaded}/${total}` : ''}</div>
                                 ${progressBar}
                                 ${t.error_message ? `<div style="font-size:11px;color:var(--color-danger);margin-top:4px;">${t.error_message}</div>` : ''}
                             </div>
-                            <div class="aios-form-actions">${actions}</div>
+                            <div class="aios-p-form-actions">${actions}</div>
                         </div>`;
                     }).join('')}</div>`;
 
@@ -718,6 +878,159 @@
                 } catch (e) { showToast(`重试失败: ${e.message}`, 'error'); }
             },
         },
+        health: {
+            async refresh() {
+                try {
+                    const [alertData, detailData, historyData] = await Promise.all([
+                        adminFetch('/api/health'),
+                        adminFetch('/api/health/detailed'),
+                        adminFetch('/api/health/history')
+                    ]);
+                    this.renderBanner(alertData);
+                    this.renderDetails(detailData);
+                    this.renderHistory(historyData);
+                } catch (e) {
+                    document.getElementById('aios-health-banner').innerHTML = errorHTML(e.message);
+                    document.getElementById('aios-health-details').innerHTML = errorHTML(e.message);
+                    document.getElementById('aios-health-history').innerHTML = errorHTML(e.message);
+                }
+            },
+            renderBanner(data) {
+                const payload = data.data || data || {};
+                const status = payload.status || payload.scores?.status || 'unknown';
+                const score = payload.health_score ?? payload.scores?.overall ?? '-';
+                const currentModel = payload.current_model || payload.models?.current_model || '-';
+                const reasons = payload.alert_reasons || payload.scores?.alerts?.map(item => item.message).filter(Boolean) || [];
+                const scoreText = typeof score === 'number' ? `${score}` : score;
+                document.getElementById('aios-health-banner').innerHTML = `
+                    <div class="aios-p-banner-title">系统健康状态</div>
+                    <div class="aios-p-banner-cards">
+                        <div class="aios-p-banner-item"><div class="aios-p-banner-icon"><i class="fas fa-heartbeat"></i></div><div class="aios-p-banner-info"><div class="aios-p-banner-label">状态</div><div class="aios-p-banner-value aios-p-value-active">${escapeHtml(status)}</div></div></div>
+                        <div class="aios-p-banner-item"><div class="aios-p-banner-icon"><i class="fas fa-medal"></i></div><div class="aios-p-banner-info"><div class="aios-p-banner-label">健康分</div><div class="aios-p-banner-value">${escapeHtml(scoreText)}</div></div></div>
+                        <div class="aios-p-banner-item"><div class="aios-p-banner-icon"><i class="fas fa-cube"></i></div><div class="aios-p-banner-info"><div class="aios-p-banner-label">当前模型</div><div class="aios-p-banner-value">${escapeHtml(currentModel)}</div></div></div>
+                    </div>
+                    ${reasons.length ? `<div style="margin-top:var(--space-md);font-size:12px;color:var(--text-secondary);">${reasons.map(item => `<div>• ${escapeHtml(item)}</div>`).join('')}</div>` : ''}`;
+            },
+            renderDetails(data) {
+                const payload = data.data || data || {};
+                const checks = payload.checks || {};
+                const engines = payload.engines || {};
+                const models = payload.models || {};
+                const cards = [
+                    { label: 'GPU', value: checks.gpu?.available === false ? '不可用' : `${checks.gpu?.utilization ?? payload.gpu?.utilization ?? 0}%` },
+                    { label: 'Go后端', value: checks.go_backend?.reachable === false ? '异常' : '正常' },
+                    { label: 'Python后端', value: checks.python_backend?.reachable === false ? '异常' : '正常' },
+                    { label: 'Redis', value: checks.redis?.available === false || payload.redis === false ? '异常' : '正常' },
+                ];
+                const engineRows = Object.entries(engines).map(([name, value]) => `<tr><td>${escapeHtml(name)}</td><td>${value?.running ? '运行中' : '未运行'}</td><td>${escapeHtml(value?.port ?? '-')}</td></tr>`).join('');
+                const modelRows = Object.entries(models).map(([name, value]) => `<tr><td>${escapeHtml(name)}</td><td>${value?.running ? '运行中' : '未运行'}</td><td>${escapeHtml(value?.active_requests ?? '-')}</td></tr>`).join('');
+                document.getElementById('aios-health-details').innerHTML = `
+                    <div class="aios-p-stats-grid">${cards.map(card => `<div class="aios-p-stat-card"><div class="aios-p-stat-body"><div class="aios-p-stat-label">${card.label}</div><div class="aios-p-stat-value">${card.value}</div></div></div>`).join('')}</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--space-lg);margin-top:var(--space-lg);">
+                        <div>
+                            <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">引擎状态</div>
+                            ${engineRows ? `<table class="aios-p-table"><thead><tr><th>引擎</th><th>状态</th><th>端口</th></tr></thead><tbody>${engineRows}</tbody></table>` : emptyHTML('暂无引擎数据')}
+                        </div>
+                        <div>
+                            <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">模型状态</div>
+                            ${modelRows ? `<table class="aios-p-table"><thead><tr><th>模型</th><th>状态</th><th>请求数</th></tr></thead><tbody>${modelRows}</tbody></table>` : emptyHTML('暂无模型数据')}
+                        </div>
+                    </div>`;
+            },
+            renderHistory(data) {
+                const payload = data.data || data || [];
+                const list = Array.isArray(payload) ? payload.slice(0, 10) : [];
+                if (!list.length) {
+                    document.getElementById('aios-health-history').innerHTML = emptyHTML('暂无健康历史');
+                    return;
+                }
+                document.getElementById('aios-health-history').innerHTML = `<div style="display:flex;flex-direction:column;gap:var(--space-sm);">${list.map(item => {
+                    const score = item.health_score ?? item.score ?? item.scores?.overall ?? '-';
+                    const status = item.status || item.scores?.status || '-';
+                    const ts = item.timestamp || item.time || '-';
+                    return `<div class="aios-p-banner-item"><div class="aios-p-banner-info"><div class="aios-p-banner-label">${escapeHtml(ts)}</div><div style="font-size:12px;color:var(--text-secondary);">状态: ${escapeHtml(status)} · 分数: ${escapeHtml(score)}</div></div></div>`;
+                }).join('')}</div>`;
+            },
+        },
+        ratelimit: {
+            async refresh() {
+                try {
+                    const [configData, statsData] = await Promise.all([
+                        adminFetch('/api/ratelimit/config'),
+                        adminFetch('/api/ratelimit/stats')
+                    ]);
+                    this.renderStats(statsData);
+                    this.fillForm(configData.data || configData || {});
+                } catch (e) {
+                    document.getElementById('aios-ratelimit-stats').innerHTML = errorHTML(e.message);
+                }
+            },
+            renderStats(data) {
+                const payload = data.data || data || {};
+                const cards = [
+                    { label: '当前并发', value: payload.current_concurrency ?? payload.current_requests ?? 0 },
+                    { label: '队列长度', value: payload.queue_length ?? payload.waiting_requests ?? 0 },
+                    { label: '已限流请求', value: payload.rate_limited_requests ?? payload.rejected_requests ?? 0 },
+                    { label: '总请求数', value: payload.total_requests ?? '-' },
+                ];
+                document.getElementById('aios-ratelimit-stats').innerHTML = cards.map(card => `<div class="aios-p-stat-card"><div class="aios-p-stat-body"><div class="aios-p-stat-label">${card.label}</div><div class="aios-p-stat-value">${card.value}</div></div></div>`).join('');
+            },
+            fillForm(config) {
+                document.getElementById('aios-rl-ip-limit').value = config.ip_qps_limit ?? config.limit_per_window ?? 100;
+                document.getElementById('aios-rl-window').value = config.ip_qps_window_seconds ?? config.window_seconds ?? 60;
+                document.getElementById('aios-rl-concurrency').value = config.concurrency_limit ?? config.max_concurrency ?? 8;
+                document.getElementById('aios-rl-timeout').value = config.queue_timeout_seconds ?? config.wait_timeout_seconds ?? 30;
+                document.getElementById('aios-rl-whitelist').value = (config.whitelist_ips || []).join(',');
+                document.getElementById('aios-rl-paths').value = (config.rate_limited_paths || []).join(',');
+            },
+            async save() {
+                const payload = {
+                    ip_qps_limit: Number(document.getElementById('aios-rl-ip-limit').value || 100),
+                    ip_qps_window_seconds: Number(document.getElementById('aios-rl-window').value || 60),
+                    concurrency_limit: Number(document.getElementById('aios-rl-concurrency').value || 8),
+                    queue_timeout_seconds: Number(document.getElementById('aios-rl-timeout').value || 30),
+                    whitelist_ips: document.getElementById('aios-rl-whitelist').value.split(',').map(item => item.trim()).filter(Boolean),
+                    rate_limited_paths: document.getElementById('aios-rl-paths').value.split(',').map(item => item.trim()).filter(Boolean),
+                };
+                try {
+                    await adminFetch('/api/ratelimit/config', { method: 'PUT', body: JSON.stringify(payload) });
+                    showToast('限流配置已保存', 'success');
+                    this.refresh();
+                } catch (e) {
+                    showToast(`保存失败: ${e.message}`, 'error');
+                }
+            },
+        },
+        config: {
+            async refresh() {
+                try {
+                    const result = await adminFetch('/api/config');
+                    const payload = result.data || result || {};
+                    document.getElementById('aios-config-editor').value = JSON.stringify(payload, null, 2);
+                } catch (e) {
+                    document.getElementById('aios-config-editor').value = '';
+                    showToast(`加载配置失败: ${e.message}`, 'error');
+                }
+            },
+            async save() {
+                const editor = document.getElementById('aios-config-editor');
+                if (!editor) return;
+                let payload;
+                try {
+                    payload = JSON.parse(editor.value || '{}');
+                } catch (e) {
+                    showToast('配置 JSON 格式无效', 'warning');
+                    return;
+                }
+                try {
+                    await adminFetch('/api/config', { method: 'PUT', body: JSON.stringify(payload) });
+                    showToast('配置已保存', 'success');
+                    this.refresh();
+                } catch (e) {
+                    showToast(`保存失败: ${e.message}`, 'error');
+                }
+            },
+        },
     };
 
     let refreshTimer = null;
@@ -726,8 +1039,14 @@
         refreshTimer = setInterval(() => {
             const gpuVisible = document.getElementById('section-aios-gpu')?.style.display !== 'none';
             const modelVisible = document.getElementById('section-aios-model')?.style.display !== 'none';
+            const healthVisible = document.getElementById('section-aios-health')?.style.display !== 'none';
+            const rateLimitVisible = document.getElementById('section-aios-ratelimit')?.style.display !== 'none';
+            const configVisible = document.getElementById('section-aios-config')?.style.display !== 'none';
             if (gpuVisible) AiosManager.gpu.refresh();
             if (modelVisible) AiosManager.model.refresh();
+            if (healthVisible) AiosManager.health.refresh();
+            if (rateLimitVisible) AiosManager.ratelimit.refresh();
+            if (configVisible) AiosManager.config.refresh();
         }, 5000);
     }
 

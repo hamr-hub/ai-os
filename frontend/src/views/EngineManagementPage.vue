@@ -42,7 +42,9 @@ onUnmounted(() => {
     clearInterval(pollTimer)
     pollTimer = null
   }
-  triggerCancel()
+  if (isSwitching.value) {
+    triggerCancel()
+  }
 })
 
 const handleRefresh = () => {
@@ -53,11 +55,9 @@ const handleRefresh = () => {
 const handleSwitch = async () => {
   if (!targetModel.value) return
   showSwitchConfirm.value = false
-  const result = await doSwitchEngine(targetModel.value, targetEngine.value, targetPort.value)
-  if (result) {
-    triggerSwitch(targetModel.value, false, 'switch')
-    activeTab.value = 'switch'
-  }
+  triggerSwitch(targetModel.value, false, 'switch')
+  activeTab.value = 'switch'
+}
 }
 
 const engineList = computed(() => {

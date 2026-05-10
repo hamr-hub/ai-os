@@ -882,6 +882,44 @@ async def refresh_cache(endpoint: Optional[str] = None):
         return {"status": "all_refreshed"}
 
 
+async def verify_go_config_consistency(config: Dict[str, Any]) -> tuple:
+    """Verify config consistency with Go backend.
+
+    Returns:
+        (consistent: bool, message: str)
+    """
+    go_backend_url = os.getenv("GO_VLLM_API_URL", "http://localhost:35001")
+    verify_url = f"{go_backend_url}/manage/config/verify"
+
+    try:
+        import aiohttp
+        import json
+
+        payload = {
+            "version": config_watcher.get_version(),
+            "config": config
+        }
+
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(verify_url, json=payload) as resp:
+                result = await resp.json()
+
+                if resp.status == 200 and result.get("consistent"):
+                    return True, "Go config is consistent with Python config"
+                else:
+                    differences = result.get("differences", [])
+                    msg = f"Go config inconsistent: {'; '.join(differences)}"
+                    _logger.warning("Config consistency check failed: %s", msg)
+                    return False, msg
+    except ImportError:
+        _logger.warning("aiohttp not installed, skipping Go config consistency check")
+        return True, "Skipped (aiohttp not installed)"
+    except Exception as e:
+        _logger.warning("Failed to verify Go config consistency: %s", e)
+        return True, f"Skipped (connection error: {e})"
+
+
 @manage_router.get("/cache/stats")
 async def get_cache_stats():
     return cache_service.get_stats()
@@ -935,14 +973,19 @@ async def update_config(request: Request):
 
         if success:
             from core.deps import _on_config_changed
-            persisted_config = config_watcher.get_config()
+            persisted_config = config_watcher.get_version()
             _on_config_changed(persisted_config)
 
             operator = request.headers.get("X-Operator", "anonymous")
             config_watcher.log_operation(operator, "update", before_config, persisted_config)
 
+            go_consistent, go_message = await verify_go_config_consistency(persisted_config)
+
             persisted_config["version"] = config_watcher.get_version()
-            return {"status": "success", "message": "Configuration updated and persisted", "config": persisted_config, "version": config_watcher.get_version()}
+            result = {"status": "success", "message": "Configuration updated and persisted", "config": persisted_config, "version": config_watcher.get_version()}
+            if not go_consistent:
+                result["go_consistency"] = {"consistent": False, "message": go_message}
+            return result
         else:
             detail = config_watcher.get_last_error() or "Failed to persist configuration"
             raise HTTPException(status_code=400, detail=detail)

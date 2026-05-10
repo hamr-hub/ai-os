@@ -79,7 +79,7 @@ class ModelSwitchService {
         }
     }
 
-    async warmupModel(modelName) {
+    async warmupModel(modelName, options = {}) {
         try {
             const baseUrl = backendClient.getBaseUrl();
             const switchBody = {

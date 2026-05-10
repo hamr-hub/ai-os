@@ -65,6 +65,42 @@
     --aios-radius-xl: 18px;
     --aios-radius-2xl: 24px;
     --aios-radius-full: 9999px;
+
+    --color-primary: var(--aios-color-primary);
+    --color-primary-dark: var(--aios-color-primary-dark);
+    --color-primary-light: var(--aios-color-primary-light);
+    --color-primary-rgb: var(--aios-color-primary-rgb);
+    --color-success: var(--aios-color-success);
+    --color-success-dark: var(--aios-color-success-dark);
+    --color-success-rgb: var(--aios-color-success-rgb);
+    --color-warning: var(--aios-color-warning);
+    --color-warning-dark: var(--aios-color-warning-dark);
+    --color-warning-rgb: var(--aios-color-warning-rgb);
+    --color-danger: var(--aios-color-danger);
+    --color-danger-dark: var(--aios-color-danger-dark);
+    --color-danger-rgb: var(--aios-color-danger-rgb);
+    --color-info: var(--aios-color-info);
+    --color-info-rgb: var(--aios-color-info-rgb);
+    --text-primary: var(--aios-text-primary);
+    --text-secondary: var(--aios-text-secondary);
+    --text-muted: var(--aios-text-muted);
+    --text-disabled: var(--aios-text-disabled);
+    --bg-root: var(--aios-bg-root);
+    --bg-primary: var(--aios-bg-primary);
+    --bg-secondary: var(--aios-bg-secondary);
+    --bg-tertiary: var(--aios-bg-tertiary);
+    --bg-card: var(--aios-bg-card);
+    --bg-hover: var(--aios-bg-hover);
+    --bg-input: var(--aios-bg-input);
+    --border-primary: var(--aios-border-primary);
+    --border-card: var(--aios-border-card);
+    --border-hover: var(--aios-border-hover);
+    --space-xs: var(--aios-space-xs);
+    --space-sm: var(--aios-space-sm);
+    --space-md: var(--aios-space-md);
+    --space-lg: var(--aios-space-lg);
+    --space-xl: var(--aios-space-xl);
+    --space-2xl: var(--aios-space-2xl);
 }
 
 /* Section animations */
@@ -647,3 +683,13 @@
 @media (max-width: 480px) {
     .aios-p-scope .aios-p-stats-grid { grid-template-columns: 1fr; }
 }
+
+/* Non-prefix toast aliases (toast container is appended to body, outside aios-p-scope) */
+.aios-toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.aios-toast { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-radius: 8px; color: #fff; font-size: 13px; box-shadow: 0 12px 28px rgba(0,0,0,0.7); min-width: 250px; max-width: 420px; animation: aios-p-slide-in 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); pointer-events: auto; }
+.aios-toast-info { background: rgba(30, 64, 175, 0.9); }
+.aios-toast-success { background: rgba(20, 83, 45, 0.9); }
+.aios-toast-warning { background: rgba(120, 53, 15, 0.9); }
+.aios-toast-error { background: rgba(127, 29, 29, 0.9); }
+.aios-toast-close { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; padding: 0 4px; opacity: 0.6; line-height: 1; transition: opacity 0.15s; }
+.aios-toast-close:hover { opacity: 1; }

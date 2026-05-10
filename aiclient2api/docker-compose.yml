@@ -7,8 +7,8 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - GO_BACKEND_URL=http://192.168.7.103:35001
-      - PYTHON_BACKEND_URL=http://192.168.7.103:35000
+      - GO_BACKEND_URL=http://host.containers.internal:35001
+      - PYTHON_BACKEND_URL=http://host.containers.internal:35000
     networks:
       - default
       - go-vllm-api_default

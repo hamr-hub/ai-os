@@ -172,6 +172,7 @@ func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 		m.PUT("/config", h.UpdateConfig)
 		m.PUT("/config/global", h.UpdateConfig)
 		m.POST("/config/reload", h.ReloadConfig)
+		m.POST("/config/verify", h.VerifyConfigConsistency)
 		m.GET("/service/status", h.GetServiceStatus)
 		m.POST("/service/start", h.StartService)
 		m.POST("/service/stop", h.StopService)
@@ -881,6 +882,80 @@ func (h *ManageHandler) ReloadConfig(c *gin.Context) {
 	h.vllmManager.SetConfig(&cfg.VLLM)
 	h.llamaCppMgr.RegisterModelsFromConfig(cfg)
 	c.JSON(http.StatusOK, gin.H{"status": "reloaded", "models_count": len(cfg.Models)})
+}
+
+func (h *ManageHandler) VerifyConfigConsistency(c *gin.Context) {
+	var req struct {
+		Version       int                    `json:"version"`
+		ConfigPayload map[string]interface{} `json:"config"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	cfg, err := config.Load(h.configPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"consistent": false,
+			"error":      fmt.Sprintf("Failed to load Go config: %v", err),
+		})
+		return
+	}
+
+	currentModels := make(map[string]interface{})
+	for name, mc := range cfg.Models {
+		currentModels[name] = gin.H{
+			"service":         mc.Service,
+			"port":            mc.Port,
+			"required_memory": mc.RequiredMemory,
+			"preload":         mc.Preload,
+			"keep_alive":      mc.KeepAlive,
+		}
+	}
+
+	modelsConsistent := true
+	var differences []string
+
+	incomingModelsMap := req.ConfigPayload
+	if incomingModelsMap == nil {
+		incomingModelsMap = make(map[string]interface{})
+	}
+
+	for name, incomingData := range incomingModelsMap {
+		if currentData, exists := currentModels[name]; exists {
+			currentJSON, _ := json.Marshal(currentData)
+			incomingJSON, _ := json.Marshal(incomingData)
+			if !bytes.Equal(currentJSON, incomingJSON) {
+				differences = append(differences, fmt.Sprintf("Model %s differs", name))
+				modelsConsistent = false
+			}
+		} else {
+			differences = append(differences, fmt.Sprintf("Model %s exists in incoming but not in Go config", name))
+			modelsConsistent = false
+		}
+	}
+
+	for name := range currentModels {
+		if _, exists := incomingModelsMap[name]; !exists {
+			differences = append(differences, fmt.Sprintf("Model %s exists in Go config but not in incoming", name))
+			modelsConsistent = false
+		}
+	}
+
+	response := gin.H{
+		"consistent":       modelsConsistent,
+		"incoming_version": req.Version,
+		"models_count":     len(currentModels),
+		"differences":      differences,
+		"timestamp":        time.Now().Unix(),
+	}
+
+	if modelsConsistent {
+		c.JSON(http.StatusOK, response)
+	} else {
+		c.JSON(http.StatusConflict, response)
+	}
 }
 
 func (h *ManageHandler) GetServiceStatus(c *gin.Context) {

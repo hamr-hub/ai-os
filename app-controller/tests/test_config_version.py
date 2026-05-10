@@ -93,3 +93,23 @@ def test_log_operation_creates_log(watcher):
                     entry = json.loads(last_line)
                     assert entry["operator"] == "test_user"
                     assert entry["action"] == "update"
+
+
+@pytest.mark.asyncio
+async def test_verify_go_config_consistency_skipped(monkeypatch):
+    """Test that verify_go_config_consistency handles missing aiohttp gracefully."""
+    from routes.manage import verify_go_config_consistency
+
+    config = {"models": {"demo": {"service": "vllm", "port": 8000}}}
+
+    monkeypatch.setenv("GO_VLLM_API_URL", "http://localhost:35001")
+
+    try:
+        import aiohttp
+        consistent, message = await verify_go_config_consistency(config)
+        assert consistent is True
+        assert "Skipped" in message or "consistent" in message.lower()
+    except ImportError:
+        consistent, message = await verify_go_config_consistency(config)
+        assert consistent is True
+        assert "aiohttp not installed" in message
