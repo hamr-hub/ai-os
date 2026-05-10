@@ -25,16 +25,17 @@ export function useModels() {
   const switchingModel = ref<string | null>(null)
   const isRefreshing = ref(false)
   let refreshInterval: number | null = null
-  let fetchController: AbortController | null = null
+  let statusFetchController: AbortController | null = null
+  let aggregatedFetchController: AbortController | null = null
 
   const fetchModelStatus = async (manualRefresh = false) => {
-    if (fetchController) {
+    if (statusFetchController) {
       if (!manualRefresh) return
-      fetchController.abort()
+      statusFetchController.abort()
     }
 
     const controller = new AbortController()
-    fetchController = controller
+    statusFetchController = controller
 
     if (manualRefresh) {
       isRefreshing.value = true
@@ -56,8 +57,8 @@ export function useModels() {
         console.error('Failed to fetch model status:', err)
       }
     } finally {
-      if (fetchController === controller) {
-        fetchController = null
+      if (statusFetchController === controller) {
+        statusFetchController = null
         loading.value = false
         isRefreshing.value = false
       }
@@ -65,13 +66,13 @@ export function useModels() {
   }
 
   const fetchAggregatedModels = async (manualRefresh = false) => {
-    if (fetchController) {
+    if (aggregatedFetchController) {
       if (!manualRefresh) return
-      fetchController.abort()
+      aggregatedFetchController.abort()
     }
 
     const controller = new AbortController()
-    fetchController = controller
+    aggregatedFetchController = controller
 
     if (manualRefresh) {
       isRefreshing.value = true
@@ -93,8 +94,8 @@ export function useModels() {
         console.error('Failed to fetch aggregated models:', err)
       }
     } finally {
-      if (fetchController === controller) {
-        fetchController = null
+      if (aggregatedFetchController === controller) {
+        aggregatedFetchController = null
         loading.value = false
         isRefreshing.value = false
       }
@@ -231,9 +232,13 @@ export function useModels() {
       clearInterval(refreshInterval)
       refreshInterval = null
     }
-    if (fetchController) {
-      fetchController.abort()
-      fetchController = null
+    if (statusFetchController) {
+      statusFetchController.abort()
+      statusFetchController = null
+    }
+    if (aggregatedFetchController) {
+      aggregatedFetchController.abort()
+      aggregatedFetchController = null
     }
   }
 

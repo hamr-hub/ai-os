@@ -124,14 +124,28 @@ const aiMonitorPlugin = {
     _priority: 100,
 
     streamCache: new Map(),
+    _streamCleanupInterval: null,
 
     async init(config) {
         await statusService.init();
         await ensureInjectedStaticIndex();
+        this._streamCleanupInterval = setInterval(() => {
+            const now = Date.now();
+            for (const [key, entry] of this.streamCache) {
+                if (now - entry.createdAt > 30000) {
+                    this.streamCache.delete(key);
+                }
+            }
+        }, 60000);
         logger.info('[AI Monitor Plugin] v2.0 Initialized (with engine/model status panel)');
     },
 
     async destroy() {
+        if (this._streamCleanupInterval) {
+            clearInterval(this._streamCleanupInterval);
+            this._streamCleanupInterval = null;
+        }
+        this.streamCache.clear();
         await statusService.destroy();
         logger.info('[AI Monitor Plugin] Destroyed');
     },
@@ -222,7 +236,8 @@ const aiMonitorPlugin = {
                     nativeChunks: [],
                     convertedChunks: [],
                     fromProvider,
-                    toProvider
+                    toProvider,
+                    createdAt: Date.now()
                 });
             }
 

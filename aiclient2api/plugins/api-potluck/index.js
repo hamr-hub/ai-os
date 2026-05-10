@@ -38,6 +38,15 @@ import { handlePotluckApiRoutes, handlePotluckUserApiRoutes } from './api-routes
 
 const pendingUsage = new Map();
 
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of pendingUsage) {
+        if (now - entry.createdAt > 300000) {
+            pendingUsage.delete(key);
+        }
+    }
+}, 60000);
+
 function toNumber(value) {
     const num = Number(value);
     return Number.isFinite(num) ? num : 0;
@@ -249,18 +258,28 @@ const apiPotluckPlugin = {
     hooks: {
         async onUnaryResponse({ requestId, nativeResponse, clientResponse }) {
             if (!requestId) return;
+            const existing = pendingUsage.get(requestId);
             pendingUsage.set(requestId, mergeUsage(
-                pendingUsage.get(requestId) || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+                existing || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
                 extractUsage(nativeResponse, clientResponse)
             ));
+            if (!existing) {
+                const entry = pendingUsage.get(requestId);
+                if (entry) entry.createdAt = Date.now();
+            }
         },
 
         async onStreamChunk({ requestId, nativeChunk, chunkToSend }) {
             if (!requestId) return;
+            const existing = pendingUsage.get(requestId);
             pendingUsage.set(requestId, mergeUsage(
-                pendingUsage.get(requestId) || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+                existing || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
                 extractUsage(nativeChunk, chunkToSend)
             ));
+            if (!existing) {
+                const entry = pendingUsage.get(requestId);
+                if (entry) entry.createdAt = Date.now();
+            }
         },
 
         /**

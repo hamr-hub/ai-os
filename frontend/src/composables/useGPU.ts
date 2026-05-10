@@ -6,7 +6,15 @@ export function useGPU() {
   const store = useGPUStore()
 
   const isRefreshing = computed(() => store.loading)
-  const isAutoRefreshEnabled = computed(() => true)
+  const isAutoRefreshEnabled = computed(() => store.wsConnected || true)
+
+  const toggleAutoRefresh = () => {
+    if (store.wsConnected) {
+      store.stopPolling()
+    } else {
+      store.startPolling()
+    }
+  }
 
   const formatMemory = (bytes: number): string => formatBytes(bytes)
   const formatTimestamp = (timestamp: string): string => formatTimeLabel(timestamp)
@@ -33,7 +41,7 @@ export function useGPU() {
     refresh: store.refresh,
     startPolling: store.startPolling,
     stopPolling: store.stopPolling,
-    toggleAutoRefresh: () => {},
+    toggleAutoRefresh,
     formatMemory,
     formatTimestamp,
     formatPercentage,

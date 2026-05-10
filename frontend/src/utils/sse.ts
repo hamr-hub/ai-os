@@ -6,6 +6,7 @@ export interface SSEStreamOptions {
   onChunk: (data: string) => void
   onError?: (error: Error) => void
   doneSentinel?: string
+  headers?: Record<string, string>
 }
 
 export const DONE_SENTINEL = '[DONE]'
@@ -19,6 +20,7 @@ export async function readSSEStream(options: SSEStreamOptions): Promise<void> {
     onChunk,
     onError,
     doneSentinel = DONE_SENTINEL,
+    headers = {},
   } = options
 
   const controller = new AbortController()
@@ -36,7 +38,7 @@ export async function readSSEStream(options: SSEStreamOptions): Promise<void> {
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
       signal: controller.signal,
     })

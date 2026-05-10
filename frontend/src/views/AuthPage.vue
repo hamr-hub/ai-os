@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { useAuthStore } from '@/stores/auth'
 import {
   Shield,
   Loader2,
@@ -12,7 +11,6 @@ import {
 } from 'lucide-vue-next'
 
 const router = useRouter()
-const authStore = useAuthStore()
 const { isAuthenticated, loading, error, login, logout } = useAuth()
 
 const apiKey = ref('')
@@ -24,14 +22,12 @@ const handleLogin = async () => {
     if (!apiKey.value) return
     const success = await login(apiKey.value)
     if (success) {
-      authStore.setToken(apiKey.value)
       router.push({ name: 'dashboard' })
     }
   } else {
     if (!password.value) return
     const success = await login(password.value)
     if (success) {
-      authStore.setToken(password.value)
       router.push({ name: 'dashboard' })
     }
   }
@@ -39,7 +35,6 @@ const handleLogin = async () => {
 
 const handleLogout = () => {
   logout()
-  authStore.clearToken()
 }
 </script>
 
@@ -54,8 +49,7 @@ const handleLogout = () => {
       <div v-if="isAuthenticated" class="logged-in-section">
         <div class="user-info">
           <Key class="w-4 h-4" />
-          <span>已登录: {{ authStore.user }}</span>
-          <span class="token-hint">Token: {{ authStore.token.substring(0, 8) }}...</span>
+          <span>已登录</span>
         </div>
         <button class="btn btn-danger" @click="handleLogout">
           <LogOut class="w-4 h-4" /> 退出登录

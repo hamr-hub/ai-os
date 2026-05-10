@@ -15,6 +15,7 @@ const engineStatus = ref<EngineStatus | null>(null)
 const switching = ref(false)
 const error = ref<string | null>(null)
 const switchError = ref<string | null>(null)
+const confirmTarget = ref<EngineType | null>(null)
 
 const engineOptions: { key: EngineType; label: string; icon: string }[] = [
   { key: 'vllm', label: 'vLLM', icon: '⚡' },
@@ -37,6 +38,11 @@ const engineRunningInfo = computed(() => {
   }
 })
 
+const confirmTargetLabel = computed(() => {
+  const opt = engineOptions.find(o => o.key === confirmTarget.value)
+  return opt ? `${opt.icon} ${opt.label}` : ''
+})
+
 async function fetchStatus() {
   try {
     engineStatus.value = await getEngineStatus()
@@ -46,8 +52,19 @@ async function fetchStatus() {
   }
 }
 
-async function handleSwitch(target: EngineType) {
+function requestSwitch(target: EngineType) {
   if (switching.value || target === currentEngine.value) return
+  confirmTarget.value = target
+}
+
+function cancelSwitch() {
+  confirmTarget.value = null
+}
+
+async function handleSwitch() {
+  if (!confirmTarget.value) return
+  const target = confirmTarget.value
+  cancelSwitch()
   switching.value = true
   switchError.value = null
   try {
@@ -104,7 +121,7 @@ onUnmounted(() => {
           active: opt.key === currentEngine,
           running: engineStatus[opt.key]?.running,
         }"
-        @click="handleSwitch(opt.key)"
+        @click="requestSwitch(opt.key)"
       >
         <div class="engine-indicator">
           <span class="engine-emoji">{{ opt.icon }}</span>
@@ -130,7 +147,23 @@ onUnmounted(() => {
         <div class="engine-action">
           <CheckCircle v-if="opt.key === currentEngine" class="w-4 h-4 check-icon" />
           <Loader2 v-else-if="switching" class="w-3.5 h-3.5 animate-spin" />
-          <span v-else class="switch-arrow">→</span>
+          <span v-else class="switch-hint">切换</span>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="confirmTarget" class="confirm-overlay">
+      <div class="confirm-dialog">
+        <div class="confirm-header">
+          <AlertTriangle class="w-5 h-5" />
+          <span>确认引擎切换</span>
+        </div>
+        <p class="confirm-body">
+          切换到 <strong>{{ confirmTargetLabel }}</strong>？切换过程将中断当前服务。
+        </p>
+        <div class="confirm-actions">
+          <button class="confirm-btn primary" @click="handleSwitch">确认切换</button>
+          <button class="confirm-btn cancel" @click="cancelSwitch">取消</button>
         </div>
       </div>
     </div>
@@ -321,9 +354,18 @@ onUnmounted(() => {
   color: #22c55e;
 }
 
-.switch-arrow {
-  color: var(--text-secondary);
-  opacity: 0.5;
+.switch-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.engine-item:hover .switch-hint {
+  opacity: 1;
 }
 
 .switch-error {
@@ -355,5 +397,81 @@ onUnmounted(() => {
   margin-left: auto;
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.confirm-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 380px;
+  width: 90%;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.confirm-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fbbf24;
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.confirm-body {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.confirm-body strong {
+  color: var(--text-primary);
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.confirm-btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.confirm-btn.primary {
+  background: #6366f1;
+  color: white;
+}
+
+.confirm-btn.primary:hover {
+  background: #4f46e5;
+}
+
+.confirm-btn.cancel {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+}
+
+.confirm-btn.cancel:hover {
+  background: var(--bg-tertiary);
 }
 </style>

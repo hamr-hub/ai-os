@@ -42,6 +42,11 @@ import {
   Settings,
   X,
   Save,
+  Search,
+  Filter,
+  Maximize2,
+  Minimize2,
+  Info,
 } from 'lucide-vue-next'
 
 const {
@@ -81,10 +86,39 @@ const gpuInfo = ref<GPUSummary | null>(null)
 
 const expandedGroups = ref<Set<string>>(new Set())
 const selectedModelForConfig = ref<ModelVariant | null>(null)
+const selectedModelDetail = ref<ModelVariant | null>(null)
 const vllmConfigModal = ref(false)
+const modelDetailModal = ref(false)
 const vllmConfig = ref<VLLMConfig | null>(null)
 const configSaving = ref(false)
 const viewMode = ref<'list' | 'grouped'>('grouped')
+
+const searchQuery = ref('')
+const filterBackend = ref<'all' | 'vllm' | 'sglang' | 'llamacpp'>('all')
+const filterStatus = ref<'all' | 'running' | 'stopped'>('all')
+const filterSize = ref<'all' | 'small' | 'medium' | 'large' | 'xlarge'>('all')
+const showFilters = ref(false)
+const sortField = ref<'name' | 'size' | 'memory' | 'status'>('name')
+const sortOrder = ref<'asc' | 'desc'>('asc')
+const toastMessage = ref<string | null>(null)
+const toastType = ref<'success' | 'error' | 'info'>('info')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  toastMessage.value = message
+  toastType.value = type
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastMessage.value = null }, 3000)
+}
+
+const actionWithToast = async (action: () => Promise<void>, successMsg: string, errorMsg: string) => {
+  try {
+    await action()
+    showToast(successMsg, 'success')
+  } catch {
+    showToast(errorMsg, 'error')
+  }
+}
 
 const recommendedConfig = computed(() => {
   if (!selectedModelForConfig.value) return null
@@ -93,6 +127,103 @@ const recommendedConfig = computed(() => {
     selectedModelForConfig.value.required_memory_gb
   )
 })
+
+const filteredGroups = computed(() => {
+  if (!aggregatedModels.value?.groups) return []
+  return aggregatedModels.value.groups.filter((group) => {
+    const variants = filterVariants(group.variants)
+    return variants.length > 0
+  }).map((group) => ({
+    ...group,
+    variants: sortVariants(filterVariants(group.variants)),
+  }))
+})
+
+const filterVariants = (variants: ModelVariant[]) => {
+  return variants.filter((v) => {
+    if (searchQuery.value) {
+      const q = searchQuery.value.toLowerCase()
+      const matchesName = v.name.toLowerCase().includes(q)
+      const matchesDesc = v.description?.toLowerCase().includes(q)
+      if (!matchesName && !matchesDesc) return false
+    }
+    if (filterBackend.value !== 'all' && v.backend_type !== filterBackend.value) return false
+    if (filterStatus.value === 'running' && !v.running) return false
+    if (filterStatus.value === 'stopped' && v.running) return false
+    if (filterSize.value !== 'all') {
+      const mem = v.required_memory_gb
+      const sizeRanges: Record<string, [number, number]> = {
+        small: [0, 7],
+        medium: [7, 14],
+        large: [14, 35],
+        xlarge: [35, Infinity],
+      }
+      const [min, max] = sizeRanges[filterSize.value] ?? [0, Infinity]
+      if (mem < min || mem >= max) return false
+    }
+    return true
+  })
+}
+
+const sortVariants = (variants: ModelVariant[]) => {
+  return [...variants].sort((a, b) => {
+    let cmp = 0
+    switch (sortField.value) {
+      case 'name':
+        cmp = a.name.localeCompare(b.name)
+        break
+      case 'size':
+        cmp = (a.size_mb ?? 0) - (b.size_mb ?? 0)
+        break
+      case 'memory':
+        cmp = (a.required_memory_gb ?? 0) - (b.required_memory_gb ?? 0)
+        break
+      case 'status':
+        cmp = (a.running ? 0 : 1) - (b.running ? 0 : 1)
+        break
+    }
+    return sortOrder.value === 'asc' ? cmp : -cmp
+  })
+}
+
+const totalVariantCount = computed(() => {
+  if (!aggregatedModels.value?.groups) return 0
+  return aggregatedModels.value.groups.reduce((sum, g) => sum + g.variant_count, 0)
+})
+
+const hasActiveFilters = computed(() =>
+  searchQuery.value !== '' ||
+  filterBackend.value !== 'all' ||
+  filterStatus.value !== 'all' ||
+  filterSize.value !== 'all'
+)
+
+const clearFilters = () => {
+  searchQuery.value = ''
+  filterBackend.value = 'all'
+  filterStatus.value = 'all'
+  filterSize.value = 'all'
+  showFilters.value = false
+}
+
+const expandAll = () => {
+  if (!aggregatedModels.value?.groups) return
+  aggregatedModels.value.groups.forEach((g) => expandedGroups.value.add(g.base_name))
+}
+
+const collapseAll = () => {
+  expandedGroups.value.clear()
+}
+
+const openModelDetail = (variant: ModelVariant) => {
+  selectedModelDetail.value = variant
+  modelDetailModal.value = true
+}
+
+const closeModelDetail = () => {
+  modelDetailModal.value = false
+  selectedModelDetail.value = null
+}
 
 function formatSizeMB(sizeMB: number): string {
   if (sizeMB >= 1024) {
@@ -562,6 +693,60 @@ watch(
       <span class="switch-hint">vLLM 加载模型通常需要 30-120 秒</span>
     </div>
 
+    <div class="search-filter-bar">
+      <div class="search-row">
+        <div class="search-input-wrapper">
+          <Search class="search-icon" />
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索模型名称或描述..."
+            class="search-input"
+          />
+          <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">
+            <X class="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <button class="filter-toggle-btn" :class="{ active: showFilters }" @click="showFilters = !showFilters">
+          <Filter class="w-4 h-4" />
+          筛选
+          <span v-if="hasActiveFilters" class="filter-dot"></span>
+        </button>
+        <select v-model="sortField" class="sort-select">
+          <option value="name">按名称</option>
+          <option value="size">按大小</option>
+          <option value="memory">按显存</option>
+          <option value="status">按状态</option>
+        </select>
+        <button class="sort-order-btn" @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'">
+          {{ sortOrder === 'asc' ? '↑' : '↓' }}
+        </button>
+      </div>
+      <div v-if="showFilters" class="filter-row">
+        <select v-model="filterBackend" class="filter-select">
+          <option value="all">全部后端</option>
+          <option value="vllm">vLLM</option>
+          <option value="sglang">SGLang</option>
+          <option value="llamacpp">llama.cpp</option>
+        </select>
+        <select v-model="filterStatus" class="filter-select">
+          <option value="all">全部状态</option>
+          <option value="running">运行中</option>
+          <option value="stopped">已停止</option>
+        </select>
+        <select v-model="filterSize" class="filter-select">
+          <option value="all">全部大小</option>
+          <option value="small">&lt;7B</option>
+          <option value="medium">7-14B</option>
+          <option value="large">14-35B</option>
+          <option value="xlarge">&gt;35B</option>
+        </select>
+        <button v-if="hasActiveFilters" class="clear-filter-btn" @click="clearFilters">
+          清除筛选
+        </button>
+      </div>
+    </div>
+
     <div class="content">
       <div class="left-col">
         <section v-if="viewMode === 'grouped'" class="card">
@@ -569,19 +754,29 @@ watch(
             <HardDrive class="card-icon" />
             <span class="card-title">模型列表</span>
             <span v-if="aggregatedModels" class="section-count">
-              {{ aggregatedModels.total_variants }} 个模型 / {{ aggregatedModels.groups.length }} 组
+              {{ totalVariantCount }} 个模型 / {{ aggregatedModels.groups.length }} 组
+              <template v-if="hasActiveFilters"> · 筛选 {{ filteredGroups.length }} 组</template>
             </span>
+            <div class="group-actions">
+              <button class="mini-btn" @click="expandAll" title="展开全部">
+                <Maximize2 class="w-3 h-3" />
+              </button>
+              <button class="mini-btn" @click="collapseAll" title="收起全部">
+                <Minimize2 class="w-3 h-3" />
+              </button>
+            </div>
           </div>
           <div v-if="loading" class="loading-state">
             <Loader2 class="w-5 h-5 animate-spin" />
             <span>加载中...</span>
           </div>
-          <div v-else-if="!aggregatedModels?.groups?.length" class="empty-state">
-            暂无可用模型
+          <div v-else-if="!filteredGroups.length" class="empty-state">
+            <template v-if="hasActiveFilters">无匹配模型，请调整筛选条件</template>
+            <template v-else>暂无可用模型</template>
           </div>
           <div v-else class="model-groups">
             <div
-              v-for="group in aggregatedModels.groups"
+              v-for="group in filteredGroups"
               :key="group.base_name"
               class="model-group"
             >
@@ -593,6 +788,9 @@ watch(
                 <span class="group-name">{{ group.base_name }}</span>
                 <span class="group-count">{{ group.variant_count }} 个变体</span>
                 <span class="group-size">{{ formatSizeMB(group.total_size_mb) }}</span>
+                <span class="group-running-count" v-if="group.variants.some(v => v.running)">
+                  {{ group.variants.filter(v => v.running).length }} 运行
+                </span>
               </div>
               <div v-if="expandedGroups.has(group.base_name)" class="group-variants">
                 <div
@@ -601,7 +799,7 @@ watch(
                   class="variant-item"
                   :class="{ running: variant.running, current: variant.is_current }"
                 >
-                  <div class="variant-info">
+                  <div class="variant-info" @click="openModelDetail(variant)">
                     <div class="variant-header">
                       <span class="variant-name">{{ variant.name }}</span>
                       <div class="variant-badges">
@@ -619,6 +817,9 @@ watch(
                         <MemoryStick class="w-3 h-3" />
                         {{ variant.required_memory }}
                       </span>
+                      <span v-if="variant.port" class="meta-item">
+                        端口 {{ variant.port }}
+                      </span>
                       <span v-if="variant.vllm_config?.has_custom_config" class="meta-item config">
                         <Settings class="w-3 h-3" />
                         已配置
@@ -627,6 +828,13 @@ watch(
                     <p v-if="variant.description" class="variant-desc">{{ variant.description }}</p>
                   </div>
                   <div class="variant-actions">
+                    <button
+                      class="action-btn small"
+                      title="查看详情"
+                      @click.stop="openModelDetail(variant)"
+                    >
+                      <Info class="w-3.5 h-3.5" />
+                    </button>
                     <button
                       class="action-btn small"
                       title="vLLM 配置"
@@ -638,7 +846,7 @@ watch(
                       v-if="!variant.running"
                       class="action-btn primary small"
                       :disabled="!!actionLoading || !!switchingModel"
-                      @click.stop="handleSwitchAndSetDefault(variant.name)"
+                      @click.stop="actionWithToast(() => handleSwitchAndSetDefault(variant.name), `已发送切换请求: ${variant.name}`, `切换 ${variant.name} 失败`)"
                     >
                       <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
                     </button>
@@ -646,7 +854,7 @@ watch(
                       v-if="variant.running"
                       class="action-btn danger small"
                       :disabled="!!actionLoading || !!switchingModel"
-                      @click.stop="handleStopModel(variant.name)"
+                      @click.stop="actionWithToast(() => handleStopModel(variant.name), `已停止: ${variant.name}`, `停止 ${variant.name} 失败`)"
                     >
                       <Square class="w-3.5 h-3.5" />
                     </button>
@@ -1095,7 +1303,7 @@ watch(
             <AlertTriangle class="w-4 h-4" />
             <span>当前可用显存: {{ formatMemory(gpuInfo.current.available_memory) }}</span>
             <span class="recommend-text">
-              推荐配置: gpu_memory_utilization={{ getRecommendedGPUUtil(selectedModelForConfig.required_memory_gb) }},
+              推荐: gpu_memory_utilization={{ getRecommendedGPUUtil(selectedModelForConfig.required_memory_gb) }},
               max_num_seqs={{ getRecommendedMaxSeqs(selectedModelForConfig.required_memory_gb) }}
             </span>
           </div>
@@ -1208,6 +1416,127 @@ watch(
         </div>
       </div>
     </div>
+
+    <div v-if="modelDetailModal && selectedModelDetail" class="modal-overlay" @click.self="closeModelDetail">
+      <div class="modal-content detail-modal">
+        <div class="modal-header">
+          <div class="modal-title">
+            <Info class="w-5 h-5" />
+            <span>模型详情</span>
+          </div>
+          <button class="modal-close" @click="closeModelDetail">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="detail-hero">
+            <div class="detail-name">{{ selectedModelDetail.name }}</div>
+            <div class="detail-badges">
+              <span v-if="selectedModelDetail.running" class="status-badge running">运行中</span>
+              <span v-if="selectedModelDetail.is_current" class="status-badge current">当前</span>
+              <span class="backend-badge large">{{ selectedModelDetail.backend_type }}</span>
+            </div>
+          </div>
+
+          <div v-if="selectedModelDetail.description" class="detail-section">
+            <span class="detail-section-title">描述</span>
+            <p class="detail-desc">{{ selectedModelDetail.description }}</p>
+          </div>
+
+          <div class="detail-section">
+            <span class="detail-section-title">基本信息</span>
+            <div class="detail-grid">
+              <div class="detail-field">
+                <span class="detail-label">大小</span>
+                <span class="detail-value">{{ formatSizeMB(selectedModelDetail.size_mb) }}</span>
+              </div>
+              <div class="detail-field">
+                <span class="detail-label">显存需求</span>
+                <span class="detail-value">{{ selectedModelDetail.required_memory || '--' }}</span>
+              </div>
+              <div class="detail-field">
+                <span class="detail-label">端口</span>
+                <span class="detail-value">{{ selectedModelDetail.port ?? '--' }}</span>
+              </div>
+              <div class="detail-field">
+                <span class="detail-label">活跃请求</span>
+                <span class="detail-value">{{ selectedModelDetail.active_requests ?? '--' }}</span>
+              </div>
+              <div class="detail-field">
+                <span class="detail-label">预加载</span>
+                <span class="detail-value">{{ selectedModelDetail.preloaded ? '是' : '否' }}</span>
+              </div>
+              <div class="detail-field">
+                <span class="detail-label">自定义配置</span>
+                <span class="detail-value">{{ selectedModelDetail.vllm_config?.has_custom_config ? '是' : '否' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="selectedModelDetail.vllm_config?.has_custom_config" class="detail-section">
+            <span class="detail-section-title">vLLM 配置</span>
+            <div class="detail-grid">
+              <div class="detail-field">
+                <span class="detail-label">gpu_memory_utilization</span>
+                <span class="detail-value mono">{{ selectedModelDetail.vllm_config.gpu_memory_utilization }}</span>
+              </div>
+              <div class="detail-field">
+                <span class="detail-label">max_model_len</span>
+                <span class="detail-value mono">{{ selectedModelDetail.vllm_config.max_model_len }}</span>
+              </div>
+              <div class="detail-field">
+                <span class="detail-label">max_num_seqs</span>
+                <span class="detail-value mono">{{ selectedModelDetail.vllm_config.max_num_seqs }}</span>
+              </div>
+              <div class="detail-field">
+                <span class="detail-label">max_num_batched_tokens</span>
+                <span class="detail-value mono">{{ selectedModelDetail.vllm_config.max_num_batched_tokens }}</span>
+              </div>
+              <div class="detail-field">
+                <span class="detail-label">tensor_parallel_size</span>
+                <span class="detail-value mono">{{ selectedModelDetail.vllm_config.tensor_parallel_size }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="getModelMemoryWarning(selectedModelDetail.name)" class="detail-warning">
+            <AlertTriangle class="w-4 h-4" />
+            {{ getModelMemoryWarning(selectedModelDetail.name) }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            v-if="!selectedModelDetail.running"
+            class="btn primary"
+            :disabled="!!actionLoading || !!switchingModel"
+            @click="actionWithToast(() => handleSwitchAndSetDefault(selectedModelDetail!.name), `已发送切换请求: ${selectedModelDetail!.name}`, `切换失败`); closeModelDetail()"
+          >
+            <ArrowRightLeft class="w-4 h-4" /> 切换至此模型
+          </button>
+          <button
+            v-if="selectedModelDetail.running"
+            class="btn danger"
+            :disabled="!!actionLoading || !!switchingModel"
+            @click="actionWithToast(() => handleStopModel(selectedModelDetail!.name), `已停止: ${selectedModelDetail!.name}`, `停止失败`); closeModelDetail()"
+          >
+            <Square class="w-4 h-4" /> 停止模型
+          </button>
+          <button class="btn" @click="openVLLMConfig(selectedModelDetail!)">
+            <Settings class="w-4 h-4" /> 配置参数
+          </button>
+          <button class="btn secondary" @click="closeModelDetail">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <Transition name="toast">
+      <div v-if="toastMessage" class="toast" :class="toastType">
+        <CheckCircle v-if="toastType === 'success'" class="w-4 h-4" />
+        <XCircle v-else-if="toastType === 'error'" class="w-4 h-4" />
+        <Info v-else class="w-4 h-4" />
+        {{ toastMessage }}
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -2434,6 +2763,21 @@ watch(
   background: var(--bg-tertiary);
 }
 
+.btn.danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.btn.danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .config-recommend-hint {
   display: flex;
   align-items: center;
@@ -2454,5 +2798,357 @@ watch(
 .hint-text {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+/* ======== Search / Filter Bar ======== */
+.search-filter-bar {
+  padding: 10px 24px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.search-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 6px 10px;
+  transition: border-color 0.2s;
+}
+
+.search-input-wrapper:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.search-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.filter-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.filter-toggle-btn:hover,
+.filter-toggle-btn.active {
+  color: var(--text-primary);
+  border-color: var(--color-primary);
+}
+
+.filter-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.sort-select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.sort-order-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sort-order-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.filter-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.filter-select {
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.clear-filter-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #ef4444;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-filter-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ======== Group Actions ======== */
+.group-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.mini-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mini-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.group-running-count {
+  font-size: 10px;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+/* ======== Detail Modal ======== */
+.detail-modal {
+  max-width: 560px;
+}
+
+.detail-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.detail-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.detail-badges {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.backend-badge.large {
+  font-size: 12px;
+  padding: 3px 8px;
+  text-transform: uppercase;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.detail-section {
+  margin-bottom: 16px;
+}
+
+.detail-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.detail-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+  padding: 10px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.detail-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.detail-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.detail-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.detail-value.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+}
+
+.detail-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  color: #ef4444;
+  font-size: 13px;
+}
+
+/* ======== Toast Notification ======== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 2000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 420px;
+}
+
+.toast.success {
+  background: rgba(34, 197, 94, 0.95);
+  color: white;
+}
+
+.toast.error {
+  background: rgba(239, 68, 68, 0.95);
+  color: white;
+}
+
+.toast.info {
+  background: rgba(99, 102, 241, 0.95);
+  color: white;
+}
+
+.toast-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.toast-leave-active {
+  transition: all 0.2s ease-in;
+}
+
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

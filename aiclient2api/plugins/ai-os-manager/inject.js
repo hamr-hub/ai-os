@@ -2,6 +2,18 @@
     const CSS_LINK = '<link rel="stylesheet" href="/plugins/ai-os-manager/styles.css">';
     const TOAST_CONTAINER = '<div class="aios-toast-container" id="aios-toast-container"></div>';
 
+    (function migrateLegacyToken() {
+        try {
+            const legacyToken = localStorage.getItem('aios_admin_token');
+            if (legacyToken && !localStorage.getItem('auth_token')) {
+                localStorage.setItem('auth_token', legacyToken);
+                localStorage.setItem('auth_user', 'admin');
+                console.log('[AI-OS Manager] Migrated legacy admin token to auth_token');
+            }
+            localStorage.removeItem('aios_admin_token');
+        } catch (_) {}
+    })();
+
     function showTokenModal() {
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
@@ -12,13 +24,20 @@
 
             const header = document.createElement('div');
             header.className = 'aios-p-modal-header';
-            header.textContent = '管理员验证:';
+            header.textContent = '管理员验证';
+
+            const desc = document.createElement('div');
+            desc.style.cssText = 'font-size:12px;color:var(--text-secondary);margin-bottom:12px;';
+            desc.textContent = '请输入 API Key / Admin Token（与管控面板登录一致）';
 
             const input = document.createElement('input');
             input.className = 'aios-p-input';
             input.type = 'password';
-            input.placeholder = '请输入 Admin Token';
+            input.placeholder = '请输入 API Key 或 Token';
             input.style.width = '100%';
+
+            const errorMsg = document.createElement('div');
+            errorMsg.style.cssText = 'display:none;font-size:12px;color:var(--color-danger);margin-top:8px;';
 
             const actions = document.createElement('div');
             actions.className = 'aios-p-modal-actions';
@@ -34,7 +53,9 @@
             actions.appendChild(cancelBtn);
             actions.appendChild(submitBtn);
             modal.appendChild(header);
+            modal.appendChild(desc);
             modal.appendChild(input);
+            modal.appendChild(errorMsg);
             modal.appendChild(actions);
             overlay.appendChild(modal);
             document.body.appendChild(overlay);
@@ -42,22 +63,40 @@
             input.focus();
             const cleanup = (value) => { overlay.remove(); resolve(value); };
             cancelBtn.onclick = () => cleanup(null);
-            submitBtn.onclick = () => cleanup(input.value || null);
+            submitBtn.onclick = () => {
+                if (!input.value || !input.value.trim()) {
+                    errorMsg.textContent = '请输入有效的 Token';
+                    errorMsg.style.display = 'block';
+                    return;
+                }
+                cleanup(input.value.trim() || null);
+            };
             input.onkeydown = (e) => {
-                if (e.key === 'Enter') cleanup(input.value || null);
+                if (e.key === 'Enter') {
+                    if (!input.value || !input.value.trim()) {
+                        errorMsg.textContent = '请输入有效的 Token';
+                        errorMsg.style.display = 'block';
+                        return;
+                    }
+                    cleanup(input.value.trim() || null);
+                }
                 if (e.key === 'Escape') cleanup(null);
             };
         });
     }
 
     function adminFetch(url, options = {}) {
-        const token = localStorage.getItem('aios_admin_token') || '';
+        const token = localStorage.getItem('auth_token') || '';
         const headers = { 'Content-Type': 'application/json', ...options.headers };
-        if (token) headers['X-Admin-Token'] = token;
+        if (token) headers['Authorization'] = 'Bearer ' + token;
         return fetch(url, { ...options, headers }).then(r => {
             if (r.status === 401) {
                 return showTokenModal().then(newToken => {
-                    if (newToken) { localStorage.setItem('aios_admin_token', newToken); return adminFetch(url, options); }
+                    if (newToken) {
+                        localStorage.setItem('auth_token', newToken);
+                        localStorage.setItem('auth_user', 'admin');
+                        return adminFetch(url, options);
+                    }
                     throw new Error('Unauthorized');
                 });
             }
@@ -378,28 +417,28 @@
     }
 
     function showSection(id) {
-        // 只管理插件自己的 section，不碰主应用的 .section
-        const gpuEl = document.getElementById('section-aios-gpu');
-        const modelEl = document.getElementById('section-aios-model');
-        if (gpuEl) gpuEl.style.display = (id === 'aios-gpu') ? '' : 'none';
-        if (modelEl) modelEl.style.display = (id === 'aios-model') ? '' : 'none';
+        const sections = ['aios-gpu', 'aios-model', 'aios-health', 'aios-ratelimit', 'aios-config'];
+        sections.forEach(sid => {
+            const el = document.getElementById('section-' + sid);
+            if (el) el.style.display = (sid === id) ? '' : 'none';
+        });
 
-        // 只管理插件自己的 nav-item
-        ['nav-aios-gpu', 'nav-aios-model'].forEach(nid => {
+        const navIds = ['nav-aios-gpu', 'nav-aios-model', 'nav-aios-health', 'nav-aios-ratelimit', 'nav-aios-config'];
+        navIds.forEach(nid => {
             const n = document.getElementById(nid);
-            if (n) n.classList.toggle('active', nid === `nav-${id}`);
+            if (n) n.classList.toggle('active', nid === 'nav-' + id);
         });
     }
 
-    // 监听主应用导航（hashchange），自动隐藏插件面板
     window.addEventListener('hashchange', () => {
         const hash = window.location.hash.slice(1);
-        if (hash !== 'aios-gpu' && hash !== 'aios-model') {
-            const gpuEl = document.getElementById('section-aios-gpu');
-            const modelEl = document.getElementById('section-aios-model');
-            if (gpuEl) gpuEl.style.display = 'none';
-            if (modelEl) modelEl.style.display = 'none';
-            ['nav-aios-gpu', 'nav-aios-model'].forEach(nid => {
+        const sections = ['aios-gpu', 'aios-model', 'aios-health', 'aios-ratelimit', 'aios-config'];
+        if (!sections.includes(hash)) {
+            sections.forEach(sid => {
+                const el = document.getElementById('section-' + sid);
+                if (el) el.style.display = 'none';
+            });
+            ['nav-aios-gpu', 'nav-aios-model', 'nav-aios-health', 'nav-aios-ratelimit', 'nav-aios-config'].forEach(nid => {
                 const n = document.getElementById(nid);
                 if (n) n.classList.remove('active');
             });

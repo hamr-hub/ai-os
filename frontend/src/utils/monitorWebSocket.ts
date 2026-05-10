@@ -1,4 +1,5 @@
 import { ref, readonly } from 'vue'
+import { useServerStore } from '@/stores/server'
 
 type WSMessageHandler = (data: any) => void
 
@@ -13,9 +14,10 @@ let heartbeatTimer: number | null = null
 
 function getUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const manageBase = localStorage.getItem('server_manage_base') || ''
-  if (manageBase) {
-    const base = manageBase.replace(/^https?:/, proto)
+  const serverStore = useServerStore()
+  const activeUrl = serverStore.activeUrl
+  if (activeUrl) {
+    const base = activeUrl.replace(/^https?:/, proto)
     return `${base}/ws/monitor`
   }
   return `${proto}//${location.host}/ws/monitor`

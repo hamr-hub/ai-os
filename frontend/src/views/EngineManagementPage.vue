@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, onUnmounted, type Ref } from 'vue'
 import { useEngineManagement } from '@/composables/useEngineManagement'
 import { useModelSwitch } from '@/composables/useModelSwitch'
+import { useModels } from '@/composables/useModels'
+import { getLLMServiceLogs } from '@/api/client'
 import {
   Zap,
   RefreshCw,
@@ -14,20 +16,54 @@ import {
   Settings,
   ArrowRight,
   SlidersHorizontal,
+  FileText,
+  RotateCw,
 } from 'lucide-vue-next'
 import type { EngineType } from '@/types'
 import EngineParamEditor from '@/components/EngineParamEditor.vue'
 
-const { engineStatus, engineConfig, loading, switching, error, fetchStatus, fetchConfig, doSwitchEngine, doUpdateConfig } = useEngineManagement()
+const { engineStatus, engineConfig, loading, switching, error, fetchStatus, fetchConfig, doUpdateConfig } = useEngineManagement()
 const { isSwitching, currentSession, triggerSwitch, triggerCancel } = useModelSwitch()
+const { modelList } = useModels()
 
 const targetModel = ref('')
 const targetEngine: Ref<EngineType> = ref('vllm')
 const targetPort = ref(8000)
 const showSwitchConfirm = ref(false)
-const activeTab = ref<'status' | 'switch' | 'config' | 'params'>('status')
+const activeTab = ref<'status' | 'switch' | 'config' | 'params' | 'logs'>('status')
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const toastMessage = ref<string | null>(null)
+const toastType = ref<'success' | 'error' | 'info'>('info')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  toastMessage.value = message
+  toastType.value = type
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastMessage.value = null }, 3500)
+}
+
+const engineLogs = ref<string[]>([])
+const logsLoading = ref(false)
+const logsLines = ref(100)
+
+const fetchLogs = async () => {
+  logsLoading.value = true
+  try {
+    const result = await getLLMServiceLogs(logsLines.value)
+    engineLogs.value = result.logs || []
+  } catch {
+    engineLogs.value = []
+    showToast('获取日志失败', 'error')
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+const runningModels = computed(() => modelList.value.filter(m => m.running))
+const availableModels = computed(() => modelList.value)
 
 onMounted(() => {
   fetchStatus()
@@ -45,6 +81,7 @@ onUnmounted(() => {
   if (isSwitching.value) {
     triggerCancel()
   }
+  if (toastTimer) clearTimeout(toastTimer)
 })
 
 const handleRefresh = () => {
@@ -57,7 +94,7 @@ const handleSwitch = async () => {
   showSwitchConfirm.value = false
   triggerSwitch(targetModel.value, false, 'switch')
   activeTab.value = 'switch'
-}
+  showToast(`已发送引擎切换请求: ${targetModel.value}`, 'info')
 }
 
 const engineList = computed(() => {
@@ -65,12 +102,21 @@ const engineList = computed(() => {
   return ['vllm', 'sglang', 'llamacpp'] as EngineType[]
 })
 
+const selectRunningModel = () => {
+  const running = runningModels.value
+  if (running.length > 0) {
+    targetModel.value = running[0].name
+  }
+}
+
 const formatUptime = (seconds: number | null) => {
   if (!seconds) return '--'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
+  const s = seconds % 60
+  if (h > 0) return `${h}h ${m}m ${s}s`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
 }
 
 const engineDisplayName = (type: EngineType) => {
@@ -80,6 +126,15 @@ const engineDisplayName = (type: EngineType) => {
     llamacpp: 'llama.cpp',
   }
   return names[type] || type
+}
+
+const engineIcon = (type: EngineType) => {
+  const icons: Record<EngineType, string> = {
+    vllm: '⚡',
+    sglang: '🔥',
+    llamacpp: '🦙',
+  }
+  return icons[type] || '🔧'
 }
 
 const phaseLabel = (phase: number) => {
@@ -110,10 +165,26 @@ const saveConfig = async () => {
     const parsed = JSON.parse(editedConfig.value)
     await doUpdateConfig(parsed)
     editingConfig.value = false
+    showToast('配置已保存', 'success')
   } catch {
     error.value = 'JSON格式错误'
+    showToast('JSON格式错误，请检查', 'error')
   }
 }
+
+const engineHealthSummary = computed(() => {
+  if (!engineStatus.value) return null
+  const engines = ['vllm', 'sglang', 'llamacpp'] as EngineType[]
+  const running = engines.filter(e => engineStatus.value![e]?.running)
+  const current = engineStatus.value.current_engine
+  return {
+    total: engines.length,
+    running: running.length,
+    stopped: engines.length - running.length,
+    current,
+    currentName: engineDisplayName(current),
+  }
+})
 </script>
 
 <template>
@@ -150,9 +221,26 @@ const saveConfig = async () => {
       <button :class="['tab-btn', activeTab === 'params' ? 'active' : '']" @click="activeTab = 'params'">
         <SlidersHorizontal class="w-4 h-4" /> 参数定制
       </button>
+      <button :class="['tab-btn', activeTab === 'logs' ? 'active' : '']" @click="activeTab = 'logs'; fetchLogs()">
+        <FileText class="w-4 h-4" /> 引擎日志
+      </button>
     </div>
 
     <div v-if="activeTab === 'status'" class="status-section">
+      <div v-if="engineHealthSummary" class="health-summary">
+        <div class="health-item">
+          <span class="health-num">{{ engineHealthSummary.running }}</span>
+          <span class="health-label">运行中</span>
+        </div>
+        <div class="health-item">
+          <span class="health-num">{{ engineHealthSummary.stopped }}</span>
+          <span class="health-label">已停止</span>
+        </div>
+        <div class="health-item">
+          <span class="health-num">{{ engineHealthSummary.currentName }}</span>
+          <span class="health-label">当前引擎</span>
+        </div>
+      </div>
       <div v-if="loading && !engineStatus" class="loading-state">
         <Loader2 class="w-8 h-8 animate-spin text-primary" />
         <p>加载中...</p>
@@ -205,19 +293,35 @@ const saveConfig = async () => {
         <h3 class="section-title"><ArrowRight class="w-5 h-5 text-primary" /> 引擎热切换</h3>
         <div class="form-row">
           <label class="form-label">目标模型</label>
-          <input v-model="targetModel" class="form-input" placeholder="输入模型名称" />
+          <div class="model-select-row">
+            <input v-model="targetModel" class="form-input" placeholder="输入模型名称或从列表选择" list="model-list" />
+            <datalist id="model-list">
+              <option v-for="m in availableModels" :key="m.name" :value="m.name">
+                {{ m.running ? '运行中' : '已停止' }} · {{ m.backend_type }} · {{ m.required_memory || '--' }}
+              </option>
+            </datalist>
+            <button v-if="runningModels.length" class="btn btn-sm" @click="selectRunningModel" title="使用当前运行模型">
+              <RotateCw class="w-3.5 h-3.5" /> 当前
+            </button>
+          </div>
         </div>
         <div class="form-row">
           <label class="form-label">目标引擎</label>
-          <select v-model="targetEngine" class="form-input">
-            <option value="vllm">vLLM</option>
-            <option value="sglang">SGLang</option>
-            <option value="llamacpp">llama.cpp</option>
-          </select>
+          <div class="engine-select-row">
+            <button
+              v-for="opt in (['vllm', 'sglang', 'llamacpp'] as EngineType[])"
+              :key="opt"
+              :class="['engine-option-btn', targetEngine === opt ? 'active' : '']"
+              @click="targetEngine = opt"
+            >
+              <span class="engine-option-icon">{{ engineIcon(opt) }}</span>
+              <span>{{ engineDisplayName(opt) }}</span>
+            </button>
+          </div>
         </div>
         <div class="form-row">
           <label class="form-label">端口</label>
-          <input v-model.number="targetPort" type="number" class="form-input" />
+          <input v-model.number="targetPort" type="number" class="form-input" style="max-width:120px" />
         </div>
         <button class="btn btn-primary" :disabled="switching || !targetModel" @click="showSwitchConfirm = true">
           <Play v-if="!switching" class="w-4 h-4" />
@@ -310,7 +414,8 @@ const saveConfig = async () => {
     <div v-if="showSwitchConfirm" class="confirm-modal">
       <div class="confirm-content glass-card tech-border">
         <h3 class="digital-font">确认引擎切换</h3>
-        <p>目标模型: {{ targetModel }}，引擎: {{ engineDisplayName(targetEngine) }}，端口: {{ targetPort }}</p>
+        <p>目标模型: <strong>{{ targetModel }}</strong></p>
+        <p>引擎: <strong>{{ engineIcon(targetEngine) }} {{ engineDisplayName(targetEngine) }}</strong>，端口: <strong>{{ targetPort }}</strong></p>
         <p class="warn-text">切换过程中将停止当前服务，请确保无活跃请求</p>
         <div class="confirm-actions">
           <button class="btn btn-primary" @click="handleSwitch">确认切换</button>
@@ -318,6 +423,48 @@ const saveConfig = async () => {
         </div>
       </div>
     </div>
+
+    <div v-if="activeTab === 'logs'" class="logs-section fade-in">
+      <div class="logs-controls">
+        <div class="logs-header">
+          <FileText class="w-5 h-5 text-primary" />
+          <h3>引擎日志</h3>
+        </div>
+        <div class="logs-actions">
+          <label class="form-label">行数</label>
+          <input v-model.number="logsLines" type="number" class="logs-lines-input" min="10" max="1000" step="10" />
+          <button class="btn btn-sm btn-secondary" @click="fetchLogs" :disabled="logsLoading">
+            <RefreshCw :class="['w-3.5 h-3.5', logsLoading ? 'animate-spin' : '']" />
+            刷新
+          </button>
+        </div>
+      </div>
+      <div v-if="logsLoading" class="loading-state">
+        <Loader2 class="w-6 h-6 animate-spin text-primary" />
+        <p>加载日志...</p>
+      </div>
+      <div v-else-if="!engineLogs.length" class="empty-state">
+        <FileText class="w-12 h-12 text-muted" />
+        <p>暂无日志</p>
+      </div>
+      <div v-else class="logs-content card-base tech-border">
+        <div class="log-lines">
+          <div v-for="(line, idx) in engineLogs" :key="idx" class="log-line">
+            <span class="log-num">{{ idx + 1 }}</span>
+            <span class="log-text">{{ line }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <Transition name="toast">
+      <div v-if="toastMessage" class="toast" :class="toastType">
+        <CheckCircle v-if="toastType === 'success'" class="w-4 h-4" />
+        <XCircle v-else-if="toastType === 'error'" class="w-4 h-4" />
+        <AlertTriangle v-else class="w-4 h-4" />
+        {{ toastMessage }}
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -749,5 +896,217 @@ const saveConfig = async () => {
   display: flex;
   gap: 8px;
   margin-top: 18px;
+}
+
+/* ======== Health Summary ======== */
+.health-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.health-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  border: 1px solid var(--border-primary);
+}
+
+.health-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-primary-light);
+  font-family: var(--font-digital, monospace);
+}
+
+.health-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ======== Engine Select Row ======== */
+.model-select-row {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.engine-select-row {
+  display: flex;
+  gap: 6px;
+}
+
+.engine-option-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.engine-option-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--color-primary);
+}
+
+.engine-option-btn.active {
+  color: var(--color-primary-light);
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.15);
+}
+
+.engine-option-icon {
+  font-size: 16px;
+}
+
+/* ======== Logs Section ======== */
+.logs-section {
+  margin-top: 16px;
+}
+
+.logs-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.logs-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logs-header h3 {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.logs-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logs-lines-input {
+  width: 70px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  outline: none;
+}
+
+.logs-content {
+  max-height: 600px;
+  overflow-y: auto;
+  padding: 12px;
+  background: #0a0a0f;
+  border-radius: 10px;
+}
+
+.log-lines {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.log-line {
+  display: flex;
+  gap: 8px;
+  padding: 1px 0;
+}
+
+.log-num {
+  color: #6b7280;
+  min-width: 40px;
+  text-align: right;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.log-text {
+  color: #d1d5db;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.logs-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.logs-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.logs-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+/* ======== Toast ======== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 2000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 420px;
+}
+
+.toast.success {
+  background: rgba(34, 197, 94, 0.95);
+  color: white;
+}
+
+.toast.error {
+  background: rgba(239, 68, 68, 0.95);
+  color: white;
+}
+
+.toast.info {
+  background: rgba(99, 102, 241, 0.95);
+  color: white;
+}
+
+.toast-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.toast-leave-active {
+  transition: all 0.2s ease-in;
+}
+
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

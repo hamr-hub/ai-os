@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+
+vi.mock('@/api/client', () => ({
+  healthCheck: vi.fn().mockResolvedValue({ status: 'healthy' }),
+}))
 
 const mockLocalStorage = {
   getItem: vi.fn(),
@@ -14,61 +19,40 @@ describe('useAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockLocalStorage.getItem.mockReturnValue(null)
+    setActivePinia(createPinia())
   })
 
-  it('初始状态token/user为null，isAuthenticated为false', () => {
-    const { token, user, loading, error, isAuthenticated } = useAuth()
-    expect(token.value).toBeNull()
-    expect(user.value).toBeNull()
+  it('初始状态isAuthenticated为false', () => {
+    const { loading, error, isAuthenticated } = useAuth()
     expect(loading.value).toBe(false)
     expect(error.value).toBeNull()
-    expect(isAuthenticated.value).toBe(false)
+    expect(isAuthenticated).toBe(false)
   })
 
-  it('localStorage有token时isAuthenticated为true', () => {
-    mockLocalStorage.getItem
-      .mockReturnValueOnce('test-key')
-      .mockReturnValueOnce('admin')
-    const { isAuthenticated, token, user } = useAuth()
-    expect(token.value).toBe('test-key')
-    expect(user.value).toBe('admin')
-    expect(isAuthenticated.value).toBe(true)
-  })
-
-  it('login成功后设置token/user到localStorage并更新isAuthenticated', async () => {
-    const { login, token, user, isAuthenticated, loading, error } = useAuth()
+  it('login成功后isAuthenticated为true', async () => {
+    const { login, isAuthenticated, loading, error } = useAuth()
     const result = await login('my-api-key')
     expect(result).toBe(true)
-    expect(token.value).toBe('my-api-key')
-    expect(user.value).toBe('admin')
-    expect(isAuthenticated.value).toBe(true)
+    expect(isAuthenticated).toBe(true)
     expect(loading.value).toBe(false)
     expect(error.value).toBeNull()
-    expect(mockLocalStorage.setItem).toHaveBeenCalledWith('auth_token', 'my-api-key')
-    expect(mockLocalStorage.setItem).toHaveBeenCalledWith('auth_user', 'admin')
   })
 
-  it('logout后清空token/user并更新isAuthenticated', () => {
-    mockLocalStorage.getItem
-      .mockReturnValueOnce('existing-key')
-      .mockReturnValueOnce('admin')
-    const { logout, token, user, isAuthenticated } = useAuth()
+  it('logout后isAuthenticated为false', async () => {
+    const { login, logout, isAuthenticated } = useAuth()
+    await login('existing-key')
+    expect(isAuthenticated).toBe(true)
     logout()
-    expect(token.value).toBeNull()
-    expect(user.value).toBeNull()
-    expect(isAuthenticated.value).toBe(false)
-    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('auth_token')
-    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('auth_user')
+    expect(isAuthenticated).toBe(false)
   })
 
-  it('localStorage.setItem抛出异常时login返回false并设置error', async () => {
-    mockLocalStorage.setItem.mockImplementation(() => {
-      throw new Error('storage full')
-    })
+  it('healthCheck失败时login返回false并设置error', async () => {
+    const { healthCheck } = await import('@/api/client')
+    vi.mocked(healthCheck).mockRejectedValueOnce(new Error('Unauthorized'))
     const { login, error, loading } = useAuth()
-    const result = await login('fail-key')
+    const result = await login('bad-key')
     expect(result).toBe(false)
-    expect(error.value).toBe('storage full')
+    expect(error.value).toBe('认证失败：API Key 无效或服务不可用')
     expect(loading.value).toBe(false)
   })
 })

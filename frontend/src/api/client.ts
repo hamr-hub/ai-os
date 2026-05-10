@@ -351,8 +351,7 @@ export async function getGPUHistory(
 }
 
 export async function healthCheck(): Promise<{ status: string }> {
-  const serverStore = useServerStore()
-  const { data } = await axios.get<{ status: string }>(serverStore.inferenceHealthUrl)
+  const { data } = await v1Client.get<{ status: string }>('/health', silentRequestConfig())
   return data
 }
 
@@ -461,6 +460,7 @@ export async function chatCompletionStream(
   signal?: AbortSignal
 ): Promise<void> {
   const serverStore = useServerStore()
+  const authStore = useAuthStore()
 
   await readSSEStream({
     url: `${serverStore.v1Base}/chat/completions`,
@@ -471,6 +471,7 @@ export async function chatCompletionStream(
     },
     signal,
     timeoutMs: 30000,
+    headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : undefined,
     onChunk: (rawData) => {
       try {
         const json = JSON.parse(rawData)
@@ -508,6 +509,7 @@ export async function agentChatStream(
   signal?: AbortSignal
 ): Promise<void> {
   const serverStore = useServerStore()
+  const authStore = useAuthStore()
 
   await readSSEStream({
     url: `${serverStore.manageBase}/agent/chat`,
@@ -515,6 +517,7 @@ export async function agentChatStream(
     signal,
     timeoutMs: 30000,
     doneSentinel: DONE_SENTINEL,
+    headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : undefined,
     onChunk: (rawData) => {
       try {
         onChunk(JSON.parse(rawData))

@@ -116,10 +116,16 @@ const aiOsManagerPlugin = {
         for (const prefix of ADMIN_API_PREFIXES) {
             if (pathname.startsWith(prefix)) {
                 const authHeader = req.headers['authorization'] || '';
-                const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-admin-token'] || null;
+                const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+                const adminToken = req.headers['x-admin-token'] || null;
+                const token = (bearerToken && bearerToken !== 'undefined' && bearerToken !== 'null') ? bearerToken : adminToken;
                 const expectedToken = config.ADMIN_TOKEN || config.REQUIRED_API_KEY;
-                if (!expectedToken) return { handled: false, authorized: true };
+                if (!expectedToken) {
+                    logger.warn('[AI-OS Manager] Admin API accessed without ADMIN_TOKEN or REQUIRED_API_KEY configured');
+                    return { handled: false, authorized: true };
+                }
                 if (!token || token !== expectedToken) {
+                    logger.info(`[AI-OS Manager] Admin auth failed for ${pathname}: token=${token ? token.substring(0, 8) + '...' : 'absent'}`);
                     res.writeHead(401, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: { message: 'Unauthorized - admin token required', type: 'authentication_error', code: 'authentication_error' } }));
                     return { handled: true, authorized: false };
@@ -143,9 +149,10 @@ const aiOsManagerPlugin = {
                 const expectedApiKey = config.REQUIRED_API_KEY;
 
                 if (!expectedApiKey) return { handled: false, authorized: true };
-                if (apiKey && apiKey === expectedApiKey) {
+                if (apiKey && apiKey !== 'undefined' && apiKey !== 'null' && apiKey === expectedApiKey) {
                     return { handled: false, authorized: true };
                 } else {
+                    logger.info(`[AI-OS Manager] API auth failed for ${pathname}: apiKey=${apiKey ? apiKey.substring(0, 8) + '...' : 'absent'}`);
                     res.writeHead(401, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: { message: 'Unauthorized', type: 'authentication_error', code: 'authentication_error' } }));
                     return { handled: true, authorized: false };

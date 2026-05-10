@@ -1,4 +1,5 @@
 import type { DownloadWSMessage } from '@/types'
+import { useServerStore } from '@/stores/server'
 
 type DownloadWSHandler = (msg: DownloadWSMessage) => void
 
@@ -11,6 +12,12 @@ const RECONNECT_DELAY = 3000
 
 function getWSUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const serverStore = useServerStore()
+  const activeUrl = serverStore.activeUrl
+  if (activeUrl) {
+    const base = activeUrl.replace(/^https?:/, proto)
+    return `${base}/ws/download`
+  }
   return `${proto}//${location.host}/ws/download`
 }
 

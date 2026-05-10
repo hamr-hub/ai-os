@@ -14,22 +14,29 @@ import {
   XCircle,
   Server,
   Cpu,
+  Search,
 } from 'lucide-vue-next'
 
-const { poolList, total, loading: poolLoading, error: poolError, list: listPool, load: loadPoolModel, remove: removePoolModel } = useModelPool()
+const { poolList, loading: poolLoading, error: poolError, list: listPool, load: loadPoolModel, remove: removePoolModel } = useModelPool()
 const { services, error: serviceError, getStatus: getServiceStatus, stop: stopService } = useLLMService()
 
 const poolFilter = ref('all')
 const showDeleteConfirm = ref<string | null>(null)
 const engineSelect = ref('vllm')
 const loadError = ref<string | null>(null)
+const searchQuery = ref('')
+const sortField = ref<'name' | 'size' | 'memory'>('name')
+const sortOrder = ref<'asc' | 'desc'>('asc')
+const toastMessage = ref<string | null>(null)
+const toastType = ref<'success' | 'error' | 'info'>('info')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
 let poolWsTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   handleRefresh()
   poolWsTimer = setInterval(() => {
     void listPool(poolFilter.value)
-  }, 3000)
+  }, 10000)
 })
 
 const handleRefresh = () => {
@@ -47,19 +54,49 @@ const handleLoad = async (modelKey: string) => {
     } else {
       loadError.value = errMsg
     }
+    showToast(errMsg, 'error')
   } else {
+    showToast(`${modelKey} 加载成功`, 'success')
     getServiceStatus()
   }
 }
 
 const handleStopService = async (modelName: string) => {
   await stopService(modelName)
+  showToast(`${modelName} 已停止`, 'info')
   getServiceStatus()
 }
+
+const filteredPoolList = computed(() => {
+  let list = poolList.value ?? []
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter(m => m.name.toLowerCase().includes(q))
+  }
+  return [...list].sort((a, b) => {
+    let cmp = 0
+    switch (sortField.value) {
+      case 'name': cmp = a.name.localeCompare(b.name); break
+      case 'size': cmp = (a.size_b ?? 0) - (b.size_b ?? 0); break
+      case 'memory': cmp = (a.required_gb ?? 0) - (b.required_gb ?? 0); break
+    }
+    return sortOrder.value === 'asc' ? cmp : -cmp
+  })
+})
+
+const filteredTotal = computed(() => filteredPoolList.value.length)
 
 const handleDelete = (modelKey: string, removeFiles: boolean) => {
   removePoolModel(modelKey, removeFiles)
   showDeleteConfirm.value = null
+  showToast(removeFiles ? '模型和文件已删除' : '模型已从池中移除', 'success')
+}
+
+const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  toastMessage.value = message
+  toastType.value = type
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastMessage.value = null }, 3000)
 }
 
 const handleFilterChange = () => {
@@ -87,6 +124,7 @@ onUnmounted(() => {
     clearInterval(poolWsTimer)
     poolWsTimer = null
   }
+  if (toastTimer) clearTimeout(toastTimer)
 })
 
 const downloadStatusColor = (status: string) => {
@@ -103,7 +141,7 @@ const runningStatusColor = (status: string) => {
 }
 
 const poolStats = computed(() => {
-  const models = poolList.value ?? []
+  const models = filteredPoolList.value
   const totalSize = models.reduce((acc, m) => acc + (m.size_b ?? 0), 0)
   const runningCount = models.filter(m => m.running_status === 'running').length
   const downloadCompleted = models.filter(m => m.download_status === 'completed').length
@@ -156,20 +194,30 @@ const poolStats = computed(() => {
     </div>
 
     <div class="pool-controls">
+      <div class="search-bar">
+        <Search class="w-4 h-4 text-muted" />
+        <input v-model="searchQuery" type="text" placeholder="搜索模型..." class="search-input" />
+        <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">&times;</button>
+      </div>
       <select v-model="poolFilter" class="source-select" @change="handleFilterChange">
         <option value="all">全部</option>
         <option value="local">本地</option>
         <option value="downloading">下载中</option>
         <option value="running">运行中</option>
       </select>
+      <select v-model="sortField" class="source-select">
+        <option value="name">按名称</option>
+        <option value="size">按大小</option>
+        <option value="memory">按显存</option>
+      </select>
+      <button class="sort-order-btn" @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'">
+        {{ sortOrder === 'asc' ? '↑' : '↓' }}
+      </button>
       <select v-model="engineSelect" class="source-select">
         <option value="vllm">vLLM</option>
         <option value="sglang">SGLang</option>
       </select>
-      <span class="total-count tag tag-purple">共 {{ total }} 个模型</span>
-      <span class="ws-poll-badge">
-        <span class="ws-poll-dot"></span> 3s 自动刷新
-      </span>
+      <span class="total-count tag tag-purple">共 {{ filteredTotal }} 个模型</span>
     </div>
 
     <div v-if="poolList.length" class="stats-overview">
@@ -239,7 +287,7 @@ const poolStats = computed(() => {
         <span>端口</span>
         <span>操作</span>
       </div>
-      <div v-for="model in poolList" :key="model.config_key || model.name" class="table-row">
+      <div v-for="model in filteredPoolList" :key="model.config_key || model.name" class="table-row">
         <span class="model-name">{{ model.name }}</span>
         <span class="source-tag">{{ sourceIcon(model.source) }} {{ model.source }}</span>
         <span class="mono">{{ formatSize(model.size_b) }}</span>
@@ -322,6 +370,14 @@ const poolStats = computed(() => {
         </div>
       </div>
     </div>
+  <Transition name="toast">
+      <div v-if="toastMessage" class="toast" :class="toastType">
+        <CheckCircle v-if="toastType === 'success'" class="w-4 h-4" />
+        <XCircle v-else-if="toastType === 'error'" class="w-4 h-4" />
+        <AlertTriangle v-else class="w-4 h-4" />
+        {{ toastMessage }}
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -631,6 +687,88 @@ const poolStats = computed(() => {
 .stat-card:nth-child(3) .stat-icon { color: #4ade80; }
 .stat-card:nth-child(4) .stat-icon { color: var(--color-primary-light); }
 .stat-card:nth-child(5) .stat-icon { color: #f87171; }
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  min-width: 200px;
+}
+
+.search-bar:focus-within {
+  border-color: var(--color-primary);
+}
+
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.sort-order-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+}
+
+.sort-order-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 2000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 420px;
+}
+
+.toast.success { background: rgba(34, 197, 94, 0.95); color: white; }
+.toast.error { background: rgba(239, 68, 68, 0.95); color: white; }
+.toast.info { background: rgba(99, 102, 241, 0.95); color: white; }
+
+.toast-enter-active { transition: all 0.3s ease-out; }
+.toast-leave-active { transition: all 0.2s ease-in; }
+.toast-enter-from { opacity: 0; transform: translateY(20px); }
+.toast-leave-to { opacity: 0; transform: translateY(-10px); }
 
 .stat-info {
   display: flex;
