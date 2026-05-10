@@ -378,13 +378,33 @@
     }
 
     function showSection(id) {
-        document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
-        const el = document.getElementById(`section-${id}`);
-        if (el) el.style.display = '';
-        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-        const nav = document.getElementById(`nav-${id}`);
-        if (nav) nav.classList.add('active');
+        // 只管理插件自己的 section，不碰主应用的 .section
+        const gpuEl = document.getElementById('section-aios-gpu');
+        const modelEl = document.getElementById('section-aios-model');
+        if (gpuEl) gpuEl.style.display = (id === 'aios-gpu') ? '' : 'none';
+        if (modelEl) modelEl.style.display = (id === 'aios-model') ? '' : 'none';
+
+        // 只管理插件自己的 nav-item
+        ['nav-aios-gpu', 'nav-aios-model'].forEach(nid => {
+            const n = document.getElementById(nid);
+            if (n) n.classList.toggle('active', nid === `nav-${id}`);
+        });
     }
+
+    // 监听主应用导航（hashchange），自动隐藏插件面板
+    window.addEventListener('hashchange', () => {
+        const hash = window.location.hash.slice(1);
+        if (hash !== 'aios-gpu' && hash !== 'aios-model') {
+            const gpuEl = document.getElementById('section-aios-gpu');
+            const modelEl = document.getElementById('section-aios-model');
+            if (gpuEl) gpuEl.style.display = 'none';
+            if (modelEl) modelEl.style.display = 'none';
+            ['nav-aios-gpu', 'nav-aios-model'].forEach(nid => {
+                const n = document.getElementById(nid);
+                if (n) n.classList.remove('active');
+            });
+        }
+    });
 
     window.AiosManager = {
         gpu: {
