@@ -89,5 +89,6 @@ const defaultAuthPlugin = {
 };
 
 export default defaultAuthPlugin;
+export { isAuthorized };
 
 

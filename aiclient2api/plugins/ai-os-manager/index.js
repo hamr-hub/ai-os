@@ -3,6 +3,7 @@ import { modelSwitchService } from './model-switch.js';
 import { engineManager } from './engine-manager.js';
 import { backendClient } from './backend-client.js';
 import logger from '../../utils/logger.js';
+import { isAuthorized } from '../default-auth/index.js';
 import fs from 'fs/promises';
 import pathModule from 'path';
 
@@ -113,53 +114,26 @@ const aiOsManagerPlugin = {
             }
         }
 
-        for (const prefix of ADMIN_API_PREFIXES) {
-            if (pathname.startsWith(prefix)) {
-                const authHeader = req.headers['authorization'] || '';
-                const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-                const adminToken = req.headers['x-admin-token'] || null;
-                const token = (bearerToken && bearerToken !== 'undefined' && bearerToken !== 'null') ? bearerToken : adminToken;
-                const expectedToken = config.ADMIN_TOKEN || config.REQUIRED_API_KEY;
-                if (!expectedToken) {
-                    logger.warn('[AI-OS Manager] Admin API accessed without ADMIN_TOKEN or REQUIRED_API_KEY configured');
-                    return { handled: false, authorized: true };
-                }
-                if (!token || token !== expectedToken) {
-                    logger.info(`[AI-OS Manager] Admin auth failed for ${pathname}: token=${token ? token.substring(0, 8) + '...' : 'absent'}`);
-                    res.writeHead(401, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: { message: 'Unauthorized - admin token required', type: 'authentication_error', code: 'authentication_error' } }));
-                    return { handled: true, authorized: false };
-                }
-                return { handled: false, authorized: true };
-            }
+        const requiresAuth = ADMIN_API_PREFIXES.some(p => pathname.startsWith(p))
+            || (PROTECTED_API_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+                && API_PATHS.some(p => pathname.startsWith(p)));
+
+        if (!requiresAuth) return { handled: false, authorized: null };
+
+        const apiKey = config.REQUIRED_API_KEY;
+        if (!apiKey) {
+            logger.warn('[AI-OS Manager] Auth bypassed - REQUIRED_API_KEY not configured');
+            return { handled: false, authorized: true };
         }
 
-        let isProtectedPath = false;
-        for (const apiPath of PROTECTED_API_PATHS) {
-            if (pathname === apiPath || pathname.startsWith(apiPath + '/')) {
-                isProtectedPath = true; break;
-            }
+        if (isAuthorized(req, requestUrl, apiKey)) {
+            return { handled: false, authorized: true };
         }
-        if (!isProtectedPath) return { handled: false, authorized: null };
 
-        for (const apiPath of API_PATHS) {
-            if (pathname.startsWith(apiPath)) {
-                const authHeader = req.headers['authorization'] || '';
-                const apiKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-                const expectedApiKey = config.REQUIRED_API_KEY;
-
-                if (!expectedApiKey) return { handled: false, authorized: true };
-                if (apiKey && apiKey !== 'undefined' && apiKey !== 'null' && apiKey === expectedApiKey) {
-                    return { handled: false, authorized: true };
-                } else {
-                    logger.info(`[AI-OS Manager] API auth failed for ${pathname}: apiKey=${apiKey ? apiKey.substring(0, 8) + '...' : 'absent'}`);
-                    res.writeHead(401, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: { message: 'Unauthorized', type: 'authentication_error', code: 'authentication_error' } }));
-                    return { handled: true, authorized: false };
-                }
-            }
-        }
-        return { handled: false, authorized: null };
+        logger.info(`[AI-OS Manager] Auth rejected for ${pathname}`);
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'Unauthorized', type: 'authentication_error', code: 'authentication_error' } }));
+        return { handled: true, authorized: false };
     },
 
     async middleware(req, res, requestUrl, config) {

@@ -228,6 +228,19 @@ class ModelTestingFramework:
             await asyncio.sleep(2)
         return False
 
+    def _get_vllm_model_id(self, model_name: str) -> str:
+        from core.vllm_manager import get_current_model_info
+        info = get_current_model_info() or {}
+        active_path = info.get("path", "")
+        if active_path:
+            config_name = info.get("config_name", info.get("name", ""))
+            if config_name == model_name:
+                return active_path
+        model_info = self.scheduler.get_model_info(model_name)
+        if model_info and model_info.get("local_path"):
+            return model_info["local_path"]
+        return model_name
+
     def _collect_runtime_status(self, model_name: str) -> Dict[str, Any]:
         backend_type = self.scheduler.get_model_backend_type(model_name)
         runtime_status = {
@@ -268,12 +281,13 @@ class ModelTestingFramework:
         try:
             port = self.scheduler.get_model_port(model_name)
             url = f"http://localhost:{port}/v1/chat/completions"
+            model_id = self._get_vllm_model_id(model_name)
             
             async with httpx.AsyncClient(timeout=self.TEST_TIMEOUT) as client:
                 response = await client.post(
                     url,
                     json={
-                        "model": model_name,
+                        "model": model_id,
                         "messages": [{"role": "user", "content": self.STANDARD_TEST_PROMPT}],
                         "max_tokens": 50,
                         "temperature": 0.7
@@ -323,12 +337,13 @@ class ModelTestingFramework:
         try:
             port = self.scheduler.get_model_port(model_name)
             url = f"http://localhost:{port}/v1/chat/completions"
+            model_id = self._get_vllm_model_id(model_name)
             
             async with httpx.AsyncClient(timeout=self.TEST_TIMEOUT) as client:
                 response = await client.post(
                     url,
                     json={
-                        "model": model_name,
+                        "model": model_id,
                         "messages": [{"role": "user", "content": self.STANDARD_TEST_PROMPT}],
                         "max_tokens": 50,
                         "temperature": 0.7,
@@ -396,6 +411,7 @@ class ModelTestingFramework:
         try:
             port = self.scheduler.get_model_port(model_name)
             url = f"http://localhost:{port}/v1/chat/completions"
+            model_id = self._get_vllm_model_id(model_name)
             
             tools = [
                 {
@@ -418,7 +434,7 @@ class ModelTestingFramework:
                 response = await client.post(
                     url,
                     json={
-                        "model": model_name,
+                        "model": model_id,
                         "messages": [{"role": "user", "content": self.STANDARD_TOOL_PROMPT}],
                         "tools": tools,
                         "tool_choice": "auto",
@@ -470,12 +486,13 @@ class ModelTestingFramework:
             
             port = self.scheduler.get_model_port(model_name)
             url = f"http://localhost:{port}/v1/chat/completions"
+            model_id = self._get_vllm_model_id(model_name)
             
             async with httpx.AsyncClient(timeout=self.TEST_TIMEOUT) as client:
                 response = await client.post(
                     url,
                     json={
-                        "model": model_name,
+                        "model": model_id,
                         "messages": [{
                             "role": "user",
                             "content": [

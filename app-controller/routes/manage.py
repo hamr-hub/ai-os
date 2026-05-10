@@ -18,6 +18,7 @@ from core.deps import (
     gpu_memory_manager as _gpu_memory_manager, model_hub as _model_hub,
     llm_service_manager as _llm_service_manager, model_pool_manager as _model_pool_manager,
     download_task_manager as _download_task_manager, model_engine_scheduler as _model_engine_scheduler,
+    model_tester as _model_tester,
 )
 
 scheduler = _scheduler
@@ -38,6 +39,7 @@ llm_service_manager = _llm_service_manager
 model_pool_manager = _model_pool_manager
 download_task_manager = _download_task_manager
 model_engine_scheduler = _model_engine_scheduler
+model_tester = _model_tester
 
 manage_router = APIRouter(prefix="/manage")
 integration_router = APIRouter(prefix="/api/v1")
@@ -1055,10 +1057,27 @@ async def get_python_service_status(refresh: Optional[bool] = False):
     return services
 
 
+@manage_router.get("/service/logs")
+async def get_service_logs(lines: int = 100, service: str = "vllm-aiclient"):
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", service, "--no-pager", "-n", str(lines)],
+            capture_output=True, text=True, timeout=10
+        )
+        log_lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+        return {"logs": log_lines, "count": len(log_lines), "service": service}
+    except subprocess.TimeoutExpired:
+        return {"logs": [], "count": 0, "error": "日志读取超时"}
+    except FileNotFoundError:
+        return {"logs": [], "count": 0, "error": "journalctl 不可用"}
+    except Exception as e:
+        return {"logs": [], "count": 0, "error": str(e)}
+
+
 @manage_router.post("/service/start")
 async def start_python_service(request: ServiceControlRequest = None):
     service_name = request.service_name if request and request.service_name else "aiclient-python"
-
     success = sys_controller.start_service(service_name)
     if success:
         return {"status": "started", "service": service_name}
@@ -1616,6 +1635,18 @@ async def pool_sync_config():
 
 @manage_router.post("/engines/switch")
 async def engine_switch(request: Request):
+    from core.deps import model_switch_orchestrator
+    if model_switch_orchestrator.is_switching:
+        current = model_switch_orchestrator.current_session
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "模型切换正在进行中，无法同时切换引擎",
+                "session_id": current.session_id if current else None,
+                "target_model": current.target_model if current else None,
+            }
+        )
+
     try:
         body = await request.json()
     except Exception:
@@ -1642,15 +1673,40 @@ async def engine_status():
         if current_info and current_info.get("running"):
             try:
                 import psutil
-                vllm_pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name'])
-                             if p.info['name'] and ('VLLM' in p.info['name'].upper() or 'vllm' in (p.info['name'] or '').lower())]
-                vllm_pid = vllm_pids[0] if vllm_pids else None
+                model_name = current_info.get("name", "")
+                configured_engine = "vllm"
+                config = scheduler.get_model_config(model_name) or {}
+                configured_engine = config.get("engine_type", "vllm")
+                service_port = config.get("port", 8000)
+
+                engine_patterns = {
+                    "vllm": ["VLLM", "vllm"],
+                    "sglang": ["SGLANG", "sglang", "python -m sglang"],
+                    "llamacpp": ["LLAMACPP", "llama.cpp", "llama-server", "llama-cli"],
+                }
+                discovered_engine = "vllm"
+                vllm_pid = None
+                for engine_type, patterns in engine_patterns.items():
+                    for pattern in patterns:
+                        try:
+                            pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name', 'cmdline'])
+                                    if p.info['name'] and pattern.upper() in (p.info['name'] or '').upper()]
+                            if not pids:
+                                pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name', 'cmdline'])
+                                        if p.info['cmdline'] and any(pattern in (c or '') for c in p.info['cmdline'])]
+                            if pids:
+                                vllm_pid = pids[0]
+                                discovered_engine = engine_type
+                                break
+                        except Exception:
+                            pass
+                    if vllm_pid:
+                        break
             except Exception:
                 vllm_pid = None
-            model_name = current_info.get("name", "")
-            engine_type = "vllm"
-            config = scheduler.get_model_config(model_name) or {}
-            service_port = config.get("port", 8000)
+                discovered_engine = "vllm"
+                model_name = current_info.get("name", "")
+                service_port = 8000
             uptime = None
             try:
                 async with httpx.AsyncClient(timeout=3) as client:
@@ -1664,8 +1720,8 @@ async def engine_status():
             services.append({
                 "status": "running",
                 "service_name": current_info.get("service", "vllm-aiclient"),
-                "engine_type": engine_type,
-                "engine": engine_type,
+                "engine_type": discovered_engine,
+                "engine": discovered_engine,
                 "pid": vllm_pid,
                 "port": service_port,
                 "model_name": model_name,
@@ -1673,10 +1729,16 @@ async def engine_status():
                 "health": health,
                 "uptime_seconds": None,
             })
+    current_engine = "vllm"
+    if services:
+        running_services = [s for s in services if s.get("status") == "running"]
+        if running_services:
+            current_engine = running_services[0].get("engine_type", "vllm")
     return {
         "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "systemd"),
         "services": services,
         "active_count": len([s for s in services if s.get("status") == "running"]),
+        "current_engine": current_engine,
     }
 
 
@@ -1737,17 +1799,86 @@ async def benchmark_model(model_name: str):
         raise HTTPException(status_code=404, detail=f"Model '{model_name}' not available")
     try:
         report = await model_tester.run_tests(model_name)
+        report_dict = _serialize_report(report)
         return {
-            "status": "completed",
+            "status": "found",
             "model_name": model_name,
-            "results": {
-                "tests_run": len(report.tests) if hasattr(report, 'tests') else 0,
-                "pass_rate": report.pass_rate if hasattr(report, 'pass_rate') else 0,
-                "errors": report.errors if hasattr(report, 'errors') else [],
-            },
+            "report": report_dict,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Benchmark failed: {str(e)}")
+
+
+@manage_router.get("/models/{model_name}/benchmark")
+async def get_benchmark_report(model_name: str):
+    report = model_tester.get_previous_report(model_name)
+    if not report:
+        raise HTTPException(status_code=404, detail=f"No benchmark report for '{model_name}'")
+    return {
+        "status": "found",
+        "model_name": model_name,
+        "report": _serialize_report(report),
+    }
+
+
+@manage_router.get("/models/benchmarks/history")
+async def get_benchmark_history():
+    all_reports = model_tester.get_all_reports()
+    history = []
+    for model_name, report in all_reports.items():
+        history.append({
+            "model_name": model_name,
+            "timestamp": report.test_timestamp if hasattr(report, 'test_timestamp') else "",
+            "status": report.overall_status if hasattr(report, 'overall_status') else "unknown",
+            "duration": report.resource_utilization.get("test_duration_seconds", 0) if hasattr(report, 'resource_utilization') else 0,
+        })
+    return {
+        "status": "ok",
+        "reports": {k: _serialize_report(v) for k, v in all_reports.items()},
+        "history": sorted(history, key=lambda x: x["timestamp"], reverse=True),
+    }
+
+
+def _serialize_report(report: Any) -> Dict[str, Any]:
+    if report is None:
+        return {}
+    try:
+        from dataclasses import asdict, is_dataclass
+        if is_dataclass(report):
+            return _dataclass_to_dict(report)
+    except ImportError:
+        pass
+    if hasattr(report, '__dict__') and not isinstance(report, dict):
+        return {k: _safe_value(v) for k, v in vars(report).items()}
+    if isinstance(report, dict):
+        return {k: _safe_value(v) for k, v in report.items()}
+    return _safe_value(report)
+
+
+def _safe_value(val: Any) -> Any:
+    if val is None:
+        return None
+    if hasattr(val, 'value'):
+        return val.value
+    if isinstance(val, (int, float, str, bool)):
+        return val
+    if isinstance(val, list):
+        return [_safe_value(item) for item in val]
+    if isinstance(val, dict):
+        return {k: _safe_value(v) for k, v in val.items()}
+    try:
+        from dataclasses import is_dataclass
+        if is_dataclass(val):
+            return _dataclass_to_dict(val)
+    except ImportError:
+        pass
+    if hasattr(val, '__dict__'):
+        return {k: _safe_value(v) for k, v in vars(val).items()}
+    return str(val)
+
+
+def _dataclass_to_dict(obj: Any) -> Dict[str, Any]:
+    return {k: _safe_value(v) for k, v in vars(obj).items() if not k.startswith('_')}
 
 
 @manage_router.post("/models/benchmark/comparative")

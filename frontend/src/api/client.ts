@@ -222,9 +222,19 @@ export async function getModelsStatus(config: AxiosRequestConfig = {}): Promise<
   return data
 }
 
-export async function getModels(): Promise<ModelsResponse> {
-  const { data } = await v1Client.get<ModelsResponse>('/models')
-  return data
+export async function getModels(config: AxiosRequestConfig = {}): Promise<{ data: ModelInfo[]; total: number }> {
+  const { data } = await client.get('/models/pool', {
+    params: { filter: 'all', page: 1, page_size: 200 },
+    timeout: config.timeout || 10000,
+    ...config,
+  })
+  const models = data.models || data.items || []
+  const items: ModelInfo[] = models.map((entry: any) => ({
+    id: entry.name || entry.id || '',
+    owned_by: entry.source || 'system',
+    running: entry.running_status === 'running' || entry.is_running === true,
+  }))
+  return { data: items, total: data.total || items.length }
 }
 
 export async function startModel(name: string): Promise<ActionResponse> {
@@ -273,8 +283,8 @@ export async function disablePreload(name: string): Promise<ActionResponse> {
 }
 
 export async function runModelTest(name: string): Promise<TestResponse> {
-  const { data } = await v1Client.post<TestResponse>(
-    `/test/model/${name}`,
+  const { data } = await client.post<TestResponse>(
+    `/models/${encodeURIComponent(name)}/benchmark`,
     null,
     silentRequestConfig({ timeout: 180000 })
   )
@@ -282,22 +292,18 @@ export async function runModelTest(name: string): Promise<TestResponse> {
 }
 
 export async function getTestResults(name: string): Promise<TestResponse> {
-  const { data } = await v1Client.get<TestResponse>(
-    `/test/report/${name}`,
+  const { data } = await client.get<TestResponse>(
+    `/models/${encodeURIComponent(name)}/benchmark`,
     silentRequestConfig()
   )
   return data
 }
 
 export async function getTestHistory(): Promise<TestHistoryEntry[]> {
-  const { data } = await v1Client.get<
-    | {
-        status?: string
-        reports?: Record<string, Record<string, unknown>>
-        history?: Array<Record<string, unknown>>
-      }
+  const { data } = await client.get<
+    | { status?: string; reports?: Record<string, Record<string, unknown>>; history?: Array<Record<string, unknown>> }
     | Array<Record<string, unknown>>
-  >('/test/reports')
+  >('/models/benchmarks/history')
 
   const normalizeEntry = (
     modelName: string,
@@ -704,7 +710,7 @@ export async function getLLMServiceStatus(config: AxiosRequestConfig = {}): Prom
 }
 
 export async function getLLMServiceLogs(lines: number = 100, config: AxiosRequestConfig = {}): Promise<{ logs: string[]; count: number }> {
-  const { data } = await client.get('/logs/test', silentRequestConfig({ params: { lines }, ...config }))
+  const { data } = await client.get('/service/logs', silentRequestConfig({ params: { lines }, ...config }))
   return data
 }
 

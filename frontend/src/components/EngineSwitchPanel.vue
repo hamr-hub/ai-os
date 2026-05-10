@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { getEngineStatus, switchEngine } from '@/api/client'
+import { getEngineStatus, switchEngine, getModelsStatus } from '@/api/client'
 import type { EngineType, EngineStatus } from '@/types'
 import {
   Zap,
@@ -16,6 +16,9 @@ const switching = ref(false)
 const error = ref<string | null>(null)
 const switchError = ref<string | null>(null)
 const confirmTarget = ref<EngineType | null>(null)
+const modelList = ref<string[]>([])
+const selectedModel = ref('')
+const modelsLoading = ref(false)
 
 const engineOptions: { key: EngineType; label: string; icon: string }[] = [
   { key: 'vllm', label: 'vLLM', icon: '⚡' },
@@ -43,6 +46,23 @@ const confirmTargetLabel = computed(() => {
   return opt ? `${opt.icon} ${opt.label}` : ''
 })
 
+async function fetchModels() {
+  if (modelsLoading.value) return
+  modelsLoading.value = true
+  try {
+    const status = await getModelsStatus()
+    modelList.value = Object.keys(status || {})
+    if (modelList.value.length > 0 && !selectedModel.value) {
+      const runningModel = Object.entries(status).find(([, s]) => s.running)
+      selectedModel.value = runningModel ? runningModel[0] : modelList.value[0]
+    }
+  } catch {
+    modelList.value = []
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
 async function fetchStatus() {
   try {
     engineStatus.value = await getEngineStatus()
@@ -64,11 +84,16 @@ function cancelSwitch() {
 async function handleSwitch() {
   if (!confirmTarget.value) return
   const target = confirmTarget.value
+  const modelName = selectedModel.value
+  if (!modelName) {
+    switchError.value = '请先选择要切换的模型'
+    return
+  }
   cancelSwitch()
   switching.value = true
   switchError.value = null
   try {
-    const result = await switchEngine(target)
+    const result = await switchEngine(modelName, target)
     if (result.status === 'success' || result.status === 'switching') {
       await fetchStatus()
     } else {
@@ -85,6 +110,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   fetchStatus()
+  fetchModels()
   pollTimer = setInterval(fetchStatus, 5000)
 })
 
@@ -161,8 +187,19 @@ onUnmounted(() => {
         <p class="confirm-body">
           切换到 <strong>{{ confirmTargetLabel }}</strong>？切换过程将中断当前服务。
         </p>
+        <div class="model-select-section">
+          <label class="model-select-label">选择模型</label>
+          <select v-model="selectedModel" class="model-select">
+            <option value="" disabled>-- 请选择模型 --</option>
+            <option v-for="m in modelList" :key="m" :value="m">{{ m }}</option>
+          </select>
+          <button class="refresh-models-btn" @click="fetchModels" :disabled="modelsLoading">
+            <Loader2 v-if="modelsLoading" class="w-3 h-3 animate-spin" />
+            <span v-else>刷新</span>
+          </button>
+        </div>
         <div class="confirm-actions">
-          <button class="confirm-btn primary" @click="handleSwitch">确认切换</button>
+          <button class="confirm-btn primary" @click="handleSwitch" :disabled="!selectedModel">确认切换</button>
           <button class="confirm-btn cancel" @click="cancelSwitch">取消</button>
         </div>
       </div>
@@ -437,6 +474,51 @@ onUnmounted(() => {
 }
 
 .confirm-body strong {
+  color: var(--text-primary);
+}
+
+.model-select-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.model-select-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.model-select {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.model-select:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.refresh-models-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-models-btn:hover {
+  background: var(--bg-tertiary);
   color: var(--text-primary);
 }
 

@@ -135,7 +135,7 @@ export function useModelSwitch() {
     phase === 'completed' || phase === 'failed' || phase === 'rolled_back' || phase === 'idle'
 
   const startPolling = () => {
-    if (pollInterval) return
+    if (pollInterval || wsConnected.value) return
     pollInterval = window.setInterval(async () => {
       try {
         const status = await getSwitchStatus()
@@ -200,7 +200,6 @@ export function useModelSwitch() {
     }
 
     connectWS()
-    startPolling()
   }
 
   const triggerCancel = async () => {

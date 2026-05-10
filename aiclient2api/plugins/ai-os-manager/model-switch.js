@@ -246,11 +246,11 @@ class ModelSwitchService {
         }
     }
 
-    async switchModel(modelName, async = true, options = {}) {
-        const mode = async ? 'warm' : 'cold';
+    async switchModel(modelName, asyncMode = true, options = {}) {
+        const mode = asyncMode ? 'warm' : 'cold';
         const taskId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
-        if (async) {
+        if (asyncMode) {
             this.switchTasks.set(taskId, {
                 modelName,
                 status: 'pending',
@@ -347,7 +347,7 @@ class ModelSwitchService {
             const sessionId = data.session_id;
             logger.info(`[Model Switch Service] Atomic switch started, session: ${sessionId}, polling status...`);
 
-            const maxPollTime = 180000;
+            const maxPollTime = 660000;
             const pollInterval = 3000;
             const startTime = Date.now();
 

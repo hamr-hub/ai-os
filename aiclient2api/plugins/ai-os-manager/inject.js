@@ -24,16 +24,16 @@
 
             const header = document.createElement('div');
             header.className = 'aios-p-modal-header';
-            header.textContent = '管理员验证';
+            header.textContent = 'API Key 验证';
 
             const desc = document.createElement('div');
             desc.style.cssText = 'font-size:12px;color:var(--text-secondary);margin-bottom:12px;';
-            desc.textContent = '请输入 API Key / Admin Token（与管控面板登录一致）';
+            desc.textContent = '请输入 API Key（与系统 REQUIRED_API_KEY 一致）';
 
             const input = document.createElement('input');
             input.className = 'aios-p-input';
             input.type = 'password';
-            input.placeholder = '请输入 API Key 或 Token';
+            input.placeholder = '请输入 API Key';
             input.style.width = '100%';
 
             const errorMsg = document.createElement('div');

@@ -92,9 +92,16 @@ const handleRefresh = () => {
 const handleSwitch = async () => {
   if (!targetModel.value) return
   showSwitchConfirm.value = false
-  triggerSwitch(targetModel.value, false, 'switch')
-  activeTab.value = 'switch'
-  showToast(`已发送引擎切换请求: ${targetModel.value}`, 'info')
+  switching.value = true
+  try {
+    await doSwitchEngine(targetModel.value, targetEngine.value, targetPort.value)
+    activeTab.value = 'switch'
+    showToast(`引擎切换已启动: ${targetModel.value} → ${engineDisplayName(targetEngine.value)}`, 'info')
+  } catch (e: any) {
+    showToast(`引擎切换失败: ${e.message || '未知错误'}`, 'error')
+  } finally {
+    switching.value = false
+  }
 }
 
 const engineList = computed(() => {
