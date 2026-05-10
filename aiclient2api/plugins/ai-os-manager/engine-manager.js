@@ -37,7 +37,13 @@ class EngineManagerService {
     async updateData() {
         try {
             const response = await backendClient.fetchWithFallback('/manage/engines/status');
-            if (!response.ok) return;
+            if (!response.ok) {
+                const status = response.status;
+                let errorText = '';
+                try { errorText = await response.text(); } catch {}
+                logger.error(`[EngineManager] Status fetch failed: ${status} - ${errorText.slice(0, 200)}`);
+                return;
+            }
             const result = await response.json();
             this.dataCache = this._normalizeResult(result);
             this.lastFetchTime = new Date().toISOString();
@@ -49,7 +55,13 @@ class EngineManagerService {
     async updateConfig() {
         try {
             const response = await backendClient.fetchWithFallback('/manage/engines/config');
-            if (!response.ok) return;
+            if (!response.ok) {
+                const status = response.status;
+                let errorText = '';
+                try { errorText = await response.text(); } catch {}
+                logger.error(`[EngineManager] Config fetch failed: ${status} - ${errorText.slice(0, 200)}`);
+                return;
+            }
             const result = await response.json();
             this.configCache = result;
         } catch (error) {

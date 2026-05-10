@@ -6,7 +6,7 @@ import type {
   GPUEnhancedInfo,
   VLLMMetricsData,
   ModelStatus,
-  ModelsResponse,
+  ModelInfo,
   ActionResponse,
   TestResponse,
   TestHistoryEntry,

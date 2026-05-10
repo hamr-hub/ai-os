@@ -228,10 +228,14 @@ export function useModelSwitch() {
       } else if (status.session && isTerminalPhase(status.session.overall_phase)) {
         currentSession.value = status.session
         isSwitching.value = false
+      } else if (status.is_switching && !status.session) {
+        isSwitching.value = false
       } else {
         isSwitching.value = false
       }
-    }).catch(() => {})
+    }).catch(() => {
+      isSwitching.value = false
+    })
   }
 
   onUnmounted(() => {

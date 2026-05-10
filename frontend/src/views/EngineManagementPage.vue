@@ -22,8 +22,8 @@ import {
 import type { EngineType } from '@/types'
 import EngineParamEditor from '@/components/EngineParamEditor.vue'
 
-const { engineStatus, engineConfig, loading, switching, error, fetchStatus, fetchConfig, doUpdateConfig } = useEngineManagement()
-const { isSwitching, currentSession, triggerSwitch, triggerCancel } = useModelSwitch()
+const { engineStatus, engineConfig, loading, switching, error, fetchStatus, fetchConfig, doUpdateConfig, doSwitchEngine } = useEngineManagement()
+const { isSwitching, currentSession, triggerCancel } = useModelSwitch()
 const { modelList } = useModels()
 
 const targetModel = ref('')

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
 from core.gpu_memory_manager import _HEADROOM_GB, _SAFETY_RATIO
+from core.vllm_manager import SYSTEMCTL_BIN
 
 logger = logging.getLogger("ai_controller.model_switch_orchestrator")
 

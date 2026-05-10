@@ -485,9 +485,10 @@ class ModelSwitchService {
                 signal: AbortSignal.timeout(180000)
             });
 
+            let errorText = null;
             if (!response.ok) {
-                const errorText = await response.text();
-                logger.error(`[Model Switch Service] Model start failed: ${response.status} - ${errorText}`);
+                try { errorText = await response.text(); } catch {}
+                logger.error(`[Model Switch Service] Model start failed: ${response.status} - ${errorText || 'unknown'}`);
             }
 
             await this.fetchModelsFromBackend();
@@ -495,6 +496,7 @@ class ModelSwitchService {
             return {
                 success: response.ok,
                 data: { modelName, status: response.ok ? 'completed' : 'failed' },
+                error: response.ok ? null : (errorText || `Model start failed with status ${response.status}`),
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };
@@ -517,11 +519,18 @@ class ModelSwitchService {
                 signal: AbortSignal.timeout(180000)
             });
 
+            let errorText = null;
+            if (!response.ok) {
+                try { errorText = await response.text(); } catch {}
+                logger.error(`[Model Switch Service] Model stop failed: ${response.status} - ${errorText || 'unknown'}`);
+            }
+
             await this.fetchModelsFromBackend();
 
             return {
                 success: response.ok,
                 data: { modelName, status: response.ok ? 'completed' : 'failed' },
+                error: response.ok ? null : (errorText || `Model stop failed with status ${response.status}`),
                 timestamp: new Date().toISOString(),
                 backendStatus: backendClient.getStatus()
             };
