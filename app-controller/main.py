@@ -23,7 +23,7 @@ from core.deps import (
     cache_service, cache_updater, redis_client,
     structured_logger, config_watcher, logger, model_tester, sys_controller, system_monitor,
     gpu_memory_manager, model_hub, llm_service_manager, model_pool_manager,
-    download_task_manager, model_engine_scheduler, sse_push_manager, agent_system,
+    download_task_manager, model_engine_scheduler, model_switch_orchestrator, sse_push_manager, agent_system,
     agent_session_manager,
     VLLM_REQUEST_TIMEOUT, VLLM_STREAM_TIMEOUT, VLLM_CLIENT_LIMITS,
     _background_tasks, _on_config_changed,
@@ -110,6 +110,49 @@ async def reload_runtime_config():
     return True
 
 
+async def _recover_switch(target_model: str, target_path: str):
+    from core.vllm_manager import get_current_model_info, discover_vllm_port, _build_vllm_base_url
+    await asyncio.sleep(15)
+    try:
+        current_info = get_current_model_info()
+        current_name = current_info.get("name") if current_info else None
+        if current_name == target_model:
+            logger.info("Switch recovery: model %s already running, clearing state", target_model)
+            model_switch_orchestrator._clear_switch_state()
+            return
+
+        port = discover_vllm_port()
+        if port:
+            try:
+                async with httpx.AsyncClient(timeout=5) as client:
+                    resp = await client.get(f"http://localhost:{port}/v1/models")
+                    if resp.status_code == 200:
+                        models_data = resp.json()
+                        registered_ids = [m.get("id", "") for m in models_data.get("data", [])]
+                        for rid in registered_ids:
+                            if target_model in rid or target_path in rid:
+                                logger.info("Switch recovery: target model %s is running, clearing state", target_model)
+                                model_switch_orchestrator._clear_switch_state()
+                                scheduler.mark_model_selected(target_model)
+                                return
+            except Exception:
+                pass
+
+        logger.info("Switch recovery: target model %s not running, re-triggering switch", target_model)
+        previous_info = get_current_model_info()
+        previous_model = previous_info.get("name") if previous_info else None
+        previous_path = previous_info.get("path") if previous_info else None
+        await model_switch_orchestrator.switch(
+            target_model=target_model,
+            target_model_path=target_path,
+            previous_model=previous_model,
+            previous_model_path=previous_path,
+        )
+    except Exception as e:
+        logger.error("Switch recovery failed: %s", e)
+        model_switch_orchestrator._clear_switch_state()
+
+
 def _install_signal_handlers():
     try:
         loop = asyncio.get_running_loop()
@@ -190,6 +233,13 @@ async def startup_event(app: FastAPI):
     model_engine_scheduler._sync_config_to_registry()
 
     await scheduler.preload_models()
+
+    pending_switch = model_switch_orchestrator.load_pending_switch_state()
+    if pending_switch:
+        target_model = pending_switch.get("target_model")
+        target_path = pending_switch.get("target_model_path")
+        logger.info("Recovering from pending switch: target=%s, path=%s", target_model, target_path)
+        asyncio.create_task(_recover_switch(target_model, target_path))
 
     _background_tasks.clear()
     _background_tasks.append(asyncio.create_task(gpu_monitor._update_cache_loop()))

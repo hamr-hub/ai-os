@@ -90,7 +90,11 @@ class EngineManagerService {
                 port: port || 8000
             });
             const result = await response.json();
-            return { success: response.ok, data: result, timestamp: new Date().toISOString() };
+            if (response.ok) {
+                return { success: true, data: result, timestamp: new Date().toISOString() };
+            } else {
+                return { success: false, error: result.detail || result.error || result.reason || `HTTP ${response.status}`, data: result, timestamp: new Date().toISOString() };
+            }
         } catch (error) {
             logger.error('[EngineManager] Switch error:', error.message);
             return { success: false, error: error.message };

@@ -125,6 +125,7 @@ model_engine_scheduler = ModelEngineScheduler(
     config, gpu_memory_manager=gpu_memory_manager, model_hub=model_hub,
     download_manager=download_task_manager, model_pool=model_pool_manager,
     llm_service_manager=llm_service_manager,
+    engine_manager_mode=_engine_manager_mode,
 )
 model_engine_scheduler._orchestrator = model_switch_orchestrator
 

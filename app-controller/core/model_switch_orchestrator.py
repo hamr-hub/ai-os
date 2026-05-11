@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import signal
 import socket
@@ -14,6 +15,8 @@ from typing import Optional, List, Dict, Any
 
 from core.gpu_memory_manager import _HEADROOM_GB, _SAFETY_RATIO
 from core.vllm_manager import SYSTEMCTL_BIN
+
+SWITCH_STATE_FILE = os.path.join(os.path.dirname(__file__), '..', 'scripts', '.switch_state.json')
 
 logger = logging.getLogger("ai_controller.model_switch_orchestrator")
 
@@ -184,6 +187,46 @@ class ModelSwitchOrchestrator:
         self._current_session: Optional[SwitchSession] = None
         self._cancel_requested = False
 
+    def _save_switch_state(self, session: SwitchSession):
+        try:
+            state = {
+                "session_id": session.session_id,
+                "action": session.action,
+                "target_model": session.target_model,
+                "target_model_path": session.target_model_path,
+                "previous_model": session.previous_model,
+                "previous_model_path": session.previous_model_path,
+                "started_at": session.started_at,
+                "overall_phase": session.overall_phase.value if isinstance(session.overall_phase, SwitchPhase) else session.overall_phase,
+            }
+            state_dir = os.path.dirname(SWITCH_STATE_FILE)
+            if state_dir:
+                os.makedirs(state_dir, exist_ok=True)
+            with open(SWITCH_STATE_FILE, 'w') as f:
+                json.dump(state, f, indent=2)
+            logger.info("Saved switch state: target=%s", session.target_model)
+        except Exception as e:
+            logger.warning("Failed to save switch state: %s", e)
+
+    def _clear_switch_state(self):
+        try:
+            if os.path.exists(SWITCH_STATE_FILE):
+                os.remove(SWITCH_STATE_FILE)
+                logger.info("Cleared switch state file")
+        except Exception as e:
+            logger.warning("Failed to clear switch state: %s", e)
+
+    def load_pending_switch_state(self) -> Optional[Dict[str, Any]]:
+        try:
+            if os.path.exists(SWITCH_STATE_FILE):
+                with open(SWITCH_STATE_FILE, 'r') as f:
+                    state = json.load(f)
+                logger.info("Found pending switch state: target=%s, phase=%s", state.get("target_model"), state.get("overall_phase"))
+                return state
+        except Exception as e:
+            logger.warning("Failed to load switch state: %s", e)
+        return None
+
     @property
     def is_switching(self) -> bool:
         return self._global_lock.locked()
@@ -222,6 +265,7 @@ class ModelSwitchOrchestrator:
                 phases=SwitchSession.create_switch_phases(),
             )
             self._current_session = session
+            self._save_switch_state(session)
 
             try:
                 session.overall_phase = SwitchPhase.IDLE
@@ -273,6 +317,7 @@ class ModelSwitchOrchestrator:
 
             finally:
                 session.finished_at = session.finished_at or datetime.now().isoformat()
+                self._clear_switch_state()
 
             return session
 
@@ -313,6 +358,7 @@ class ModelSwitchOrchestrator:
                     raise _SwitchAborted(session.error)
 
                 session.overall_phase = SwitchPhase.PHASE1
+                self._save_switch_state(session)
                 try:
                     await asyncio.wait_for(
                         self._phase1_stop_and_verify(session),
@@ -372,6 +418,7 @@ class ModelSwitchOrchestrator:
 
             finally:
                 session.finished_at = session.finished_at or datetime.now().isoformat()
+                self._clear_switch_state()
 
             return session
 
@@ -397,6 +444,7 @@ class ModelSwitchOrchestrator:
                 phases=SwitchSession.create_stop_phases(),
             )
             self._current_session = session
+            self._save_switch_state(session)
 
             try:
                 session.overall_phase = SwitchPhase.PHASE1
@@ -446,6 +494,7 @@ class ModelSwitchOrchestrator:
 
             finally:
                 session.finished_at = session.finished_at or datetime.now().isoformat()
+                self._clear_switch_state()
 
             return session
 

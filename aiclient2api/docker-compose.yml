@@ -3,21 +3,12 @@ services:
     image: justlikemaki/aiclient-2-api:latest
     container_name: aiclient
     restart: always
-    ports:
-      - "3000:3000"
+    network_mode: host
     environment:
       - NODE_ENV=production
-      - GO_BACKEND_URL=http://host.docker.internal:35001
-      - PYTHON_BACKEND_URL=http://host.docker.internal:35000
-    networks:
-      - default
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - GO_BACKEND_URL=http://localhost:35001
+      - PYTHON_BACKEND_URL=http://localhost:35000
     volumes:
       - ./data:/app/data
       - ./configs:/app/configs
       - ./plugins:/app/src/plugins
-
-networks:
-  default:
-    driver: bridge

@@ -104,6 +104,8 @@
 }
 
 /* Section animations */
+.aios-p-scope .aios-p-section { display: none; }
+.aios-p-scope .aios-p-section.active { display: block; }
 .aios-p-scope .aios-p-section {
     animation: aios-p-section-in 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
 }

@@ -1729,7 +1729,7 @@ async def engine_status():
                 service_port = 8000
             uptime = None
             try:
-                async with httpx.AsyncClient(timeout=3) as client:
+                async with httpx.AsyncClient(timeout=10) as client:
                     resp = await client.get(f"http://localhost:{service_port}/v1/models")
                     if resp.status_code == 200:
                         health = "healthy"

@@ -45,6 +45,7 @@ class ModelEngineScheduler:
         download_manager=None,
         model_pool=None,
         llm_service_manager=None,
+        engine_manager_mode: str = "subprocess",
     ):
         self._config = config
         self._gpu_mgr = gpu_memory_manager
@@ -52,11 +53,13 @@ class ModelEngineScheduler:
         self._download_mgr = download_manager
         self._model_pool = model_pool
         self._llm_mgr = llm_service_manager
+        self._engine_manager_mode = engine_manager_mode
         self._switching_lock = asyncio.Lock()
         self._active_service: Optional[str] = None
         self._switch_history: List[Dict] = []
         self._max_history = 50
         self._engine_model_registry: Dict[str, Dict] = {}
+        self._orchestrator = None
 
     def _build_model_pool_from_config(self) -> Dict[str, Dict]:
         if not self._config:
@@ -216,34 +219,74 @@ class ModelEngineScheduler:
     ) -> Dict:
         if engine_type not in _ENGINE_CAPABILITIES:
             return {"success": False, "reason": f"unsupported_engine: {engine_type}"}
-        if not self._llm_mgr:
-            return {"success": False, "reason": "no_llm_service_manager"}
         if not port:
             port = self._find_available_port(engine_type)
-        if self._gpu_mgr:
-            feasibility = self._gpu_mgr.check_model_feasibility(model_name)
-            if not feasibility.get("feasible", True):
-                return {
-                    "success": False,
-                    "reason": "insufficient_gpu_memory",
-                    "feasibility": feasibility,
-                    "suggestion": f"需要 {feasibility.get('required_gb', '?')}GB，可用 {feasibility.get('available_gb', '?')}GB",
-                }
-        existing = self._llm_mgr.get_service_by_model(model_name)
-        if existing and existing.get("status") == "running":
-            existing_engine = self._engine_model_registry.get(model_name, {}).get("engine")
-            if existing_engine == engine_type:
+
+        from core.vllm_manager import get_current_model_info
+        current_info = get_current_model_info()
+
+        if current_info and current_info.get("running") and current_info.get("name"):
+            existing_registry = self._engine_model_registry.get(current_info["name"], {})
+            if current_info["name"] == model_name and existing_registry.get("engine") == engine_type:
                 return {
                     "success": True,
                     "reason": "already_running_same_engine",
-                    "service": existing,
+                    "model": current_info["name"],
+                    "engine": engine_type,
                 }
+
+        if self._engine_manager_mode == "systemd" and current_info and current_info.get("running"):
+            pass
+        else:
+            if not self._llm_mgr:
+                return {"success": False, "reason": "no_llm_service_manager_and_not_systemd"}
+            existing = self._llm_mgr.get_service_by_model(model_name)
+            if existing and existing.get("status") == "running":
+                existing_engine = self._engine_model_registry.get(model_name, {}).get("engine")
+                if existing_engine == engine_type:
+                    return {
+                        "success": True,
+                        "reason": "already_running_same_engine",
+                        "service": existing,
+                    }
+
+        if self._gpu_mgr:
+            is_current_model = (
+                self._engine_manager_mode == "systemd"
+                and current_info
+                and current_info.get("running")
+                and current_info.get("name") == model_name
+            )
+            has_running_service = (
+                (current_info and current_info.get("running"))
+                or (self._llm_mgr and self._llm_mgr.list_services())
+            )
+            if not is_current_model and not has_running_service:
+                feasibility = self._gpu_mgr.check_model_feasibility(model_name)
+                if not feasibility.get("feasible", True):
+                    return {
+                        "success": False,
+                        "reason": "insufficient_gpu_memory",
+                        "feasibility": feasibility,
+                        "suggestion": f"需要 {feasibility.get('required_gb', '?')}GB，可用 {feasibility.get('available_gb', '?')}GB",
+                    }
+
         self._engine_model_registry[model_name] = {
             "engine": engine_type,
             "port": port,
             "status": "switching",
             "requested_at": time.time(),
         }
+
+        if self._engine_manager_mode == "systemd" and engine_type != "vllm" and not self._llm_mgr:
+            self._engine_model_registry[model_name]["status"] = "failed"
+            self._engine_model_registry[model_name]["error"] = "non_vllm_not_supported_in_systemd"
+            return {
+                "success": False,
+                "reason": "non_vllm_engine_not_supported_in_systemd_mode",
+                "detail": f"引擎 {engine_type} 在 systemd 模式下不支持，仅支持 vllm。",
+            }
+
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(self._do_engine_switch(model_name, engine_type, port))
@@ -264,67 +307,223 @@ class ModelEngineScheduler:
     ) -> Dict:
         async with self._switching_lock:
             try:
-                if self._gpu_mgr:
-                    feasibility = self._gpu_mgr.check_model_feasibility(model_name)
-                    if not feasibility.get("feasible", True):
-                        freed = await self._free_up_memory_for(model_name)
-                        if not freed:
-                            self._engine_model_registry[model_name]["status"] = "failed"
-                            self._engine_model_registry[model_name]["error"] = "insufficient_memory"
-                            return {"success": False, "reason": "insufficient_gpu_memory"}
-                existing = self._llm_mgr.get_service_by_model(model_name) if self._llm_mgr else None
-                if existing:
-                    self._llm_mgr.stop_service(existing["service_name"])
-                if self._gpu_mgr:
-                    self._gpu_mgr.unregister_loaded_model(model_name)
-                await asyncio.sleep(3)
-                model_path = None
-                if self._model_hub:
-                    model_path = self._model_hub.get_model_local_path(model_name)
-                if not model_path and self._config:
-                    if hasattr(self._config, 'get_model'):
-                        cfg = self._config.get_model(model_name)
-                        if cfg and hasattr(cfg, 'model_path') and cfg.model_path:
-                            model_path = cfg.model_path
-                        elif isinstance(cfg, dict) and cfg.get("model_path"):
-                            model_path = cfg.get("model_path")
-                service_name = f"{engine_type}-{model_name.split('/')[-1]}"
-                result = self._llm_mgr.start_service(
-                    service_name, model_name, engine_type, port,
-                    model_path=model_path,
-                )
-                if result.get("status") != "started":
-                    self._engine_model_registry[model_name]["status"] = "failed"
-                    return {"success": False, "reason": result.get("message", "start_failed"), "detail": result}
-                ready = await self._llm_mgr.wait_for_ready(service_name, port, timeout=120)
-                if not ready:
-                    self._llm_mgr.stop_service(service_name)
-                    self._engine_model_registry[model_name]["status"] = "failed"
-                    self._engine_model_registry[model_name]["error"] = "service_not_ready"
-                    return {"success": False, "reason": "service_not_ready"}
-                if self._gpu_mgr:
-                    self._gpu_mgr.register_loaded_model(model_name, device_id=0)
-                self._engine_model_registry[model_name].update({
-                    "status": "running",
-                    "service_name": service_name,
-                    "switched_at": time.time(),
-                })
-                self._active_service = service_name
-                self._record_switch(model_name, engine_type, port, "engine_switch")
-                logger.info("Engine switch completed: %s → %s on port %d", model_name, engine_type, port)
-                return {
-                    "success": True,
-                    "model": model_name,
-                    "engine_type": engine_type,
-                    "port": port,
-                    "service_name": service_name,
-                }
+                if self._engine_manager_mode == "systemd":
+                    return await self._do_systemd_engine_switch(model_name, engine_type, port)
+                else:
+                    return await self._do_subprocess_engine_switch(model_name, engine_type, port)
             except Exception as e:
                 logger.error("Engine switch failed for %s: %s", model_name, e)
                 if model_name in self._engine_model_registry:
                     self._engine_model_registry[model_name]["status"] = "failed"
                     self._engine_model_registry[model_name]["error"] = str(e)
                 return {"success": False, "reason": str(e)}
+
+    async def _do_systemd_engine_switch(
+        self, model_name: str, engine_type: str, port: int,
+    ) -> Dict:
+        from core.vllm_manager import (
+            stop_vllm_service, start_vllm_service,
+            get_current_model_info, _update_vllm_script,
+            refresh_vllm_port_cache, discover_vllm_port,
+            _build_vllm_health_url,
+        )
+
+        current_info = get_current_model_info()
+        previous_model = current_info.get("name") if current_info and current_info.get("running") else None
+        previous_model_path = current_info.get("path") if current_info else None
+
+        model_path = None
+        if self._model_hub:
+            model_path = self._model_hub.get_model_local_path(model_name)
+        if not model_path and self._config:
+            if hasattr(self._config, 'get_model'):
+                cfg = self._config.get_model(model_name)
+                if cfg and hasattr(cfg, 'model_path') and cfg.model_path:
+                    model_path = cfg.model_path
+                elif isinstance(cfg, dict) and cfg.get("model_path"):
+                    model_path = cfg.get("model_path")
+        if not model_path:
+            import os as _os
+            model_path = _os.path.join("/mnt/pve_models", model_name)
+
+        if engine_type != "vllm" and not self._llm_mgr:
+            return {
+                "success": False,
+                "reason": "non_vllm_engine_not_supported_in_systemd_mode",
+                "detail": f"引擎 {engine_type} 在 systemd 模式下不支持，仅支持 vllm。",
+            }
+
+        if current_info and current_info.get("running"):
+            if engine_type == "vllm":
+                logger.info("Stopping current systemd vllm service for vllm engine switch (model=%s)", previous_model)
+                stop_vllm_service()
+                await asyncio.sleep(5)
+            elif self._llm_mgr:
+                logger.info("Stopping current systemd vllm service for non-vllm engine switch (model=%s → %s)", previous_model, engine_type)
+                stop_vllm_service()
+                await asyncio.sleep(5)
+
+        if self._gpu_mgr:
+            self._gpu_mgr.unregister_loaded_model(previous_model) if previous_model else None
+            await asyncio.sleep(2)
+
+        if engine_type == "vllm":
+            script_ok = _update_vllm_script(model_path, model_name)
+            if not script_ok:
+                self._engine_model_registry[model_name]["status"] = "failed"
+                self._engine_model_registry[model_name]["error"] = "config_update_failed"
+                return {"success": False, "reason": "config_update_failed"}
+
+            refresh_vllm_port_cache()
+
+            start_ok = start_vllm_service()
+            if not start_ok:
+                self._engine_model_registry[model_name]["status"] = "failed"
+                self._engine_model_registry[model_name]["error"] = "systemd_start_failed"
+                return {"success": False, "reason": "systemd_start_failed"}
+
+            ready = False
+            for attempt in range(120):
+                await asyncio.sleep(2)
+                try:
+                    port = discover_vllm_port()
+                    import httpx
+                    async with httpx.AsyncClient(timeout=3) as client:
+                        resp = await client.get(_build_vllm_health_url(port))
+                        if resp.status_code == 200:
+                            ready = True
+                            break
+                except Exception:
+                    pass
+                if attempt % 15 == 0:
+                    logger.info("Waiting for vllm systemd service ready... (%ds)", attempt * 2)
+
+            if not ready:
+                self._engine_model_registry[model_name]["status"] = "failed"
+                self._engine_model_registry[model_name]["error"] = "systemd_service_not_ready"
+                return {"success": False, "reason": "systemd_service_not_ready"}
+
+            if self._gpu_mgr:
+                self._gpu_mgr.register_loaded_model(model_name, device_id=0)
+
+            self._engine_model_registry[model_name].update({
+                "status": "running",
+                "service_name": "vllm-aiclient",
+                "switched_at": time.time(),
+            })
+            self._active_service = "vllm-aiclient"
+            self._record_switch(model_name, engine_type, port, "systemd_engine_switch")
+            logger.info("Systemd engine switch completed: %s → %s on port %d", model_name, engine_type, port)
+            return {
+                "success": True,
+                "model": model_name,
+                "engine_type": engine_type,
+                "port": port,
+                "service_name": "vllm-aiclient",
+                "previous_model": previous_model,
+            }
+        else:
+            if not self._llm_mgr:
+                self._engine_model_registry[model_name]["status"] = "failed"
+                self._engine_model_registry[model_name]["error"] = "no_llm_service_manager"
+                return {"success": False, "reason": "no_llm_service_manager_for_non_vllm_engine"}
+
+            service_name = f"{engine_type}-{model_name.split('/')[-1]}"
+            result = self._llm_mgr.start_service(
+                service_name, model_name, engine_type, port,
+                model_path=model_path,
+            )
+            if result.get("status") != "started":
+                self._engine_model_registry[model_name]["status"] = "failed"
+                return {"success": False, "reason": result.get("message", "start_failed"), "detail": result}
+
+            ready = await self._llm_mgr.wait_for_ready(service_name, port, timeout=120)
+            if not ready:
+                self._llm_mgr.stop_service(service_name)
+                self._engine_model_registry[model_name]["status"] = "failed"
+                self._engine_model_registry[model_name]["error"] = "service_not_ready"
+                return {"success": False, "reason": "service_not_ready"}
+
+            if self._gpu_mgr:
+                self._gpu_mgr.register_loaded_model(model_name, device_id=0)
+
+            self._engine_model_registry[model_name].update({
+                "status": "running",
+                "service_name": service_name,
+                "switched_at": time.time(),
+            })
+            self._active_service = service_name
+            self._record_switch(model_name, engine_type, port, "systemd_engine_switch_non_vllm")
+            logger.info("Systemd engine switch (non-vllm) completed: %s → %s on port %d", model_name, engine_type, port)
+            return {
+                "success": True,
+                "model": model_name,
+                "engine_type": engine_type,
+                "port": port,
+                "service_name": service_name,
+                "previous_model": previous_model,
+            }
+
+    async def _do_subprocess_engine_switch(
+        self, model_name: str, engine_type: str, port: int,
+    ) -> Dict:
+        if self._gpu_mgr:
+            feasibility = self._gpu_mgr.check_model_feasibility(model_name)
+            if not feasibility.get("feasible", True):
+                freed = await self._free_up_memory_for(model_name)
+                if not freed:
+                    self._engine_model_registry[model_name]["status"] = "failed"
+                    self._engine_model_registry[model_name]["error"] = "insufficient_memory"
+                    return {"success": False, "reason": "insufficient_gpu_memory"}
+        existing = self._llm_mgr.get_service_by_model(model_name) if self._llm_mgr else None
+        if existing:
+            self._llm_mgr.stop_service(existing["service_name"])
+        if self._gpu_mgr:
+            self._gpu_mgr.unregister_loaded_model(model_name)
+        await asyncio.sleep(3)
+        model_path = None
+        if self._model_hub:
+            model_path = self._model_hub.get_model_local_path(model_name)
+        if not model_path and self._config:
+            if hasattr(self._config, 'get_model'):
+                cfg = self._config.get_model(model_name)
+                if cfg and hasattr(cfg, 'model_path') and cfg.model_path:
+                    model_path = cfg.model_path
+                elif isinstance(cfg, dict) and cfg.get("model_path"):
+                    model_path = cfg.get("model_path")
+        if not self._llm_mgr:
+            return {"success": False, "reason": "no_llm_service_manager"}
+        service_name = f"{engine_type}-{model_name.split('/')[-1]}"
+        result = self._llm_mgr.start_service(
+            service_name, model_name, engine_type, port,
+            model_path=model_path,
+        )
+        if result.get("status") != "started":
+            self._engine_model_registry[model_name]["status"] = "failed"
+            return {"success": False, "reason": result.get("message", "start_failed"), "detail": result}
+        ready = await self._llm_mgr.wait_for_ready(service_name, port, timeout=120)
+        if not ready:
+            self._llm_mgr.stop_service(service_name)
+            self._engine_model_registry[model_name]["status"] = "failed"
+            self._engine_model_registry[model_name]["error"] = "service_not_ready"
+            return {"success": False, "reason": "service_not_ready"}
+        if self._gpu_mgr:
+            self._gpu_mgr.register_loaded_model(model_name, device_id=0)
+        self._engine_model_registry[model_name].update({
+            "status": "running",
+            "service_name": service_name,
+            "switched_at": time.time(),
+        })
+        self._active_service = service_name
+        self._record_switch(model_name, engine_type, port, "engine_switch")
+        logger.info("Engine switch completed: %s → %s on port %d", model_name, engine_type, port)
+        return {
+            "success": True,
+            "model": model_name,
+            "engine_type": engine_type,
+            "port": port,
+            "service_name": service_name,
+        }
 
     async def deploy_model(
         self, model_name: str, engine_type: Optional[str] = None,
@@ -522,25 +721,42 @@ class ModelEngineScheduler:
         return await self.deploy_model(model_name, engine_type, source, port)
 
     async def _free_up_memory_for(self, target_model: str) -> bool:
-        if not self._gpu_mgr or not self._llm_mgr:
+        if not self._gpu_mgr:
             return False
         feasibility = self._gpu_mgr.check_model_feasibility(target_model)
         if feasibility["feasible"]:
             return True
-        services = self._llm_mgr.list_services()
-        services.sort(key=lambda s: s.get("uptime_seconds", 0))
-        for svc in services:
-            model = svc.get("model", "")
-            if model == target_model:
-                continue
-            self._llm_mgr.stop_service(svc["service_name"])
-            self._gpu_mgr.unregister_loaded_model(model)
-            if model in self._engine_model_registry:
-                self._engine_model_registry[model]["status"] = "stopped"
-            await asyncio.sleep(3)
-            new_feasibility = self._gpu_mgr.check_model_feasibility(target_model)
-            if new_feasibility["feasible"]:
-                return True
+        if self._engine_manager_mode == "systemd":
+            from core.vllm_manager import stop_vllm_service, get_current_model_info
+            current_info = get_current_model_info()
+            if current_info and current_info.get("running"):
+                current_model = current_info.get("name", "")
+                if current_model != target_model:
+                    logger.info("Stopping systemd vllm service to free memory for %s", target_model)
+                    stop_vllm_service()
+                    if self._gpu_mgr:
+                        self._gpu_mgr.unregister_loaded_model(current_model)
+                    if current_model in self._engine_model_registry:
+                        self._engine_model_registry[current_model]["status"] = "stopped"
+                    await asyncio.sleep(5)
+                    new_feasibility = self._gpu_mgr.check_model_feasibility(target_model)
+                    if new_feasibility["feasible"]:
+                        return True
+        if self._llm_mgr:
+            services = self._llm_mgr.list_services()
+            services.sort(key=lambda s: s.get("uptime_seconds", 0))
+            for svc in services:
+                model = svc.get("model", "")
+                if model == target_model:
+                    continue
+                self._llm_mgr.stop_service(svc["service_name"])
+                self._gpu_mgr.unregister_loaded_model(model)
+                if model in self._engine_model_registry:
+                    self._engine_model_registry[model]["status"] = "stopped"
+                await asyncio.sleep(3)
+                new_feasibility = self._gpu_mgr.check_model_feasibility(target_model)
+                if new_feasibility["feasible"]:
+                    return True
         return False
 
     async def _ensure_model_downloaded(self, model_name: str, source: str) -> Dict:
@@ -682,6 +898,9 @@ class ModelEngineScheduler:
                             logger.warning("Service %s process alive but HTTP unhealthy", name)
                 for name, reg in self._engine_model_registry.items():
                     if reg.get("preload_intended") and reg.get("status") in ("stopped", "crashed", "dead"):
+                        if self._active_service:
+                            logger.debug("Skipping preload for %s: active service %s is running", name, self._active_service)
+                            continue
                         service = self._llm_mgr.get_service_by_model(name) if self._llm_mgr else None
                         if not service or service.get("status") != "running":
                             logger.info("Preload model %s not running, attempting deploy", name)

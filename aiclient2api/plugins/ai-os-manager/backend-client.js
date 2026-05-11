@@ -107,9 +107,10 @@ class BackendClient {
         const isSwitchStatus = path.includes('/switch/status');
         const isSwitchCancel = path.includes('/switch/cancel');
         const isModelSwitch = isAtomicSwitch || isSwitchStatus || isSwitchCancel;
+        const isEngineSwitch = path.includes('/engines/switch');
         const isModelStart = path.includes('/start');
         const isModelStop = path.includes('/stop');
-        const isLongOperation = isModelSwitch || isModelStart || isModelStop;
+        const isLongOperation = isModelSwitch || isEngineSwitch || isModelStart || isModelStop;
 
         const defaultTimeout = isLongOperation ? 180000 : (options.method === 'POST' ? 60000 : 10000);
         const timeoutSignal = options.signal || AbortSignal.timeout(defaultTimeout);
@@ -143,6 +144,31 @@ class BackendClient {
                 }
             }
             throw new Error('No available backend for model switch');
+        }
+
+        if (isEngineSwitch) {
+            if (this.goAvailable) {
+                try {
+                    logger.info('[BackendClient] Engine switch -> Go backend');
+                    const response = await fetch(goUrl, { ...options, signal: timeoutSignal });
+                    if (response.ok || response.status === 409) return response;
+                    logger.warn(`[BackendClient] Go backend returned ${response.status} for engine switch, trying Python fallback`);
+                } catch (error) {
+                    logger.warn('[BackendClient] Go backend failed for engine switch, trying Python fallback:', error.message);
+                }
+            }
+            if (this.pythonAvailable) {
+                try {
+                    logger.info('[BackendClient] Engine switch -> Python backend');
+                    const pythonTimeoutSignal = options.signal || AbortSignal.timeout(180000);
+                    const response = await fetch(pythonUrl, { ...options, signal: pythonTimeoutSignal });
+                    return response;
+                } catch (error) {
+                    logger.error('[BackendClient] Python backend failed for engine switch:', error.message);
+                    throw new Error(`Engine switch failed: ${error.message}`);
+                }
+            }
+            throw new Error('No available backend for engine switch');
         }
 
         if (isLongOperation) {
