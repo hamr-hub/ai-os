@@ -33,14 +33,6 @@ export const docTree: DocItem[] = [
     ],
   },
   {
-    slug: 'installation',
-    title: '安装配置',
-    category: 'installation',
-    children: [
-      { slug: 'ai-flow-init-report', title: 'AI Flow 初始化报告', category: 'installation' },
-    ],
-  },
-  {
     slug: 'research',
     title: '研发资产',
     category: 'research',
@@ -59,8 +51,6 @@ const docModules: Record<string, () => Promise<{ default: Component }>> = {
   'agent/conventions': () => import('../../../docs/agent/conventions.md'),
   'agent/development-commands': () => import('../../../docs/agent/development_commands.md'),
   'agent/requirement-template': () => import('../../../docs/agent/requirement-template.md'),
-  'installation/ai-flow-init-report': () =>
-    import('../../../docs/installation/ai-flow-init-report.md'),
   'research/rd-assets': () => import('../../../docs/research/rd-assets.md'),
 }
 
