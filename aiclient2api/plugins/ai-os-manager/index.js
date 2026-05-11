@@ -26,6 +26,7 @@ const EXEMPT_PATHS = [
     '/plugins/ai-os-manager/inject.js',
     '/plugins/ai-os-manager/styles.css',
     '/gpu-admin',
+    '/__panel__',
     '/__panel_html__',
     '/health',
     '/favicon.ico',
@@ -94,6 +95,7 @@ const aiOsManagerPlugin = {
 
     routes: [
         { method: 'GET', path: '/gpu-admin', handler: handlePanelRoute },
+        { method: 'GET', path: '/__panel__', handler: handleGetPanelHTML },
         { method: 'GET', path: '/__panel_html__', handler: handleGetPanelHTML },
         { method: 'GET', path: '/plugins/ai-os-manager/inject.js', handler: handleInjectScript },
         { method: 'GET', path: '/plugins/ai-os-manager/styles.css', handler: handlePluginStyles },

@@ -306,7 +306,9 @@ class ModelSwitchService {
                 body: JSON.stringify({
                     action: 'switch',
                     model_name: modelName,
-                    set_as_default: false
+                    set_as_default: false,
+                    ...(options.engineType ? { engine_type: options.engineType } : {}),
+                    ...(options.port ? { port: options.port } : {})
                 }),
                 signal: AbortSignal.timeout(30000)
             });

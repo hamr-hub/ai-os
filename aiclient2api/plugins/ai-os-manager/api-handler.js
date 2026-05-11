@@ -39,6 +39,10 @@ function sendHTMLResponse(res, html) {
     res.end(html);
 }
 
+function getRequestUrl(req, fallbackPath = '/') {
+    return new URL(req.url || fallbackPath, 'http://localhost');
+}
+
 async function proxyToBackend(res, path, method = 'GET', body = null) {
     try {
         const options = { method };
@@ -58,7 +62,7 @@ async function proxyToBackend(res, path, method = 'GET', body = null) {
 }
 
 export async function handleGetPanelHTML(method, urlPath, req, res) {
-    if (method !== 'GET' || urlPath !== '/__panel_html__') return false;
+    if (method !== 'GET' || (urlPath !== '/__panel_html__' && urlPath !== '/__panel__')) return false;
     try {
         const html = await fs.readFile(pathModule.join(staticDir, 'index.html'), 'utf8');
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -155,6 +159,8 @@ export async function handleGPUMonitorApiRoutes(method, urlPath, req, res, confi
 export async function handleModelSwitchApiRoutes(method, urlPath, req, res, config) {
     if (!urlPath.startsWith('/api/model-switch')) return false;
     try {
+        const requestUrl = getRequestUrl(req, urlPath);
+        const search = requestUrl.search || '';
         if (urlPath === '/api/model-switch/models' && method === 'GET') {
             sendJSONResponse(res, 200, await modelSwitchService.getModelsList());
             return true;
@@ -164,8 +170,78 @@ export async function handleModelSwitchApiRoutes(method, urlPath, req, res, conf
             return true;
         }
         if (urlPath === '/api/model-switch/aggregated' && method === 'GET') {
-            const refresh = urlPath.includes('refresh=true');
+            const refresh = requestUrl.searchParams.get('refresh') === 'true';
             sendJSONResponse(res, 200, await modelSwitchService.getAggregatedModels(refresh));
+            return true;
+        }
+        if (urlPath === '/api/model-switch/search' && method === 'GET') {
+            return await proxyToBackend(res, `/manage/models/search${search}`);
+        }
+        if (urlPath === '/api/model-switch/recommend' && method === 'GET') {
+            return await proxyToBackend(res, `/manage/gpu/recommend${search}`);
+        }
+        if (urlPath === '/api/model-switch/memory-check' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/gpu/memory-check');
+        }
+        if (urlPath.match(/^\/api\/model-switch\/memory-check\/(.+)$/) && method === 'POST') {
+            const modelName = decodeURIComponent(urlPath.split('/api/model-switch/memory-check/')[1]);
+            const body = await parseRequestBody(req);
+            return await proxyToBackend(res, `/manage/gpu/memory-check/${encodeURIComponent(modelName)}`, 'POST', body);
+        }
+        if (urlPath === '/api/model-switch/pool' && method === 'GET') {
+            return await proxyToBackend(res, `/manage/models/pool${search}`);
+        }
+        if (urlPath === '/api/model-switch/pool/register' && method === 'POST') {
+            const body = await parseRequestBody(req);
+            return await proxyToBackend(res, '/manage/models/pool/register', 'POST', body);
+        }
+        if (urlPath === '/api/model-switch/pool/sync-config' && method === 'POST') {
+            return await proxyToBackend(res, '/manage/models/pool/sync-config', 'POST');
+        }
+        if (urlPath.match(/^\/api\/model-switch\/pool\/([^/]+)\/load$/) && method === 'POST') {
+            const modelKey = decodeURIComponent(urlPath.split('/api/model-switch/pool/')[1].replace('/load', ''));
+            const body = await parseRequestBody(req);
+            return await proxyToBackend(res, `/manage/models/pool/${encodeURIComponent(modelKey)}/load`, 'POST', body);
+        }
+        if (urlPath.match(/^\/api\/model-switch\/pool\/([^/]+)$/) && method === 'GET') {
+            const modelKey = decodeURIComponent(urlPath.split('/api/model-switch/pool/')[1]);
+            return await proxyToBackend(res, `/manage/models/pool/${encodeURIComponent(modelKey)}`);
+        }
+        if (urlPath.match(/^\/api\/model-switch\/pool\/([^/]+)$/) && method === 'DELETE') {
+            const modelKey = decodeURIComponent(urlPath.split('/api/model-switch/pool/')[1]);
+            return await proxyToBackend(res, `/manage/models/pool/${encodeURIComponent(modelKey)}${search}`, 'DELETE');
+        }
+        if (urlPath === '/api/model-switch/default' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/default-model');
+        }
+        if (urlPath === '/api/model-switch/default' && method === 'POST') {
+            const body = await parseRequestBody(req);
+            if (!body.modelName) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelName' }); return true; }
+            return await proxyToBackend(res, `/manage/default-model/${encodeURIComponent(body.modelName)}`, 'POST');
+        }
+        if (urlPath === '/api/model-switch/default' && method === 'DELETE') {
+            return await proxyToBackend(res, '/manage/default-model', 'DELETE');
+        }
+        if (urlPath === '/api/model-switch/preload' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/preload/status');
+        }
+        if (urlPath.match(/^\/api\/model-switch\/preload\/([^/]+)\/enable$/) && method === 'POST') {
+            const modelName = decodeURIComponent(urlPath.split('/api/model-switch/preload/')[1].replace('/enable', ''));
+            return await proxyToBackend(res, `/manage/preload/${encodeURIComponent(modelName)}/enable`, 'POST');
+        }
+        if (urlPath.match(/^\/api\/model-switch\/preload\/([^/]+)\/disable$/) && method === 'POST') {
+            const modelName = decodeURIComponent(urlPath.split('/api/model-switch/preload/')[1].replace('/disable', ''));
+            return await proxyToBackend(res, `/manage/preload/${encodeURIComponent(modelName)}/disable`, 'POST');
+        }
+        if (urlPath.match(/^\/api\/model-switch\/vllm-params\/(.+)$/) && method === 'GET') {
+            const modelName = decodeURIComponent(urlPath.split('/api/model-switch/vllm-params/')[1]);
+            sendJSONResponse(res, 200, await modelSwitchService.getModelVLLMParams(modelName));
+            return true;
+        }
+        if (urlPath.match(/^\/api\/model-switch\/vllm-params\/(.+)$/) && method === 'PUT') {
+            const modelName = decodeURIComponent(urlPath.split('/api/model-switch/vllm-params/')[1]);
+            const body = await parseRequestBody(req);
+            sendJSONResponse(res, 200, await modelSwitchService.updateModelVLLMParams(modelName, body.vllm_params || body));
             return true;
         }
         if (urlPath === '/api/model-switch/switch' && method === 'POST') {
@@ -178,7 +254,7 @@ export async function handleModelSwitchApiRoutes(method, urlPath, req, res, conf
             return true;
         }
         if (urlPath === '/api/model-switch/task-status' && method === 'GET') {
-            const taskId = new URL(urlPath, 'http://localhost').searchParams.get('taskId');
+            const taskId = requestUrl.searchParams.get('taskId');
             if (!taskId) { sendJSONResponse(res, 400, { success: false, error: 'Missing taskId' }); return true; }
             sendJSONResponse(res, 200, modelSwitchService.getSwitchTaskStatus(taskId));
             return true;
@@ -239,8 +315,14 @@ export async function handleEngineApiRoutes(method, urlPath, req, res, config) {
             return true;
         }
         if (urlPath === '/api/engine/config' && method === 'GET') {
-            sendJSONResponse(res, 200, engineManager.getConfig());
-            return true;
+            return await proxyToBackend(res, '/manage/engines/config');
+        }
+        if (urlPath === '/api/engine/config' && method === 'PUT') {
+            const body = await parseRequestBody(req);
+            return await proxyToBackend(res, '/manage/engines/config', 'PUT', body);
+        }
+        if (urlPath === '/api/engine/param-schema' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/engines/param-schema');
         }
         return false;
     } catch (error) {
@@ -283,6 +365,9 @@ export async function handleRateLimitApiRoutes(method, urlPath, req, res, config
         if (urlPath === '/api/ratelimit/stats' && method === 'GET') {
             return await proxyToBackend(res, '/manage/ratelimit/stats');
         }
+        if (urlPath === '/api/ratelimit/queue' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/queue');
+        }
         return false;
     } catch (error) {
         logger.error('[RateLimit API]', error.message);
@@ -300,6 +385,12 @@ export async function handleConfigApiRoutes(method, urlPath, req, res, config) {
         if (urlPath === '/api/config' && method === 'PUT') {
             const body = await parseRequestBody(req);
             return await proxyToBackend(res, '/manage/config', 'PUT', body);
+        }
+        if (urlPath === '/api/config/reload' && method === 'POST') {
+            return await proxyToBackend(res, '/manage/config/reload', 'POST');
+        }
+        if (urlPath === '/api/config/operation-log' && method === 'GET') {
+            return await proxyToBackend(res, '/manage/config/operation-log');
         }
         return false;
     } catch (error) {

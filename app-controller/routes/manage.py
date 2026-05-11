@@ -4,6 +4,7 @@ from datetime import datetime
 import asyncio
 import copy
 import os
+import json
 
 from core.vllm_manager import save_model_vllm_params, get_model_vllm_params
 from middleware.error_handler import ModelNotFoundException
@@ -975,7 +976,7 @@ async def update_config(request: Request):
 
         if success:
             from core.deps import _on_config_changed
-            persisted_config = config_watcher.get_version()
+            persisted_config = copy.deepcopy(config_watcher.get_config())
             _on_config_changed(persisted_config)
 
             operator = request.headers.get("X-Operator", "anonymous")
@@ -1008,6 +1009,25 @@ async def reload_config():
     from core.deps import _on_config_changed
     _on_config_changed(new_config)
     return {"status": "reloaded", "config": new_config}
+
+
+@manage_router.get("/config/operation-log")
+async def get_config_operation_log(limit: int = 50):
+    from core.config_watcher import CONFIG_LOG_FILE
+    if not os.path.exists(CONFIG_LOG_FILE):
+        return {"items": [], "total": 0}
+    items = []
+    with open(CONFIG_LOG_FILE, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                items.append(json.loads(line))
+            except json.JSONDecodeError:
+                items.append({"raw": line})
+    sliced = items[-max(1, min(limit, 500)):]
+    return {"items": list(reversed(sliced)), "total": len(items)}
 
 
 @manage_router.get("/service/status")
@@ -1578,7 +1598,7 @@ async def pool_detail(model_key: str):
     entry = model_pool_manager.get_pool_detail(model_key)
     if not entry:
         raise HTTPException(status_code=404, detail="模型不在池中")
-    return entry.__dict__
+    return entry if isinstance(entry, dict) else entry.__dict__
 
 
 @manage_router.post("/models/pool/{model_key}/load")
