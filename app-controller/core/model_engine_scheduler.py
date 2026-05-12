@@ -76,7 +76,6 @@ class ModelEngineScheduler:
             model_cfg = self._config.get('models', {}).get(model_name)
         return self._cfg_get(model_cfg, "engine_type", "vllm") if model_cfg else "vllm"
 
-<<<<<<< HEAD
     def _engine_mode(self) -> str:
         return getattr(self, "_engine_manager_mode", "subprocess")
 
@@ -104,8 +103,6 @@ class ModelEngineScheduler:
             return registry_engine
         return self._get_model_engine_from_config(model_name)
 
-=======
->>>>>>> bb4a855 (update)
     def _is_engine_enabled(self, engine_type: str) -> bool:
         if engine_type == "vllm":
             return True

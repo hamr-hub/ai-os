@@ -19,6 +19,7 @@ describe('useAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockLocalStorage.getItem.mockReturnValue(null)
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch failed')))
     setActivePinia(createPinia())
   })
 
@@ -54,5 +55,30 @@ describe('useAuth', () => {
     expect(result).toBe(false)
     expect(error.value).toBe('认证失败：API Key 无效或服务不可用')
     expect(loading.value).toBe(false)
+  })
+
+  it('verifyAuth异常时使用fetch兜底登录', async () => {
+    const { verifyAuth } = await import('@/api/client')
+    vi.mocked(verifyAuth).mockRejectedValueOnce(new Error('Interceptor failed'))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ authenticated: true, auth_enabled: false }),
+      })
+    )
+
+    const { login, isAuthenticated, error } = useAuth()
+    const result = await login('fallback-key')
+
+    expect(result).toBe(true)
+    expect(isAuthenticated.value).toBe(true)
+    expect(error.value).toBeNull()
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/auth/verify',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer fallback-key' }),
+      })
+    )
   })
 })
