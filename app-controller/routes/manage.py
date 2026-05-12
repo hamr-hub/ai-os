@@ -77,7 +77,7 @@ async def get_switch_status():
 @manage_router.post("/switch/atomic")
 async def atomic_switch_model(request: Request):
     from core.deps import model_switch_orchestrator
-    from core.vllm_manager import get_current_model_info, MODEL_BASE_PATH
+    from core.vllm_manager import MODEL_BASE_PATH
     import os
 
     try:
@@ -109,9 +109,19 @@ async def atomic_switch_model(request: Request):
 
     model_switch_orchestrator.clear_completed_session()
 
-    current_info = get_current_model_info()
-    previous_model = current_info.get("name") if current_info else None
-    previous_path = current_info.get("path") if current_info else None
+    previous_model = None
+    previous_path = None
+    if os.environ.get("ENGINE_MANAGER_MODE", "subprocess") == "subprocess":
+        running_services = [s for s in llm_service_manager.list_services() if s.get("status") == "running"]
+        if running_services:
+            current = running_services[0]
+            previous_model = current.get("model")
+            previous_path = scheduler.get_model_path(previous_model) if previous_model else None
+    else:
+        from core.vllm_manager import get_current_model_info
+        current_info = get_current_model_info()
+        previous_model = current_info.get("name") if current_info else None
+        previous_path = current_info.get("path") if current_info else None
 
     if action != "stop":
         if not scheduler.is_model_available(model_name):
@@ -1642,10 +1652,11 @@ async def engine_switch(request: Request):
 
 @manage_router.get("/engines/status")
 async def engine_status():
-    import httpx
-    from core.vllm_manager import get_current_model_info
+    engine_manager_mode = os.environ.get("ENGINE_MANAGER_MODE", "subprocess")
     services = llm_service_manager.list_services()
-    if not services:
+    if engine_manager_mode != "subprocess" and not services:
+        import httpx
+        from core.vllm_manager import get_current_model_info
         current_info = get_current_model_info()
         if current_info and current_info.get("running"):
             try:
@@ -1661,7 +1672,7 @@ async def engine_status():
                     "sglang": ["SGLANG", "sglang", "python -m sglang"],
                     "llamacpp": ["LLAMACPP", "llama.cpp", "llama-server", "llama-cli"],
                 }
-                discovered_engine = "vllm"
+                discovered_engine = configured_engine
                 vllm_pid = None
                 for engine_type, patterns in engine_patterns.items():
                     for pattern in patterns:
@@ -1684,14 +1695,10 @@ async def engine_status():
                 discovered_engine = "vllm"
                 model_name = current_info.get("name", "")
                 service_port = 8000
-            uptime = None
             try:
                 async with httpx.AsyncClient(timeout=10) as client:
                     resp = await client.get(f"http://localhost:{service_port}/v1/models")
-                    if resp.status_code == 200:
-                        health = "healthy"
-                    else:
-                        health = "unhealthy"
+                    health = "healthy" if resp.status_code == 200 else "unhealthy"
             except Exception:
                 health = "unknown"
             services.append({
@@ -1706,15 +1713,14 @@ async def engine_status():
                 "health": health,
                 "uptime_seconds": None,
             })
-    current_engine = "vllm"
-    if services:
-        running_services = [s for s in services if s.get("status") == "running"]
-        if running_services:
-            current_engine = running_services[0].get("engine_type", "vllm")
+    current_engine = None
+    running_services = [s for s in services if s.get("status") == "running"]
+    if running_services:
+        current_engine = running_services[0].get("engine_type")
     return {
-        "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "subprocess"),
+        "engine_manager_mode": engine_manager_mode,
         "services": services,
-        "active_count": len([s for s in services if s.get("status") == "running"]),
+        "active_count": len(running_services),
         "current_engine": current_engine,
     }
 
