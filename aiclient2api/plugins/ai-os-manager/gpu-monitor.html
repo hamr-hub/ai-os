@@ -35,10 +35,15 @@
         .gpum-header{display:flex;justify-content:space-between;align-items:center;padding:var(--space-lg)var(--space-xl);background:linear-gradient(135deg,rgba(var(--color-primary-rgb),0.08)0%,rgba(var(--color-primary-rgb),0.02)100%);border:1px solid var(--border-card);border-radius:var(--radius-2xl);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:var(--shadow-sm);margin-bottom:var(--space-xl)}
         .gpum-title{font-size:20px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:var(--space-sm);letter-spacing:-0.02em}
         .gpum-title i{color:var(--color-primary-light)}
+        .gpum-header-right{display:flex;align-items:center;gap:var(--space-md)}
         .gpum-status{font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:var(--space-sm);font-weight:500}
         .gpum-status-dot{width:9px;height:9px;border-radius:50%;background:var(--color-success);box-shadow:0 0 10px rgba(var(--color-success-rgb),0.5);animation:gpum-pulse 2s ease-in-out infinite}
         .gpum-status-dot.gpum-offline{background:var(--text-muted);box-shadow:none;animation:none}
         @keyframes gpum-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(1.3)}}
+        .gpum-range-selector{display:flex;gap:4px;padding:4px;background:rgba(0,0,0,0.2);border-radius:var(--radius-md);border:1px solid var(--border-primary)}
+        .gpum-range-btn{padding:6px 12px;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s ease;background:transparent;color:var(--text-secondary);font-family:var(--font-sans)}
+        .gpum-range-btn:hover{background:rgba(255,255,255,0.05);color:var(--text-primary)}
+        .gpum-range-btn.active{background:var(--color-primary);color:white}
         .gpum-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--space-lg);margin-bottom:var(--space-xl)}
         .gpum-card{background:linear-gradient(160deg,var(--bg-card)0%,rgba(21,25,32,0.75)100%);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border-card);border-radius:var(--radius-xl);padding:var(--space-lg);box-shadow:var(--shadow-xs);transition:all var(--transition);position:relative;overflow:hidden;animation:gpum-fade-in .45s cubic-bezier(0.22,0.61,0.36,1) both}
         .gpum-card:nth-child(1){animation-delay:.05s}
@@ -77,7 +82,7 @@
         .gpum-canvas{position:absolute;top:0;left:0;width:100%;height:100%}
         .gpum-chart-axis{position:absolute;bottom:0;left:0;right:0;height:20px;display:flex;justify-content:space-between;align-items:center;padding:0 4px}
         .gpum-axis-label{font-size:9px;color:var(--text-muted);font-family:var(--font-mono)}
-        .gpum-chart-y-axis{position:absolute;left:0;top:0;bottom:20px;width:30px;display:flex;flex-direction:column;justify-content:space-between;padding:var(--space-xs) 0}
+        .gpum-chart-y-axis{position:absolute;left:0;top:0;bottom:20px;width:35px;display:flex;flex-direction:column;justify-content:space-between;padding:var(--space-xs) 0}
         .gpum-y-label{font-size:9px;color:var(--text-muted);font-family:var(--font-mono);text-align:right;padding-right:4px}
         .gpum-table-card{background:linear-gradient(160deg,var(--bg-card)0%,rgba(21,25,32,0.75)100%);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border-card);border-radius:var(--radius-2xl);box-shadow:var(--shadow-xs);overflow:hidden;animation:gpum-fade-in .45s cubic-bezier(0.22,0.61,0.36,1).3s both}
         .gpum-table-header{padding:var(--space-md)var(--space-xl);background:linear-gradient(90deg,rgba(var(--color-primary-rgb),0.06)0%,rgba(var(--color-primary-rgb),0.01)100%);border-bottom:1px solid var(--border-card)}
@@ -110,10 +115,17 @@
 <div class="gpum-container">
     <div class="gpum-header">
         <div class="gpum-title"><i class="fas fa-microchip"></i> GPU 监控</div>
-        <div class="gpum-status">
-            <div class="gpum-status-dot" id="status-dot"></div>
-            <span id="status-text">连接中...</span>
-            <button class="gpum-btn gpum-btn-primary" onclick="fetchData()" style="margin-left:8px"><i class="fas fa-sync-alt"></i> 刷新</button>
+        <div class="gpum-header-right">
+            <div class="gpum-range-selector">
+                <button class="gpum-range-btn active" data-range="min" onclick="setTimeRange('min')">分钟</button>
+                <button class="gpum-range-btn" data-range="hour" onclick="setTimeRange('hour')">小时</button>
+                <button class="gpum-range-btn" data-range="day" onclick="setTimeRange('day')">天</button>
+            </div>
+            <div class="gpum-status">
+                <div class="gpum-status-dot" id="status-dot"></div>
+                <span id="status-text">连接中...</span>
+                <button class="gpum-btn gpum-btn-primary" onclick="fetchData()" style="margin-left:8px"><i class="fas fa-sync-alt"></i> 刷新</button>
+            </div>
         </div>
     </div>
     <div class="gpum-grid">
@@ -185,8 +197,10 @@
 </div>
 <script>
 var refreshTimer=null;
-var history={utilization:[],memoryPct:[],temperature:[],power:[]};
-var timestamps=[];
+var currentRange='min';
+var history={min:{utilization:[],memoryPct:[],temperature:[],power:[]},hour:{utilization:[],memoryPct:[],temperature:[],power:[]},day:{utilization:[],memoryPct:[],temperature:[],power:[]}};
+var timestamps={min:[],hour:[],day:[]};
+var lastSaveTime={min:null,hour:null,day:null};
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function formatBytes(b){if(!b||b===0)return'0 B';var k=1024,s=['B','KB','MB','GB','TB'],i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(2))+' '+s[i]}
 function getAdminToken(){try{return localStorage.getItem('aios_admin_token')||''}catch(e){return''}}
@@ -195,92 +209,16 @@ function setStatus(on){var d=document.getElementById('status-dot'),t=document.ge
 function setEl(id,v){var e=document.getElementById(id);if(e)e.textContent=v}
 function setBar(id,p,th){var b=document.getElementById(id);if(!b)return;b.style.width=p+'%';var c='gpum-success';if(th){if(p>th[1])c='gpum-danger';else if(p>th[0])c='gpum-warning'}b.className='gpum-progress-fill '+c}
 function formatTime(d){var h=d.getHours(),m=d.getMinutes(),s=d.getSeconds();return(h<10?'0':'')+h+':'+(m<10?'0':'')+m+':'+(s<10?'0':'')+s}
-function drawMiniChart(canvasId,dataPoints,maxLen,color,minVal,maxVal,unit,axisPrefix){
-    var canvas=document.getElementById(canvasId);if(!canvas)return;
-    var ctx=canvas.getContext('2d');
-    var container=canvas.parentElement;
-    var w=container.clientWidth||400;
-    var h=container.clientHeight||120;
-    canvas.width=w;canvas.height=h;
-    var points=dataPoints.slice(-maxLen);
-    ctx.clearRect(0,0,w,h);
-    var chartLeft=35,chartRight=10,chartTop=10,chartBottom=25;
-    var chartW=w-chartLeft-chartRight;
-    var chartH=h-chartTop-chartBottom;
-    ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;
-    for(var i=0;i<=4;i++){var y=chartTop+(chartH/4)*i;ctx.beginPath();ctx.moveTo(chartLeft,y);ctx.lineTo(chartLeft+chartW,y);ctx.stroke()}
-    ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(chartLeft,chartTop);ctx.lineTo(chartLeft,chartTop+chartH);ctx.lineTo(chartLeft+chartW,chartTop+chartH);ctx.stroke();
-    if(points.length<2){
-        ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=2;
-        ctx.moveTo(chartLeft,chartTop+chartH/2);ctx.lineTo(chartLeft+chartW,chartTop+chartH/2);ctx.stroke();return;
-    }
-    var dataMin=minVal!=null?minVal:0;
-    var dataMax=maxVal!=null?maxVal:Math.max(...points)*1.1||100;
-    if(dataMax===dataMin)dataMax=dataMin+10;
-    var getY=function(v){return chartTop+chartH-(v-dataMin)/(dataMax-dataMin)*chartH};
-    var getX=function(i){return chartLeft+(i/(points.length-1))*chartW};
-    ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=2;
-    points.forEach(function(v,i){var x=getX(i),y=getY(v);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});
-    ctx.stroke();
-    ctx.lineTo(getX(points.length-1),chartTop+chartH);ctx.lineTo(chartLeft,chartTop+chartH);ctx.closePath();
-    var fillColor=color.replace('rgb','rgba').replace(')',',0.1)');ctx.fillStyle=fillColor;ctx.fill();
-    ctx.fillStyle=color;points.forEach(function(v,i){if(i%Math.ceil(points.length/6)===0||i===points.length-1){var x=getX(i),y=getY(v);ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill()}});
-    if(axisPrefix!=null){
-        var setAxisLabel=function(id,v){var e=document.getElementById(id);if(e){if(unit==='%')e.textContent=v.toFixed(0)+'%';else if(unit==='W')e.textContent=v.toFixed(0)+'W';else if(unit==='C')e.textContent=v.toFixed(0)+'C';else e.textContent=v}};
-        if(maxVal!=null){setAxisLabel('axis-'+axisPrefix+'-max',dataMax);setAxisLabel('axis-'+axisPrefix+'-mid',(dataMax+dataMin)/2);setAxisLabel('axis-'+axisPrefix+'-min',dataMin)}
-        var step=Math.ceil(points.length/4);for(var i=0;i<4;i++){var idx=i*step;if(idx<points.length){var ts=timestamps[timestamps.length-points.length+idx];var e=document.getElementById('axis-'+axisPrefix+'-'+i);if(e&&ts)e.textContent=formatTime(new Date(ts))}}}
-}
-async function fetchData(){
-    try{
-        var res=await adminFetch('/api/gpu-monitor/info');
-        if(res.status===401){setStatus(false);return}
-        if(!res.ok)throw new Error('HTTP '+res.status);
-        var data=await res.json();
-        if(!data||!data.data){setStatus(false);return}
-        setStatus(true);
-        var gpuList=null,inner=data.data;
-        if(Array.isArray(inner))gpuList=inner;
-        else if(inner&&Array.isArray(inner.data))gpuList=inner.data;
-        else if(inner&&inner.data&&inner.data.data)gpuList=inner.data.data;
-        if(!gpuList||!gpuList.length){setStatus(false);return}
-        var gpu=gpuList[0],now=new Date();
-        timestamps.push(now.toISOString());
-        setEl('gpu-name',gpu.name||'--');
-        var util=gpu.gpuUtilization||gpu.gpu_utilization||0;
-        setEl('gpu-util',(typeof util==='number'?util.toFixed(1):util)+'%');
-        setBar('gpu-util-bar',util,[50,80]);
-        var mu=gpu.memoryUsed||gpu.memory_used_gb||gpu.memory_used||0;
-        var mt=gpu.memoryTotal||gpu.memory_total_gb||gpu.memory_total||1;
-        var mp=mt>0?(mu/mt*100):0;
-        if(gpu.memory_used_gb!==undefined||gpu.memory_total_gb!==undefined)
-            setEl('gpu-mem',mu.toFixed(1)+' / '+mt.toFixed(1)+' GB');
-        else if(typeof mu==='number'&&typeof mt==='number')
-            setEl('gpu-mem',formatBytes(mu)+' / '+formatBytes(mt));
-        else setEl('gpu-mem',mu+' / '+mt);
-        setBar('gpu-mem-bar',mp,[70,90]);
-        var temp=gpu.temperature||gpu.temp||0;
-        setEl('gpu-temp',(temp||'--')+(temp?'\u00B0C':''));
-        var pw=gpu.powerDraw||gpu.power||gpu.power_draw||0;
-        var pl=gpu.powerLimit||gpu.power_limit||0;
-        setEl('gpu-power',pw?(pw+'W'+(pl?' / '+pl+'W':'')):'--');
-        var procs=gpu.processes||gpu.gpu_processes||[];
-        var tbody=document.querySelector('#gpu-processes tbody');
-        if(procs.length>0){tbody.innerHTML=procs.map(function(p){var m=p.gpu_memory_usage||p.used_memory||p.gpu_memory||0;return'<tr><td>'+(p.pid||'--')+'</td><td>'+esc(p.name||'--')+'</td><td>'+formatBytes(m)+'</td></tr>'}).join('')}else{tbody.innerHTML='<tr><td colspan="3" class="gpum-empty">无活跃 GPU 进程</td></tr>'}
-        var maxLen=30;
-        history.utilization.push(util);history.memoryPct.push(mp);history.temperature.push(temp);history.power.push(pw);
-        for(var k in history){if(history[k].length>maxLen){history[k]=history[k].slice(-maxLen);timestamps=timestamps.slice(-maxLen)}}
-        var setVal=function(id,val,unit){var e=document.getElementById(id);if(e)e.textContent=val!=null?val+unit:'--'};
-        setVal('chart-util-value',util.toFixed(1),'%');setVal('chart-mem-value',mp.toFixed(1),'%');setVal('chart-temp-value',temp,'\u00B0C');setVal('chart-power-value',pw,'W');
-        drawMiniChart('chart-util',history.utilization,maxLen,'rgb(129,140,248)',0,100,'%','util');
-        drawMiniChart('chart-mem',history.memoryPct,maxLen,'rgb(52,211,153)',0,100,'%','mem');
-        var tempMax=Math.max(...history.temperature.filter(function(v){return v>0}),80);
-        drawMiniChart('chart-temp',history.temperature,maxLen,'rgb(251,191,36)',0,tempMax,'C','temp');
-        var powerMax=Math.max(...history.power.filter(function(v){return v>0}),pw||100);
-        drawMiniChart('chart-power',history.power,maxLen,'rgb(248,113,113)',0,powerMax,'W','power');
-    }catch(e){setStatus(false);console.error('[GPU]',e.message)}
-}
-fetchData();refreshTimer=setInterval(fetchData,5000);
-window.addEventListener('beforeunload',function(){if(refreshTimer)clearInterval(refreshTimer)});
+function formatTimeShort(d){var h=d.getHours(),m=d.getMinutes();return(h<10?'0':'')+h+':'+(m<10?'0':'')+m}
+function formatDate(d){var mo=['01','02','03','04','05','06','07','08','09','10','11','12'];var da=d.getDate();return mo[d.getMonth()]+'-'+(da<10?'0':'')+da}
+function shouldSaveTo(range){var now=Date.now();var last=lastSaveTime[range];if(!last){lastSaveTime[range]=now;return true}var intervals={min:5000,hour:60000,day:3600000};if(now-last>=intervals[range]){lastSaveTime[range]=now;return true}return false}
+function setTimeRange(range){currentRange=range;document.querySelectorAll('.gpum-range-btn').forEach(function(b){b.classList.toggle('active',b.dataset.range===range)});renderCharts()}
+function getFilteredData(range){var maxPoints={min:30,hour:60,day:48};var pts=maxPoints[range];var h=history[range];return{utilization:h.utilization.slice(-pts),memoryPct:h.memoryPct.slice(-pts),temperature:h.temperature.slice(-pts),power:h.power.slice(-pts),timestamps:timestamps[range].slice(-pts)}}
+function renderCharts(){var data=getFilteredData(currentRange);var maxLen={min:30,hour:60,day:48}[currentRange];renderChart('chart-util',data.utilization,data.timestamps,maxLen,'rgb(129,140,248)',0,100,'%','util');renderChart('chart-mem',data.memoryPct,data.timestamps,maxLen,'rgb(52,211,153)',0,100,'%','mem');var tempMax=Math.max(...data.temperature.filter(function(v){return v>0}),80)||80;renderChart('chart-temp',data.temperature,data.timestamps,maxLen,'rgb(251,191,36)',0,tempMax,'C','temp');var powerMax=Math.max(...data.power.filter(function(v){return v>0}),100)||100;renderChart('chart-power',data.power,data.timestamps,maxLen,'rgb(248,113,113)',0,powerMax,'W','power');updateCurrentValues()}
+function renderChart(canvasId,dataPoints,timestamps,maxLen,color,minVal,maxVal,unit,axisPrefix){var canvas=document.getElementById(canvasId);if(!canvas)return;var ctx=canvas.getContext('2d');var container=canvas.parentElement;var w=container.clientWidth||400;var h=container.clientHeight||120;canvas.width=w;canvas.height=h;var points=dataPoints.slice(-maxLen);var ts=timestamps.slice(-maxLen);ctx.clearRect(0,0,w,h);var chartLeft=35,chartRight=10,chartTop=10,chartBottom=25;var chartW=w-chartLeft-chartRight;var chartH=h-chartTop-chartBottom;ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;for(var i=0;i<=4;i++){var y=chartTop+(chartH/4)*i;ctx.beginPath();ctx.moveTo(chartLeft,y);ctx.lineTo(chartLeft+chartW,y);ctx.stroke()}ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(chartLeft,chartTop);ctx.lineTo(chartLeft,chartTop+chartH);ctx.lineTo(chartLeft+chartW,chartTop+chartH);ctx.stroke();if(points.length<2){ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.moveTo(chartLeft,chartTop+chartH/2);ctx.lineTo(chartLeft+chartW,chartTop+chartH/2);ctx.stroke();return}var dataMin=minVal!=null?minVal:0;var dataMax=maxVal!=null?maxVal:Math.max(...points)*1.1||100;if(dataMax===dataMin)dataMax=dataMin+10;var getY=function(v){return chartTop+chartH-(v-dataMin)/(dataMax-dataMin)*chartH};var getX=function(i){return chartLeft+(i/(points.length-1))*chartW};ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=2;points.forEach(function(v,i){var x=getX(i),y=getY(v);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});ctx.stroke();ctx.lineTo(getX(points.length-1),chartTop+chartH);ctx.lineTo(chartLeft,chartTop+chartH);ctx.closePath();var fillColor=color.replace('rgb','rgba').replace(')',',0.1)');ctx.fillStyle=fillColor;ctx.fill();ctx.fillStyle=color;points.forEach(function(v,i){if(i%Math.ceil(points.length/6)===0||i===points.length-1){var x=getX(i),y=getY(v);ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill()}});if(axisPrefix!=null){var setAxisLabel=function(id,v){var e=document.getElementById(id);if(e){if(unit==='%')e.textContent=v.toFixed(0)+'%';else if(unit==='W')e.textContent=v.toFixed(0)+'W';else if(unit==='C')e.textContent=v.toFixed(0)+'\u00B0C';else e.textContent=v}};if(maxVal!=null&&minVal===0){setAxisLabel('axis-'+axisPrefix+'-max',dataMax);setAxisLabel('axis-'+axisPrefix+'-mid',dataMax/2);setAxisLabel('axis-'+axisPrefix+'-min',0)}var step=Math.ceil(points.length/4);var fmtFn=currentRange==='day'?formatDate:(currentRange==='hour'?formatTimeShort:formatTime);for(var i=0;i<4;i++){var idx=i*step;if(idx<points.length&&ts[idx]){var d=new Date(ts[idx]);var e=document.getElementById('axis-'+axisPrefix+'-'+i);if(e)e.textContent=fmtFn(d)}}}}
+function updateCurrentValues(){var h=history[currentRange];var len=h.utilization.length;if(len===0)return;var util=h.utilization[len-1];var mem=h.memoryPct[len-1];var temp=h.temperature[len-1];var power=h.power[len-1];var setVal=function(id,val,unit){var e=document.getElementById(id);if(e)e.textContent=val!=null?val+unit:'--'};setVal('chart-util-value',typeof util==='number'?util.toFixed(1):util,'%');setVal('chart-mem-value',typeof mem==='number'?mem.toFixed(1):mem,'%');setVal('chart-temp-value',temp,'\u00B0C');setVal('chart-power-value',power,'W')}
+async function fetchData(){try{var res=await adminFetch('/api/gpu-monitor/info');if(res.status===401){setStatus(false);return}if(!res.ok)throw new Error('HTTP '+res.status);var data=await res.json();if(!data||!data.data){setStatus(false);return}setStatus(true);var gpuList=null,inner=data.data;if(Array.isArray(inner))gpuList=inner;else if(inner&&Array.isArray(inner.data))gpuList=inner.data;else if(inner&&inner.data&&inner.data.data)gpuList=inner.data.data;if(!gpuList||!gpuList.length){setStatus(false);return}var gpu=gpuList[0],now=new Date();setEl('gpu-name',gpu.name||'--');var util=gpu.gpuUtilization||gpu.gpu_utilization||0;setEl('gpu-util',(typeof util==='number'?util.toFixed(1):util)+'%');setBar('gpu-util-bar',util,[50,80]);var mu=gpu.memoryUsed||gpu.memory_used_gb||gpu.memory_used||0;var mt=gpu.memoryTotal||gpu.memory_total_gb||gpu.memory_total||1;var mp=mt>0?(mu/mt*100):0;if(gpu.memory_used_gb!==undefined||gpu.memory_total_gb!==undefined)setEl('gpu-mem',mu.toFixed(1)+' / '+mt.toFixed(1)+' GB');else if(typeof mu==='number'&&typeof mt==='number')setEl('gpu-mem',formatBytes(mu)+' / '+formatBytes(mt));else setEl('gpu-mem',mu+' / '+mt);setBar('gpu-mem-bar',mp,[70,90]);var temp=gpu.temperature||gpu.temp||0;setEl('gpu-temp',(temp||'--')+(temp?'\u00B0C':''));var pw=gpu.powerDraw||gpu.power||gpu.power_draw||0;var pl=gpu.powerLimit||gpu.power_limit||0;setEl('gpu-power',pw?(pw+'W'+(pl?' / '+pl+'W':'')):'--');var procs=gpu.processes||gpu.gpu_processes||[];var tbody=document.querySelector('#gpu-processes tbody');if(procs.length>0){tbody.innerHTML=procs.map(function(p){var m=p.gpu_memory_usage||p.used_memory||p.gpu_memory||0;return'<tr><td>'+(p.pid||'--')+'</td><td>'+esc(p.name||'--')+'</td><td>'+formatBytes(m)+'</td></tr>'}).join('')}else{tbody.innerHTML='<tr><td colspan="3" class="gpum-empty">无活跃 GPU 进程</td></tr>'}if(shouldSaveTo('min')){history.min.utilization.push(util);history.min.memoryPct.push(mp);history.min.temperature.push(temp);history.min.power.push(pw);timestamps.min.push(now.toISOString());if(history.min.utilization.length>30){history.min.utilization.shift();history.min.memoryPct.shift();history.min.temperature.shift();history.min.power.shift();timestamps.min.shift()}}if(shouldSaveTo('hour')){history.hour.utilization.push(util);history.hour.memoryPct.push(mp);history.hour.temperature.push(temp);history.hour.power.push(pw);timestamps.hour.push(now.toISOString());if(history.hour.utilization.length>60){history.hour.utilization.shift();history.hour.memoryPct.shift();history.hour.temperature.shift();history.hour.power.shift();timestamps.hour.shift()}}if(shouldSaveTo('day')){history.day.utilization.push(util);history.day.memoryPct.push(mp);history.day.temperature.push(temp);history.day.power.push(pw);timestamps.day.push(now.toISOString());if(history.day.utilization.length>48){history.day.utilization.shift();history.day.memoryPct.shift();history.day.temperature.shift();history.day.power.shift();timestamps.day.shift()}}renderCharts();updateCurrentValues()}catch(e){setStatus(false);console.error('[GPU]',e.message)}}
+fetchData();refreshTimer=setInterval(fetchData,5000);window.addEventListener('beforeunload',function(){if(refreshTimer)clearInterval(refreshTimer)});
 </script>
 </body>
 </html>

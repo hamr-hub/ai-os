@@ -1042,10 +1042,7 @@
     color: var(--text-secondary);
 }
 
-.aios-p-scope .aios-p-charts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--aios-space-lg);
+.aios-p-scope .aios-p-chart-section {
     margin-bottom: var(--aios-space-lg);
 }
 
@@ -1072,6 +1069,12 @@
     border-bottom: 1px solid var(--border-color);
 }
 
+.aios-p-scope .aios-p-chart-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--aios-space-sm);
+}
+
 .aios-p-scope .aios-p-chart-header h3 {
     font-size: 13px;
     font-weight: 600;
@@ -1083,9 +1086,13 @@
 }
 
 .aios-p-scope .aios-p-chart-header h3 i {
-    color: var(--primary-color);
     font-size: 12px;
 }
+
+.aios-p-scope .aios-p-chart-header h3.aios-p-util i { color: #818cf8; }
+.aios-p-scope .aios-p-chart-header h3.aios-p-mem i { color: #34d399; }
+.aios-p-scope .aios-p-chart-header h3.aios-p-temp i { color: #fbbf24; }
+.aios-p-scope .aios-p-chart-header h3.aios-p-power i { color: #f87171; }
 
 .aios-p-scope .aios-p-chart-current {
     font-size: 18px;
@@ -1094,13 +1101,59 @@
     color: var(--text-primary);
 }
 
-.aios-p-scope .aios-p-chart-container {
+.aios-p-scope .aios-p-chart-wrapper {
     padding: var(--aios-space-md);
-    background: var(--bg-primary);
+    background: rgba(0, 0, 0, 0.15);
+    position: relative;
+}
+
+.aios-p-scope .aios-p-chart-canvas-wrap {
+    position: relative;
+    height: 120px;
 }
 
 .aios-p-scope .aios-p-canvas {
-    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    height: 100px;
+    height: 100%;
+}
+
+.aios-p-scope .aios-p-chart-axis {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 4px;
+}
+
+.aios-p-scope .aios-p-axis-label {
+    font-size: 9px;
+    color: var(--text-tertiary);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.aios-p-scope .aios-p-chart-y-axis {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 20px;
+    width: 30px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: var(--aios-space-xs) 0;
+}
+
+.aios-p-scope .aios-p-y-label {
+    font-size: 9px;
+    color: var(--text-tertiary);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    text-align: right;
+    padding-right: 4px;
 }

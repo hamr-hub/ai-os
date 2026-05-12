@@ -17,17 +17,16 @@
     function showTokenModal() {
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
-            overlay.className = 'aios-p-modal-overlay';
+            overlay.className = 'aios-p-scope aios-p-modal-overlay';
 
             const modal = document.createElement('div');
             modal.className = 'aios-p-modal';
 
-            const header = document.createElement('div');
-            header.className = 'aios-p-modal-header';
+            const header = document.createElement('h3');
             header.textContent = 'API Key 验证';
 
             const desc = document.createElement('div');
-            desc.style.cssText = 'font-size:12px;color:var(--text-secondary);margin-bottom:12px;';
+            desc.style.cssText = 'font-size:12px;color:var(--aios-text-secondary);margin-bottom:12px;';
             desc.textContent = '请输入 API Key（与系统 REQUIRED_API_KEY 一致）';
 
             const input = document.createElement('input');
@@ -37,7 +36,7 @@
             input.style.width = '100%';
 
             const errorMsg = document.createElement('div');
-            errorMsg.style.cssText = 'display:none;font-size:12px;color:var(--color-danger);margin-top:8px;';
+            errorMsg.style.cssText = 'display:none;font-size:12px;color:var(--aios-color-danger);margin-top:8px;';
 
             const actions = document.createElement('div');
             actions.className = 'aios-p-modal-actions';
@@ -117,17 +116,16 @@
     function showConfirm(message, title = '确认操作') {
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
-            overlay.className = 'aios-p-modal-overlay';
+            overlay.className = 'aios-p-scope aios-p-modal-overlay';
 
             const modal = document.createElement('div');
             modal.className = 'aios-p-modal';
 
-            const header = document.createElement('div');
-            header.className = 'aios-p-modal-header';
+            const header = document.createElement('h3');
             header.textContent = title;
 
             const body = document.createElement('div');
-            body.style.cssText = 'font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px;';
+            body.style.cssText = 'font-size:13px;color:var(--aios-text-secondary);line-height:1.6;margin-bottom:16px;';
             body.textContent = message;
 
             const actions = document.createElement('div');
@@ -212,41 +210,104 @@
         return t || 'vllm';
     }
 
-    function drawMiniChart(canvasId, dataPoints, maxLen, color, currentValue, unit) {
+    function drawMiniChart(canvasId, dataPoints, maxLen, color, minVal, maxVal, unit, axisPrefix) {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         const container = canvas.parentElement;
-        const w = container.clientWidth || 200;
-        const h = 100;
+        const w = container.clientWidth || 400;
+        const h = container.clientHeight || 120;
         canvas.width = w;
         canvas.height = h;
         const points = dataPoints.slice(-maxLen);
         ctx.clearRect(0, 0, w, h);
+        const chartLeft = 35, chartRight = 10, chartTop = 10, chartBottom = 25;
+        const chartW = w - chartLeft - chartRight;
+        const chartH = h - chartTop - chartBottom;
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = chartTop + (chartH / 4) * i;
+            ctx.beginPath();
+            ctx.moveTo(chartLeft, y);
+            ctx.lineTo(chartLeft + chartW, y);
+            ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(chartLeft, chartTop);
+        ctx.lineTo(chartLeft, chartTop + chartH);
+        ctx.lineTo(chartLeft + chartW, chartTop + chartH);
+        ctx.stroke();
         if (points.length < 2) {
             ctx.beginPath();
             ctx.strokeStyle = color || '#818cf8';
             ctx.lineWidth = 2;
-            ctx.moveTo(0, h - 12);
-            ctx.lineTo(w, h - 12);
+            ctx.moveTo(chartLeft, chartTop + chartH / 2);
+            ctx.lineTo(chartLeft + chartW, chartTop + chartH / 2);
             ctx.stroke();
             return;
         }
-        const max = Math.max(...points, 1);
+        const dataMin = minVal != null ? minVal : 0;
+        const dataMax = maxVal != null ? maxVal : Math.max(...points, 1) * 1.1;
+        if (dataMax === dataMin) dataMax = dataMin + 10;
+        const getY = (v) => chartTop + chartH - ((v - dataMin) / (dataMax - dataMin)) * chartH;
+        const getX = (i) => chartLeft + (i / (points.length - 1)) * chartW;
         ctx.beginPath();
         ctx.strokeStyle = color || '#818cf8';
         ctx.lineWidth = 2;
         points.forEach((v, i) => {
-            const x = (i / (points.length - 1)) * w;
-            const y = h - (v / max) * (h - 20) - 10;
+            const x = getX(i);
+            const y = getY(v);
             i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         });
         ctx.stroke();
-        ctx.lineTo(w, h);
-        ctx.lineTo(0, h);
+        ctx.lineTo(getX(points.length - 1), chartTop + chartH);
+        ctx.lineTo(chartLeft, chartTop + chartH);
         ctx.closePath();
-        ctx.fillStyle = (color || '#818cf8').replace(')', ', 0.08)').replace('rgb', 'rgba');
+        const fillColor = (color || '#818cf8').replace(')', ', 0.1)').replace('rgb', 'rgba');
+        ctx.fillStyle = fillColor;
         ctx.fill();
+        ctx.fillStyle = color || '#818cf8';
+        points.forEach((v, i) => {
+            if (i % Math.ceil(points.length / 6) === 0 || i === points.length - 1) {
+                const x = getX(i);
+                const y = getY(v);
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+        if (axisPrefix != null && window.GPU_TIMESTAMPS) {
+            const setAxisLabel = (id, v) => {
+                const e = document.getElementById(id);
+                if (e) {
+                    if (unit === '%') e.textContent = v.toFixed(0) + '%';
+                    else if (unit === 'W') e.textContent = v.toFixed(0) + 'W';
+                    else if (unit === 'C') e.textContent = v.toFixed(0) + '°C';
+                    else e.textContent = v;
+                }
+            };
+            if (maxVal != null) {
+                setAxisLabel('axis-' + axisPrefix + '-max', dataMax);
+                setAxisLabel('axis-' + axisPrefix + '-mid', (dataMax + dataMin) / 2);
+                setAxisLabel('axis-' + axisPrefix + '-min', dataMin);
+            }
+            const step = Math.ceil(points.length / 4);
+            for (let i = 0; i < 4; i++) {
+                const idx = i * step;
+                if (idx < points.length) {
+                    const ts = window.GPU_TIMESTAMPS[window.GPU_TIMESTAMPS.length - points.length + idx];
+                    const e = document.getElementById('axis-' + axisPrefix + '-' + i);
+                    if (e && ts) {
+                        const d = new Date(ts);
+                        const h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+                        e.textContent = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+                    }
+                }
+            }
+        }
     }
 
     const GPU_HTML = `
@@ -258,22 +319,56 @@
         </div>
     </div>
     <div class="aios-p-stats-grid" id="aios-gpu-stats">${loadingHTML()}</div>
-    <div class="aios-p-charts-grid" id="aios-gpu-charts">
+    <div class="aios-p-chart-section">
         <div class="aios-p-chart-card">
-            <div class="aios-p-chart-header"><h3><i class="fas fa-chart-line"></i> GPU 利用率</h3><span class="aios-p-chart-current" id="chart-util-value">--</span></div>
-            <div class="aios-p-chart-container"><canvas id="chart-util" class="aios-p-canvas"></canvas></div>
+            <div class="aios-p-chart-header">
+                <div class="aios-p-chart-header-left"><h3 class="aios-p-util"><i class="fas fa-chart-line"></i> GPU 利用率</h3></div>
+                <span class="aios-p-chart-current" id="chart-util-value">--</span>
+            </div>
+            <div class="aios-p-chart-wrapper">
+                <div class="aios-p-chart-y-axis"><span class="aios-p-y-label">100%</span><span class="aios-p-y-label">50%</span><span class="aios-p-y-label">0%</span></div>
+                <div class="aios-p-chart-canvas-wrap"><canvas id="chart-util" class="aios-p-canvas"></canvas></div>
+                <div class="aios-p-chart-axis"><span class="aios-p-axis-label" id="axis-util-0">--</span><span class="aios-p-axis-label" id="axis-util-1">--</span><span class="aios-p-axis-label" id="axis-util-2">--</span><span class="aios-p-axis-label" id="axis-util-3">--</span><span class="aios-p-axis-label" id="axis-util-4">现在</span></div>
+            </div>
         </div>
+    </div>
+    <div class="aios-p-chart-section">
         <div class="aios-p-chart-card">
-            <div class="aios-p-chart-header"><h3><i class="fas fa-memory"></i> 显存利用率</h3><span class="aios-p-chart-current" id="chart-mem-value">--</span></div>
-            <div class="aios-p-chart-container"><canvas id="chart-mem" class="aios-p-canvas"></canvas></div>
+            <div class="aios-p-chart-header">
+                <div class="aios-p-chart-header-left"><h3 class="aios-p-mem"><i class="fas fa-memory"></i> 显存利用率</h3></div>
+                <span class="aios-p-chart-current" id="chart-mem-value">--</span>
+            </div>
+            <div class="aios-p-chart-wrapper">
+                <div class="aios-p-chart-y-axis"><span class="aios-p-y-label">100%</span><span class="aios-p-y-label">50%</span><span class="aios-p-y-label">0%</span></div>
+                <div class="aios-p-chart-canvas-wrap"><canvas id="chart-mem" class="aios-p-canvas"></canvas></div>
+                <div class="aios-p-chart-axis"><span class="aios-p-axis-label" id="axis-mem-0">--</span><span class="aios-p-axis-label" id="axis-mem-1">--</span><span class="aios-p-axis-label" id="axis-mem-2">--</span><span class="aios-p-axis-label" id="axis-mem-3">--</span><span class="aios-p-axis-label" id="axis-mem-4">现在</span></div>
+            </div>
         </div>
+    </div>
+    <div class="aios-p-chart-section">
         <div class="aios-p-chart-card">
-            <div class="aios-p-chart-header"><h3><i class="fas fa-thermometer-half"></i> 温度</h3><span class="aios-p-chart-current" id="chart-temp-value">--</span></div>
-            <div class="aios-p-chart-container"><canvas id="chart-temp" class="aios-p-canvas"></canvas></div>
+            <div class="aios-p-chart-header">
+                <div class="aios-p-chart-header-left"><h3 class="aios-p-temp"><i class="fas fa-thermometer-half"></i> 温度</h3></div>
+                <span class="aios-p-chart-current" id="chart-temp-value">--</span>
+            </div>
+            <div class="aios-p-chart-wrapper">
+                <div class="aios-p-chart-y-axis"><span class="aios-p-y-label" id="axis-temp-max">--</span><span class="aios-p-y-label" id="axis-temp-mid">--</span><span class="aios-p-y-label" id="axis-temp-min">--</span></div>
+                <div class="aios-p-chart-canvas-wrap"><canvas id="chart-temp" class="aios-p-canvas"></canvas></div>
+                <div class="aios-p-chart-axis"><span class="aios-p-axis-label" id="axis-temp-0">--</span><span class="aios-p-axis-label" id="axis-temp-1">--</span><span class="aios-p-axis-label" id="axis-temp-2">--</span><span class="aios-p-axis-label" id="axis-temp-3">--</span><span class="aios-p-axis-label" id="axis-temp-4">现在</span></div>
+            </div>
         </div>
+    </div>
+    <div class="aios-p-chart-section">
         <div class="aios-p-chart-card">
-            <div class="aios-p-chart-header"><h3><i class="fas fa-bolt"></i> 功耗</h3><span class="aios-p-chart-current" id="chart-power-value">--</span></div>
-            <div class="aios-p-chart-container"><canvas id="chart-power" class="aios-p-canvas"></canvas></div>
+            <div class="aios-p-chart-header">
+                <div class="aios-p-chart-header-left"><h3 class="aios-p-power"><i class="fas fa-bolt"></i> 功耗</h3></div>
+                <span class="aios-p-chart-current" id="chart-power-value">--</span>
+            </div>
+            <div class="aios-p-chart-wrapper">
+                <div class="aios-p-chart-y-axis"><span class="aios-p-y-label" id="axis-power-max">--</span><span class="aios-p-y-label" id="axis-power-mid">--</span><span class="aios-p-y-label" id="axis-power-min">--</span></div>
+                <div class="aios-p-chart-canvas-wrap"><canvas id="chart-power" class="aios-p-canvas"></canvas></div>
+                <div class="aios-p-chart-axis"><span class="aios-p-axis-label" id="axis-power-0">--</span><span class="aios-p-axis-label" id="axis-power-1">--</span><span class="aios-p-axis-label" id="axis-power-2">--</span><span class="aios-p-axis-label" id="axis-power-3">--</span><span class="aios-p-axis-label" id="axis-power-4">现在</span></div>
+            </div>
         </div>
     </div>
     <div class="aios-p-gpu-layout">
@@ -1133,22 +1228,30 @@
                 const memPct = gpu.memoryUsagePercent ?? 0;
                 const temp = gpu.temperature ?? 0;
                 const power = gpu.powerDraw ?? 0;
+                const now = new Date().toISOString();
+                if (!window.GPU_TIMESTAMPS) window.GPU_TIMESTAMPS = [];
+                window.GPU_TIMESTAMPS.push(now);
                 this.history.utilization.push(util);
                 this.history.memoryPct.push(memPct);
                 this.history.temperature.push(temp);
                 this.history.power.push(power);
                 for (const k in this.history) {
-                    if (this.history[k].length > maxLen) this.history[k] = this.history[k].slice(-maxLen);
+                    if (this.history[k].length > maxLen) {
+                        this.history[k] = this.history[k].slice(-maxLen);
+                        window.GPU_TIMESTAMPS = window.GPU_TIMESTAMPS.slice(-maxLen);
+                    }
                 }
                 const setVal = (id, val, unit) => { const e = document.getElementById(id); if (e) e.textContent = val != null ? `${val}${unit}` : '--'; };
-                setVal('chart-util-value', util, '%');
+                setVal('chart-util-value', util.toFixed(1), '%');
                 setVal('chart-mem-value', memPct.toFixed(1), '%');
                 setVal('chart-temp-value', temp, '°C');
                 setVal('chart-power-value', power, 'W');
-                drawMiniChart('chart-util', this.history.utilization, maxLen, 'rgb(129, 140, 248)', util, '%');
-                drawMiniChart('chart-mem', this.history.memoryPct, maxLen, 'rgb(52, 211, 153)', memPct, '%');
-                drawMiniChart('chart-temp', this.history.temperature, maxLen, 'rgb(251, 191, 36)', temp, '°C');
-                drawMiniChart('chart-power', this.history.power, maxLen, 'rgb(248, 113, 113)', power, 'W');
+                drawMiniChart('chart-util', this.history.utilization, maxLen, 'rgb(129, 140, 248)', 0, 100, '%', 'util');
+                drawMiniChart('chart-mem', this.history.memoryPct, maxLen, 'rgb(52, 211, 153)', 0, 100, '%', 'mem');
+                const tempMax = Math.max(...this.history.temperature.filter(v => v > 0), 80);
+                drawMiniChart('chart-temp', this.history.temperature, maxLen, 'rgb(251, 191, 36)', 0, tempMax, 'C', 'temp');
+                const powerMax = Math.max(...this.history.power.filter(v => v > 0), power || 100);
+                drawMiniChart('chart-power', this.history.power, maxLen, 'rgb(248, 113, 113)', 0, powerMax, 'W', 'power');
             },
         },
         model: {
