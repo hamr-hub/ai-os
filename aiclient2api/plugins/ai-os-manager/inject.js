@@ -109,17 +109,12 @@
         if (!container) return;
         const toast = document.createElement('div');
         toast.className = `aios-toast aios-toast-${type}`;
-<<<<<<< HEAD
         toast.innerHTML = `<span>${escapeHtml(message)}</span><button class="aios-toast-close" onclick="this.parentElement.remove()">&times;</button>`;
-=======
-        toast.innerHTML = `<span>${message}</span><button class="aios-toast-close" onclick="this.parentElement.remove()">&times;</button>`;
->>>>>>> eeda9ed (123)
         container.appendChild(toast);
         setTimeout(() => toast.remove(), 4000);
     }
 
     function loadingHTML(text = '加载中...') {
-<<<<<<< HEAD
         return `<div class="aios-p-loading">${escapeHtml(text)}</div>`;
     }
 
@@ -129,17 +124,6 @@
 
     function errorHTML(msg) {
         return `<div class="aios-p-error">${escapeHtml(msg)}</div>`;
-=======
-        return `<div class="aios-p-loading">${text}</div>`;
-    }
-
-    function emptyHTML(text = '暂无数据') {
-        return `<div class="aios-p-empty"><i class="fas fa-inbox"></i><span>${text}</span></div>`;
-    }
-
-    function errorHTML(msg) {
-        return `<div class="aios-p-error">${msg}</div>`;
->>>>>>> eeda9ed (123)
     }
 
     function formatBytes(bytes) {
@@ -800,7 +784,6 @@
         }
     }
 
-<<<<<<< HEAD
     function clearAiosHash() {
         if (!AIOS_SECTIONS.includes(window.location.hash.slice(1))) return;
         const nextUrl = window.location.pathname + window.location.search;
@@ -811,8 +794,6 @@
         }
     }
 
-=======
->>>>>>> eeda9ed (123)
     function setupGlobalEventHandlers() {
         document.addEventListener('click', function(e) {
             const navItem = e.target.closest('[data-nav-target]');
