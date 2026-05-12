@@ -1660,8 +1660,16 @@ async def engine_switch(request: Request):
         raise HTTPException(status_code=400, detail="model_name required")
     result = model_engine_scheduler.switch_engine(model_name, engine_type, port)
     if not result.get("success"):
-        code = 409 if result.get("reason") == "insufficient_gpu_memory" else 500
-        raise HTTPException(status_code=code, detail=result.get("reason", "switch_failed"))
+        reason = result.get("reason", "switch_failed")
+        if reason == "insufficient_gpu_memory":
+            code = 409
+        elif reason == "engine_disabled":
+            code = 409
+        elif reason.startswith("unsupported_engine"):
+            code = 400
+        else:
+            code = 500
+        raise HTTPException(status_code=code, detail=result.get("detail") or reason)
     return result
 
 
@@ -1669,7 +1677,13 @@ async def engine_switch(request: Request):
 async def engine_status():
     engine_manager_mode = os.environ.get("ENGINE_MANAGER_MODE", "subprocess")
     services = llm_service_manager.list_services()
-    if engine_manager_mode != "subprocess" and not services:
+
+    def _cfg_value(cfg, key, default=None):
+        if isinstance(cfg, dict):
+            return cfg.get(key, default)
+        return getattr(cfg, key, default)
+
+    if not services:
         import httpx
         from core.vllm_manager import get_current_model_info
         current_info = get_current_model_info()
@@ -1679,8 +1693,8 @@ async def engine_status():
                 model_name = current_info.get("name", "")
                 configured_engine = "vllm"
                 config = scheduler.get_model_config(model_name) or {}
-                configured_engine = config.get("engine_type", "vllm")
-                service_port = config.get("port", 8000)
+                configured_engine = _cfg_value(config, "engine_type", "vllm")
+                service_port = current_info.get("port") or _cfg_value(config, "port", 8000)
 
                 engine_patterns = {
                     "vllm": ["VLLM", "vllm"],

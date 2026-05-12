@@ -235,13 +235,13 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 	port := s.GetModelPort(matched)
 	serviceRunning := mc.Service != "" && s.sysCtl.IsServiceRunning(mc.Service)
 	portActive := port > 0 && s.sysCtl.GetProcessInfo(port)
-	
+
 	if !portActive && serviceRunning {
-		s.logger.Debug("service running but port process not detected, allowing", 
+		s.logger.Debug("service running but port process not detected, allowing",
 			zap.String("model", matched), zap.String("service", mc.Service))
 		portActive = true
 	}
-	
+
 	if portActive || serviceRunning {
 		currentModelPath := s.getCurrentVLLMModelPath()
 
@@ -467,27 +467,58 @@ func (s *Scheduler) StartZombieChecker(ctx context.Context) {
 		case <-zombieCtx.Done():
 			return
 		case <-ticker.C:
-			s.mu.Lock()
 			now := time.Now()
+			type idleCandidate struct {
+				model        string
+				streamActive int64
+				preloaded    bool
+			}
+			type staleStream struct {
+				model string
+				count int64
+			}
+
+			var idleCandidates []idleCandidate
+			var staleStreams []staleStream
+
+			s.mu.RLock()
 			for model, lastUsed := range s.modelLastUsed {
 				if now.Sub(lastUsed) > idleTimeout {
-					active := s.rateLimiter.GetActiveRequests(model)
 					streamActive := s.streamActive[model]
-					if active == 0 && streamActive == 0 && s.IsModelRunning(model) && !s.preloaded[model] {
-						s.logger.Info("zombie checker: idle model detected", zap.String("model", model), zap.Duration("idle", now.Sub(lastUsed)))
-					}
+					idleCandidates = append(idleCandidates, idleCandidate{
+						model:        model,
+						streamActive: streamActive,
+						preloaded:    s.preloaded[model],
+					})
 				}
 			}
 			for model, count := range s.streamActive {
 				if count > 0 {
 					lastUsed, hasLast := s.modelLastUsed[model]
 					if hasLast && now.Sub(lastUsed) > idleTimeout {
-						s.logger.Warn("zombie checker: stale stream connection detected, releasing slots", zap.String("model", model), zap.Int64("stale_slots", count))
-						s.streamActive[model] = 0
+						staleStreams = append(staleStreams, staleStream{model: model, count: count})
 					}
 				}
 			}
-			s.mu.Unlock()
+			s.mu.RUnlock()
+
+			for _, candidate := range idleCandidates {
+				active := s.rateLimiter.GetActiveRequests(candidate.model)
+				if active == 0 && candidate.streamActive == 0 && !candidate.preloaded && s.IsModelRunning(candidate.model) {
+					s.logger.Info("zombie checker: idle model detected", zap.String("model", candidate.model))
+				}
+			}
+
+			if len(staleStreams) > 0 {
+				s.mu.Lock()
+				for _, stale := range staleStreams {
+					if s.streamActive[stale.model] > 0 {
+						s.logger.Warn("zombie checker: stale stream connection detected, releasing slots", zap.String("model", stale.model), zap.Int64("stale_slots", stale.count))
+						s.streamActive[stale.model] = 0
+					}
+				}
+				s.mu.Unlock()
+			}
 
 			goroutineCount := runtime.NumGoroutine()
 			if goroutineCount > 500 {
@@ -778,7 +809,7 @@ func (s *Scheduler) ensureMemoryAvailable(ctx context.Context, modelName string)
 		return nil
 	}
 
-	s.logger.Warn("insufficient memory for model", 
+	s.logger.Warn("insufficient memory for model",
 		zap.String("model", modelName),
 		zap.Int64("available", mem.Available),
 		zap.Int64("required", requiredMem))
@@ -826,14 +857,14 @@ func (s *Scheduler) switchVLLMModel(ctx context.Context, matched string, mc *con
 
 func (s *Scheduler) waitForActiveRequestsToComplete(modelName string, timeoutSeconds int) error {
 	deadline := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
-	
+
 	for time.Now().Before(deadline) {
 		if s.GetActiveRequests(modelName) == 0 {
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	
+
 	return fmt.Errorf("timeout waiting for active requests to complete")
 }
 
@@ -1210,7 +1241,7 @@ func (s *Scheduler) waitForServiceReady(ctx context.Context, serviceName string,
 		status := s.sysCtl.GetServiceStatus(serviceName)
 		if status == "active" {
 			s.logger.Info("service is active, verifying readiness", zap.String("service", serviceName))
-			
+
 			if s.isVLLMServiceReady() {
 				return nil
 			}
@@ -1231,12 +1262,12 @@ func (s *Scheduler) isVLLMServiceReady() bool {
 	if s.vllmManager == nil {
 		return true
 	}
-	
+
 	port := s.vllmManager.GetCurrentPort()
 	if port == 0 {
 		port = 8000
 	}
-	
+
 	url := fmt.Sprintf("http://localhost:%d/v1/models", port)
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
@@ -1244,7 +1275,7 @@ func (s *Scheduler) isVLLMServiceReady() bool {
 		return false
 	}
 	defer resp.Body.Close()
-	
+
 	return resp.StatusCode == http.StatusOK
 }
 

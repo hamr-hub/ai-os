@@ -61,6 +61,32 @@ class ModelEngineScheduler:
         self._engine_model_registry: Dict[str, Dict] = {}
         self._orchestrator = None
 
+    def _cfg_get(self, cfg: Any, key: str, default=None):
+        if isinstance(cfg, dict):
+            return cfg.get(key, default)
+        return getattr(cfg, key, default)
+
+    def _get_model_engine_from_config(self, model_name: str) -> str:
+        if not self._config:
+            return "vllm"
+        model_cfg = None
+        if hasattr(self._config, 'get_model'):
+            model_cfg = self._config.get_model(model_name)
+        elif isinstance(self._config, dict):
+            model_cfg = self._config.get('models', {}).get(model_name)
+        return self._cfg_get(model_cfg, "engine_type", "vllm") if model_cfg else "vllm"
+
+    def _is_engine_enabled(self, engine_type: str) -> bool:
+        if engine_type == "vllm":
+            return True
+        engines_cfg = {}
+        if isinstance(self._config, dict):
+            engines_cfg = self._config.get("engines", {})
+        elif hasattr(self._config, "engines"):
+            engines_cfg = getattr(self._config, "engines") or {}
+        engine_cfg = self._cfg_get(engines_cfg, engine_type, {})
+        return bool(self._cfg_get(engine_cfg, "enabled", True))
+
     def _build_model_pool_from_config(self) -> Dict[str, Dict]:
         if not self._config:
             return {}
@@ -219,6 +245,12 @@ class ModelEngineScheduler:
     ) -> Dict:
         if engine_type not in _ENGINE_CAPABILITIES:
             return {"success": False, "reason": f"unsupported_engine: {engine_type}"}
+        if not self._is_engine_enabled(engine_type):
+            return {
+                "success": False,
+                "reason": "engine_disabled",
+                "detail": f"引擎 {engine_type} 当前未启用。",
+            }
         if not port:
             port = self._find_available_port(engine_type)
 
@@ -227,12 +259,15 @@ class ModelEngineScheduler:
 
         if current_info and current_info.get("running") and current_info.get("name"):
             existing_registry = self._engine_model_registry.get(current_info["name"], {})
-            if current_info["name"] == model_name and existing_registry.get("engine") == engine_type:
+            current_engine = existing_registry.get("engine") or self._get_model_engine_from_config(current_info["name"])
+            if current_info["name"] == model_name and current_engine == engine_type:
                 return {
                     "success": True,
                     "reason": "already_running_same_engine",
                     "model": current_info["name"],
                     "engine": engine_type,
+                    "port": current_info.get("port") or port,
+                    "service_name": current_info.get("service"),
                 }
 
         if self._engine_manager_mode == "systemd" and current_info and current_info.get("running"):

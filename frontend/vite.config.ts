@@ -68,7 +68,7 @@ export default defineConfig({
       '/api/health/history': {
         target: unifiedBackend,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '/manage'),
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/api/health': {
         target: gatewayBackend,

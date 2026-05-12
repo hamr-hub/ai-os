@@ -9,6 +9,37 @@ health_router = APIRouter()
 logger = setup_logger()
 
 
+def _status_from_score(score: float) -> str:
+    if score >= 90:
+        return "healthy"
+    if score >= 70:
+        return "degraded"
+    if score >= 50:
+        return "warning"
+    return "critical"
+
+
+def _score_from_gpu_history(entry: dict) -> Optional[float]:
+    score = entry.get("health_score")
+    if isinstance(score, (int, float)):
+        return round(float(score), 2)
+
+    temp = entry.get("temperature")
+    mem_util = entry.get("memory_utilization")
+    if mem_util is None:
+        total_mem = entry.get("total_memory") or 0
+        used_mem = entry.get("used_memory") or 0
+        if total_mem:
+            mem_util = (used_mem / total_mem) * 100
+
+    if not isinstance(temp, (int, float)) or not isinstance(mem_util, (int, float)):
+        return None
+
+    temp_score = max(0, 100 - max(0, temp - 85) * 5)
+    mem_score = max(0, 100 - max(0, mem_util - 90) * 10)
+    return round(max(0, min(100, temp_score * 0.5 + mem_score * 0.5)), 2)
+
+
 def _build_fallback_health(reason: str):
     return {
         "status": "critical",
@@ -161,12 +192,12 @@ async def get_health_history(count: int = 60):
         gpu_history = gpu_monitor.get_gpu_history(count)
         for entry in gpu_history:
             ts = entry.get("timestamp", "")
-            score = entry.get("health_score", 0)
-            if isinstance(score, (int, float)):
+            score = _score_from_gpu_history(entry)
+            if score is not None:
                 history.append({
                     "timestamp": ts,
                     "health_score": score,
-                    "status": "healthy" if score >= 90 else "degraded" if score >= 70 else "critical",
+                    "status": _status_from_score(score),
                     "alert_count": len(entry.get("alert_reasons") or []),
                     "source": "gpu_history",
                 })
