@@ -504,7 +504,8 @@ test.describe('页面间导航一致性', () => {
     await page.locator('.nav-item').filter({ hasText: 'GPU监控' }).click()
     await expect(page.locator('.gpu-monitor')).toBeVisible({ timeout: 10000 })
     await page.locator('.nav-item').filter({ hasText: '总览面板' }).click()
-    await expect(page.locator('.header-title')).toHaveText('仪表盘', { timeout: 10000 })
+    await page.waitForURL('**/', { timeout: 10000 })
+    await expect(page.locator('.dashboard .header-title')).toHaveText('仪表盘', { timeout: 10000 })
   })
 
   test('侧边栏在所有页面保持可见', async ({ page }) => {
