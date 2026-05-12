@@ -5,7 +5,7 @@
     (function migrateLegacyToken() {
         try {
             const legacyToken = localStorage.getItem('aios_admin_token');
-            if (legacyToken &amp;&amp; !localStorage.getItem('auth_token')) {
+            if (legacyToken && !localStorage.getItem('auth_token')) {
                 localStorage.setItem('auth_token', legacyToken);
                 localStorage.setItem('auth_user', 'admin');
                 console.log('[AI-OS Manager] Migrated legacy admin token to auth_token');
@@ -15,7 +15,7 @@
     })();
 
     function showTokenModal() {
-        return new Promise((resolve) =&gt; {
+        return new Promise((resolve) => {
             const overlay = document.createElement('div');
             overlay.className = 'aios-p-modal-overlay';
 
@@ -61,9 +61,9 @@
             document.body.appendChild(overlay);
 
             input.focus();
-            const cleanup = (value) =&gt; { overlay.remove(); resolve(value); };
-            cancelBtn.onclick = () =&gt; cleanup(null);
-            submitBtn.onclick = () =&gt; {
+            const cleanup = (value) => { overlay.remove(); resolve(value); };
+            cancelBtn.onclick = () => cleanup(null);
+            submitBtn.onclick = () => {
                 if (!input.value || !input.value.trim()) {
                     errorMsg.textContent = '请输入有效的 Token';
                     errorMsg.style.display = 'block';
@@ -71,7 +71,7 @@
                 }
                 cleanup(input.value.trim() || null);
             };
-            input.onkeydown = (e) =&gt; {
+            input.onkeydown = (e) => {
                 if (e.key === 'Enter') {
                     if (!input.value || !input.value.trim()) {
                         errorMsg.textContent = '请输入有效的 Token';
@@ -89,9 +89,9 @@
         const token = localStorage.getItem('auth_token') || '';
         const headers = { 'Content-Type': 'application/json', ...options.headers };
         if (token) headers['Authorization'] = 'Bearer ' + token;
-        return fetch(url, { ...options, headers }).then(r =&gt; {
+        return fetch(url, { ...options, headers }).then(r => {
             if (r.status === 401) {
-                return showTokenModal().then(newToken =&gt; {
+                return showTokenModal().then(newToken => {
                     if (newToken) {
                         localStorage.setItem('auth_token', newToken);
                         localStorage.setItem('auth_user', 'admin');
@@ -109,9 +109,9 @@
         if (!container) return;
         const toast = document.createElement('div');
         toast.className = `aios-toast aios-toast-${type}`;
-        toast.innerHTML = `&lt;span&gt;${message}&lt;/span&gt;&lt;button class="aios-toast-close" onclick="this.parentElement.remove()"&gt;&amp;times;&lt;/button&gt;';
+        toast.innerHTML = `&lt;span&gt;${message}&lt;/span&gt;&lt;button class="aios-toast-close" onclick="this.parentElement.remove()"&gt;&amp;times;&lt;/button&gt;`;
         container.appendChild(toast);
-        setTimeout(() =&gt; toast.remove(), 4000);
+        setTimeout(() => toast.remove(), 4000);
     }
 
     function loadingHTML(text = '加载中...') {
@@ -173,13 +173,13 @@
         canvas.width = w;
         canvas.height = h;
         const points = dataPoints.slice(-maxLen);
-        if (points.length &lt; 2) return;
+        if (points.length < 2) return;
         const max = Math.max(...points, 1);
         ctx.clearRect(0, 0, w, h);
         ctx.beginPath();
         ctx.strokeStyle = '#818cf8';
         ctx.lineWidth = 1.5;
-        points.forEach((v, i) =&gt; {
+        points.forEach((v, i) => {
             const x = (i / (points.length - 1)) * w;
             const y = h - (v / max) * (h - 4) - 2;
             i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
@@ -193,12 +193,11 @@
     }
 
     const GPU_HTML = `
-<<<<<<< Updated upstream
-<div class="section" id="section-aios-gpu" style="display:none;">
+<div class="aios-p-section" id="section-aios-gpu">
     <div class="section-header">
         <h2><i class="fas fa-microchip"></i> GPU 监控</h2>
         <div class="section-actions">
-            <button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.gpu.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+            <button class="aios-p-btn aios-p-btn-sm" data-action="gpu-refresh"><i class="fas fa-sync-alt"></i> 刷新</button>
         </div>
     </div>
     <div class="aios-p-stats-grid" id="aios-gpu-stats">${loadingHTML()}</div>
@@ -223,11 +222,11 @@
 </div>`;
 
     const MODEL_HTML = `
-<div class="section" id="section-aios-model" style="display:none;">
+<div class="aios-p-section" id="section-aios-model">
     <div class="section-header">
         <h2><i class="fas fa-cubes"></i> 模型管理</h2>
         <div class="section-actions">
-            <button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.model.refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+            <button class="aios-p-btn aios-p-btn-sm" data-action="model-refresh"><i class="fas fa-sync-alt"></i> 刷新</button>
         </div>
     </div>
     <div class="aios-p-status-banner" id="aios-model-banner">${loadingHTML()}</div>
@@ -253,7 +252,7 @@
                     <input id="aios-switch-port" class="aios-p-input" type="number" placeholder="自动(8000)">
                 </div>
                 <div class="aios-p-form-actions">
-                    <button class="aios-p-btn aios-p-btn-primary" onclick="AiosManager.model.switchModel()"><i class="fas fa-play"></i> 切换</button>
+                    <button class="aios-p-btn aios-p-btn-primary" data-action="switch-model"><i class="fas fa-play"></i> 切换</button>
                 </div>
             </div>
             <div id="aios-switch-status" style="margin-top:var(--space-md);"></div>
@@ -314,7 +313,7 @@
                     </select>
                 </div>
                 <div class="aios-p-form-actions">
-                    <button class="aios-p-btn aios-p-btn-primary" onclick="AiosManager.model.download()"><i class="fas fa-cloud-download-alt"></i> 下载</button>
+                    <button class="aios-p-btn aios-p-btn-primary" data-action="download-model"><i class="fas fa-cloud-download-alt"></i> 下载</button>
                 </div>
             </div>
             <div id="aios-download-tasks" style="margin-top:var(--space-lg);"></div>
@@ -329,89 +328,6 @@
         <div class="aios-p-card-content" id="aios-model-pool">${loadingHTML()}</div>
     </div>
 </div>`;
-=======
-&lt;div class="aios-p-section" id="section-aios-gpu"&gt;
-    &lt;div class="section-header"&gt;
-        &lt;h2&gt;&lt;i class="fas fa-microchip"&gt;&lt;/i&gt; GPU 监控&lt;/h2&gt;
-        &lt;div class="section-actions"&gt;
-            &lt;button class="aios-p-btn aios-p-btn-sm" data-action="gpu-refresh"&gt;&lt;i class="fas fa-sync-alt"&gt;&lt;/i&gt; 刷新&lt;/button&gt;
-        &lt;/div&gt;
-    &lt;/div&gt;
-    &lt;div class="aios-p-stats-grid" id="aios-gpu-stats"&gt;${loadingHTML()}&lt;/div&gt;
-    &lt;div class="aios-p-card aios-p-chart-card" style="margin-top:var(--space-lg);"&gt;
-        &lt;div class="aios-p-card-header"&gt;&lt;h3&gt;&lt;i class="fas fa-chart-area"&gt;&lt;/i&gt; GPU 历史趋势&lt;/h3&gt;&lt;/div&gt;
-        &lt;div class="aios-p-card-content"&gt;&lt;canvas id="aios-gpu-chart" style="height:80px;"&gt;&lt;/canvas&gt;&lt;/div&gt;
-    &lt;/div&gt;
-    &lt;div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-lg);"&gt;
-        &lt;div class="aios-p-card-header"&gt;&lt;h3&gt;&lt;i class="fas fa-bolt"&gt;&lt;/i&gt; 引擎状态&lt;/h3&gt;&lt;/div&gt;
-        &lt;div class="aios-p-card-content" id="aios-engine-status"&gt;${loadingHTML()}&lt;/div&gt;
-    &lt;/div&gt;
-&lt;/div&gt;`;
-
-    const MODEL_HTML = `
-&lt;div class="aios-p-section" id="section-aios-model"&gt;
-    &lt;div class="section-header"&gt;
-        &lt;h2&gt;&lt;i class="fas fa-cube"&gt;&lt;/i&gt; 模型管理&lt;/h2&gt;
-        &lt;div class="section-actions"&gt;
-            &lt;button class="aios-p-btn aios-p-btn-sm" data-action="model-refresh"&gt;&lt;i class="fas fa-sync-alt"&gt;&lt;/i&gt; 刷新&lt;/button&gt;
-        &lt;/div&gt;
-    &lt;/div&gt;
-    &lt;div class="aios-p-status-banner" id="aios-model-banner"&gt;${loadingHTML()}&lt;/div&gt;
-    &lt;div id="aios-p-switching-banner" style="margin-bottom:var(--space-lg);"&gt;&lt;/div&gt;
-    &lt;div class="aios-p-card aios-p-action-card"&gt;
-        &lt;div class="aios-p-card-header"&gt;&lt;h3&gt;&lt;i class="fas fa-exchange-alt"&gt;&lt;/i&gt; 快速切换&lt;/h3&gt;&lt;/div&gt;
-        &lt;div class="aios-p-card-content"&gt;
-            &lt;div class="aios-p-form-grid"&gt;
-                &lt;div class="aios-p-form-group"&gt;
-                    &lt;label&gt;模型&lt;/label&gt;
-                    &lt;select id="aios-switch-model" class="aios-p-input aios-p-select"&gt;&lt;/select&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-group"&gt;
-                    &lt;label&gt;引擎&lt;/label&gt;
-                    &lt;select id="aios-switch-engine" class="aios-p-input aios-p-select"&gt;
-                        &lt;option value="vllm"&gt;vLLM&lt;/option&gt;
-                        &lt;option value="sglang"&gt;SGLang&lt;/option&gt;
-                        &lt;option value="llamacpp"&gt;llama.cpp&lt;/option&gt;
-                    &lt;/select&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-group"&gt;
-                    &lt;label&gt;端口&lt;/label&gt;
-                    &lt;input id="aios-switch-port" class="aios-p-input" type="number" placeholder="自动(8000)"&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-actions"&gt;
-                    &lt;button class="aios-p-btn aios-p-btn-primary" data-action="switch-model"&gt;&lt;i class="fas fa-play"&gt;&lt;/i&gt; 切换&lt;/button&gt;
-                &lt;/div&gt;
-            &lt;/div&gt;
-            &lt;div id="aios-switch-status" style="margin-top:var(--space-md);"&gt;&lt;/div&gt;
-        &lt;/div&gt;
-    &lt;/div&gt;
-    &lt;div class="aios-p-models-shell" style="margin-top:var(--space-lg);"&gt;
-        &lt;div id="aios-model-list"&gt;${loadingHTML()}&lt;/div&gt;
-    &lt;/div&gt;
-    &lt;div class="aios-p-card aios-p-action-card" style="margin-top:var(--space-lg);"&gt;
-        &lt;div class="aios-p-card-header"&gt;&lt;h3&gt;&lt;i class="fas fa-download"&gt;&lt;/i&gt; 模型下载&lt;/h3&gt;&lt;/div&gt;
-        &lt;div class="aios-p-card-content"&gt;
-            &lt;div class="aios-p-form-grid"&gt;
-                &lt;div class="aios-p-form-group" style="flex:2;"&gt;
-                    &lt;label&gt;模型ID (HuggingFace / ModelScope&lt;/label&gt;
-                    &lt;input id="aios-download-model-name" class="aios-p-input" placeholder="如: Qwen/Qwen2.5-7B-Instruct" style="width:100%;"&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-group"&gt;
-                    &lt;label&gt;来源&lt;/label&gt;
-                    &lt;select id="aios-download-source" class="aios-p-input aios-p-select"&gt;
-                        &lt;option value="hf"&gt;HuggingFace&lt;/option&gt;
-                        &lt;option value="ms"&gt;ModelScope&lt;/option&gt;
-                    &lt;/select&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-actions"&gt;
-                    &lt;button class="aios-p-btn aios-p-btn-primary" data-action="download-model"&gt;&lt;i class="fas fa-cloud-download-alt"&gt;&lt;/i&gt; 下载&lt;/button&gt;
-                &lt;/div&gt;
-            &lt;/div&gt;
-            &lt;div id="aios-download-tasks" style="margin-top:var(--space-lg);"&gt;&lt;/div&gt;
-        &lt;/div&gt;
-    &lt;/div&gt;
-&lt;/div&gt;`;
->>>>>>> Stashed changes
 
     const HEALTH_HTML = `
 &lt;div class="aios-p-section" id="section-aios-health"&gt;
@@ -433,8 +349,7 @@
 &lt;/div&gt;`;
 
     const RATELIMIT_HTML = `
-<<<<<<< Updated upstream
-<div class="section" id="section-aios-ratelimit" style="display:none;">
+<div class="aios-p-section" id="section-aios-ratelimit">
     <div class="section-header">
         <h2><i class="fas fa-tachometer-alt"></i> 限流控制</h2>
         <div class="section-actions">
@@ -493,7 +408,7 @@
 </div>`;
 
     const CONFIG_HTML = `
-<div class="section" id="section-aios-config" style="display:none;">
+<div class="aios-p-section" id="section-aios-config">
     <div class="section-header">
         <h2><i class="fas fa-cog"></i> 配置中心</h2>
         <div class="section-actions">
@@ -513,66 +428,6 @@
         <div class="aios-p-card-content" id="aios-config-operation-log">${loadingHTML()}</div>
     </div>
 </div>`;
-=======
-&lt;div class="aios-p-section" id="section-aios-ratelimit"&gt;
-    &lt;div class="section-header"&gt;
-        &lt;h2&gt;&lt;i class="fas fa-tachometer-alt"&gt;&lt;/i&gt; 限流控制&lt;/h2&gt;
-        &lt;div class="section-actions"&gt;
-            &lt;button class="aios-p-btn aios-p-btn-sm" data-action="ratelimit-refresh"&gt;&lt;i class="fas fa-sync-alt"&gt;&lt;/i&gt; 刷新&lt;/button&gt;
-            &lt;button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" data-action="ratelimit-save"&gt;&lt;i class="fas fa-save"&gt;&lt;/i&gt; 保存&lt;/button&gt;
-        &lt;/div&gt;
-    &lt;/div&gt;
-    &lt;div class="aios-p-stats-grid" id="aios-ratelimit-stats"&gt;${loadingHTML()}&lt;/div&gt;
-    &lt;div class="aios-p-card" style="margin-top:var(--space-lg);"&gt;
-        &lt;div class="aios-p-card-header"&gt;&lt;h3&gt;&lt;i class="fas fa-sliders-h"&gt;&lt;/i&gt; 限流配置&lt;/h3&gt;&lt;/div&gt;
-        &lt;div class="aios-p-card-content"&gt;
-            &lt;div class="aios-p-form-grid"&gt;
-                &lt;div class="aios-p-form-group"&gt;
-                    &lt;label&gt;IP QPS 限制&lt;/label&gt;
-                    &lt;input id="aios-rl-ip-limit" class="aios-p-input" type="number" min="0"&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-group"&gt;
-                    &lt;label&gt;统计窗口(秒)&lt;/label&gt;
-                    &lt;input id="aios-rl-window" class="aios-p-input" type="number" min="1"&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-group"&gt;
-                    &lt;label&gt;并发上限&lt;/label&gt;
-                    &lt;input id="aios-rl-concurrency" class="aios-p-input" type="number" min="1"&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-group"&gt;
-                    &lt;label&gt;排队超时(秒)&lt;/label&gt;
-                    &lt;input id="aios-rl-timeout" class="aios-p-input" type="number" min="1"&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-group" style="flex:1 1 100%;"&gt;
-                    &lt;label&gt;白名单 IP（逗号分隔）&lt;/label&gt;
-                    &lt;input id="aios-rl-whitelist" class="aios-p-input" type="text" placeholder="127.0.0.1,localhost"&gt;
-                &lt;/div&gt;
-                &lt;div class="aios-p-form-group" style="flex:1 1 100%;"&gt;
-                    &lt;label&gt;限流路径（逗号分隔）&lt;/label&gt;
-                    &lt;input id="aios-rl-paths" class="aios-p-input" type="text" placeholder="/v1/chat/completions,/v1/embeddings"&gt;
-                &lt;/div&gt;
-            &lt;/div&gt;
-        &lt;/div&gt;
-    &lt;/div&gt;
-&lt;/div&gt;`;
-
-    const CONFIG_HTML = `
-&lt;div class="aios-p-section" id="section-aios-config"&gt;
-    &lt;div class="section-header"&gt;
-        &lt;h2&gt;&lt;i class="fas fa-cog"&gt;&lt;/i&gt; 配置中心&lt;/h2&gt;
-        &lt;div class="section-actions"&gt;
-            &lt;button class="aios-p-btn aios-p-btn-sm" data-action="config-refresh"&gt;&lt;i class="fas fa-sync-alt"&gt;&lt;/i&gt; 刷新&lt;/button&gt;
-            &lt;button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" data-action="config-save"&gt;&lt;i class="fas fa-save"&gt;&lt;/i&gt; 保存&lt;/button&gt;
-        &lt;/div&gt;
-    &lt;/div&gt;
-    &lt;div class="aios-p-card"&gt;
-        &lt;div class="aios-p-card-header"&gt;&lt;h3&gt;&lt;i class="fas fa-file-code"&gt;&lt;/i&gt; 当前配置&lt;/h3&gt;&lt;/div&gt;
-        &lt;div class="aios-p-card-content"&gt;
-            &lt;textarea id="aios-config-editor" class="aios-p-input" style="min-height:360px;font-family:Menlo,monospace;resize:vertical;"&gt;&lt;/textarea&gt;
-        &lt;/div&gt;
-    &lt;/div&gt;
-&lt;/div&gt;`;
->>>>>>> Stashed changes
 
     let initialized = false;
     let aiosScope = null;
@@ -599,7 +454,7 @@
         ];
         for (const selector of selectors) {
             const el = document.querySelector(selector);
-            if (el &amp;&amp; el.children.length &gt; 0) return el;
+            if (el && el.children.length > 0) return el;
         }
         return null;
     }
@@ -632,19 +487,18 @@
             if (injected) return;
             const nav = findNavigationContainer();
             const content = findContentContainer();
-            if (nav &amp;&amp; content) {
+            if (nav && content) {
                 injected = true;
                 cb(nav, content);
                 return;
             }
             tries++;
-            if (tries &lt; maxTries) {
+            if (tries < maxTries) {
                 setTimeout(check, 500);
             } else {
                     console.warn('[AI-OS Manager] Could not find DOM containers after maximum attempts');
                     cb(null, document.body);
                 }
-            }
         }
         check();
         
@@ -757,58 +611,30 @@
         showSection('aios-gpu');
     }
 
-<<<<<<< Updated upstream
-    function showSection(id) {
-        const sections = ['aios-gpu', 'aios-model', 'aios-health', 'aios-ratelimit', 'aios-config'];
-sections.forEach(sectionId => {
-            const el = document.getElementById(`section-${sectionId}`);
-            if (el) el.style.display = (sectionId === id) ? '' : 'none';
-        });
-
-        sections.map(sectionId => `nav-${sectionId}`).forEach(nid => { (feat: 增加模型搜索、显存检查和配置管理功能)
-            const n = document.getElementById(nid);
-            if (n) n.classList.toggle('active', nid === 'nav-' + id);
-=======
     function startMenuWatcher(nav, content) {
         const watcher = new MutationObserver(() => {
             ensureAiosMenus(nav);
             ensureAiosScope(content);
->>>>>>> Stashed changes
         });
         watcher.observe(nav, { childList: true, subtree: true });
         watcher.observe(content, { childList: true, subtree: true });
     }
 
-<<<<<<< Updated upstream
-    window.addEventListener('hashchange', () => {
-        const hash = window.location.hash.slice(1);
-        const sections = ['aios-gpu', 'aios-model', 'aios-health', 'aios-ratelimit', 'aios-config'];
-        if (!sections.includes(hash)) {
-sections.forEach(sectionId => {
-                const el = document.getElementById(`section-${sectionId}`);
-                if (el) el.style.display = 'none';
-            });
-            sections.map(sectionId => `nav-${sectionId}`).forEach(nid => { (feat: 增加模型搜索、显存检查和配置管理功能)
-                const n = document.getElementById(nid);
-                if (n) n.classList.remove('active');
-            });
-=======
     let currentAiosSection = 'aios-gpu';
     function setupHostNavigationGuard() {
-        const guard = new MutationObserver((mutations) =&gt; {
+        const guard = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') continue;
                 const target = mutation.target;
                 if (!target.id || !target.id.startsWith('section-aios-')) continue;
                 const wasActive = target.classList.contains('active');
-                if (!wasActive &amp;&amp; currentAiosSection === target.id.replace('section-', '')) {
-                    setTimeout(() =&gt; target.classList.add('active'), 0);
+                if (!wasActive && currentAiosSection === target.id.replace('section-', '')) {
+                    setTimeout(() => target.classList.add('active'), 0);
                 }
             }
         });
         if (aiosScope) {
             guard.observe(aiosScope, { attributes: true, subtree: true, attributeFilter: ['class'] });
->>>>>>> Stashed changes
         }
     }
 
@@ -818,7 +644,6 @@ sections.forEach(sectionId => {
                 window.AiosManager.gpu.refresh();
                 break;
             case 'model-refresh':
-                window.AiosManager.model.refresh();
                 break;
             case 'health-refresh':
                 window.AiosManager.health.refresh();
@@ -829,12 +654,10 @@ sections.forEach(sectionId => {
             case 'config-refresh':
                 window.AiosManager.config.refresh();
                 break;
-            case 'switch-model':
                 window.AiosManager.model.switchModel();
                 break;
             case 'download-model':
                 window.AiosManager.model.download();
-                break;
             case 'switch-engine':
                 const engine = target.getAttribute('data-engine');
                 window.AiosManager.gpu.switchEngine(engine);
@@ -843,20 +666,6 @@ sections.forEach(sectionId => {
                 const modelName = target.getAttribute('data-model');
                 window.AiosManager.model.downloadByName(modelName);
                 break;
-            case 'start-model':
-                const startModel = target.getAttribute('data-model');
-                window.AiosManager.model.start(startModel);
-                break;
-            case 'stop-model':
-                const stopModel = target.getAttribute('data-model');
-                window.AiosManager.model.stop(stopModel);
-                break;
-            case 'switch-to-model':
-                const switchModel = target.getAttribute('data-model');
-                const switchEngine = target.getAttribute('data-engine');
-                window.AiosManager.model.switchTo(switchModel, switchEngine);
-                break;
-            case 'cancel-switch':
                 window.AiosManager.model.cancelSwitch();
                 break;
             case 'cancel-download':
@@ -872,7 +681,6 @@ sections.forEach(sectionId => {
                 break;
             case 'config-save':
                 window.AiosManager.config.save();
-                break;
         }
     }
 
@@ -881,13 +689,13 @@ sections.forEach(sectionId => {
             const navItem = e.target.closest('[data-nav-target]');
             if (navItem) {
                 const navId = navItem.getAttribute('id');
-                if (navId &amp;&amp; navId.startsWith('nav-aios-')) {
+                if (navId && navId.startsWith('nav-aios-')) {
                     e.preventDefault();
                     e.stopPropagation();
                     const target = navItem.getAttribute('data-nav-target');
                     if (target) {
                         showSection(target);
-                        if (window.AiosManager &amp;&amp; window.AiosManager[target.replace('aios-', '')]) {
+                        if (window.AiosManager && window.AiosManager[target.replace('aios-', '')]) {
                             window.AiosManager[target.replace('aios-', '')].refresh();
                         }
                     }
@@ -908,7 +716,7 @@ sections.forEach(sectionId => {
             }
         });
 
-        const handleRouteChange = () =&gt; {
+        const handleRouteChange = () => {
             const hash = window.location.hash.slice(1);
             const isAiosSection = AIOS_SECTIONS.includes(hash);
             if (!isAiosSection) {
@@ -918,7 +726,7 @@ sections.forEach(sectionId => {
 
         window.addEventListener('hashchange', handleRouteChange);
         
-        if (window.history &amp;&amp; window.history.pushState) {
+        if (window.history && window.history.pushState) {
             const originalPushState = window.history.pushState;
             const originalReplaceState = window.history.replaceState;
             
@@ -963,19 +771,19 @@ sections.forEach(sectionId => {
                 const util = gpu.gpuUtilization ?? 0;
                 const memUsed = gpu.memoryUsed ?? 0;
                 const memTotal = gpu.memoryTotal ?? 0;
-                const memPct = memTotal &gt; 0 ? (memUsed / memTotal * 100) : 0;
+                const memPct = memTotal > 0 ? (memUsed / memTotal * 100) : 0;
                 const temp = gpu.temperature ?? 0;
                 const power = gpu.powerDraw ?? 0;
                 const cards = [
                     { icon: 'fa-tag', label: 'GPU', value: gpu.name || '-' },
-                    { icon: 'fa-chart-line', label: '利用率', value: `${util}%`, progress: util, ptype: util &gt; 80 ? 'danger' : util &gt; 50 ? 'warning' : 'success' },
-                    { icon: 'fa-memory', label: '显存', value: `${formatBytes(memUsed)} / ${formatBytes(memTotal)}`, progress: memPct, ptype: memPct &gt; 80 ? 'danger' : 'success' },
-                    { icon: 'fa-thermometer-half', label: '温度', value: `${temp}°C`, progress: temp, ptype: temp &gt; 80 ? 'danger' : temp &gt; 60 ? 'warning' : 'success' },
+                    { icon: 'fa-chart-line', label: '利用率', value: `${util}%`, progress: util, ptype: util > 80 ? 'danger' : util > 50 ? 'warning' : 'success' },
+                    { icon: 'fa-memory', label: '显存', value: `${formatBytes(memUsed)} / ${formatBytes(memTotal)}`, progress: memPct, ptype: memPct > 80 ? 'danger' : memPct > 50 ? 'warning' : 'success' },
+                    { icon: 'fa-thermometer-half', label: '温度', value: `${temp}°C`, progress: temp, ptype: temp > 80 ? 'danger' : temp > 60 ? 'warning' : 'success' },
                     { icon: 'fa-plug', label: '功耗', value: `${power}W` },
                 ];
                 const el = document.getElementById('aios-gpu-stats');
                 if (el) {
-                    el.innerHTML = cards.map(c =&gt; {
+                    el.innerHTML = cards.map(c => {
                         const prog = c.progress != null ? `&lt;div class="aios-p-progress-bar"&gt;&lt;div class="aios-p-progress-fill aios-${c.ptype}" style="width:${Math.min(c.progress, 100)}%"&gt;&lt;/div&gt;&lt;/div&gt;` : '';
                         return `&lt;div class="aios-p-stat-card"&gt;&lt;div class="aios-p-stat-icon"&gt;&lt;i class="fas ${c.icon}"&gt;&lt;/i&gt;&lt;/div&gt;&lt;div class="aios-p-stat-body"&gt;&lt;div class="aios-p-stat-label"&gt;${c.label}&lt;/div&gt;&lt;div class="aios-p-stat-value"&gt;${c.value}&lt;/div&gt;${prog}&lt;/div&gt;&lt;/div&gt;`;
                     }).join('');
@@ -990,7 +798,7 @@ sections.forEach(sectionId => {
                     if (el) el.innerHTML = emptyHTML('未检测到引擎');
                     return;
                 }
-                const engines = services.map(s =&gt; {
+                const engines = services.map(s => {
                     const engineType = s.engine_type || 'unknown';
                     const status = s.status || 'unknown';
                     const running = status === 'running';
@@ -1002,7 +810,7 @@ sections.forEach(sectionId => {
                     const pid = s.pid ?? null;
                     return { engineType, status, running, svcName, model, port, uptime, health, pid };
                 });
-                const html = `&lt;div class="aios-p-engine-grid"&gt;${engines.map(e =&gt; `
+                const html = `&lt;div class="aios-p-engine-grid"&gt;${engines.map(e => `
                     &lt;div class="aios-p-engine-card ${e.running ? 'aios-p-engine-running' : (e.status === 'not_found' ? 'aios-p-engine-stopped' : 'aios-p-engine-stopped')}" data-engine-type="${e.engineType}"&gt;
                         &lt;div class="aios-p-engine-header"&gt;
                             &lt;div class="aios-p-engine-icon"&gt;&lt;i class="fas fa-bolt"&gt;&lt;/i&gt;&lt;/div&gt;
@@ -1033,7 +841,7 @@ sections.forEach(sectionId => {
                         }
                         if (modelName) break;
                     }
-                    if (!modelName &amp;&amp; groups.length &gt; 0) modelName = groups[0].base_name;
+                    if (!modelName && groups.length > 0) modelName = groups[0].base_name;
                     if (!modelName) { showToast('没有可用模型，请先下载模型', 'warning'); return; }
                     const result = await adminFetch('/api/engine/switch', {
                         method: 'POST',
@@ -1102,7 +910,7 @@ sections.forEach(sectionId => {
                 this.history.temperature.push(gpu.temperature ?? 0);
                 const maxLen = 30;
                 for (const k in this.history) {
-                    if (this.history[k].length &gt; maxLen) this.history[k] = this.history[k].slice(-maxLen);
+                    if (this.history[k].length > maxLen) this.history[k] = this.history[k].slice(-maxLen);
                 }
                 drawMiniChart('aios-gpu-chart', this.history.utilization, maxLen);
             },
@@ -1208,10 +1016,10 @@ sections.forEach(sectionId => {
                 if (!el) return;
                 const isSwitching = data.is_switching ?? false;
                 const session = data.session || null;
-                if (isSwitching &amp;&amp; session) {
+                if (isSwitching && session) {
                     const progress = session.overall_progress ?? 0;
                     const target = session.target_model || '-';
-                    const phasesHtml = (session.phases || []).map(p =&gt; {
+                    const phasesHtml = (session.phases || []).map(p => {
                         const statusIcon = p.status === 'running' ? 'fa-spinner fa-spin' : p.status === 'success' ? 'fa-check' : p.status === 'failed' ? 'fa-times' : 'fa-clock';
                         return `&lt;div style="display:flex;align-items:center;gap:8px;padding:4px 0;"&gt;&lt;i class="fas ${statusIcon}" style="width:16px;"&gt;&lt;/i&gt;&lt;span style="font-size:12px;color:var(--text-secondary);"&gt;${p.name}&lt;/span&gt;&lt;/div&gt;`;
                     }).join('');
@@ -1233,8 +1041,8 @@ sections.forEach(sectionId => {
                 const select = document.getElementById('aios-switch-model');
                 if (!select) return;
                 const currentModel = aggResult.current_model || '';
-                select.innerHTML = groups.map(g =&gt; {
-                    const selected = (g.base_name === currentModel || (g.variants &amp;&amp; g.variants.some(v =&gt; v.is_current))) ? ' selected' : '';
+                select.innerHTML = groups.map(g => {
+                    const selected = (g.base_name === currentModel || (g.variants && g.variants.some(v => v.is_current))) ? ' selected' : '';
                     return `&lt;option value="${g.base_name}"${selected}&gt;${g.base_name} (${g.variant_count || (g.variants || []).length}个变体)&lt;/option&gt;`;
                 }).join('');
             },
@@ -1245,8 +1053,8 @@ sections.forEach(sectionId => {
                 const select = document.getElementById('aios-switch-engine');
                 if (!select) return;
                 const engineTypes = ['vllm', 'sglang', 'llamacpp'];
-                select.innerHTML = engineTypes.map(t =&gt; {
-                    const running = services.find(s =&gt; normalizeEngineType(s.engine_type) === t &amp;&amp; s.status === 'running');
+                select.innerHTML = engineTypes.map(t => {
+                    const running = services.find(s => normalizeEngineType(s.engine_type) === t && s.status === 'running');
                     return `&lt;option value="${t}"${running ? ' selected' : ''}&gt;${engineDisplayName(t)}&lt;/option&gt;`;
                 }).join('');
             },
@@ -1259,10 +1067,10 @@ sections.forEach(sectionId => {
                     el.innerHTML = emptyHTML('暂无模型，请通过模型下载添加');
                     return;
                 }
-                el.innerHTML = `&lt;div class="aios-p-models-list"&gt;${groups.map(g =&gt; {
+                el.innerHTML = `&lt;div class="aios-p-models-list"&gt;${groups.map(g => {
                     const variants = g.variants || [];
                     const groupName = g.base_name;
-                    const runningCount = variants.filter(v =&gt; v.running || v.is_current).length;
+                    const runningCount = variants.filter(v => v.running || v.is_current).length;
                     const totalSize = g.total_size_mb ? `${(g.total_size_mb / 1024).toFixed(1)}GB` : '-';
                     return `&lt;div class="aios-p-model-group"&gt;
                         &lt;div class="aios-p-model-group-head"&gt;
@@ -1271,11 +1079,11 @@ sections.forEach(sectionId => {
                                 &lt;span class="aios-p-model-group-count"&gt;${variants.length} 个变体&lt;/span&gt;
                             &lt;/div&gt;
                             &lt;div class="aios-p-model-group-stats"&gt;
-                                &lt;span class="aios-p-model-group-stat"&gt;${runningCount &gt; 0 ? `&lt;span style="color:var(--color-success);"&gt;${runningCount} 运行&lt;/span&gt;` : '未运行'}&lt;/span&gt;
+                                &lt;span class="aios-p-model-group-stat"&gt;${runningCount > 0 ? `&lt;span style="color:var(--color-success);"&gt;${runningCount} 运行&lt;/span&gt;` : '未运行'}&lt;/span&gt;
                                 &lt;span class="aios-p-model-group-stat"&gt;总大小: ${totalSize}&lt;/span&gt;
                             &lt;/div&gt;
                         &lt;/div&gt;
-                        &lt;div class="aios-p-model-grid"&gt;${variants.map(v =&gt; {
+                        &lt;div class="aios-p-model-grid"&gt;${variants.map(v => {
                             const isRunning = v.running || false;
                             const isCurrent = v.is_current || false;
                             const vName = v.name || groupName;
@@ -1304,8 +1112,8 @@ sections.forEach(sectionId => {
                                 &lt;/div&gt;
                                 &lt;div class="aios-p-model-actions"&gt;
                                     ${!vPathExists ? `&lt;button class="aios-p-btn aios-p-btn-sm" data-action="download-by-name" data-model="${vName}"&gt;&lt;i class="fas fa-cloud-download-alt"&gt;&lt;/i&gt; 下载&lt;/button&gt;` : ''}
-                                    ${vPathExists &amp;&amp; !isRunning ? `&lt;button class="aios-p-btn aios-p-btn-sm aios-p-btn-success" data-action="start-model" data-model="${vName}"&gt;&lt;i class="fas fa-play"&gt;&lt;/i&gt; 启动&lt;/button&gt;` : ''}
-                                    ${isRunning &amp;&amp; !isCurrent ? `&lt;button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" data-action="switch-to-model" data-model="${vName}" data-engine="${vEngine}"&gt;&lt;i class="fas fa-exchange-alt"&gt;&lt;/i&gt; 切换&lt;/button&gt;` : ''}
+                                    ${vPathExists && !isRunning ? `&lt;button class="aios-p-btn aios-p-btn-sm aios-p-btn-success" data-action="start-model" data-model="${vName}"&gt;&lt;i class="fas fa-play"&gt;&lt;/i&gt; 启动&lt;/button&gt;` : ''}
+                                    ${isRunning && !isCurrent ? `&lt;button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" data-action="switch-to-model" data-model="${vName}" data-engine="${vEngine}"&gt;&lt;i class="fas fa-exchange-alt"&gt;&lt;/i&gt; 切换&lt;/button&gt;` : ''}
                                     ${isRunning ? `&lt;button class="aios-p-btn aios-p-btn-sm aios-p-btn-danger" data-action="stop-model" data-model="${vName}"&gt;&lt;i class="fas fa-stop"&gt;&lt;/i&gt; 停止&lt;/button&gt;` : ''}
                                 &lt;/div&gt;
                             &lt;/div&gt;`;
@@ -1571,7 +1379,7 @@ sections.forEach(sectionId => {
                 } catch (e) { showToast(`取消失败: ${e.message}`, 'error'); }
             },
             pollSwitchStatus() {
-                setTimeout(() =&gt; this.refresh(), 3000);
+                setTimeout(() => this.refresh(), 3000);
             },
             async download() {
                 const modelInput = document.getElementById('aios-download-model-name');
@@ -1613,7 +1421,7 @@ sections.forEach(sectionId => {
             },
             startDownloadPolling() {
                 if (this._downloadPolling) return;
-                this._downloadPolling = setInterval(() =&gt; {
+                this._downloadPolling = setInterval(() => {
                     this.refreshDownloadList();
                 }, 3000);
             },
@@ -1631,11 +1439,11 @@ sections.forEach(sectionId => {
                         this.stopDownloadPolling();
                         return;
                     }
-                    const hasActive = tasks.some(t =&gt; ['pending', 'downloading', 'retrying'].includes(t.status));
+                    const hasActive = tasks.some(t => ['pending', 'downloading', 'retrying'].includes(t.status));
                     if (hasActive) this.startDownloadPolling();
                     else this.stopDownloadPolling();
 
-                    el.innerHTML = `&lt;div style="display:flex;flex-direction:column;gap:var(--space-md);"&gt;${tasks.map(t =&gt; {
+                    el.innerHTML = `&lt;div style="display:flex;flex-direction:column;gap:var(--space-md);"&gt;${tasks.map(t => {
                         const pct = t.progress_pct ?? 0;
                         const speed = t.speed_mbps ?? 0;
                         const eta = t.eta_seconds ?? null;
@@ -1654,7 +1462,7 @@ sections.forEach(sectionId => {
                             ['failed', 'error'].includes(t.status) ? 'var(--color-danger)' :
                             ['pending', 'queued'].includes(t.status) ? 'var(--color-warning)' : 'var(--text-secondary)';
                         const progressBar = ['downloading', 'pending', 'retrying'].includes(t.status) ?
-                            `&lt;div class="aios-p-progress-bar" style="height:6px;margin-top:6px;"&gt;&lt;div class="aios-p-progress-fill aios-${pct &gt; 80 ? 'success' : 'warning'}" style="width:${pct}%"&gt;&lt;/div&gt;&lt;/div&gt;` : '';
+                            `&lt;div class="aios-p-progress-bar" style="height:6px;margin-top:6px;"&gt;&lt;div class="aios-p-progress-fill aios-${pct > 80 ? 'success' : 'warning'}" style="width:${pct}%"&gt;&lt;/div&gt;&lt;/div&gt;` : '';
                         const actions = t.status === 'downloading' || t.status === 'pending' ?
                             `&lt;button class="aios-p-btn aios-p-btn-sm aios-p-btn-danger" data-action="cancel-download" data-task-id="${t.task_id}"&gt;&lt;i class="fas fa-times"&gt;&lt;/i&gt; 取消&lt;/button&gt;` :
                             t.status === 'failed' ?
@@ -1662,7 +1470,7 @@ sections.forEach(sectionId => {
                         return `&lt;div class="aios-p-banner-item" style="flex-wrap:wrap;"&gt;
                             &lt;div class="aios-p-banner-info" style="flex:2;min-width:200px;"&gt;
                                 &lt;div class="aios-p-banner-label"&gt;${t.model_name || '-'} (${t.source || 'hf'})&lt;/div&gt;
-                                &lt;div style="font-size:12px;color:${statusColor};font-weight:600;"&gt;${statusText}${speed &gt; 0 ? ` | ${speed}MB/s | ETA ${etaStr}` : ''}${downloaded ? ` | ${downloaded}/${total}` : ''}&lt;/div&gt;
+                                &lt;div style="font-size:12px;color:${statusColor};font-weight:600;"&gt;${statusText}${speed > 0 ? ` | ${speed}MB/s | ETA ${etaStr}` : ''}${downloaded ? ` | ${downloaded}/${total}` : ''}&lt;/div&gt;
                                 ${progressBar}
                                 ${t.error_message ? `&lt;div style="font-size:11px;color:var(--color-danger);margin-top:4px;"&gt;${t.error_message}&lt;/div&gt;` : ''}
                             &lt;/div&gt;
@@ -1670,14 +1478,14 @@ sections.forEach(sectionId => {
                         &lt;/div&gt;`;
                     }).join('')}&lt;/div&gt;`;
 
-                    const justCompleted = tasks.filter(t =&gt; t.status === 'completed');
-                    if (justCompleted.length &gt; 0) {
+                    const justCompleted = tasks.filter(t => t.status === 'completed');
+                    if (justCompleted.length > 0) {
                         for (const t of justCompleted) {
                             if (!this._notifiedCompleted?.has(t.task_id)) {
                                 showToast(`${t.model_name} 下载完成`, 'success');
                                 if (!this._notifiedCompleted) this._notifiedCompleted = new Set();
                                 this._notifiedCompleted.add(t.task_id);
-                                setTimeout(() =&gt; this.refresh(), 2000);
+                                setTimeout(() => this.refresh(), 2000);
                             }
                         }
                     }
@@ -1734,7 +1542,7 @@ sections.forEach(sectionId => {
                 const status = payload.status || payload.scores?.status || 'unknown';
                 const score = payload.health_score ?? payload.scores?.overall ?? '-';
                 const currentModel = payload.current_model || payload.models?.current_model || '-';
-                const reasons = payload.alert_reasons || payload.scores?.alerts?.map(item =&gt; item.message).filter(Boolean) || [];
+                const reasons = payload.alert_reasons || payload.scores?.alerts?.map(item => item.message).filter(Boolean) || [];
                 const scoreText = typeof score === 'number' ? `${score}` : score;
                 const el = document.getElementById('aios-health-banner');
                 if (el) {
@@ -1745,7 +1553,7 @@ sections.forEach(sectionId => {
                             &lt;div class="aios-p-banner-item"&gt;&lt;div class="aios-p-banner-icon"&gt;&lt;i class="fas fa-medal"&gt;&lt;/i&gt;&lt;/div&gt;&lt;div class="aios-p-banner-info"&gt;&lt;div class="aios-p-banner-label"&gt;健康分&lt;/div&gt;&lt;div class="aios-p-banner-value"&gt;${escapeHtml(scoreText)}&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
                             &lt;div class="aios-p-banner-item"&gt;&lt;div class="aios-p-banner-icon"&gt;&lt;i class="fas fa-cube"&gt;&lt;/i&gt;&lt;/div&gt;&lt;div class="aios-p-banner-info"&gt;&lt;div class="aios-p-banner-label"&gt;当前模型&lt;/div&gt;&lt;div class="aios-p-banner-value"&gt;${escapeHtml(currentModel)}&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;
                         &lt;/div&gt;
-                        ${reasons.length ? `&lt;div style="margin-top:var(--space-md);font-size:12px;color:var(--text-secondary);"&gt;${reasons.map(item =&gt; `&lt;div&gt;• ${escapeHtml(item)}&lt;/div&gt;`).join('')}&lt;/div&gt;` : ''}
+                        ${reasons.length ? `&lt;div style="margin-top:var(--space-md);font-size:12px;color:var(--text-secondary);"&gt;${reasons.map(item => `&lt;div&gt;• ${escapeHtml(item)}&lt;/div&gt;`).join('')}&lt;/div&gt;` : ''}
                     `;
                 }
             },
@@ -1760,12 +1568,12 @@ sections.forEach(sectionId => {
                     { icon: 'fa-laptop-code', label: 'Python后端', value: checks.python_backend?.reachable === false ? '异常' : '正常' },
                     { icon: 'fa-database', label: 'Redis', value: checks.redis?.available === false || payload.redis === false ? '异常' : '正常' },
                 ];
-                const engineRows = Object.entries(engines).map(([name, value]) =&gt; `&lt;tr&gt;&lt;td&gt;${escapeHtml(name)}&lt;/td&gt;&lt;td&gt;${value?.running ? '运行中' : '未运行'}&lt;/td&gt;&lt;td&gt;${escapeHtml(value?.port ?? '-')}&lt;/td&gt;&lt;/tr&gt;`;
-                const modelRows = Object.entries(models).map(([name, value]) =&gt; `&lt;tr&gt;&lt;td&gt;${escapeHtml(name)}&lt;/td&gt;&lt;td&gt;${value?.running ? '运行中' : '未运行'}&lt;/td&gt;&lt;td&gt;${escapeHtml(value?.active_requests ?? '-')}&lt;/td&gt;&lt;/tr&gt;`);
+                const engineRows = Object.entries(engines).map(([name, value]) => `&lt;tr&gt;&lt;td&gt;${escapeHtml(name)}&lt;/td&gt;&lt;td&gt;${value?.running ? '运行中' : '未运行'}&lt;/td&gt;&lt;td&gt;${escapeHtml(value?.port ?? '-')}&lt;/td&gt;&lt;/tr&gt;`);
+                const modelRows = Object.entries(models).map(([name, value]) => `&lt;tr&gt;&lt;td&gt;${escapeHtml(name)}&lt;/td&gt;&lt;td&gt;${value?.running ? '运行中' : '未运行'}&lt;/td&gt;&lt;td&gt;${escapeHtml(value?.active_requests ?? '-')}&lt;/td&gt;&lt;/tr&gt;`);
                 const el = document.getElementById('aios-health-details');
                 if (el) {
                     el.innerHTML = `
-                        &lt;div class="aios-p-stats-grid"&gt;${cards.map(c =&gt; `&lt;div class="aios-p-stat-card"&gt;&lt;div class="aios-p-stat-icon"&gt;&lt;i class="fas ${c.icon}"&gt;&lt;/i&gt;&lt;/div&gt;&lt;div class="aios-p-stat-body"&gt;&lt;div class="aios-p-stat-label"&gt;${c.label}&lt;/div&gt;&lt;div class="aios-p-stat-value"&gt;${c.value}&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;`).join('')}&lt;/div&gt;
+                        &lt;div class="aios-p-stats-grid"&gt;${cards.map(c => `&lt;div class="aios-p-stat-card"&gt;&lt;div class="aios-p-stat-icon"&gt;&lt;i class="fas ${c.icon}"&gt;&lt;/i&gt;&lt;/div&gt;&lt;div class="aios-p-stat-body"&gt;&lt;div class="aios-p-stat-label"&gt;${c.label}&lt;/div&gt;&lt;div class="aios-p-stat-value"&gt;${c.value}&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;`).join('')}&lt;/div&gt;
                         &lt;div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--space-lg);margin-top:var(--space-lg);"&gt;
                             &lt;div&gt;
                                 &lt;div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:8px;"&gt;引擎状态&lt;/div&gt;
@@ -1788,7 +1596,7 @@ sections.forEach(sectionId => {
                     el.innerHTML = emptyHTML('暂无健康历史');
                     return;
                 }
-                el.innerHTML = `&lt;div style="display:flex;flex-direction:column;gap:var(--space-sm);"&gt;${list.map(item =&gt; {
+                el.innerHTML = `&lt;div style="display:flex;flex-direction:column;gap:var(--space-sm);"&gt;${list.map(item => {
                     const score = item.health_score ?? item.score ?? item.scores?.overall ?? '-';
                     const status = item.status ?? item.scores?.status ?? '-';
                     const ts = item.timestamp ?? item.time ?? '-';
@@ -1820,11 +1628,10 @@ sections.forEach(sectionId => {
                 ];
                 const el = document.getElementById('aios-ratelimit-stats');
                 if (el) {
-                    el.innerHTML = cards.map(c =&gt; `&lt;div class="aios-p-stat-card"&gt;&lt;div class="aios-p-stat-icon"&gt;&lt;i class="fas ${c.icon}"&gt;&lt;/i&gt;&lt;/div&gt;&lt;div class="aios-p-stat-body"&gt;&lt;div class="aios-p-stat-label"&gt;${c.label}&lt;/div&gt;&lt;div class="aios-p-stat-value"&gt;${c.value}&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;`).join('');
+                    el.innerHTML = cards.map(c => `&lt;div class="aios-p-stat-card"&gt;&lt;div class="aios-p-stat-icon"&gt;&lt;i class="fas ${c.icon}"&gt;&lt;/i&gt;&lt;/div&gt;&lt;div class="aios-p-stat-body"&gt;&lt;div class="aios-p-stat-label"&gt;${c.label}&lt;/div&gt;&lt;div class="aios-p-stat-value"&gt;${c.value}&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;`).join('');
                 }
             },
             fillForm(config) {
-<<<<<<< Updated upstream
                 document.getElementById('aios-rl-ip-limit').value = config.ip_qps_limit ?? config.limit_per_window ?? 100;
                 document.getElementById('aios-rl-window').value = config.ip_qps_window_seconds ?? config.window_seconds ?? 60;
                 document.getElementById('aios-rl-concurrency').value = config.concurrency_limit ?? config.max_concurrency ?? 8;
@@ -1853,8 +1660,19 @@ sections.forEach(sectionId => {
                 if (maxQueue > 0) payload.max_queue_size = maxQueue;
                 if (tokenLimit > 0) payload.token_limit_per_minute = tokenLimit;
                 if (maxModelLen > 0) payload.max_model_len = maxModelLen;
-=======
-                const ipLimit = document.getElementById('aios-rl-ip-limit');
+                try {
+                    await adminFetch('/api/ratelimit/config', { method: 'PUT', body: JSON.stringify(payload) });
+                    showToast('限流配置已保存', 'success');
+                    this.refresh();
+                } catch (e) {
+                    showToast(`保存失败: ${e.message}`, 'error');
+                }
+            },
+            async refresh() {
+                try {
+                    const result = await adminFetch('/api/ratelimit/config');
+                    const config = result.data || result || {};
+                    const ipLimit = document.getElementById('aios-rl-ip-limit');
                 const windowEl = document.getElementById('aios-rl-window');
                 const concurrency = document.getElementById('aios-rl-concurrency');
                 const timeoutEl = document.getElementById('aios-rl-timeout');
@@ -1867,23 +1685,9 @@ sections.forEach(sectionId => {
                 if (timeoutEl) timeoutEl.value = config.queue_timeout_seconds ?? config.wait_timeout_seconds ?? 30;
                 if (whitelist) whitelist.value = (config.whitelist_ips || []).join(',');
                 if (paths) paths.value = (config.rate_limited_paths || []).join(',');
-            },
-            async save() {
->>>>>>> Stashed changes
-                try {
-                    const payload = {
-                        ip_qps_limit: Number(document.getElementById('aios-rl-ip-limit')?.value ?? 100),
-                        ip_qps_window_seconds: Number(document.getElementById('aios-rl-window')?.value ?? 60),
-                        concurrency_limit: Number(document.getElementById('aios-rl-concurrency')?.value ?? 8),
-                        queue_timeout_seconds: Number(document.getElementById('aios-rl-timeout')?.value ?? 30),
-                        whitelist_ips: (document.getElementById('aios-rl-whitelist')?.value ?? '').split(',').map(v =&gt; v.trim()).filter(Boolean),
-                        rate_limited_paths: (document.getElementById('aios-rl-paths')?.value ?? '').split(',').map(v =&gt; v.trim()).filter(Boolean),
-                    };
-                    await adminFetch('/api/ratelimit/config', { method: 'PUT', body: JSON.stringify(payload) });
-                    showToast('限流配置已保存', 'success');
-                    this.refresh();
                 } catch (e) {
-                    showToast(`保存失败: ${e.message}`, 'error');
+                    const el = document.getElementById('aios-ratelimit-stats');
+                    if (el) el.innerHTML = errorHTML(e.message);
                 }
             },
         },
@@ -1895,13 +1699,9 @@ sections.forEach(sectionId => {
                         adminFetch('/api/config/operation-log').catch(() => ({ items: [] }))
                     ]);
                     const payload = result.data || result || {};
-<<<<<<< Updated upstream
-                    document.getElementById('aios-config-editor').value = JSON.stringify(payload, null, 2);
-                    this.renderOperationLog(logResult);
-=======
                     const editor = document.getElementById('aios-config-editor');
                     if (editor) editor.value = JSON.stringify(payload, null, 2);
->>>>>>> Stashed changes
+                    this.renderOperationLog(logResult);
                 } catch (e) {
                     const editor = document.getElementById('aios-config-editor');
                     if (editor) editor.value = '';
@@ -1926,28 +1726,20 @@ sections.forEach(sectionId => {
             },
             async save() {
                 try {
-<<<<<<< Updated upstream
-                    const result = await adminFetch('/api/config', { method: 'PUT', body: JSON.stringify(payload) });
-                    if (result.detail?.error === 'version conflict' || result.detail?.current_version) {
-                        showToast(`配置版本冲突，请刷新后重试（当前版本 ${result.detail.current_version}）`, 'warning');
-                        return;
-                    }
-                    if (result.detail && !result.status) {
-                        showToast(`保存失败: ${typeof result.detail === 'string' ? result.detail : JSON.stringify(result.detail)}`, 'error');
-                        return;
-                    }
-=======
                     const editor = document.getElementById('aios-config-editor');
                     if (!editor) return;
                     let payload;
                     try {
                         payload = JSON.parse(editor.value || '{}');
-                    } catch (e) {
+                    } catch {
                         showToast('配置 JSON 格式无效', 'warning');
                         return;
                     }
-                    await adminFetch('/api/config', { method: 'PUT', body: JSON.stringify(payload) });
->>>>>>> Stashed changes
+                    const result = await adminFetch('/api/config', { method: 'PUT', body: JSON.stringify(payload) });
+                    if (result.detail?.error === 'version conflict' || result.detail?.current_version) {
+                        showToast(`配置版本冲突，请刷新后重试（当前版本 ${result.detail.current_version}）`, 'warning');
+                        return;
+                    }
                     showToast('配置已保存', 'success');
                     this.refresh();
                 } catch (e) {
@@ -1973,7 +1765,7 @@ sections.forEach(sectionId => {
     let refreshTimer = null;
     function startAutoRefresh() {
         if (refreshTimer) clearInterval(refreshTimer);
-        refreshTimer = setInterval(() =&gt; {
+        refreshTimer = setInterval(() => {
             try {
                 const gpuVisible = document.getElementById('section-aios-gpu');
                 const modelVisible = document.getElementById('section-aios-model');
@@ -1981,35 +1773,29 @@ sections.forEach(sectionId => {
                 const rateLimitVisible = document.getElementById('section-aios-ratelimit');
                 const configVisible = document.getElementById('section-aios-config');
                 
-                if (gpuVisible &amp;&amp; gpuVisible.classList.contains('active')) {
+                if (gpuVisible && gpuVisible.classList.contains('active')) {
                     window.AiosManager.gpu.refresh();
                 }
-                if (modelVisible &amp;&amp; modelVisible.classList.contains('active')) {
+                if (modelVisible && modelVisible.classList.contains('active')) {
                     window.AiosManager.model.refresh();
                 }
-                if (healthVisible &amp;&amp; healthVisible.classList.contains('active')) {
+                if (healthVisible && healthVisible.classList.contains('active')) {
                     window.AiosManager.health.refresh();
                 }
-                if (rateLimitVisible &amp;&amp; rateLimitVisible.classList.contains('active')) {
+                if (rateLimitVisible && rateLimitVisible.classList.contains('active')) {
                     window.AiosManager.ratelimit.refresh();
                 }
-                if (configVisible &amp;&amp; configVisible.classList.contains('active')) {
+                if (configVisible && configVisible.classList.contains('active')) {
                     window.AiosManager.config.refresh();
                 }
-            } catch (e) {
-                // Ignore errors during auto-refresh
-            }
+            } catch (e) {}
         }, 5000);
     }
 
-    waitForDOM((nav, content) =&gt; {
+    waitForDOM((nav, content) => {
         injectUI(nav, content);
-<<<<<<< Updated upstream
         AiosManager.model.initRealtime();
-        showSection('aios-gpu');
-=======
         startMenuWatcher(nav, content);
->>>>>>> Stashed changes
         startAutoRefresh();
     });
 })();

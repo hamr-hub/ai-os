@@ -443,7 +443,7 @@ class TestLLMServiceManagerVllmServe:
 
     def test_build_vllm_command_with_params(self):
         mgr = LLMServiceManager(config=None)
-        cfg = {"vllm_params": {"gpu_memory_utilization": 0.90, "max_model_len": 40960, "max_num_seqs": 256, "max_num_batched_tokens": 16384, "enable_chunked_prefill": True}}
+        cfg = {"vllm_params": {"gpu_memory_utilization": 0.90, "max_model_len": 40960, "max_num_seqs": 256, "max_num_batched_tokens": 16384, "enable_chunked_prefill": True, "moe_backend": "cutlass"}}
         cmd = mgr._build_vllm_command("/mnt/models/Qwen3", 8000, cfg)
         assert "--gpu-memory-utilization" in cmd
         assert "0.9" in cmd
@@ -451,6 +451,8 @@ class TestLLMServiceManagerVllmServe:
         assert "40960" in cmd
         assert "--max-num-seqs" in cmd
         assert "--enable-chunked-prefill" in cmd
+        assert "--moe-backend" in cmd
+        assert "cutlass" in cmd
 
     def test_build_vllm_command_tool_call(self):
         mgr = LLMServiceManager(config=None)
@@ -474,12 +476,15 @@ class TestLLMServiceManagerVllmServe:
     def test_build_vllm_env_with_attention_backend(self):
         from core.config import AppConfig, ModelConfig, SettingsConfig
         config = AppConfig(
-            models={"Qwen3": ModelConfig(service="svc", port=8000, required_memory="40GB", vllm_params={"attention_backend": "FLASH_ATTN"})},
+            models={"Qwen3": ModelConfig(service="svc", port=8000, required_memory="40GB", vllm_params={"attention_backend": "FLASH_ATTN", "env_vars": {"CUSTOM_VLLM_FLAG": "enabled"}, "nvfp4_gemm_backend": "cutlass", "use_flashinfer_moe_fp4": False})},
             settings=SettingsConfig(),
         )
         mgr = LLMServiceManager(config=config)
         env = mgr._get_vllm_env("Qwen3")
         assert env["VLLM_ATTENTION_BACKEND"] == "FLASH_ATTN"
+        assert env["CUSTOM_VLLM_FLAG"] == "enabled"
+        assert env["VLLM_NVFP4_GEMM_BACKEND"] == "cutlass"
+        assert env["VLLM_USE_FLASHINFER_MOE_FP4"] == "0"
 
     def test_build_vllm_env_no_attention_backend(self):
         mgr = LLMServiceManager(config=None)

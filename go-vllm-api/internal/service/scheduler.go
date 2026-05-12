@@ -353,9 +353,35 @@ func (s *Scheduler) detectCurrentVLLMModel() string {
 	return modelID
 }
 
+func (s *Scheduler) hasPythonModelSwitchInProgress() bool {
+	if s.cfg == nil || s.cfg.VLLM.StartScript == "" {
+		return false
+	}
+	stateFile := filepath.Join(filepath.Dir(s.cfg.VLLM.StartScript), ".switch_state.json")
+	data, err := os.ReadFile(stateFile)
+	if err != nil {
+		return false
+	}
+	var state struct {
+		OverallPhase string `json:"overall_phase"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		return false
+	}
+	switch strings.ToLower(state.OverallPhase) {
+	case "", "completed", "failed", "rolled_back":
+		return false
+	default:
+		return true
+	}
+}
+
 func (s *Scheduler) shouldSkipKeepAlivePreload(name string) bool {
 	if s.GetModelBackendType(name) != "vllm" {
 		return false
+	}
+	if s.hasPythonModelSwitchInProgress() {
+		return true
 	}
 	s.mu.RLock()
 	currentModel := s.currentModel

@@ -46,6 +46,105 @@ manage_router = APIRouter(prefix="/manage")
 integration_router = APIRouter(prefix="/api/v1")
 
 
+def _resolve_model_from_served_id(served_id: str) -> tuple[Optional[str], Optional[str]]:
+    served_id = (served_id or "").strip()
+    if not served_id:
+        return None, None
+
+    try:
+        matched = scheduler.get_model_name(served_id)
+        if matched:
+            return matched, scheduler.get_model_path(matched)
+    except Exception:
+        pass
+
+    try:
+        served_abs = os.path.abspath(served_id) if os.path.isabs(served_id) else None
+        for model in scheduler.get_available_models():
+            path = scheduler.get_model_path(model)
+            if path and served_abs and os.path.abspath(path) == served_abs:
+                return model, path
+            if path and served_id == path:
+                return model, path
+    except Exception:
+        pass
+
+    base_name = os.path.basename(served_id.rstrip("/"))
+    if base_name:
+        try:
+            matched = scheduler.get_model_name(base_name)
+            if matched:
+                return matched, scheduler.get_model_path(matched)
+        except Exception:
+            pass
+
+    try:
+        for model in scheduler.get_available_models():
+            if model == served_id or model == base_name or model in served_id:
+                return model, scheduler.get_model_path(model)
+    except Exception:
+        pass
+
+    if os.path.isabs(served_id) and os.path.exists(served_id):
+        return base_name or served_id, served_id
+    return base_name or served_id, None
+
+
+async def _detect_running_model_context() -> tuple[Optional[str], Optional[str]]:
+    try:
+        for service in llm_service_manager.list_services():
+            if service.get("status") != "running":
+                continue
+            model_name = service.get("model") or service.get("model_name")
+            if model_name:
+                return model_name, service.get("model_path") or scheduler.get_model_path(model_name)
+    except Exception as exc:
+        logger.warning("Failed to inspect tracked LLM services: %s", exc)
+
+    current_info = None
+    try:
+        from core.vllm_manager import get_current_model_info
+        current_info = get_current_model_info()
+        if current_info and current_info.get("running") and current_info.get("name"):
+            return current_info.get("name"), current_info.get("path")
+    except Exception as exc:
+        logger.warning("Failed to inspect current vLLM model info: %s", exc)
+
+    ports = []
+    try:
+        if current_info and current_info.get("port"):
+            ports.append(int(current_info["port"]))
+    except Exception:
+        pass
+    try:
+        from core.vllm_manager import discover_vllm_port, VLLM_DEFAULT_PORT
+        ports.extend([discover_vllm_port(), VLLM_DEFAULT_PORT])
+    except Exception:
+        ports.append(8000)
+
+    seen_ports = []
+    for port in ports:
+        if port and port not in seen_ports:
+            seen_ports.append(port)
+
+    import httpx
+    for port in seen_ports:
+        try:
+            async with httpx.AsyncClient(timeout=2) as client:
+                resp = await client.get(f"http://127.0.0.1:{port}/v1/models")
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            model_ids = [m.get("id") for m in data.get("data", []) if m.get("id")]
+            if not model_ids:
+                continue
+            return _resolve_model_from_served_id(model_ids[0])
+        except Exception:
+            continue
+
+    return None, None
+
+
 @manage_router.get("/switch/status")
 async def get_switch_status():
     from core.deps import model_switch_orchestrator
@@ -78,7 +177,6 @@ async def get_switch_status():
 async def atomic_switch_model(request: Request):
     from core.deps import model_switch_orchestrator
     from core.vllm_manager import MODEL_BASE_PATH
-    import os
 
     try:
         body = await request.json()
@@ -109,19 +207,7 @@ async def atomic_switch_model(request: Request):
 
     model_switch_orchestrator.clear_completed_session()
 
-    previous_model = None
-    previous_path = None
-    if os.environ.get("ENGINE_MANAGER_MODE", "subprocess") == "subprocess":
-        running_services = [s for s in llm_service_manager.list_services() if s.get("status") == "running"]
-        if running_services:
-            current = running_services[0]
-            previous_model = current.get("model")
-            previous_path = scheduler.get_model_path(previous_model) if previous_model else None
-    else:
-        from core.vllm_manager import get_current_model_info
-        current_info = get_current_model_info()
-        previous_model = current_info.get("name") if current_info else None
-        previous_path = current_info.get("path") if current_info else None
+    previous_model, previous_path = await _detect_running_model_context()
 
     if action != "stop":
         if not scheduler.is_model_available(model_name):

@@ -205,7 +205,10 @@ models:
       max_model_len: 40960
       max_num_batched_tokens: 16384
       max_num_seqs: 256
+      moe_backend: cutlass
+      nvfp4_gemm_backend: cutlass
       tool_call_parser: null
+      use_flashinfer_moe_fp4: false
   Qwen3.6-35B-A3B-Uncensored:
     ctx_size: 4096
     description: Qwen3.6 35B 去审查版

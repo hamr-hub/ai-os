@@ -100,6 +100,9 @@ class LLMServiceManager:
     def _get_vllm_env(self, model_name: str) -> Dict[str, str]:
         env = {**os.environ, **self._VLLM_ENV_VARS}
         vllm_config = self._get_vllm_config()
+        env_vars = vllm_config.get("env_vars", {})
+        if isinstance(env_vars, dict):
+            env.update({str(key): str(value) for key, value in env_vars.items() if value is not None})
         env["HF_ENDPOINT"] = os.environ.get(
             "HF_ENDPOINT",
             vllm_config.get("hf_endpoint", "https://hf-mirror.com"),
@@ -113,6 +116,17 @@ class LLMServiceManager:
         attention_backend = vllm_params.get("attention_backend")
         if attention_backend:
             env["VLLM_ATTENTION_BACKEND"] = attention_backend
+        model_env_vars = vllm_params.get("env_vars", {})
+        if isinstance(model_env_vars, dict):
+            env.update({str(key): str(value) for key, value in model_env_vars.items() if value is not None})
+        if "use_flashinfer_moe_fp4" in vllm_params:
+            env["VLLM_USE_FLASHINFER_MOE_FP4"] = "1" if vllm_params.get("use_flashinfer_moe_fp4") else "0"
+        if vllm_params.get("flashinfer_moe_backend"):
+            env["VLLM_FLASHINFER_MOE_BACKEND"] = str(vllm_params["flashinfer_moe_backend"])
+        if vllm_params.get("nvfp4_gemm_backend"):
+            env["VLLM_NVFP4_GEMM_BACKEND"] = str(vllm_params["nvfp4_gemm_backend"])
+        if "use_nvfp4_ct_emulations" in vllm_params:
+            env["VLLM_USE_NVFP4_CT_EMULATIONS"] = "1" if vllm_params.get("use_nvfp4_ct_emulations") else "0"
         venv_path = vllm_config.get("venv_path")
         if venv_path and os.path.isfile(os.path.join(venv_path, "bin", "activate")):
             env["VLLM_ENV_PATH"] = venv_path
@@ -150,6 +164,10 @@ class LLMServiceManager:
         quant = vllm_params.get("quantization")
         if quant:
             cmd.extend(["--quantization", quant])
+
+        moe_backend = vllm_params.get("moe_backend")
+        if moe_backend and moe_backend != "auto":
+            cmd.extend(["--moe-backend", str(moe_backend)])
 
         max_model_len = vllm_params.get("max_model_len")
         if max_model_len:

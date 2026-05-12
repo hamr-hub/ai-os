@@ -112,6 +112,8 @@ class SwitchSession:
         ]
 
     def _calc_overall_progress(self) -> int:
+        if self.completed_successfully or self.overall_phase == SwitchPhase.COMPLETED:
+            return 100
         n = len(self.phases)
         if n == 0:
             return 0
@@ -148,14 +150,14 @@ class _SwitchAborted(Exception):
 
 
 class ModelSwitchOrchestrator:
-    SWITCH_MAX_TIMEOUT = 600
+    SWITCH_MAX_TIMEOUT = 900
     PHASE0_GPU_CHECK_TIMEOUT = 10
     PHASE1_STOP_TIMEOUT = 30
     PHASE1_PORT_CHECK_TIMEOUT = 15
     PHASE2_KILL_TIMEOUT = 60
     PHASE2_VERIFY_TIMEOUT = 15
-    PHASE3_START_TIMEOUT = 480
-    PHASE3_PORT_WAIT_TIMEOUT = 300
+    PHASE3_START_TIMEOUT = 900
+    PHASE3_PORT_WAIT_TIMEOUT = 900
     PHASE4_TEST_RETRIES = 3
     PHASE4_TEST_TIMEOUT = 15
 
@@ -241,6 +243,10 @@ class ModelSwitchOrchestrator:
 
     def request_cancel(self):
         self._cancel_requested = True
+
+    def _has_destructive_phase_started(self, session: SwitchSession) -> bool:
+        """Return True once a phase that can change service state has started."""
+        return any(p.phase >= 1 and p.started_at for p in session.phases)
 
     async def switch(
         self,
@@ -504,6 +510,50 @@ class ModelSwitchOrchestrator:
                 return p
         raise ValueError(f"Phase {phase_num} not found in session")
 
+    async def _stop_systemd_vllm_if_active(self, session: SwitchSession, phase: PhaseDetail):
+        try:
+            result = subprocess.run(
+                [SYSTEMCTL_BIN, "is-active", self._vllm_service_name],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.stdout.strip() != "active":
+                return
+
+            await self._log(
+                session,
+                phase,
+                f"检测到 systemd vLLM 服务 {self._vllm_service_name} 正在运行，subprocess 模式先停止它",
+            )
+            stop_result = subprocess.run(
+                [SYSTEMCTL_BIN, "stop", self._vllm_service_name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if stop_result.returncode != 0:
+                await self._log(
+                    session,
+                    phase,
+                    f"停止 systemd vLLM 服务失败: {stop_result.stderr.strip() or stop_result.stdout.strip()}",
+                )
+            else:
+                for _ in range(30):
+                    active_result = subprocess.run(
+                        [SYSTEMCTL_BIN, "is-active", self._vllm_service_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    if active_result.stdout.strip() != "active":
+                        await self._log(session, phase, "systemd vLLM 服务已停止")
+                        return
+                    await asyncio.sleep(1)
+                await self._log(session, phase, "systemd vLLM 服务停止超时，将继续清理残留进程")
+        except Exception as exc:
+            await self._log(session, phase, f"检查/停止 systemd vLLM 服务失败: {exc}")
+
     async def _kill_external_vllm_processes(self, session: SwitchSession, phase: PhaseDetail):
         import subprocess as _sp
         try:
@@ -726,9 +776,13 @@ class ModelSwitchOrchestrator:
         await self._broadcast(session, phase=1, progress=10, log="停止旧服务")
 
         if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
+            await self._stop_systemd_vllm_if_active(session, phase)
+
             for svc in self._llm_service_manager.list_services():
                 self._llm_service_manager.stop_service(svc["service_name"])
                 await self._log(session, phase, f"subprocess停止: {svc['service_name']}")
+
+            await self._kill_external_vllm_processes(session, phase)
 
             port = self._vllm_port
             start_time = time.time()
@@ -802,6 +856,8 @@ class ModelSwitchOrchestrator:
         if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
             await self._log(session, phase, "使用 subprocess 模式启动引擎")
             await self._broadcast(session, phase=1, progress=15, log="subprocess模式启动引擎")
+
+            await self._stop_systemd_vllm_if_active(session, phase)
 
             for svc in self._llm_service_manager.list_services():
                 self._llm_service_manager.stop_service(svc["service_name"])
@@ -1213,9 +1269,30 @@ class ModelSwitchOrchestrator:
                               log=f"开始回滚: {reason}", level="warning",
                               event_type="rollback_started")
 
+        if not self._has_destructive_phase_started(session):
+            await self._log(
+                session,
+                self._get_phase(session, 0),
+                "rollback: 预检阶段失败，尚未执行服务变更，跳过进程清理",
+            )
+            session.overall_phase = SwitchPhase.ROLLED_BACK
+            session.finished_at = datetime.now().isoformat()
+            await self._broadcast(
+                session,
+                phase=0,
+                progress=100,
+                log=f"预检失败，未修改现有服务: {reason}",
+                level="error",
+                final=True,
+                event_type="rollback_completed",
+            )
+            return
+
         if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
             from core.vllm_manager import _cleanup_runtime_override
             _cleanup_runtime_override()
+
+            await self._stop_systemd_vllm_if_active(session, self._get_phase(session, 0))
 
             for svc in self._llm_service_manager.list_services():
                 self._llm_service_manager.stop_service(svc["service_name"])
