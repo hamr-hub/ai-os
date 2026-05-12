@@ -13,7 +13,7 @@ logger = logging.getLogger("ai_controller.sys_ctl")
 class SystemController:
     def __init__(self):
         self._use_sudo = False
-        self._command_timeout = 15
+        self._command_timeout = 900
         self._systemctl_bin = shutil.which('systemctl') or '/usr/bin/systemctl'
 
         self._restart_attempts: Dict[str, int] = {}

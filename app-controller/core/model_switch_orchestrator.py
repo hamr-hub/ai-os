@@ -1445,6 +1445,9 @@ class ModelSwitchOrchestrator:
         return list(set(pids))
 
     def _check_vllm_logs_for_errors(self) -> Optional[str]:
+        if self._engine_manager_mode == "subprocess":
+            return None
+
         try:
             result = subprocess.run(
                 ["journalctl", "-u", self._vllm_service_name, "-n", "100",

@@ -46,13 +46,6 @@ manage_router = APIRouter(prefix="/manage")
 integration_router = APIRouter(prefix="/api/v1")
 
 
-class AtomicSwitchRequest:
-    def __init__(self, model_name: str, model_path: Optional[str] = None, set_as_default: bool = False):
-        self.model_name = model_name
-        self.model_path = model_path
-        self.set_as_default = set_as_default
-
-
 @manage_router.get("/switch/status")
 async def get_switch_status():
     from core.deps import model_switch_orchestrator
@@ -96,7 +89,7 @@ async def atomic_switch_model(request: Request):
     if action not in {"switch", "start", "stop"}:
         raise HTTPException(status_code=400, detail="action must be switch, start or stop")
 
-    model_name = body.get("model_name")
+    model_name = body.get("model_name") or body.get("target_model")
     if not model_name:
         raise HTTPException(status_code=400, detail="model_name is required")
 
@@ -385,42 +378,6 @@ async def models_summary(refresh: Optional[bool] = False):
 
     cache_service.set(cache_key, result, ttl_seconds=5)
     return result
-
-
-@manage_router.post("/models/{model_name}/start")
-async def start_model(model_name: str):
-    raise HTTPException(
-        status_code=410,
-        detail={
-            "error": "此接口已废弃",
-            "replacement": "/manage/switch/atomic",
-            "example": {"action": "start", "model_name": model_name},
-        }
-    )
-
-
-@manage_router.post("/models/{model_name}/stop")
-async def stop_model(model_name: str):
-    raise HTTPException(
-        status_code=410,
-        detail={
-            "error": "此接口已废弃",
-            "replacement": "/manage/switch/atomic",
-            "example": {"action": "stop", "model_name": model_name},
-        }
-    )
-
-
-@manage_router.post("/models/{model_name}/switch")
-async def switch_to_model(model_name: str, test_enabled: Optional[bool] = True, set_as_default: Optional[bool] = False):
-    raise HTTPException(
-        status_code=410,
-        detail={
-            "error": "此接口已废弃",
-            "replacement": "/manage/switch/atomic",
-            "example": {"action": "switch", "model_name": model_name, "set_as_default": bool(set_as_default)},
-        }
-    )
 
 
 @manage_router.get("/default-model")
@@ -1671,8 +1628,8 @@ async def engine_switch(request: Request):
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
-    model_name = body.get("model_name")
-    engine_type = body.get("engine_type", "vllm")
+    model_name = body.get("model_name") or body.get("target_model")
+    engine_type = body.get("engine_type") or body.get("engine") or "vllm"
     port = body.get("port", 8000)
     if not model_name:
         raise HTTPException(status_code=400, detail="model_name required")
@@ -1755,7 +1712,7 @@ async def engine_status():
         if running_services:
             current_engine = running_services[0].get("engine_type", "vllm")
     return {
-        "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "systemd"),
+        "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "subprocess"),
         "services": services,
         "active_count": len([s for s in services if s.get("status") == "running"]),
         "current_engine": current_engine,
@@ -1777,7 +1734,7 @@ async def get_engines_config():
         vllm_cfg = current_config['vllm']
     engines_config["vllm"] = vllm_cfg
     engines_config["default_engine"] = os.environ.get("DEFAULT_ENGINE", "vllm")
-    engines_config["engine_manager_mode"] = os.environ.get("ENGINE_MANAGER_MODE", "systemd")
+    engines_config["engine_manager_mode"] = os.environ.get("ENGINE_MANAGER_MODE", "subprocess")
     return engines_config
 
 
@@ -1806,7 +1763,7 @@ async def update_engines_config(request: Request):
         _on_config_changed(persisted)
         return {"status": "success", "engines_config": {
             "default_engine": os.environ.get("DEFAULT_ENGINE", "vllm"),
-            "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "systemd"),
+            "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "subprocess"),
         }}
     raise HTTPException(status_code=500, detail="Failed to persist engines config")
 

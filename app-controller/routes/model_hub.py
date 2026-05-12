@@ -38,7 +38,7 @@ class DeployRequest(BaseModel):
 
 
 class SwitchRequest(BaseModel):
-    target_model: str = Field(..., description="Target model name")
+    model_name: str = Field(..., description="Target model name")
     engine_type: Optional[str] = None
     priority: str = "normal"
     port: Optional[int] = None
@@ -148,7 +148,7 @@ async def undeploy_model(model_name: str):
 @hub_router.post("/switch")
 async def switch_model(request: SwitchRequest):
     result = await _model_engine_scheduler.switch_model(
-        request.target_model, request.engine_type,
+        request.model_name, request.engine_type,
         priority=request.priority, port=request.port,
     )
     return result

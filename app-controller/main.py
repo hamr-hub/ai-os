@@ -202,6 +202,38 @@ async def save_history_loop():
         await asyncio.sleep(5)  # Changed to 5 seconds for more reasonable resolution
 
 
+async def _preload_models_with_integrated_engines():
+    """Preload configured models through the Python-managed engine layer."""
+    preload_order = scheduler._get_preload_order()
+    for model_name in preload_order:
+        if scheduler.is_model_running(model_name):
+            logger.info("Preloaded model already running: %s", model_name)
+            continue
+
+        model_config = scheduler.get_model_config(model_name) or {}
+        model_path = model_config.get("model_path") or scheduler.get_model_path(model_name)
+        logger.info("Preloading model with integrated engine manager: %s", model_name)
+        try:
+            session = await model_switch_orchestrator.start(
+                target_model=model_name,
+                target_model_path=model_path,
+                previous_model=None,
+                previous_model_path=None,
+            )
+            if session.completed_successfully:
+                scheduler.mark_model_selected(model_name)
+                logger.info("Successfully preloaded model with integrated engine manager: %s", model_name)
+            else:
+                logger.warning(
+                    "Integrated engine preload failed for %s: %s",
+                    model_name,
+                    session.error or session.rollback_reason,
+                )
+        except Exception as exc:
+            logger.error("Integrated engine preload error for %s: %s", model_name, exc)
+        await asyncio.sleep(2)
+
+
 async def startup_event(app: FastAPI):
     app.state.vllm_request_client = httpx.AsyncClient(
         timeout=VLLM_REQUEST_TIMEOUT,
@@ -232,7 +264,11 @@ async def startup_event(app: FastAPI):
     download_task_manager.initialize_semaphore()
     model_engine_scheduler._sync_config_to_registry()
 
-    await scheduler.preload_models()
+    engine_manager_mode = config.get("vllm", {}).get("engine_manager_mode", "subprocess")
+    if engine_manager_mode == "subprocess":
+        logger.info("Skipping startup preload in subprocess mode; use explicit start/switch APIs")
+    else:
+        await scheduler.preload_models()
 
     pending_switch = model_switch_orchestrator.load_pending_switch_state()
     if pending_switch:

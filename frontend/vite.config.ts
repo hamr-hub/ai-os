@@ -37,8 +37,8 @@ export default defineConfig({
     target: 'es2020',
     sourcemap: false,
     chunkSizeWarningLimit: 600,
-    outDir: resolve(__dirname, '..'),
-    emptyOutDir: false, // 不要清空父目录，只覆盖构建文件
+    outDir: resolve(__dirname, 'dist'),
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         manualChunks: {
