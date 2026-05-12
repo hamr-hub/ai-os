@@ -754,3 +754,290 @@
 .aios-toast-error { background: rgba(127, 29, 29, 0.9); }
 .aios-toast-close { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; padding: 0 4px; opacity: 0.6; line-height: 1; transition: opacity 0.15s; }
 .aios-toast-close:hover { opacity: 1; }
+
+/* AIClient2API native theme alignment */
+.aios-p-scope {
+    --aios-bg-root: var(--bg-primary);
+    --aios-bg-primary: transparent;
+    --aios-bg-secondary: var(--bg-secondary);
+    --aios-bg-tertiary: var(--bg-tertiary);
+    --aios-bg-card: var(--bg-glass);
+    --aios-bg-hover: var(--bg-tertiary);
+    --aios-bg-input: var(--bg-secondary);
+    --aios-bg-input-focus: var(--bg-primary);
+
+    --aios-text-primary: var(--text-primary);
+    --aios-text-secondary: var(--text-secondary);
+    --aios-text-muted: var(--text-tertiary);
+    --aios-text-disabled: var(--text-tertiary);
+
+    --aios-border-primary: var(--border-color);
+    --aios-border-card: var(--border-color);
+    --aios-border-hover: var(--border-hover);
+
+    --aios-color-primary: var(--primary-color);
+    --aios-color-primary-dark: var(--primary-hover);
+    --aios-color-primary-light: var(--primary-color);
+    --aios-color-primary-rgb: 5, 150, 105;
+    --aios-color-success: var(--success-color);
+    --aios-color-success-dark: var(--success-color);
+    --aios-color-success-rgb: 16, 185, 129;
+    --aios-color-warning: var(--warning-color);
+    --aios-color-warning-dark: var(--warning-color);
+    --aios-color-warning-rgb: 245, 158, 11;
+    --aios-color-danger: var(--danger-color);
+    --aios-color-danger-dark: var(--danger-color);
+    --aios-color-danger-rgb: 239, 68, 68;
+    --aios-color-info: var(--info-color);
+    --aios-color-info-rgb: 59, 130, 246;
+
+    --aios-gradient-subtle: var(--bg-glass);
+    --aios-gradient-accent: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    --aios-gradient-success: linear-gradient(135deg, var(--success-color) 0%, var(--secondary-color) 100%);
+    --aios-gradient-warning: linear-gradient(135deg, var(--warning-color) 0%, var(--warning-color) 100%);
+    --aios-gradient-danger: linear-gradient(135deg, var(--danger-color) 0%, var(--danger-color) 100%);
+    --aios-shadow-xs: var(--shadow-sm);
+    --aios-shadow-sm: var(--shadow-md);
+    --aios-shadow-md: var(--shadow-lg);
+    --aios-shadow-glow-sm: 0 4px 6px -1px var(--primary-20);
+    --aios-radius-xs: var(--radius-sm);
+    --aios-radius-sm: var(--radius-sm);
+    --aios-radius-md: var(--radius-md);
+    --aios-radius-lg: var(--radius-lg);
+    --aios-radius-xl: var(--radius-xl);
+    --aios-radius-2xl: var(--radius-xl);
+
+    --color-primary: var(--primary-color);
+    --color-primary-dark: var(--primary-hover);
+    --color-primary-light: var(--primary-light);
+    --color-primary-rgb: var(--aios-color-primary-rgb);
+    --color-success: var(--success-color);
+    --color-success-dark: var(--success-color);
+    --color-success-rgb: var(--aios-color-success-rgb);
+    --color-warning: var(--warning-color);
+    --color-warning-dark: var(--warning-color);
+    --color-warning-rgb: var(--aios-color-warning-rgb);
+    --color-danger: var(--danger-color);
+    --color-danger-dark: var(--danger-color);
+    --color-danger-rgb: var(--aios-color-danger-rgb);
+    --color-info: var(--info-color);
+    --color-info-rgb: var(--aios-color-info-rgb);
+    --text-primary: var(--aios-text-primary);
+    --text-secondary: var(--aios-text-secondary);
+    --text-muted: var(--aios-text-muted);
+    --text-disabled: var(--aios-text-disabled);
+    --bg-root: var(--aios-bg-root);
+    --bg-primary: var(--aios-bg-primary);
+    --bg-secondary: var(--aios-bg-secondary);
+    --bg-tertiary: var(--aios-bg-tertiary);
+    --bg-card: var(--aios-bg-card);
+    --bg-hover: var(--aios-bg-hover);
+    --bg-input: var(--aios-bg-input);
+    --border-primary: var(--aios-border-primary);
+    --border-card: var(--aios-border-card);
+    --border-hover: var(--aios-border-hover);
+
+    padding: 0;
+    background: transparent;
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .aios-p-scope {
+    --aios-color-primary-rgb: 16, 185, 129;
+}
+
+.aios-p-scope .aios-p-section-header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.aios-p-scope .aios-p-section-header h2 {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+}
+
+.aios-p-scope .aios-p-section-header h2 i,
+.aios-p-scope .aios-p-card-header h3 i,
+.aios-p-scope .aios-p-stat-icon,
+.aios-p-scope .aios-p-banner-icon {
+    color: var(--primary-color);
+}
+
+.aios-p-scope .aios-p-card,
+.aios-p-scope .aios-p-status-banner,
+.aios-p-scope .aios-p-stat-card,
+.aios-p-scope .aios-p-model-group,
+.aios-p-scope .aios-p-engine-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-glass);
+}
+
+.aios-p-scope .aios-p-card:hover,
+.aios-p-scope .aios-p-status-banner:hover,
+.aios-p-scope .aios-p-stat-card:hover,
+.aios-p-scope .aios-p-model-group:hover,
+.aios-p-scope .aios-p-engine-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-md);
+}
+
+.aios-p-scope .aios-p-card-header,
+.aios-p-scope .aios-p-model-group-head {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.aios-p-scope .aios-p-banner-item,
+.aios-p-scope .aios-p-model-item,
+.aios-p-scope .aios-p-model-info-card,
+.aios-p-scope .aios-p-tabs,
+.aios-p-scope .aios-p-config-row {
+    background: var(--bg-primary);
+    border-color: var(--border-color);
+}
+
+.aios-p-scope .aios-p-banner-item:hover,
+.aios-p-scope .aios-p-model-item:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-hover);
+}
+
+.aios-p-scope .aios-p-engine-card.aios-p-engine-running,
+.aios-p-scope .aios-p-model-item.aios-p-current-model,
+.aios-p-scope .aios-p-tab.aios-p-tab-active {
+    background: var(--primary-10);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 1px var(--primary-20), var(--shadow-sm);
+}
+
+.aios-p-scope .aios-p-engine-icon,
+.aios-p-scope .aios-p-stat-icon,
+.aios-p-scope .aios-p-banner-icon {
+    background: var(--primary-10);
+    border-color: var(--primary-20);
+}
+
+.aios-p-scope .aios-p-input {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.aios-p-scope .aios-p-input:hover {
+    border-color: var(--border-hover);
+}
+
+.aios-p-scope .aios-p-input:focus {
+    background: var(--bg-primary);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px var(--primary-10);
+}
+
+.aios-p-scope .aios-p-btn {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+    font-weight: 600;
+}
+
+.aios-p-scope .aios-p-btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.aios-p-scope .aios-p-btn-primary,
+.aios-p-scope .aios-p-badge-primary,
+.aios-p-scope .aios-p-tab.aios-p-tab-active {
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
+}
+
+.aios-p-scope .aios-p-btn-primary:hover {
+    background: var(--primary-hover);
+    box-shadow: 0 4px 6px -1px var(--primary-20);
+    color: #fff;
+}
+
+.aios-p-scope .aios-p-btn-success {
+    background: var(--success-color);
+    color: #fff;
+    border-color: var(--success-color);
+}
+
+.aios-p-scope .aios-p-btn-danger {
+    background: var(--danger-color);
+    color: #fff;
+    border-color: var(--danger-color);
+}
+
+.aios-p-scope .aios-p-table th {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+.aios-p-scope .aios-p-table th,
+.aios-p-scope .aios-p-table td {
+    border-bottom-color: var(--border-color);
+}
+
+.aios-p-scope .aios-p-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.aios-p-scope .aios-p-empty,
+.aios-p-scope .aios-p-loading {
+    color: var(--text-tertiary);
+}
+
+.aios-p-scope .aios-p-error {
+    background: var(--danger-bg-light);
+    border-color: var(--danger-border);
+    color: var(--danger-text);
+}
+
+.aios-p-modal-overlay {
+    background: var(--overlay-bg);
+}
+
+.aios-p-modal {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    color: var(--text-primary);
+}
+
+.aios-toast {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    color: var(--text-primary);
+}
+
+.aios-toast-info {
+    background: var(--bg-primary);
+    border-left: 4px solid var(--info-color);
+}
+.aios-toast-success {
+    background: var(--bg-primary);
+    border-left: 4px solid var(--success-color);
+}
+.aios-toast-warning {
+    background: var(--bg-primary);
+    border-left: 4px solid var(--warning-color);
+}
+.aios-toast-error {
+    background: var(--bg-primary);
+    border-left: 4px solid var(--danger-color);
+}
+.aios-toast-close {
+    color: var(--text-secondary);
+}

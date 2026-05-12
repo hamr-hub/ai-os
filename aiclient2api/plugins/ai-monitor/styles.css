@@ -508,3 +508,212 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* AIClient2API native theme alignment */
+#ai-monitor-toggle {
+    background: var(--bg-glass);
+    border: 1px solid var(--primary-color);
+    color: var(--text-primary);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    letter-spacing: 0;
+}
+
+#ai-monitor-toggle:hover,
+#ai-monitor-toggle.aim-toggle-active {
+    background: var(--primary-10);
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 6px -1px var(--primary-20), var(--shadow-md);
+}
+
+.aim-toggle-icon {
+    color: var(--primary-color);
+    filter: none;
+}
+
+#ai-monitor-panel {
+    background: var(--bg-glass-strong);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    color: var(--text-primary);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.aim-panel-header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.aim-panel-title {
+    color: var(--text-primary);
+    font-size: 1rem;
+    letter-spacing: 0;
+}
+
+.aim-section-title {
+    color: var(--text-secondary);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.8125rem;
+}
+
+.aim-section-title::before {
+    background: var(--primary-color);
+}
+
+.aim-engine-card,
+.aim-model-item,
+.aim-empty {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.aim-engine-card:hover,
+.aim-model-item:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-md);
+}
+
+.aim-engine-card.aim-engine-active {
+    background: var(--success-bg-light);
+    border-color: var(--success-color);
+    box-shadow: 0 0 0 1px var(--success-10), var(--shadow-sm);
+}
+
+.aim-engine-card.aim-engine-inactive {
+    opacity: 0.75;
+}
+
+.aim-engine-name,
+.aim-model-name {
+    color: var(--text-primary);
+}
+
+.aim-engine-detail,
+.aim-model-meta,
+.aim-empty,
+.aim-meta-port {
+    color: var(--text-secondary);
+}
+
+.aim-model-item.aim-model-current {
+    background: var(--primary-10);
+    border-color: var(--primary-color);
+    border-left: 4px solid var(--primary-color);
+    box-shadow: 0 0 0 1px var(--primary-20), var(--shadow-sm);
+}
+
+.aim-model-badge {
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    box-shadow: none;
+}
+
+.aim-select {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.aim-select:focus {
+    border-color: var(--primary-color);
+    background-color: var(--bg-primary);
+    box-shadow: 0 0 0 4px var(--primary-10);
+}
+
+.aim-select option {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.aim-btn {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+    font-weight: 600;
+}
+
+.aim-btn:hover,
+.aim-btn-collapse:hover,
+.aim-btn-engine:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.aim-btn-primary {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.aim-btn-primary:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+    color: #fff;
+    box-shadow: 0 4px 6px -1px var(--primary-20);
+}
+
+.aim-btn-collapse {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
+}
+
+.aim-btn-engine {
+    background: var(--bg-primary);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+.aim-indicator-running {
+    background: var(--success-color);
+    box-shadow: 0 0 8px var(--success-color);
+}
+
+.aim-indicator-stopped {
+    background: var(--text-tertiary);
+}
+
+.aim-toast {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    color: var(--text-primary);
+}
+
+.aim-toast-info {
+    background: var(--bg-primary);
+    border-left: 4px solid var(--info-color);
+}
+
+.aim-toast-success {
+    background: var(--bg-primary);
+    border-left: 4px solid var(--success-color);
+}
+
+.aim-toast-warning {
+    background: var(--bg-primary);
+    border-left: 4px solid var(--warning-color);
+}
+
+.aim-toast-error {
+    background: var(--bg-primary);
+    border-left: 4px solid var(--danger-color);
+}
+
+.aim-toast-close {
+    color: var(--text-secondary);
+}
