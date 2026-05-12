@@ -1771,7 +1771,8 @@ async def engine_status():
 
     if not services:
         import httpx
-        from core.vllm_manager import get_current_model_info
+        import subprocess
+        from core.vllm_manager import get_current_model_info, SYSTEMCTL_BIN
         current_info = get_current_model_info()
         if current_info and current_info.get("running"):
             try:
@@ -1789,14 +1790,31 @@ async def engine_status():
                 }
                 discovered_engine = configured_engine
                 vllm_pid = None
+                try:
+                    pid_result = subprocess.run(
+                        [SYSTEMCTL_BIN, "show", current_info.get("service", "vllm-aiclient"), "--property=MainPID", "--value"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    pid_text = pid_result.stdout.strip()
+                    if pid_result.returncode == 0 and pid_text.isdigit() and int(pid_text) > 0:
+                        vllm_pid = int(pid_text)
+                except Exception:
+                    vllm_pid = None
                 for engine_type, patterns in engine_patterns.items():
+                    if vllm_pid:
+                        break
                     for pattern in patterns:
                         try:
                             pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name', 'cmdline'])
-                                    if p.info['name'] and pattern.upper() in (p.info['name'] or '').upper()]
+                                    if p.info['name'] and pattern.upper() in (p.info['name'] or '').upper()
+                                    and "go-vllm-api" not in " ".join(p.info.get('cmdline') or [])]
                             if not pids:
                                 pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name', 'cmdline'])
-                                        if p.info['cmdline'] and any(pattern in (c or '') for c in p.info['cmdline'])]
+                                        if p.info['cmdline']
+                                        and any(pattern in (c or '') for c in p.info['cmdline'])
+                                        and "go-vllm-api" not in " ".join(p.info.get('cmdline') or [])]
                             if pids:
                                 vllm_pid = pids[0]
                                 discovered_engine = engine_type

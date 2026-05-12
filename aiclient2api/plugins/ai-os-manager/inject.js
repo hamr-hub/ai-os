@@ -114,6 +114,54 @@
         setTimeout(() => toast.remove(), 4000);
     }
 
+    function showConfirm(message, title = '确认操作') {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'aios-p-modal-overlay';
+
+            const modal = document.createElement('div');
+            modal.className = 'aios-p-modal';
+
+            const header = document.createElement('div');
+            header.className = 'aios-p-modal-header';
+            header.textContent = title;
+
+            const body = document.createElement('div');
+            body.style.cssText = 'font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px;';
+            body.textContent = message;
+
+            const actions = document.createElement('div');
+            actions.className = 'aios-p-modal-actions';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'aios-p-btn';
+            cancelBtn.textContent = '取消';
+
+            const submitBtn = document.createElement('button');
+            submitBtn.className = 'aios-p-btn aios-p-btn-primary';
+            submitBtn.textContent = '确认';
+
+            const cleanup = (value) => {
+                overlay.remove();
+                resolve(value);
+            };
+            cancelBtn.onclick = () => cleanup(false);
+            submitBtn.onclick = () => cleanup(true);
+            overlay.onclick = (e) => {
+                if (e.target === overlay) cleanup(false);
+            };
+
+            actions.appendChild(cancelBtn);
+            actions.appendChild(submitBtn);
+            modal.appendChild(header);
+            modal.appendChild(body);
+            modal.appendChild(actions);
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+            cancelBtn.focus();
+        });
+    }
+
     function loadingHTML(text = '加载中...') {
         return `<div class="aios-p-loading">${escapeHtml(text)}</div>`;
     }
@@ -169,19 +217,28 @@
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         const w = canvas.parentElement.clientWidth || 200;
-        const h = 50;
+        const containerH = canvas.parentElement.clientHeight || 0;
+        const h = containerH > 120 ? containerH : 280;
         canvas.width = w;
         canvas.height = h;
         const points = dataPoints.slice(-maxLen);
-        if (points.length < 2) return;
-        const max = Math.max(...points, 1);
         ctx.clearRect(0, 0, w, h);
+        if (points.length < 2) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#818cf8';
+            ctx.lineWidth = 2;
+            ctx.moveTo(0, h - 12);
+            ctx.lineTo(w, h - 12);
+            ctx.stroke();
+            return;
+        }
+        const max = Math.max(...points, 1);
         ctx.beginPath();
         ctx.strokeStyle = '#818cf8';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 2;
         points.forEach((v, i) => {
             const x = (i / (points.length - 1)) * w;
-            const y = h - (v / max) * (h - 4) - 2;
+            const y = h - (v / max) * (h - 20) - 10;
             i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         });
         ctx.stroke();
@@ -201,15 +258,17 @@
         </div>
     </div>
     <div class="aios-p-stats-grid" id="aios-gpu-stats">${loadingHTML()}</div>
-    <div class="aios-p-card aios-p-chart-card" style="margin-top:var(--space-lg);">
-        <div class="aios-p-card-header"><h3><i class="fas fa-chart-area"></i> GPU 历史趋势</h3></div>
-        <div class="aios-p-card-content"><canvas id="aios-gpu-chart" style="height:80px;"></canvas></div>
+    <div class="aios-p-gpu-layout">
+        <div class="aios-p-card aios-p-chart-card">
+            <div class="aios-p-card-header"><h3><i class="fas fa-chart-area"></i> GPU 历史趋势</h3></div>
+            <div class="aios-p-card-content aios-p-chart-content"><canvas id="aios-gpu-chart" class="aios-p-chart"></canvas></div>
+        </div>
+        <div class="aios-p-card aios-p-status-card">
+            <div class="aios-p-card-header"><h3><i class="fas fa-bolt"></i> 引擎状态</h3></div>
+            <div class="aios-p-card-content" id="aios-engine-status">${loadingHTML()}</div>
+        </div>
     </div>
-    <div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-lg);">
-        <div class="aios-p-card-header"><h3><i class="fas fa-bolt"></i> 引擎状态</h3></div>
-        <div class="aios-p-card-content" id="aios-engine-status">${loadingHTML()}</div>
-    </div>
-    <div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-lg);">
+    <div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-md);">
         <div class="aios-p-card-header">
             <h3><i class="fas fa-sliders-h"></i> 引擎配置</h3>
             <button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.gpu.loadEngineConfig()"><i class="fas fa-sync-alt"></i> 刷新</button>
@@ -904,42 +963,76 @@
                 }
             },
             renderEngineStatus(data) {
-                const result = data.data || data;
-                const raw = result.current || result;
-                const services = raw.services || raw.engines || [];
-                if (!services || services.length === 0) {
-                    const el = document.getElementById('aios-engine-status');
-                    if (el) el.innerHTML = emptyHTML('未检测到引擎');
-                    return;
+                const result = data.data || data || {};
+                const raw = result.current || result || {};
+                const services = Array.isArray(raw.services) ? raw.services : (Array.isArray(raw.engines) ? raw.engines : []);
+                const engineTypes = ['vllm', 'sglang', 'llamacpp'];
+                const configEditor = document.getElementById('aios-engine-config-editor');
+                let config = {};
+                if (configEditor?.value) {
+                    try {
+                        config = JSON.parse(configEditor.value);
+                    } catch {}
                 }
-                const engines = services.map(s => {
-                    const engineType = s.engine_type || 'unknown';
-                    const status = s.status || 'unknown';
+                const configRoot = config.config || config.current || config;
+                const configMap = {
+                    vllm: configRoot.vllm || configRoot.vllm_config || {},
+                    sglang: configRoot.sglang || configRoot.sglang_config || {},
+                    llamacpp: configRoot.llamacpp || configRoot.llama_cpp || configRoot.llamacpp_config || configRoot.llama_cpp_config || {},
+                };
+                const engines = engineTypes.map(type => {
+                    const svc = services.find(s => normalizeEngineType(s.engine_type || s.name || s.type) === type) || null;
+                    const status = svc?.status || (svc ? 'stopped' : 'not_found');
                     const running = status === 'running';
-                    const svcName = s.service_name || engineType;
-                    const model = s.model || s.model_name || '-';
-                    const port = s.port ?? '-';
-                    const uptime = s.uptime_seconds ? `${Math.floor(s.uptime_seconds / 3600)}h${Math.floor((s.uptime_seconds % 3600) / 60)}m` : '-';
-                    const health = s.health || 'unknown';
-                    const pid = s.pid ?? null;
-                    return { engineType, status, running, svcName, model, port, uptime, health, pid };
+                    const cfg = configMap[type] || {};
+                    const model = svc?.model || svc?.model_name || cfg.model_name || cfg.model || '-';
+                    const port = svc?.port ?? cfg.port ?? cfg.http_port ?? '-';
+                    const uptime = svc?.uptime_seconds ? `${Math.floor(svc.uptime_seconds / 3600)}h${Math.floor((svc.uptime_seconds % 3600) / 60)}m` : '-';
+                    const pid = svc?.pid ?? null;
+                    const health = svc?.health || cfg.health_check || '-';
+                    const host = svc?.host || cfg.host || cfg.bind_host || '-';
+                    const parallel = cfg.tensor_parallel_size ?? cfg.tp ?? cfg.parallel_size ?? '-';
+                    const gpuMem = cfg.gpu_memory_utilization ?? cfg.mem_fraction_static ?? cfg.gpu_memory_fraction ?? '-';
+                    const extras = [
+                        cfg.max_model_len != null ? `上下文 ${cfg.max_model_len}` : '',
+                        cfg.quantization ? `量化 ${cfg.quantization}` : '',
+                        cfg.dtype ? `精度 ${cfg.dtype}` : '',
+                    ].filter(Boolean);
+                    return { type, status, running, model, port, uptime, pid, health, host, parallel, gpuMem, extras };
                 });
-                const html = `<div class="aios-p-engine-grid">${engines.map(e => `
-                    <div class="aios-p-engine-card ${e.running ? 'aios-p-engine-running' : (e.status === 'not_found' ? 'aios-p-engine-stopped' : 'aios-p-engine-stopped')}" data-engine-type="${e.engineType}">
+                const html = `<div class="aios-p-engine-grid">${engines.map(e => {
+                    const unavailable = e.status === 'not_found';
+                    const canSwitch = !e.running && !unavailable;
+                    const actionAttrs = canSwitch ? `data-action="switch-engine" data-engine="${e.type}"` : 'disabled aria-disabled="true"';
+                    const actionIcon = e.running ? 'fa-check-circle' : (unavailable ? 'fa-ban' : 'fa-play');
+                    const actionText = e.running ? '当前引擎' : (unavailable ? '未配置' : '切换到此引擎');
+                    return `
+                    <div class="aios-p-engine-card ${e.running ? 'aios-p-engine-running' : 'aios-p-engine-stopped'}" data-engine-type="${e.type}">
                         <div class="aios-p-engine-header">
                             <div class="aios-p-engine-icon"><i class="fas fa-bolt"></i></div>
-                            <div class="aios-p-engine-title">${engineDisplayName(e.engineType)}</div>
+                            <div class="aios-p-engine-title-row">
+                                <div class="aios-p-engine-title">${engineDisplayName(e.type)}</div>
+                                <div class="aios-p-engine-status-text ${e.running ? 'aios-p-engine-running-text' : 'aios-p-engine-stopped-text'}">${e.running ? '运行中' : (e.status === 'not_found' ? '未配置/未安装' : '已停止')}</div>
+                            </div>
                         </div>
-                        <div class="aios-p-engine-status-text ${e.running ? 'aios-p-engine-running-text' : 'aios-p-engine-stopped-text'}">
-                            ${e.running ? '运行中' : (e.status === 'not_found' ? '未安装' : '已停止')}
+                        <div class="aios-p-engine-info-grid">
+                            <div class="aios-p-engine-info-item aios-p-engine-info-wide"><span>模型</span><strong>${e.model}</strong></div>
+                            <div class="aios-p-engine-info-item"><span>端口</span><strong>${e.port}</strong></div>
+                            <div class="aios-p-engine-info-item"><span>主机</span><strong>${e.host}</strong></div>
+                            <div class="aios-p-engine-info-item"><span>并行</span><strong>${e.parallel}</strong></div>
+                            <div class="aios-p-engine-info-item"><span>显存阈值</span><strong>${e.gpuMem}</strong></div>
+                            <div class="aios-p-engine-info-item"><span>健康</span><strong>${e.health}</strong></div>
+                            <div class="aios-p-engine-info-item"><span>运行</span><strong>${e.uptime}</strong></div>
+                            <div class="aios-p-engine-info-item"><span>PID</span><strong>${e.pid ?? '-'}</strong></div>
                         </div>
-                        ${e.running ? `<div class="aios-p-engine-info"><div>模型: ${e.model}</div><div>端口: ${e.port}</div>${e.uptime !== '-' ? `<div>运行: ${e.uptime}</div>` : ''}${e.pid ? `<div>PID: ${e.pid}</div>` : ''}</div>` : ''}
-                        <div style="margin-top:auto;padding-top:var(--space-sm);">
-                            <button class="aios-p-btn aios-p-btn-sm ${e.running ? 'aios-p-btn-success' : ''}" style="width:100%;" data-action="switch-engine" data-engine="${e.engineType}">
-                                <i class="fas ${e.running ? 'fa-check-circle' : 'fa-play'}"></i> ${e.running ? '当前引擎' : '切换到此引擎'}
+                        ${e.extras.length ? `<div class="aios-p-engine-tags">${e.extras.map(tag => `<span class="aios-p-engine-tag">${tag}</span>`).join('')}</div>` : ''}
+                        <div class="aios-p-engine-actions">
+                            <button class="aios-p-btn aios-p-btn-sm ${e.running ? 'aios-p-btn-success' : ''}" style="width:100%;" ${actionAttrs}>
+                                <i class="fas ${actionIcon}"></i> ${actionText}
                             </button>
                         </div>
-                    </div>`).join('')}</div>`;
+                    </div>`;
+                }).join('')}</div>`;
                 const el = document.getElementById('aios-engine-status');
                 if (el) el.innerHTML = html;
             },
@@ -957,6 +1050,8 @@
                     }
                     if (!modelName && groups.length > 0) modelName = groups[0].base_name;
                     if (!modelName) { showToast('没有可用模型，请先下载模型', 'warning'); return; }
+                    const confirmed = await showConfirm(`确认切换引擎到 ${engineDisplayName(engineType)}？该操作会重启当前推理服务。`);
+                    if (!confirmed) return;
                     const result = await adminFetch('/api/engine/switch', {
                         method: 'POST',
                         body: JSON.stringify({ model_name: modelName, engine_type: normalizeEngineType(engineType), port: 8000 })
@@ -1034,15 +1129,19 @@
             _switchWs: null,
             _downloadWs: null,
             _realtimeStarted: false,
+            isSwitching: false,
+            currentModel: '',
+            currentEngine: '',
             initRealtime() {
                 if (this._realtimeStarted || typeof WebSocket === 'undefined') return;
-                this._realtimeStarted = true;
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const hosts = [
-                    `${protocol}//${window.location.hostname}:35000`,
-                    `${protocol}//${window.location.hostname}:35001`,
-                    `${protocol}//${window.location.host}`,
-                ];
+                const configuredHosts = Array.isArray(window.AIOS_WS_BASES) ? window.AIOS_WS_BASES : [];
+                const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+                const hosts = configuredHosts.length > 0
+                    ? configuredHosts
+                    : (['35000', '35001'].includes(currentPort) ? [`${protocol}//${window.location.host}`] : []);
+                if (hosts.length === 0) return;
+                this._realtimeStarted = true;
                 const connect = (path, onMessage) => {
                     let idx = 0;
                     const tryNext = () => {
@@ -1111,6 +1210,9 @@
                         engineHealth = s.health || '-';
                     }
                 }
+                this.currentModel = currentModel || '';
+                this.currentEngine = normalizeEngineType(currentEngine);
+                this.currentPort = currentPort;
                 const modelDisplay = currentModel || '-';
                 const engineDisplay = engineDisplayName(currentEngine);
                 const el = document.getElementById('aios-model-banner');
@@ -1129,6 +1231,7 @@
                 const el = document.getElementById('aios-p-switching-banner');
                 if (!el) return;
                 const isSwitching = data.is_switching ?? false;
+                this.isSwitching = !!isSwitching;
                 const session = data.session || null;
                 if (isSwitching && session) {
                     const progress = session.overall_progress ?? 0;
@@ -1155,10 +1258,22 @@
                 const select = document.getElementById('aios-switch-model');
                 if (!select) return;
                 const currentModel = aggResult.current_model || '';
-                select.innerHTML = groups.map(g => {
-                    const selected = (g.base_name === currentModel || (g.variants && g.variants.some(v => v.is_current))) ? ' selected' : '';
-                    return `<option value="${g.base_name}"${selected}>${g.base_name} (${g.variant_count || (g.variants || []).length}个变体)</option>`;
+                const modelOptions = groups.map(g => {
+                    const variants = Array.isArray(g.variants) && g.variants.length > 0
+                        ? g.variants
+                        : [{ name: g.base_name, is_current: g.base_name === currentModel, path_exists: true }];
+                    const options = variants.map(v => {
+                        const name = v.name || g.base_name;
+                        const selected = (name === currentModel || v.is_current) ? ' selected' : '';
+                        const state = v.running || v.is_current ? '运行中' : (v.path_exists === false ? '未下载' : '已下载');
+                        const engine = engineDisplayName(v.backend_type || 'vllm');
+                        return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name)} · ${engine} · ${state}</option>`;
+                    }).join('');
+                    if (variants.length === 1) return options;
+                    return `<optgroup label="${escapeHtml(g.base_name)}">${options}</optgroup>`;
                 }).join('');
+                const placeholder = currentModel ? '' : '<option value="" selected disabled>请选择模型</option>';
+                select.innerHTML = `${placeholder}${modelOptions}`;
             },
             populateEngineSelect(engineData) {
                 const result = engineData.data || engineData;
@@ -1167,10 +1282,16 @@
                 const select = document.getElementById('aios-switch-engine');
                 if (!select) return;
                 const engineTypes = ['vllm', 'sglang', 'llamacpp'];
-                select.innerHTML = engineTypes.map(t => {
-                    const running = services.find(s => normalizeEngineType(s.engine_type) === t && s.status === 'running');
-                    return `<option value="${t}"${running ? ' selected' : ''}>${engineDisplayName(t)}</option>`;
+                const engineOptions = engineTypes.map(t => {
+                    const service = services.find(s => normalizeEngineType(s.engine_type || s.name || s.type) === t);
+                    const running = service && service.status === 'running';
+                    const disabled = !service;
+                    const suffix = disabled ? ' (未配置)' : (running ? ' (当前)' : '');
+                    return `<option value="${t}"${running ? ' selected' : ''}${disabled ? ' disabled' : ''}>${engineDisplayName(t)}${suffix}</option>`;
                 }).join('');
+                const hasUsableEngine = services.some(s => engineTypes.includes(normalizeEngineType(s.engine_type || s.name || s.type)));
+                const placeholder = hasUsableEngine ? '' : '<option value="" selected disabled>无可用引擎</option>';
+                select.innerHTML = `${placeholder}${engineOptions}`;
             },
             renderModelList(aggData) {
                 const aggResult = aggData.data || aggData;
@@ -1419,7 +1540,45 @@
                 const engineType = engineInput ? engineInput.value : 'vllm';
                 const port = portInput ? portInput.value : null;
                 if (!modelName) { showToast('请选择模型', 'warning'); return; }
+                const selectedEngineOption = engineInput?.selectedOptions?.[0] || null;
+                if (!engineType || selectedEngineOption?.disabled) {
+                    showToast('请选择已配置的引擎', 'warning');
+                    return;
+                }
+                if (this.isSwitching) {
+                    showToast('已有模型切换任务进行中，请等待完成或取消后再操作', 'warning');
+                    return;
+                }
                 try {
+                    const currentModel = this.currentModel || '';
+                    const currentEngine = normalizeEngineType(this.currentEngine || '');
+                    if (modelName === currentModel && normalizeEngineType(engineType) === currentEngine) {
+                        showToast(`${modelName} 已在 ${engineDisplayName(engineType)} 上运行`, 'info');
+                        return;
+                    }
+                    const confirmed = await showConfirm(`确认切换到 ${modelName} (${engineDisplayName(engineType)})？该操作会重启推理服务。`);
+                    if (!confirmed) return;
+                    if (normalizeEngineType(engineType) !== currentEngine) {
+                        const engineBody = { model_name: modelName, engine_type: normalizeEngineType(engineType) };
+                        if (port) engineBody.port = parseInt(port);
+                        const engineResult = await adminFetch('/api/engine/switch', {
+                            method: 'POST',
+                            body: JSON.stringify(engineBody)
+                        });
+                        if (engineResult.success || engineResult.data?.success) {
+                            const reason = engineResult.data?.reason || engineResult.reason;
+                            showToast(reason === 'already_running_same_engine'
+                                ? `${modelName} 已在 ${engineDisplayName(engineType)} 上运行`
+                                : `引擎切换任务已提交: ${engineDisplayName(engineType)}`, reason === 'already_running_same_engine' ? 'info' : 'success');
+                            setTimeout(() => this.refresh(), 3000);
+                            window.AiosManager.gpu.refresh();
+                        } else {
+                            const detail = engineResult.detail || engineResult.error || engineResult.data?.detail || engineResult.data?.reason || '未知错误';
+                            showToast(`引擎切换失败: ${detail}`, 'error');
+                        }
+                        return;
+                    }
+
                     const body = { modelName, engineType };
                     if (port) body.port = parseInt(port);
                     const result = await adminFetch('/api/model-switch/switch', {
@@ -1443,6 +1602,8 @@
             },
             async switchTo(modelName, backendType) {
                 try {
+                    const confirmed = await showConfirm(`确认切换到 ${modelName}？该操作会重启推理服务。`);
+                    if (!confirmed) return;
                     const result = await adminFetch('/api/model-switch/switch', {
                         method: 'POST',
                         body: JSON.stringify({ modelName, engineType: normalizeEngineType(backendType), async: true })
@@ -1464,6 +1625,8 @@
             },
             async start(modelName) {
                 try {
+                    const confirmed = await showConfirm(`确认启动 ${modelName}？`);
+                    if (!confirmed) return;
                     const result = await adminFetch('/api/model-switch/start', { method: 'POST', body: JSON.stringify({ modelName }) });
                     if (result.success || result.data?.success) {
                         showToast(`启动 ${modelName} 成功`, 'success');
@@ -1475,6 +1638,8 @@
             },
             async stop(modelName) {
                 try {
+                    const confirmed = await showConfirm(`确认停止 ${modelName}？当前推理服务会中断。`);
+                    if (!confirmed) return;
                     const result = await adminFetch('/api/model-switch/stop', { method: 'POST', body: JSON.stringify({ modelName }) });
                     if (result.success || result.data?.success) {
                         showToast(`停止 ${modelName} 成功`, 'success');

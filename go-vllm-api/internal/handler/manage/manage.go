@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -17,20 +18,20 @@ import (
 )
 
 type ManageHandler struct {
-	scheduler    *service.Scheduler
-	gpuMonitor   *service.GPUMonitor
-	sysCtl       *service.SystemController
-	sysCollector *service.SystemStatusCollector
-	metrics      *service.MetricsCollector
-	cache        *service.CacheService
-	cacheUpdater *service.CacheUpdater
-	wsManager    *service.WSManager
-	vllmManager  *service.VLLMManager
-	llamaCppMgr  *service.LlamaCppManager
-	modelTesting *service.ModelTestingFramework
-	redis        *repository.RedisRepo
-	configPath   string
-	pythonClient *http.Client
+	scheduler     *service.Scheduler
+	gpuMonitor    *service.GPUMonitor
+	sysCtl        *service.SystemController
+	sysCollector  *service.SystemStatusCollector
+	metrics       *service.MetricsCollector
+	cache         *service.CacheService
+	cacheUpdater  *service.CacheUpdater
+	wsManager     *service.WSManager
+	vllmManager   *service.VLLMManager
+	llamaCppMgr   *service.LlamaCppManager
+	modelTesting  *service.ModelTestingFramework
+	redis         *repository.RedisRepo
+	configPath    string
+	pythonClient  *http.Client
 	pythonBaseURL string
 }
 
@@ -315,11 +316,11 @@ func (h *ManageHandler) GetGPUSummary(c *gin.Context) {
 	models := gin.H{}
 	for _, m := range h.scheduler.GetAvailableModels() {
 		models[m] = gin.H{
-			"running":     h.scheduler.IsModelRunning(m),
-			"engine":      h.scheduler.GetModelBackendType(m),
-			"port":        h.scheduler.GetModelPort(m),
-			"pid":         nil,
-			"started_at":  nil,
+			"running":    h.scheduler.IsModelRunning(m),
+			"engine":     h.scheduler.GetModelBackendType(m),
+			"port":       h.scheduler.GetModelPort(m),
+			"pid":        nil,
+			"started_at": nil,
 		}
 	}
 	currentModel := h.scheduler.GetCurrentModelName()
@@ -390,7 +391,7 @@ func (h *ManageHandler) GetModelStatus(c *gin.Context) {
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
 			"last_used":                 nil,
 			"model_path":                modelPath,
-			"path_exists": func() bool { _, err := os.Stat(modelPath); return err == nil }(),
+			"path_exists":               func() bool { _, err := os.Stat(modelPath); return err == nil }(),
 			"description": func() string {
 				if mc != nil {
 					return mc.Description
@@ -435,7 +436,7 @@ func (h *ManageHandler) ModelsSummary(c *gin.Context) {
 			"supports_tool_calling":     h.scheduler.GetModelSupportsToolCalling(m),
 			"supports_image_generation": h.scheduler.GetModelSupportsImageGeneration(m),
 			"model_path":                modelPath,
-			"path_exists": func() bool { _, err := os.Stat(modelPath); return err == nil }(),
+			"path_exists":               func() bool { _, err := os.Stat(modelPath); return err == nil }(),
 		}
 		if mc != nil {
 			entry["description"] = mc.Description
@@ -1256,7 +1257,7 @@ func (h *ManageHandler) NodeIntegrationStatus(c *gin.Context) {
 			"active_requests":           h.scheduler.GetActiveRequests(m),
 			"can_accept":                h.scheduler.CanAcceptRequest(m),
 			"model_path":                modelPath,
-			"path_exists": func() bool { _, err := os.Stat(modelPath); return err == nil }(),
+			"path_exists":               func() bool { _, err := os.Stat(modelPath); return err == nil }(),
 		}
 	}
 
@@ -1504,11 +1505,11 @@ func (h *ManageHandler) GetHealthDetail(c *gin.Context) {
 				"memory_used_pct": gpuMemUsedPct,
 			},
 			"go_backend": gin.H{
-				"reachable":       true,
+				"reachable":        true,
 				"response_time_ms": 0,
 			},
 			"python_backend": gin.H{
-				"reachable":       true,
+				"reachable":        true,
 				"response_time_ms": 0,
 			},
 			"vllm_service": gin.H{
@@ -1516,8 +1517,8 @@ func (h *ManageHandler) GetHealthDetail(c *gin.Context) {
 				"active_requests": vllmActiveRequests,
 			},
 			"redis": gin.H{
-				"available":  redisAvailable,
-				"connected":  redisConnected,
+				"available": redisAvailable,
+				"connected": redisConnected,
 			},
 		},
 		"alert_reasons": alertReasons,
@@ -1607,8 +1608,8 @@ func (h *ManageHandler) RunComparativeAnalysis(c *gin.Context) {
 	analysis := h.modelTesting.RunComparativeAnalysis(c.Request.Context(), req.ModelNames, getModelInfo)
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":  "completed",
-		"message": "Comparative analysis completed",
+		"status":   "completed",
+		"message":  "Comparative analysis completed",
 		"analysis": analysis,
 	})
 }
@@ -1616,10 +1617,10 @@ func (h *ManageHandler) RunComparativeAnalysis(c *gin.Context) {
 func (h *ManageHandler) GetTestStatus(c *gin.Context) {
 	if h.redis == nil || !h.redis.IsConnected() {
 		c.JSON(http.StatusOK, gin.H{
-			"status":            "ready",
+			"status":              "ready",
 			"models_tested_count": 0,
-			"models_tested":     []string{},
-			"timestamp":         time.Now().Format(time.RFC3339),
+			"models_tested":       []string{},
+			"timestamp":           time.Now().Format(time.RFC3339),
 		})
 		return
 	}
@@ -1628,10 +1629,10 @@ func (h *ManageHandler) GetTestStatus(c *gin.Context) {
 	items, err := h.redis.LRange(ctx, "model_test:history", 0, -1)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"status":            "ready",
+			"status":              "ready",
 			"models_tested_count": 0,
-			"models_tested":     []string{},
-			"timestamp":         time.Now().Format(time.RFC3339),
+			"models_tested":       []string{},
+			"timestamp":           time.Now().Format(time.RFC3339),
 		})
 		return
 	}
@@ -1652,10 +1653,10 @@ func (h *ManageHandler) GetTestStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":            "ready",
+		"status":              "ready",
 		"models_tested_count": len(modelList),
-		"models_tested":     modelList,
-		"timestamp":         time.Now().Format(time.RFC3339),
+		"models_tested":       modelList,
+		"timestamp":           time.Now().Format(time.RFC3339),
 	})
 }
 
@@ -1757,17 +1758,30 @@ func (h *ManageHandler) proxyPythonManageDelete(c *gin.Context, path string) {
 }
 
 func (h *ManageHandler) ProxySearchModels(c *gin.Context) {
-	keyword := c.Query("keyword")
-	source := c.Query("source")
-	limit := c.Query("limit")
-	path := fmt.Sprintf("/manage/models/search?keyword=%s&source=%s&limit=%s", keyword, source, limit)
+	q := url.Values{}
+	for _, key := range []string{"keyword", "source", "limit", "sort"} {
+		if value := c.Query(key); value != "" {
+			q.Set(key, value)
+		}
+	}
+	path := "/manage/models/search"
+	if encoded := q.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
 	h.proxyPythonManageGet(c, path)
 }
 
 func (h *ManageHandler) ProxyRecommendModel(c *gin.Context) {
-	keyword := c.Query("keyword")
-	source := c.Query("source")
-	path := fmt.Sprintf("/manage/gpu/recommend?keyword=%s&source=%s", keyword, source)
+	q := url.Values{}
+	for _, key := range []string{"keyword", "source"} {
+		if value := c.Query(key); value != "" {
+			q.Set(key, value)
+		}
+	}
+	path := "/manage/gpu/recommend"
+	if encoded := q.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
 	h.proxyPythonManageGet(c, path)
 }
 
@@ -1802,10 +1816,16 @@ func (h *ManageHandler) ProxyListDownloads(c *gin.Context) {
 }
 
 func (h *ManageHandler) ProxyPoolList(c *gin.Context) {
-	filter := c.Query("filter")
-	page := c.Query("page")
-	pageSize := c.Query("page_size")
-	path := fmt.Sprintf("/manage/models/pool?filter=%s&page=%s&page_size=%s", filter, page, pageSize)
+	q := url.Values{}
+	for _, key := range []string{"filter", "page", "page_size"} {
+		if value := c.Query(key); value != "" {
+			q.Set(key, value)
+		}
+	}
+	path := "/manage/models/pool"
+	if encoded := q.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
 	h.proxyPythonManageGet(c, path)
 }
 
