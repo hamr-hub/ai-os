@@ -162,9 +162,10 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(cfg.AppController.CorsOrigins))
 	r.Use(middleware.RequestID())
 	r.Use(middleware.NewTrustedProxyMiddleware(cfg.Settings.TrustedProxies).Handler())
+	r.Use(middleware.NewAdminAuthMiddleware(cfg.GoApi.Auth).Handler())
 	r.Use(middleware.RequestTracking(zapLogger))
 	r.Use(middleware.ErrorHandler())
 
@@ -182,8 +183,11 @@ func main() {
 	wsHandler := ws.NewWSHandlerWithState(wsManager, zapLogger, gpuMonitor, scheduler)
 
 	v1Handler.RegisterRoutes(r.Group(""))
-	adminMW := middleware.NewAdminWhitelistMiddleware(cfg.GoApi.AdminWhitelist.AllowedIPs, []string{"GET", "HEAD"})
-	manageGroup := r.Group("", adminMW.Handler())
+	manageGroup := r.Group("")
+	if cfg.GoApi.AdminWhitelist.Enabled {
+		adminMW := middleware.NewAdminWhitelistMiddleware(cfg.GoApi.AdminWhitelist.AllowedIPs, []string{"GET", "HEAD"})
+		manageGroup.Use(adminMW.Handler())
+	}
 	manageHandler.RegisterRoutes(manageGroup)
 	healthHandler.RegisterRoutes(r.Group(""))
 	wsHandler.RegisterRoutes(r.Group(""))

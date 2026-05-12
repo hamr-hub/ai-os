@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Test frontend
+        run: pnpm --dir frontend test
+
+      - name: Build frontend
+        run: pnpm --dir frontend build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: app-controller/requirements.txt
+
+      - name: Install Python dependencies
+        run: python -m pip install -r app-controller/requirements.txt
+
+      - name: Test app-controller
+        working-directory: app-controller
+        run: pytest -m "not integration and not e2e"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go-vllm-api/go.mod
+          cache-dependency-path: go-vllm-api/go.sum
+
+      - name: Test go-vllm-api
+        working-directory: go-vllm-api
+        run: go test ./...
+
+      - name: Build frontend image
+        run: docker build -t ai-os-frontend:ci frontend
+
+      - name: Build app-controller image
+        run: docker build -t ai-os-app-controller:ci app-controller
+
+      - name: Build go-vllm-api image
+        run: docker build -t ai-os-go-vllm-api:ci go-vllm-api

@@ -9,6 +9,7 @@ from typing import Dict, Optional, List, Set
 from datetime import datetime, timedelta
 from .rate_limiter import RateLimiter
 from core.cache_service import cache_service
+from core.config_paths import resolve_config_path
 
 logger = logging.getLogger("ai_controller.scheduler")
 
@@ -58,7 +59,7 @@ class Scheduler:
         self._default_model = None
     
     def _load_config(self) -> Dict:
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        config_path = resolve_config_path()
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 config = yaml.safe_load(f)
@@ -237,13 +238,9 @@ class Scheduler:
         return self.config.get('settings', {}).get('concurrency_limit', 4)
     
     def _get_current_model_info_cached(self):
-        now = time.time()
-        if now < self._current_model_cache_until:
-            return self._current_model_cache
-
         from core.vllm_manager import get_current_model_info
         self._current_model_cache = get_current_model_info()
-        self._current_model_cache_until = now + 3
+        self._current_model_cache_until = time.time()
         return self._current_model_cache
 
     def is_model_running(self, model_name: str) -> bool:

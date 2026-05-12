@@ -236,8 +236,9 @@ class ModelTestingFramework:
             config_name = info.get("config_name", info.get("name", ""))
             if config_name == model_name:
                 return active_path
-        model_info = self.scheduler.get_model_info(model_name)
-        if model_info and model_info.get("local_path"):
+        get_model_info = getattr(self.scheduler, "get_model_info", None)
+        model_info = get_model_info(model_name) if callable(get_model_info) else None
+        if isinstance(model_info, dict) and model_info.get("local_path"):
             return model_info["local_path"]
         return model_name
 

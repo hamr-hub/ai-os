@@ -1,6 +1,6 @@
-import { ref, type Ref } from 'vue'
+import { computed, ref, type Ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { healthCheck } from '@/api/client'
+import { verifyAuth } from '@/api/client'
 
 export function useAuth() {
   const authStore = useAuthStore()
@@ -13,7 +13,7 @@ export function useAuth() {
     try {
       authStore.setToken(apiKey)
       try {
-        await healthCheck()
+        await verifyAuth()
       } catch {
         authStore.clearToken()
         error.value = '认证失败：API Key 无效或服务不可用'
@@ -38,7 +38,7 @@ export function useAuth() {
     user: authStore.user,
     loading,
     error,
-    isAuthenticated: authStore.isAuthenticated,
+    isAuthenticated: computed(() => authStore.isAuthenticated),
     login,
     logout,
   }

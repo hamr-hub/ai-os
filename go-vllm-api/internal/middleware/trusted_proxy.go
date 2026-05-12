@@ -7,33 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var privateIPNets []*net.IPNet
-
-func init() {
-	privateIPNets = []*net.IPNet{
-		parseCIDR("10.0.0.0/8"),
-		parseCIDR("172.16.0.0/12"),
-		parseCIDR("192.168.0.0/16"),
-		parseCIDR("127.0.0.0/8"),
-		parseCIDR("169.254.0.0/16"),
-		parseCIDR("::1/128"),
-		parseCIDR("fc00::/7"),
-		parseCIDR("fe80::/10"),
-	}
-}
-
 func parseCIDR(s string) *net.IPNet {
 	_, ipNet, _ := net.ParseCIDR(s)
 	return ipNet
-}
-
-func isPrivateIP(ip net.IP) bool {
-	for _, ipNet := range privateIPNets {
-		if ipNet.Contains(ip) {
-			return true
-		}
-	}
-	return false
 }
 
 type TrustedProxyMiddleware struct {
@@ -41,7 +17,10 @@ type TrustedProxyMiddleware struct {
 }
 
 func NewTrustedProxyMiddleware(trustedProxyCIDRs []string) *TrustedProxyMiddleware {
-	nets := make([]*net.IPNet, 0, len(trustedProxyCIDRs))
+	nets := []*net.IPNet{
+		parseCIDR("127.0.0.0/8"),
+		parseCIDR("::1/128"),
+	}
 	for _, cidr := range trustedProxyCIDRs {
 		if strings.Contains(cidr, "/") {
 			_, ipNet, err := net.ParseCIDR(cidr)
@@ -93,7 +72,7 @@ func extractRealIP(c *gin.Context, trustedProxies []*net.IPNet) string {
 		}
 	}
 
-	if !isTrusted && !isPrivateIP(remoteIP) {
+	if !isTrusted {
 		return remoteIP.String()
 	}
 
@@ -116,7 +95,7 @@ func extractRealIP(c *gin.Context, trustedProxies []*net.IPNet) string {
 				break
 			}
 		}
-		if !proxyTrusted && !isPrivateIP(ip) {
+		if !proxyTrusted {
 			return ipStr
 		}
 	}

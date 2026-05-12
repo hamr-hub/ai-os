@@ -33,6 +33,7 @@ from core.cache_service import cache_service            # 缓存服务
 from core.cache_updater import CacheUpdater             # 缓存更新器
 from core.model_testing import ModelTestingFramework    # 模型测试框架
 from core.logger import setup_logger                    # 基础日志
+from core.config_paths import resolve_config_path       # 配置路径解析
 from core.vllm_manager import (                         # vLLM 管理
     get_available_models as vllm_get_available_models,
     get_current_model_info as vllm_get_current_model_info,
@@ -49,8 +50,8 @@ from core.vllm_manager import (                         # vLLM 管理
 import httpx
 import os
 
-# 确定配置文件路径（相对于此文件的上两级目录）
-config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.yaml")
+# 确定配置文件路径：优先根目录 config.yaml，容器内支持 /app/config.yaml 挂载。
+config_path = resolve_config_path()
 
 # 创建配置监听器并加载初始配置
 config_watcher = ConfigWatcher(config_path)

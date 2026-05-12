@@ -61,6 +61,53 @@ func (h *HealthHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/metrics/metadata", h.GetMetricsMetadata)
 }
 
+func prometheusGPUStatus(status *service.GPUStatus) *prom.GPUMetricsData {
+	if status == nil {
+		return nil
+	}
+	data := &prom.GPUMetricsData{
+		GPUCount: status.GPUCount,
+		GPUs:     make([]prom.GPUGPUMetricEntry, 0, len(status.AllGPUs)),
+	}
+	for _, gpu := range status.AllGPUs {
+		data.GPUs = append(data.GPUs, prom.GPUGPUMetricEntry{
+			ID:              fmt.Sprintf("%d", gpu.Index),
+			TotalMemory:     gpu.TotalMemory,
+			UsedMemory:      gpu.UsedMemory,
+			AvailableMemory: gpu.AvailableMemory,
+			Temperature:     gpu.Temperature,
+			Utilization:     gpu.Utilization,
+			PowerDraw:       gpu.PowerDraw,
+			FanSpeed:        gpu.FanSpeed,
+			ClockSM:         gpu.ClockSM,
+			EccErrors:       gpu.EccErrors,
+			PCIeRx:          gpu.PCIeRxThroughput,
+			PCIeTx:          gpu.PCIeTxThroughput,
+			Bar1Total:       gpu.Bar1TotalMemory,
+			Bar1Used:        gpu.Bar1UsedMemory,
+			Throttled:       len(gpu.ThrottleReasons) > 0,
+		})
+	}
+	return data
+}
+
+func prometheusVLLMMetrics(metrics *service.VLLMMetricsData) *prom.VLLMMetricsData {
+	if metrics == nil {
+		return nil
+	}
+	return &prom.VLLMMetricsData{
+		RunningRequests:      float64(metrics.RunningRequests),
+		WaitingRequests:      float64(metrics.WaitingRequests),
+		GPUCacheUsage:        metrics.GPUCacheUsage,
+		CPUCacheUsage:        metrics.CPUCacheUsage,
+		GenerationThroughput: metrics.GenerationThroughput,
+		PromptThroughput:     metrics.PromptThroughput,
+		TTFT:                 metrics.TimeToFirstToken,
+		TPOT:                 metrics.TimePerOutputToken,
+		PrefixCacheHitRate:   metrics.PrefixCacheHitRate,
+	}
+}
+
 func (h *HealthHandler) buildEngineStatus() map[string]interface{} {
 	engines := map[string]interface{}{}
 	vllmRunning := h.sysCtl.IsServiceRunning("vllm-aiclient")
@@ -198,11 +245,11 @@ func (h *HealthHandler) HealthCheckDetailed(c *gin.Context) {
 				"memory_used_pct": gpuMemUsedPct,
 			},
 			"go_backend": gin.H{
-				"reachable":       true,
+				"reachable":        true,
 				"response_time_ms": 0,
 			},
 			"python_backend": gin.H{
-				"reachable":       true,
+				"reachable":        true,
 				"response_time_ms": 0,
 			},
 			"vllm_service": gin.H{
@@ -210,8 +257,8 @@ func (h *HealthHandler) HealthCheckDetailed(c *gin.Context) {
 				"active_requests": vllmActiveRequests,
 			},
 			"redis": gin.H{
-				"available":  redisAvailable,
-				"connected":  redisConnected,
+				"available": redisAvailable,
+				"connected": redisConnected,
 			},
 		},
 		"alert_reasons": alertReasons,
@@ -223,6 +270,29 @@ func (h *HealthHandler) HealthCheckDetailed(c *gin.Context) {
 }
 
 func (h *HealthHandler) GetPrometheusMetrics(c *gin.Context) {
+	var gpuStatus *service.GPUStatus
+	var vllmMetrics *service.VLLMMetricsData
+	if h.gpuMonitor != nil {
+		gpuStatus = h.gpuMonitor.GetStatus()
+		vllmMetrics = h.gpuMonitor.GetVLLMMetrics()
+	}
+
+	h.prometheus.UpdateGPUMetrics(prometheusGPUStatus(gpuStatus))
+	h.prometheus.UpdateVLLMMetrics(prometheusVLLMMetrics(vllmMetrics))
+
+	if h.metrics != nil {
+		healthInfo := h.metrics.GetComprehensiveHealthScore(gpuStatus, vllmMetrics)
+		if overall, ok := healthInfo["overall"].(float64); ok {
+			h.prometheus.SetHealthScore(overall)
+		}
+	}
+	if h.scheduler != nil {
+		for _, model := range h.scheduler.GetAvailableModels() {
+			h.prometheus.SetModelStatus(model, h.scheduler.GetModelService(model), h.scheduler.IsModelRunning(model))
+			h.prometheus.SetActiveRequests(model, h.scheduler.GetActiveRequests(model))
+		}
+	}
+
 	h.prometheus.Handler().ServeHTTP(c.Writer, c.Request)
 }
 
@@ -246,10 +316,10 @@ func (h *HealthHandler) GetHealthHistory(c *gin.Context) {
 		temp := entry.Temperature
 		score := 100.0 - float64(memUtil)*0.5 - float64(temp)*0.5
 		if temp > 85 {
-			score -= float64(temp - 85) * 5
+			score -= float64(temp-85) * 5
 		}
 		if memUtil > 90 {
-			score -= float64(memUtil - 90) * 10
+			score -= float64(memUtil-90) * 10
 		}
 		score = max(0, min(100, score))
 

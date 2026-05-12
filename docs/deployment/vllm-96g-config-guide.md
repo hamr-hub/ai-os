@@ -262,7 +262,7 @@ exec vllm serve /mnt/pve_models/llama-3.3-70b-8.0bpw \
 
 所有模型的推荐参数已写入:
 ```
-/root/ai-os/app-controller/config.yaml
+/root/ai-os/config.yaml
 ```
 
 每个模型的 `vllm_params` 部分包含完整的推荐配置。

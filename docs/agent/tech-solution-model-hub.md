@@ -729,7 +729,7 @@ ai-controller:
 | `app-controller/core/deps.py` | 注册新模块单例 |
 | `app-controller/core/scheduler.py` | 调用ModelPoolManager获取模型信息 |
 | `app-controller/requirements.txt` | 新增5个依赖 |
-| `app-controller/config.yaml` | 新增engines/download配置段 |
+| `config.yaml` | 新增engines/download配置段 |
 
 ### 11.3 Go修改文件
 

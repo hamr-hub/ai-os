@@ -7,6 +7,32 @@ GO_BASE = os.environ.get("GO_BASE", "http://localhost:35001")
 VLLM_BASE = os.environ.get("VLLM_BASE", "http://localhost:8000")
 REQUEST_TIMEOUT = int(os.environ.get("TEST_TIMEOUT", "10"))
 
+INTEGRATION_TEST_FILES = {
+    "test_agent_stream.py",
+    "test_api_cross_service.py",
+    "test_api_manage.py",
+    "test_api_v1.py",
+    "test_image_requests.py",
+    "test_integration.py",
+    "test_model_hub_routes.py",
+}
+
+E2E_TEST_FILES = {
+    "test_e2e.py",
+    "test_e2e_model_testing.py",
+}
+
+
+def pytest_collection_modifyitems(items):
+    integration_marker = pytest.mark.integration
+    e2e_marker = pytest.mark.e2e
+    for item in items:
+        filename = item.path.name
+        if filename in INTEGRATION_TEST_FILES:
+            item.add_marker(integration_marker)
+        if filename in E2E_TEST_FILES:
+            item.add_marker(e2e_marker)
+
 
 @pytest.fixture(scope="session")
 def py_base():

@@ -17,8 +17,10 @@ const gatewayBackend = normalizeTarget(
   process.env.VITE_GATEWAY || 'http://localhost:35001',
 )
 const devServerPort = resolvePort(process.env.VITE_PORT || process.env.PORT, 30001)
+const appBase = process.env.VITE_BASE_PATH || '/'
 
 export default defineConfig({
+  base: appBase,
   plugins: [
     vue({
       include: [/\.vue$/, /\.md$/],

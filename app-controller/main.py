@@ -18,6 +18,7 @@ from routes.agent import agent_router
 from routes.model_hub import hub_router
 from routes.sse import sse_router
 from routes.command import command_router
+from routes.auth import auth_router
 from core.deps import (
     scheduler, gpu_monitor, ws_manager, metrics, prometheus,
     cache_service, cache_updater, redis_client,
@@ -39,9 +40,10 @@ from middleware.error_handler import (
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.timeout_handler import TimeoutHandlerMiddleware
 from middleware.admin_whitelist import AdminWhitelistMiddleware
+from middleware.auth import AdminAuthMiddleware
 
 async def request_tracking_middleware(request: Request, call_next):
-    request_id = str(uuid.uuid4())
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     request.state.request_id = request_id
     start_time = datetime.now()
     status_code = 500
@@ -326,7 +328,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AI Controller API", version="1.0.0", lifespan=lifespan)
 
 app_controller_cfg = config_watcher.get_config().get("app_controller", {})
-cors_origins = app_controller_cfg.get("cors_origins", ["*"])
+cors_origins = app_controller_cfg.get("cors_origins") or [
+    "http://localhost:30001",
+    "http://localhost:30000",
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -340,11 +345,15 @@ app.middleware("http")(TimeoutHandlerMiddleware(timeout_seconds=60))
 app.middleware("http")(request_tracking_middleware)
 
 trusted_proxies = os.environ.get("TRUSTED_PROXIES", "").split(",") if os.environ.get("TRUSTED_PROXIES") else []
+trusted_proxies.extend(app_controller_cfg.get("trusted_proxies", []))
 whitelist_cfg = app_controller_cfg.get("admin_whitelist", {})
-if whitelist_cfg.get("enabled", True):
-    config_allowed_ips = whitelist_cfg.get("allowed_ips", [])
-    trusted_proxies.extend(config_allowed_ips)
-app.add_middleware(AdminWhitelistMiddleware, trusted_proxies=trusted_proxies)
+app.add_middleware(AdminAuthMiddleware, config=config_watcher.get_config())
+app.add_middleware(
+    AdminWhitelistMiddleware,
+    trusted_proxies=trusted_proxies,
+    allowed_ips=whitelist_cfg.get("allowed_ips", []),
+    enabled=whitelist_cfg.get("enabled", True),
+)
 
 app.include_router(v1_router)
 app.include_router(manage_router)
@@ -355,6 +364,7 @@ app.include_router(agent_router)
 app.include_router(hub_router)
 app.include_router(sse_router)
 app.include_router(command_router)
+app.include_router(auth_router)
 
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)

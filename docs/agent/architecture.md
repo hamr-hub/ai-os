@@ -181,7 +181,7 @@ go-vllm-api/
 │       ├── prometheus/        # Prometheus指标导出
 │       ├── response/          # 统一响应格式
 │       ├── utils/image.go     # 图片校验/解码
-└── configs/config.yaml        # 配置文件(186行)
+└── ../config.yaml             # 统一运行配置
 ```
 
 **核心功能模块详解**

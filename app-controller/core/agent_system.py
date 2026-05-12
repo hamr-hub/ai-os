@@ -3,8 +3,8 @@ import logging
 import time
 import os
 import uuid
-import subprocess
-from typing import Dict, Optional, List, Any
+import shlex
+from typing import Dict, Optional, List, Any, Sequence
 from dataclasses import dataclass, field
 
 logger = logging.getLogger("ai_controller.agent_system")
@@ -13,6 +13,9 @@ _COMMAND_TIMEOUT = 30
 _MAX_HISTORY = 100
 
 _ALLOWED_COMMANDS = {
+    "hostname": True,
+    "uptime": True,
+    "nproc": True,
     "nvidia-smi": True,
     "ps": True,
     "top": True,
@@ -23,14 +26,14 @@ _ALLOWED_COMMANDS = {
     "grep": True,
     "python": True,
     "pip": True,
-    "docker": True,
+    "docker": False,
     "systemctl": True,
     "journalctl": True,
     "curl": True,
     "wget": True,
     "tar": True,
     "unzip": True,
-    "chmod": True,
+    "chmod": False,
     "chown": False,
     "rm": False,
     "shutdown": False,
@@ -40,6 +43,8 @@ _ALLOWED_COMMANDS = {
 }
 
 _BLOCKED_PREFIXES = ["rm -rf /", "dd if=", "mkfs", "shutdown", "reboot", ":(){ :|:& };:"]
+_SHELL_OPERATOR_CHARS = {";", "|", "&", ">", "<", "`"}
+_SHELL_OPERATOR_TOKENS = {"$(", "${"}
 
 
 @dataclass
@@ -87,10 +92,36 @@ class AgentSystem:
             self._semaphore = asyncio.Semaphore(self._max_concurrent)
         return self._semaphore
 
-    def validate_command(self, command: str) -> Dict:
-        cmd_parts = command.strip().split()
-        if not cmd_parts:
-            return {"valid": False, "reason": "empty_command"}
+    def _feature_flags(self) -> Dict[str, Any]:
+        if isinstance(self._config, dict):
+            return self._config.get("feature_flags", {}) or {}
+        return getattr(self._config, "feature_flags", {}) or {}
+
+    def _normalize_command(self, command: str | Sequence[str]) -> tuple[Optional[List[str]], Optional[str]]:
+        if isinstance(command, str):
+            stripped = command.strip()
+            if not stripped:
+                return None, "empty_command"
+            if any(char in stripped for char in _SHELL_OPERATOR_CHARS) or any(
+                token in stripped for token in _SHELL_OPERATOR_TOKENS
+            ):
+                return None, "shell_operator_not_allowed"
+            try:
+                return shlex.split(stripped), None
+            except ValueError:
+                return None, "invalid_command_syntax"
+
+        argv = [str(part) for part in command if str(part)]
+        if not argv:
+            return None, "empty_command"
+        if any(any(char in part for char in _SHELL_OPERATOR_CHARS) for part in argv):
+            return None, "shell_operator_not_allowed"
+        return argv, None
+
+    def validate_command(self, command: str | Sequence[str]) -> Dict:
+        cmd_parts, error = self._normalize_command(command)
+        if error or not cmd_parts:
+            return {"valid": False, "reason": error or "empty_command"}
 
         base_cmd = cmd_parts[0]
         if os.path.isabs(base_cmd):
@@ -104,34 +135,37 @@ class AgentSystem:
         if allowed is False:
             return {"valid": False, "reason": "command_blocked", "command": basename}
 
-        cmd_lower = command.lower()
+        command_display = shlex.join(cmd_parts)
+        cmd_lower = command_display.lower()
         for prefix in _BLOCKED_PREFIXES:
             if cmd_lower.startswith(prefix.lower()):
                 return {"valid": False, "reason": "dangerous_pattern", "pattern": prefix}
 
-        if self._config and hasattr(self._config, 'feature_flags'):
-            blocked = self._config.feature_flags.get("agent_blocked_commands", [])
-            if basename in blocked:
-                return {"valid": False, "reason": "blocked_by_config", "command": basename}
+        blocked = self._feature_flags().get("agent_blocked_commands", [])
+        if basename in blocked:
+            return {"valid": False, "reason": "blocked_by_config", "command": basename}
 
-        return {"valid": True, "command": command}
+        return {"valid": True, "command": command_display, "argv": cmd_parts}
 
     async def execute_command(
-        self, command: str, timeout: int = _COMMAND_TIMEOUT,
+        self, command: str | Sequence[str], timeout: int = _COMMAND_TIMEOUT,
     ) -> Dict:
         validation = self.validate_command(command)
         if not validation["valid"]:
+            command_display = command if isinstance(command, str) else shlex.join([str(part) for part in command])
             return {
                 "command_id": None,
                 "status": "rejected",
                 "reason": validation["reason"],
-                "command": command,
+                "command": command_display,
             }
 
+        argv = validation["argv"]
+        command_display = validation["command"]
         command_id = str(uuid.uuid4())[:12]
         cmd_obj = AgentCommand(
             command_id=command_id,
-            command=command,
+            command=command_display,
             timeout_seconds=timeout,
         )
         self._commands[command_id] = cmd_obj
@@ -144,8 +178,8 @@ class AgentSystem:
             self._push_event("agent_command_started", cmd_obj)
 
             try:
-                proc = await asyncio.create_subprocess_shell(
-                    command,
+                proc = await asyncio.create_subprocess_exec(
+                    *argv,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -235,22 +269,25 @@ class AgentSystem:
     async def get_system_info(self) -> Dict:
         results = {}
         basic_cmds = [
-            ("hostname", "hostname"),
-            ("uptime", "uptime"),
-            ("memory", "free -h"),
-            ("disk", "df -h /"),
-            ("cpu", "nproc"),
-            ("gpu", "nvidia-smi --query-gpu=name,memory.total,memory.used,memory.free --format=csv,noheader"),
-            ("load", "cat /proc/loadavg"),
-            ("processes", "ps aux --sort=-%mem | head -10"),
+            ("hostname", ["hostname"]),
+            ("uptime", ["uptime"]),
+            ("memory", ["free", "-h"]),
+            ("disk", ["df", "-h", "/"]),
+            ("cpu", ["nproc"]),
+            ("gpu", ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free", "--format=csv,noheader"]),
+            ("load", ["cat", "/proc/loadavg"]),
+            ("processes", ["ps", "aux", "--sort=-%mem"]),
         ]
-        for key, cmd in basic_cmds:
+        for key, argv in basic_cmds:
             try:
-                proc = await asyncio.create_subprocess_shell(
-                    cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                proc = await asyncio.create_subprocess_exec(
+                    *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
-                results[key] = stdout.decode('utf-8', errors='replace').strip()
+                value = stdout.decode('utf-8', errors='replace').strip()
+                if key == "processes":
+                    value = "\n".join(value.splitlines()[:10])
+                results[key] = value
             except Exception as e:
                 results[key] = f"error: {e}"
         return results

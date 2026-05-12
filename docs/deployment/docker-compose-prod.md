@@ -39,7 +39,7 @@ cp .env.example .env
 # - ALLOWED_ORIGINS=<你的域名>
 
 # 后端配置（如需自定义模型）
-cp app-controller/config.yaml config.yaml
+# 运行配置统一使用仓库根目录 config.yaml
 ```
 
 ### 2. 构建与启动

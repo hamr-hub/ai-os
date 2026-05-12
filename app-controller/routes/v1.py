@@ -89,6 +89,11 @@ def get_vllm_stream_client(request: Request) -> httpx.AsyncClient:
     return client
 
 
+def get_upstream_headers(request: Request) -> Dict[str, str]:
+    request_id = getattr(request.state, "request_id", None) or request.headers.get("X-Request-ID")
+    return {"X-Request-ID": request_id} if request_id else {}
+
+
 async def ensure_model_ready(scheduler, model_name: str) -> None:
     if scheduler.is_model_running(model_name):
         return
@@ -237,7 +242,9 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
                 request_data['stream_options'] = {"include_usage": True}
             
             stream_client = get_vllm_stream_client(request)
-            stream_request = stream_client.build_request('POST', vllm_url, json=request_data)
+            stream_request = stream_client.build_request(
+                'POST', vllm_url, json=request_data, headers=get_upstream_headers(request)
+            )
 
             try:
                 response = await stream_client.send(stream_request, stream=True)
@@ -340,7 +347,7 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
             })
 
         request_client = get_vllm_request_client(request)
-        response = await request_client.post(vllm_url, json=request_data)
+        response = await request_client.post(vllm_url, json=request_data, headers=get_upstream_headers(request))
         response.raise_for_status()
 
         result = response.json()
@@ -508,7 +515,9 @@ async def generate_image(request: Request, body: ImageGenerationRequest):
         }
 
         request_client = get_vllm_request_client(request)
-        response = await request_client.post(vllm_url, json=req_data, timeout=120)
+        response = await request_client.post(
+            vllm_url, json=req_data, timeout=120, headers=get_upstream_headers(request)
+        )
         response.raise_for_status()
         result = response.json()
 
@@ -572,7 +581,7 @@ async def create_embeddings(request: Request, body: EmbeddingRequest):
             req_data["dimensions"] = body.dimensions
 
         request_client = get_vllm_request_client(request)
-        response = await request_client.post(vllm_url, json=req_data)
+        response = await request_client.post(vllm_url, json=req_data, headers=get_upstream_headers(request))
         response.raise_for_status()
         result = response.json()
 

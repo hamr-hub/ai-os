@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('@/api/client', () => ({
-  healthCheck: vi.fn().mockResolvedValue({ status: 'healthy' }),
+  verifyAuth: vi.fn().mockResolvedValue({ authenticated: true, auth_enabled: true, mode: 'token' }),
 }))
 
 const mockLocalStorage = {
@@ -26,14 +26,14 @@ describe('useAuth', () => {
     const { loading, error, isAuthenticated } = useAuth()
     expect(loading.value).toBe(false)
     expect(error.value).toBeNull()
-    expect(isAuthenticated).toBe(false)
+    expect(isAuthenticated.value).toBe(false)
   })
 
   it('login成功后isAuthenticated为true', async () => {
     const { login, isAuthenticated, loading, error } = useAuth()
     const result = await login('my-api-key')
     expect(result).toBe(true)
-    expect(isAuthenticated).toBe(true)
+    expect(isAuthenticated.value).toBe(true)
     expect(loading.value).toBe(false)
     expect(error.value).toBeNull()
   })
@@ -41,14 +41,14 @@ describe('useAuth', () => {
   it('logout后isAuthenticated为false', async () => {
     const { login, logout, isAuthenticated } = useAuth()
     await login('existing-key')
-    expect(isAuthenticated).toBe(true)
+    expect(isAuthenticated.value).toBe(true)
     logout()
-    expect(isAuthenticated).toBe(false)
+    expect(isAuthenticated.value).toBe(false)
   })
 
   it('healthCheck失败时login返回false并设置error', async () => {
-    const { healthCheck } = await import('@/api/client')
-    vi.mocked(healthCheck).mockRejectedValueOnce(new Error('Unauthorized'))
+    const { verifyAuth } = await import('@/api/client')
+    vi.mocked(verifyAuth).mockRejectedValueOnce(new Error('Unauthorized'))
     const { login, error, loading } = useAuth()
     const result = await login('bad-key')
     expect(result).toBe(false)

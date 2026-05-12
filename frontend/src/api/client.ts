@@ -357,7 +357,20 @@ export async function getGPUHistory(
 }
 
 export async function healthCheck(): Promise<{ status: string }> {
-  const { data } = await v1Client.get<{ status: string }>('/health', silentRequestConfig())
+  const serverStore = useServerStore()
+  const authStore = useAuthStore()
+  const { data } = await axios.get<{ status: string }>(serverStore.healthUrl, {
+    ...silentRequestConfig(),
+    headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : undefined,
+  })
+  return data
+}
+
+export async function verifyAuth(): Promise<{ authenticated: boolean; auth_enabled: boolean; mode: string }> {
+  const { data } = await client.get<{ authenticated: boolean; auth_enabled: boolean; mode: string }>(
+    '/auth/verify',
+    silentRequestConfig()
+  )
   return data
 }
 

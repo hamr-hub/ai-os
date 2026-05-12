@@ -163,6 +163,7 @@ async def get_prometheus_metrics():
         gpu_status = gpu_monitor.get_gpu_status()
         vllm_metrics = gpu_monitor.get_vllm_metrics()
         prometheus.update_gpu_metrics(gpu_status)
+        prometheus.update_vllm_metrics(vllm_metrics)
 
         health_info = metrics.get_comprehensive_health_score(gpu_status, vllm_metrics)
         prometheus.set_health_score(health_info["overall"])

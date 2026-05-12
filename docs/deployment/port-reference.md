@@ -81,7 +81,7 @@ kill -9 <PID>      # 释放端口
 
 ```bash
 # Python 后端: python main.py --port 35000
-# Go 后端: go run cmd/server/main.go --port 35001 --config configs/config.yaml
+# Go 后端: go run cmd/server/main.go --port 35001 --config ../config.yaml
 ```
 
 ```yaml

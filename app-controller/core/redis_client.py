@@ -10,6 +10,7 @@ from functools import wraps
 import logging
 
 from .config import load_config, AppConfig
+from .config_paths import resolve_config_path
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,7 @@ class RedisClient:
             config_source = "parameter"
         else:
             try:
-                config = load_config(config_path or "app-controller/config.yaml")
+                config = load_config(resolve_config_path(config_path))
                 if config.settings and config.settings.redis:
                     self.host = config.settings.redis.host
                     self.port = config.settings.redis.port

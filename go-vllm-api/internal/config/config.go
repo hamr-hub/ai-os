@@ -26,6 +26,7 @@ type GoApiConfig struct {
 	Port              int              `yaml:"port"`
 	ManageBackendURL  string           `yaml:"manage_backend_url"`
 	AdminWhitelist    AdminWhitelistConfig `yaml:"admin_whitelist"`
+	Auth              AuthConfig       `yaml:"auth"`
 }
 
 type AppControllerConfig struct {
@@ -34,12 +35,20 @@ type AppControllerConfig struct {
 	AdminWhitelist AdminWhitelistConfig `yaml:"admin_whitelist"`
 	WebSocket      WebSocketConfig      `yaml:"websocket"`
 	CorsOrigins    []string             `yaml:"cors_origins"`
+	TrustedProxies []string             `yaml:"trusted_proxies"`
+	Auth           AuthConfig           `yaml:"auth"`
 }
 
 type AdminWhitelistConfig struct {
 	Enabled              bool     `yaml:"enabled"`
 	AllowedIPs           []string `yaml:"allowed_ips"`
 	BlockWriteNonWhitelist bool   `yaml:"block_write_non_whitelist"`
+}
+
+type AuthConfig struct {
+	Enabled bool     `yaml:"enabled"`
+	APIKey  string   `yaml:"api_key"`
+	APIKeys []string `yaml:"api_keys"`
 }
 
 type WebSocketConfig struct {

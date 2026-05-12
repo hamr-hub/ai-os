@@ -1,18 +1,10 @@
-FROM ubuntu:22.04 AS builder
+FROM golang:1.25-bookworm AS builder
 
-RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list \
-    && sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list \
-    && apt-get update && apt-get install -y --no-install-recommends \
-    gcc musl-dev libc6-dev git ca-certificates wget \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc musl-dev libc6-dev git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 ENV GOPROXY=https://goproxy.cn,direct
-
-RUN wget -q https://golang.google.cn/dl/go1.21.13.linux-amd64.tar.gz \
-    && rm -rf /usr/local/go \
-    && tar -C /usr/local -xzf go1.21.13.linux-amd64.tar.gz \
-    && rm go1.21.13.linux-amd64.tar.gz
-ENV PATH="/usr/local/go/bin:${PATH}"
 
 WORKDIR /app
 

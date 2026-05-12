@@ -1,6 +1,8 @@
 __pycache__
 .codeflicker
 .DS_Store
+.env
+*.log
 .serena/
 go-vllm-api/server
 go-vllm-api/bin/
@@ -13,6 +15,7 @@ logs/
 aiclient2api/configs/
 aiclient2api/data/
 frontend/dist_30000
+frontend/package-lock.json
 venvs/
 .playwright-mcp/
 assets/
