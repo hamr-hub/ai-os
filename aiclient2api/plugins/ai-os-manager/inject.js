@@ -432,7 +432,7 @@
     let initialized = false;
     let aiosScope = null;
 
-    const AIOS_SECTIONS = ['aios-gpu', 'aios-model', 'aios-health', 'aios-ratelimit', 'aios-config'];
+    const AIOS_SECTIONS = ['aios-gpu', 'aios-model'];
 
     function findNavigationContainer() {
         const selectors = [
@@ -611,9 +611,6 @@
     const MENU_ITEMS = [
         { id: 'nav-aios-gpu', target: 'aios-gpu', icon: 'fa-microchip', text: 'GPU 监控' },
         { id: 'nav-aios-model', target: 'aios-model', icon: 'fa-cube', text: '模型管理' },
-        { id: 'nav-aios-health', target: 'aios-health', icon: 'fa-heartbeat', text: '健康运维' },
-        { id: 'nav-aios-ratelimit', target: 'aios-ratelimit', icon: 'fa-tachometer-alt', text: '限流控制' },
-        { id: 'nav-aios-config', target: 'aios-config', icon: 'fa-cog', text: '配置中心' },
     ];
 
     function ensureAiosMenus(nav) {
@@ -633,14 +630,16 @@
         nav.querySelector('#aios-p-nav-group')?.remove();
         nav.querySelectorAll('[id^="nav-aios-"][data-nav-target], .aios-p-nav-divider').forEach(el => el.remove());
 
+        const isAiclientNav = nav.classList.contains('sidebar-nav');
+        const isVueNav = nav.classList.contains('nav-container') || !!nav.querySelector('.nav-group, .group-items');
+        const itemClass = isAiclientNav ? 'nav-item aios-p-nav-item' : 'aios-p-nav-item';
         const menuHTML = MENU_ITEMS.map(item =>
-            `<button type="button" class="aios-p-nav-item" id="${item.id}" data-nav-target="${item.target}"><i class="fas ${item.icon}"></i><span class="aios-p-nav-label">${item.text}</span></button>`
+            `<a href="#${item.target}" class="${itemClass}" id="${item.id}" data-nav-target="${item.target}" aria-label="${item.text}"><i class="fas ${item.icon}" aria-hidden="true"></i><span class="aios-p-nav-label">${item.text}</span></a>`
         ).join('');
 
-        const isVueNav = nav.classList.contains('nav-container') || !!nav.querySelector('.nav-group, .group-items');
         const fullMenuHTML = isVueNav
             ? `<div class="aios-p-nav-group" id="aios-p-nav-group"><h3 class="aios-p-nav-title">AI 管控</h3><div class="aios-p-nav-items">${menuHTML}</div></div>`
-            : '<div class="aios-p-nav-divider"></div>' + menuHTML;
+            : (isAiclientNav ? menuHTML : '<div class="aios-p-nav-divider"></div>' + menuHTML);
 
         const existingDivider = nav.querySelector('.aios-p-nav-divider, .nav-divider');
         if (existingDivider) {
@@ -658,7 +657,7 @@
         }
         aiosScope = document.createElement('div');
         aiosScope.className = 'aios-p-scope';
-        aiosScope.innerHTML = GPU_HTML + MODEL_HTML + HEALTH_HTML + RATELIMIT_HTML + CONFIG_HTML;
+        aiosScope.innerHTML = GPU_HTML + MODEL_HTML;
         content.appendChild(aiosScope);
     }
 

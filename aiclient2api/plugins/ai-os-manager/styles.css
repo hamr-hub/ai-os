@@ -666,10 +666,20 @@
 }
 .aios-p-toast-close:hover { opacity: 1; }
 
-/* Plugin nav items in sidebar */
+/* Plugin nav items in sidebar. In AIClient2API, injected items use the host
+   .nav-item class and intentionally inherit its spacing, hover, and active style. */
+.sidebar-nav .aios-p-nav-item {
+    font: inherit;
+}
+.sidebar-nav .aios-p-nav-item i,
+.sidebar-nav .aios-p-nav-label {
+    pointer-events: none;
+}
+
+/* Fallback styling for non-AIClient host sidebars. */
 .aios-p-nav-group,
 .aios-p-nav-divider,
-.aios-p-nav-item {
+.aios-p-nav-item:not(.nav-item) {
     --aios-text-primary: #e8ecf1;
     --aios-text-secondary: #8b95a5;
     --aios-text-muted: #5d6878;
@@ -695,7 +705,7 @@
     flex-direction: column;
     gap: 4px;
 }
-.aios-p-nav-item {
+.aios-p-nav-item:not(.nav-item) {
     display: flex; align-items: center; padding: 10px 16px;
     color: var(--aios-text-secondary); text-decoration: none;
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -704,17 +714,17 @@
     width: calc(100% - 16px); border: 1px solid transparent;
     background: transparent; text-align: left; font-family: inherit;
 }
-.aios-p-nav-item:hover { background: rgba(255,255,255,0.04); color: var(--aios-text-primary); }
-.aios-p-nav-item.aios-p-nav-active,
-.aios-p-nav-item.active {
+.aios-p-nav-item:not(.nav-item):hover { background: rgba(255,255,255,0.04); color: var(--aios-text-primary); }
+.aios-p-nav-item:not(.nav-item).aios-p-nav-active,
+.aios-p-nav-item:not(.nav-item).active {
     background: linear-gradient(135deg, rgba(var(--aios-color-primary-rgb), 0.15) 0%, rgba(var(--aios-color-primary-rgb), 0.04) 100%);
     color: var(--aios-color-primary-light); border: 1px solid rgba(var(--aios-color-primary-rgb), 0.15);
 }
-.aios-p-nav-item i { width: 18px; text-align: center; font-size: 13px; flex-shrink: 0; }
+.aios-p-nav-item:not(.nav-item) i { width: 18px; text-align: center; font-size: 13px; flex-shrink: 0; }
 .aios-p-nav-divider { margin: 8px 16px; border-bottom: 1px solid var(--aios-border-card); }
 .sidebar.collapsed .aios-p-nav-title,
 .sidebar.collapsed .aios-p-nav-label { display: none; }
-.sidebar.collapsed .aios-p-nav-item {
+.sidebar.collapsed .aios-p-nav-item:not(.nav-item) {
     justify-content: center;
     width: auto;
     padding: 12px;

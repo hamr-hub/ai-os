@@ -18,9 +18,9 @@
     };
 
     var ENGINE_COLORS = {
-        vllm: '#3b82f6',
-        sglang: '#22c55e',
-        llamacpp: '#f59e0b'
+        vllm: 'var(--info-color)',
+        sglang: 'var(--success-color)',
+        llamacpp: 'var(--warning-color)'
     };
 
     function esc(str) {
@@ -126,13 +126,13 @@
         <div class="aim-engine-switch">\
             <div class="aim-engine-switch-row">\
                 <button class="aim-btn aim-btn-engine" data-engine="vllm" onclick="window.__aiMonitorSwitchEngine(\'vllm\')">\
-                    <span class="aim-engine-dot" style="background:#3b82f6"></span> vLLM\
+                    <span class="aim-engine-dot" style="background:var(--info-color)"></span> vLLM\
                 </button>\
                 <button class="aim-btn aim-btn-engine" data-engine="sglang" onclick="window.__aiMonitorSwitchEngine(\'sglang\')">\
-                    <span class="aim-engine-dot" style="background:#22c55e"></span> SGLang\
+                    <span class="aim-engine-dot" style="background:var(--success-color)"></span> SGLang\
                 </button>\
                 <button class="aim-btn aim-btn-engine" data-engine="llamacpp" onclick="window.__aiMonitorSwitchEngine(\'llamacpp\')">\
-                    <span class="aim-engine-dot" style="background:#f59e0b"></span> llama.cpp\
+                    <span class="aim-engine-dot" style="background:var(--warning-color)"></span> llama.cpp\
                 </button>\
             </div>\
         </div>\
@@ -224,7 +224,7 @@
             var currentEngine = data.currentEngine || '--';
             var label = ENGINE_LABELS[currentEngine] || currentEngine;
             toggle.querySelector('.aim-toggle-label').textContent = label;
-            toggle.style.borderColor = ENGINE_COLORS[currentEngine] || '#6366f1';
+            toggle.style.removeProperty('border-color');
         }
     }
 
