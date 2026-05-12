@@ -425,10 +425,26 @@ async def get_aggregated_models():
 
     aggregated = _get_aggregated_models()
 
+    running_model_names = set()
+    for service in llm_service_manager.list_services():
+        if service.get("status") == "running" and service.get("model"):
+            running_model_names.add(service["model"])
+
+    if not running_model_names:
+        try:
+            from core.vllm_manager import get_current_model_info
+            current_info = get_current_model_info()
+            if current_info and current_info.get("running") and current_info.get("name"):
+                running_model_names.add(current_info["name"])
+        except Exception as exc:
+            logger.warning("Failed to detect current running model for aggregated list: %s", exc)
+
+    current_model = next(iter(running_model_names), None)
+
     for group in aggregated:
         for variant in group.get("variants", []):
             model_name = variant["name"]
-            variant["running"] = scheduler.is_model_running(model_name)
+            variant["running"] = model_name in running_model_names
             variant["port"] = scheduler.get_model_port(model_name)
             variant["preloaded"] = scheduler.is_model_preloaded(model_name)
             variant["active_requests"] = scheduler.get_active_requests(model_name)
@@ -446,7 +462,6 @@ async def get_aggregated_models():
             model_path = variant.get("path", "")
             variant["path_exists"] = os.path.exists(model_path) if model_path else False
 
-    current_model = scheduler.get_current_model_name()
     for group in aggregated:
         for variant in group.get("variants", []):
             variant["is_current"] = variant["name"] == current_model

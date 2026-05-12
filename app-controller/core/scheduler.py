@@ -51,6 +51,8 @@ class Scheduler:
         self.preloaded_models: Set[str] = set()
         self.model_last_used: Dict[str, datetime] = {}
         self._model_lock = threading.Lock()
+        self._current_model_cache = None
+        self._current_model_cache_until = 0.0
         self._switching_in_progress = False
         self._init_preloaded_models()
         self._default_model = None
@@ -234,25 +236,35 @@ class Scheduler:
     def get_concurrency_limit(self) -> int:
         return self.config.get('settings', {}).get('concurrency_limit', 4)
     
+    def _get_current_model_info_cached(self):
+        now = time.time()
+        if now < self._current_model_cache_until:
+            return self._current_model_cache
+
+        from core.vllm_manager import get_current_model_info
+        self._current_model_cache = get_current_model_info()
+        self._current_model_cache_until = now + 3
+        return self._current_model_cache
+
     def is_model_running(self, model_name: str) -> bool:
         cache_key = f"ai_controller:cache:model_running:{model_name}"
         cached = cache_service.get(cache_key, ttl_seconds=3)
-        if cached is True:
-            return True
+        if cached is not None:
+            return bool(cached)
 
         with self._model_lock:
-            from core.vllm_manager import get_current_model_info
-            current_info = get_current_model_info()
-            if current_info and current_info.get('running'):
-                current_name = current_info.get('name')
-                if current_name == model_name:
+            current_info = self._get_current_model_info_cached()
+            if current_info and current_info.get("running"):
+                current_name = current_info.get("name")
+                is_running = current_name == model_name
+                if is_running:
                     if model_name not in self.running_models:
                         self.running_models[model_name] = datetime.now()
-                    cache_service.set(cache_key, True, ttl=3)
-                    return True
-                else:
-                    logger.info(f"is_model_running: name mismatch, current={current_name}, requested={model_name}")
-            
+                elif model_name in self.running_models:
+                    del self.running_models[model_name]
+                cache_service.set(cache_key, is_running, ttl=3)
+                return is_running
+
             if model_name in self.running_models:
                 del self.running_models[model_name]
             cache_service.set(cache_key, False, ttl=3)
