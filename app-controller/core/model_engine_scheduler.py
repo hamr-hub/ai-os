@@ -464,6 +464,27 @@ class ModelEngineScheduler:
                 "previous_model": previous_model,
             }
 
+    async def _stop_all_services(self, exclude_model: Optional[str] = None):
+        if not self._llm_mgr:
+            return []
+        stopped_models = []
+        for svc in list(self._llm_mgr.list_services()):
+            if svc.get("status") != "running":
+                continue
+            svc_model = svc.get("model", "")
+            if exclude_model and svc_model == exclude_model:
+                continue
+            self._llm_mgr.stop_service(svc["service_name"])
+            if svc_model:
+                stopped_models.append(svc_model)
+        await asyncio.sleep(3)
+        for model in stopped_models:
+            if self._gpu_mgr:
+                self._gpu_mgr.unregister_loaded_model(model)
+            if model in self._engine_model_registry:
+                self._engine_model_registry[model]["status"] = "stopped"
+        return stopped_models
+
     async def _do_subprocess_engine_switch(
         self, model_name: str, engine_type: str, port: int,
     ) -> Dict:
@@ -475,12 +496,7 @@ class ModelEngineScheduler:
                     self._engine_model_registry[model_name]["status"] = "failed"
                     self._engine_model_registry[model_name]["error"] = "insufficient_memory"
                     return {"success": False, "reason": "insufficient_gpu_memory"}
-        existing = self._llm_mgr.get_service_by_model(model_name) if self._llm_mgr else None
-        if existing:
-            self._llm_mgr.stop_service(existing["service_name"])
-        if self._gpu_mgr:
-            self._gpu_mgr.unregister_loaded_model(model_name)
-        await asyncio.sleep(3)
+        await self._stop_all_services()
         model_path = None
         if self._model_hub:
             model_path = self._model_hub.get_model_local_path(model_name)
@@ -643,25 +659,16 @@ class ModelEngineScheduler:
             current_services = self._llm_mgr.list_services() if self._llm_mgr else []
             target_service = self._llm_mgr.get_service_by_model(target_model) if self._llm_mgr else None
             if target_service and target_service.get("status") == "running":
-                self._active_service = target_service["service_name"]
-                self._record_switch(target_model, engine_type, port, "select_existing")
-                return {
-                    "success": True,
-                    "reason": "already_running",
-                    "service": target_service,
-                }
-            stopped_models = []
-            for svc in current_services:
-                svc_model = svc.get("model", "")
-                if svc_model != target_model:
-                    self._llm_mgr.stop_service(svc["service_name"])
-                    stopped_models.append(svc_model)
-            await asyncio.sleep(3)
-            for m in stopped_models:
-                if self._gpu_mgr:
-                    self._gpu_mgr.unregister_loaded_model(m)
-                if m in self._engine_model_registry:
-                    self._engine_model_registry[m]["status"] = "stopped"
+                current_engine = target_service.get("engine_type")
+                if current_engine == engine_type:
+                    self._active_service = target_service["service_name"]
+                    self._record_switch(target_model, engine_type, port, "select_existing")
+                    return {
+                        "success": True,
+                        "reason": "already_running",
+                        "service": target_service,
+                    }
+            stopped_models = await self._stop_all_services(exclude_model=None)
             model_path = None
             if self._model_hub:
                 model_path = self._model_hub.get_model_local_path(target_model)

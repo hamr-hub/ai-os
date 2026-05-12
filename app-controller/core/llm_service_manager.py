@@ -394,6 +394,19 @@ class LLMServiceManager:
     ) -> Dict:
         if model_path:
             self._model_paths[model_name] = model_path
+
+        port_service = self.get_service_by_port(port)
+        if port_service and port_service.get("status") == "running":
+            existing_name = port_service.get("service_name")
+            if existing_name != service_name:
+                self.stop_service(existing_name)
+                time.sleep(2)
+
+        existing = self.get_service_status(service_name)
+        if existing.get("status") == "running":
+            self.stop_service(service_name)
+            time.sleep(2)
+
         cmd = self.build_command(model_name, engine_type, port)
         logger.info("Starting %s engine for %s: %s", engine_type, model_name, " ".join(cmd))
 
