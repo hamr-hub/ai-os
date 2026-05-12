@@ -210,7 +210,7 @@
         return t || 'vllm';
     }
 
-    function drawMiniChart(canvasId, dataPoints, maxLen, color, minVal, maxVal, unit, axisPrefix) {
+    function drawMiniChart(canvasId, dataPoints, maxLen, color, minVal, maxVal, unit, axisPrefix, range, timestamps) {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -279,7 +279,7 @@
                 ctx.fill();
             }
         });
-        if (axisPrefix != null && window.GPU_TIMESTAMPS) {
+        if (axisPrefix != null) {
             const setAxisLabel = (id, v) => {
                 const e = document.getElementById(id);
                 if (e) {
@@ -289,22 +289,31 @@
                     else e.textContent = v;
                 }
             };
-            if (maxVal != null) {
+            if (maxVal != null && minVal === 0) {
                 setAxisLabel('axis-' + axisPrefix + '-max', dataMax);
-                setAxisLabel('axis-' + axisPrefix + '-mid', (dataMax + dataMin) / 2);
-                setAxisLabel('axis-' + axisPrefix + '-min', dataMin);
+                setAxisLabel('axis-' + axisPrefix + '-mid', dataMax / 2);
+                setAxisLabel('axis-' + axisPrefix + '-min', 0);
             }
             const step = Math.ceil(points.length / 4);
+            const fmtTime = (d) => {
+                const h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+                return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+            };
+            const fmtTimeShort = (d) => {
+                const h = d.getHours(), m = d.getMinutes();
+                return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+            };
+            const fmtDate = (d) => {
+                const mo = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+                return mo[d.getMonth()] + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate();
+            };
+            const fmtFn = range === 'day' ? fmtDate : (range === 'hour' ? fmtTimeShort : fmtTime);
             for (let i = 0; i < 4; i++) {
                 const idx = i * step;
-                if (idx < points.length) {
-                    const ts = window.GPU_TIMESTAMPS[window.GPU_TIMESTAMPS.length - points.length + idx];
+                if (idx < points.length && timestamps && timestamps[idx]) {
+                    const d = new Date(timestamps[idx]);
                     const e = document.getElementById('axis-' + axisPrefix + '-' + i);
-                    if (e && ts) {
-                        const d = new Date(ts);
-                        const h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
-                        e.textContent = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-                    }
+                    if (e) e.textContent = fmtFn(d);
                 }
             }
         }
@@ -315,6 +324,11 @@
     <div class="aios-p-section-header">
         <h2><i class="fas fa-microchip"></i> GPU 监控</h2>
         <div class="aios-p-section-actions">
+            <div class="aios-p-range-selector">
+                <button class="aios-p-range-btn active" data-range="min" onclick="AiosManager.gpu.setTimeRange('min')">分钟</button>
+                <button class="aios-p-range-btn" data-range="hour" onclick="AiosManager.gpu.setTimeRange('hour')">小时</button>
+                <button class="aios-p-range-btn" data-range="day" onclick="AiosManager.gpu.setTimeRange('day')">天</button>
+            </div>
             <button class="aios-p-btn aios-p-btn-sm" data-action="gpu-refresh"><i class="fas fa-sync-alt"></i> 刷新</button>
         </div>
     </div>
@@ -1026,7 +1040,14 @@
 
     window.AiosManager = {
         gpu: {
-            history: { utilization: [], memoryPct: [], temperature: [], power: [] },
+            currentRange: 'min',
+            history: {
+                min: { utilization: [], memoryPct: [], temperature: [], power: [] },
+                hour: { utilization: [], memoryPct: [], temperature: [], power: [] },
+                day: { utilization: [], memoryPct: [], temperature: [], power: [] }
+            },
+            timestamps: { min: [], hour: [], day: [] },
+            lastSaveTime: { min: null, hour: null, day: null },
             async refresh() {
                 try {
                     const [gpuData, engineData] = await Promise.all([
@@ -1223,35 +1244,89 @@
                 const gpuDataArr = data.data || [];
                 const gpu = gpuDataArr[0];
                 if (!gpu) return;
-                const maxLen = 30;
                 const util = gpu.gpuUtilization ?? 0;
                 const memPct = gpu.memoryUsagePercent ?? 0;
                 const temp = gpu.temperature ?? 0;
                 const power = gpu.powerDraw ?? 0;
                 const now = new Date().toISOString();
-                if (!window.GPU_TIMESTAMPS) window.GPU_TIMESTAMPS = [];
-                window.GPU_TIMESTAMPS.push(now);
-                this.history.utilization.push(util);
-                this.history.memoryPct.push(memPct);
-                this.history.temperature.push(temp);
-                this.history.power.push(power);
-                for (const k in this.history) {
-                    if (this.history[k].length > maxLen) {
-                        this.history[k] = this.history[k].slice(-maxLen);
-                        window.GPU_TIMESTAMPS = window.GPU_TIMESTAMPS.slice(-maxLen);
+                const shouldSaveTo = (range) => {
+                    const nowMs = Date.now();
+                    const last = this.lastSaveTime[range];
+                    if (!last) { this.lastSaveTime[range] = nowMs; return true; }
+                    const intervals = { min: 5000, hour: 60000, day: 3600000 };
+                    if (nowMs - last >= intervals[range]) { this.lastSaveTime[range] = nowMs; return true; }
+                    return false;
+                };
+                if (shouldSaveTo('min')) {
+                    this.history.min.utilization.push(util);
+                    this.history.min.memoryPct.push(memPct);
+                    this.history.min.temperature.push(temp);
+                    this.history.min.power.push(power);
+                    this.timestamps.min.push(now);
+                    const maxPoints = { min: 30, hour: 60, day: 48 };
+                    for (const range of ['min', 'hour', 'day']) {
+                        if (this.history[range].utilization.length > maxPoints[range]) {
+                            this.history[range].utilization.shift();
+                            this.history[range].memoryPct.shift();
+                            this.history[range].temperature.shift();
+                            this.history[range].power.shift();
+                            this.timestamps[range].shift();
+                        }
                     }
                 }
+                if (shouldSaveTo('hour')) {
+                    this.history.hour.utilization.push(util);
+                    this.history.hour.memoryPct.push(memPct);
+                    this.history.hour.temperature.push(temp);
+                    this.history.hour.power.push(power);
+                    this.timestamps.hour.push(now);
+                }
+                if (shouldSaveTo('day')) {
+                    this.history.day.utilization.push(util);
+                    this.history.day.memoryPct.push(memPct);
+                    this.history.day.temperature.push(temp);
+                    this.history.day.power.push(power);
+                    this.timestamps.day.push(now);
+                }
+                this.renderCharts();
+            },
+            setTimeRange(range) {
+                this.currentRange = range;
+                document.querySelectorAll('.aios-p-range-btn').forEach(b => {
+                    b.classList.toggle('active', b.dataset.range === range);
+                });
+                this.renderCharts();
+            },
+            getFilteredData(range) {
+                const maxPoints = { min: 30, hour: 60, day: 48 };
+                const pts = maxPoints[range];
+                const h = this.history[range];
+                return {
+                    utilization: h.utilization.slice(-pts),
+                    memoryPct: h.memoryPct.slice(-pts),
+                    temperature: h.temperature.slice(-pts),
+                    power: h.power.slice(-pts),
+                    timestamps: this.timestamps[range].slice(-pts)
+                };
+            },
+            renderCharts() {
+                const range = this.currentRange;
+                const data = this.getFilteredData(range);
+                const maxLen = { min: 30, hour: 60, day: 48 }[range];
                 const setVal = (id, val, unit) => { const e = document.getElementById(id); if (e) e.textContent = val != null ? `${val}${unit}` : '--'; };
-                setVal('chart-util-value', util.toFixed(1), '%');
-                setVal('chart-mem-value', memPct.toFixed(1), '%');
-                setVal('chart-temp-value', temp, '°C');
-                setVal('chart-power-value', power, 'W');
-                drawMiniChart('chart-util', this.history.utilization, maxLen, 'rgb(129, 140, 248)', 0, 100, '%', 'util');
-                drawMiniChart('chart-mem', this.history.memoryPct, maxLen, 'rgb(52, 211, 153)', 0, 100, '%', 'mem');
-                const tempMax = Math.max(...this.history.temperature.filter(v => v > 0), 80);
-                drawMiniChart('chart-temp', this.history.temperature, maxLen, 'rgb(251, 191, 36)', 0, tempMax, 'C', 'temp');
-                const powerMax = Math.max(...this.history.power.filter(v => v > 0), power || 100);
-                drawMiniChart('chart-power', this.history.power, maxLen, 'rgb(248, 113, 113)', 0, powerMax, 'W', 'power');
+                const len = data.utilization.length;
+                if (len > 0) {
+                    setVal('chart-util-value', data.utilization[len - 1].toFixed(1), '%');
+                    setVal('chart-mem-value', data.memoryPct[len - 1].toFixed(1), '%');
+                    setVal('chart-temp-value', data.temperature[len - 1], '°C');
+                    setVal('chart-power-value', data.power[len - 1], 'W');
+                }
+                drawMiniChart('chart-util', data.utilization, maxLen, 'rgb(129, 140, 248)', 0, 100, '%', 'util', range, data.timestamps);
+                drawMiniChart('chart-mem', data.memoryPct, maxLen, 'rgb(52, 211, 153)', 0, 100, '%', 'mem', range, data.timestamps);
+                const tempMax = Math.max(...data.temperature.filter(v => v > 0), 80) || 80;
+                drawMiniChart('chart-temp', data.temperature, maxLen, 'rgb(251, 191, 36)', 0, tempMax, 'C', 'temp', range, data.timestamps);
+                const powerMax = Math.max(...data.power.filter(v => v > 0), 100) || 100;
+                drawMiniChart('chart-power', data.power, maxLen, 'rgb(248, 113, 113)', 0, powerMax, 'W', 'power', range, data.timestamps);
             },
         },
         model: {

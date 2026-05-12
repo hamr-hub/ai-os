@@ -1042,6 +1042,38 @@
     color: var(--text-secondary);
 }
 
+.aios-p-scope .aios-p-range-selector {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.aios-p-scope .aios-p-range-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all .15s ease;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+}
+
+.aios-p-scope .aios-p-range-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+.aios-p-scope .aios-p-range-btn.active {
+    background: var(--primary-color);
+    color: white;
+}
+
 .aios-p-scope .aios-p-chart-section {
     margin-bottom: var(--aios-space-lg);
 }
