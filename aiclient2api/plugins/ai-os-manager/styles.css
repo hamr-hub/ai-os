@@ -1041,3 +1041,66 @@
 .aios-toast-close {
     color: var(--text-secondary);
 }
+
+.aios-p-scope .aios-p-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--aios-space-lg);
+    margin-bottom: var(--aios-space-lg);
+}
+
+.aios-p-scope .aios-p-chart-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-glass);
+    overflow: hidden;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.aios-p-scope .aios-p-chart-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-md);
+}
+
+.aios-p-scope .aios-p-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--aios-space-md) var(--aios-space-lg);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.aios-p-scope .aios-p-chart-header h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--aios-space-sm);
+}
+
+.aios-p-scope .aios-p-chart-header h3 i {
+    color: var(--primary-color);
+    font-size: 12px;
+}
+
+.aios-p-scope .aios-p-chart-current {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    color: var(--text-primary);
+}
+
+.aios-p-scope .aios-p-chart-container {
+    padding: var(--aios-space-md);
+    background: var(--bg-primary);
+}
+
+.aios-p-scope .aios-p-canvas {
+    display: block;
+    width: 100%;
+    height: 100px;
+}

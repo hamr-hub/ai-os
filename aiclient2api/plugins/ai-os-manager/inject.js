@@ -212,20 +212,20 @@
         return t || 'vllm';
     }
 
-    function drawMiniChart(canvasId, dataPoints, maxLen) {
+    function drawMiniChart(canvasId, dataPoints, maxLen, color, currentValue, unit) {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const w = canvas.parentElement.clientWidth || 200;
-        const containerH = canvas.parentElement.clientHeight || 0;
-        const h = containerH > 120 ? containerH : 280;
+        const container = canvas.parentElement;
+        const w = container.clientWidth || 200;
+        const h = 100;
         canvas.width = w;
         canvas.height = h;
         const points = dataPoints.slice(-maxLen);
         ctx.clearRect(0, 0, w, h);
         if (points.length < 2) {
             ctx.beginPath();
-            ctx.strokeStyle = '#818cf8';
+            ctx.strokeStyle = color || '#818cf8';
             ctx.lineWidth = 2;
             ctx.moveTo(0, h - 12);
             ctx.lineTo(w, h - 12);
@@ -234,7 +234,7 @@
         }
         const max = Math.max(...points, 1);
         ctx.beginPath();
-        ctx.strokeStyle = '#818cf8';
+        ctx.strokeStyle = color || '#818cf8';
         ctx.lineWidth = 2;
         points.forEach((v, i) => {
             const x = (i / (points.length - 1)) * w;
@@ -245,7 +245,7 @@
         ctx.lineTo(w, h);
         ctx.lineTo(0, h);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(99, 102, 241, 0.08)';
+        ctx.fillStyle = (color || '#818cf8').replace(')', ', 0.08)').replace('rgb', 'rgba');
         ctx.fill();
     }
 
@@ -258,11 +258,25 @@
         </div>
     </div>
     <div class="aios-p-stats-grid" id="aios-gpu-stats">${loadingHTML()}</div>
-    <div class="aios-p-gpu-layout">
-        <div class="aios-p-card aios-p-chart-card">
-            <div class="aios-p-card-header"><h3><i class="fas fa-chart-area"></i> GPU 历史趋势</h3></div>
-            <div class="aios-p-card-content aios-p-chart-content"><canvas id="aios-gpu-chart" class="aios-p-chart"></canvas></div>
+    <div class="aios-p-charts-grid" id="aios-gpu-charts">
+        <div class="aios-p-chart-card">
+            <div class="aios-p-chart-header"><h3><i class="fas fa-chart-line"></i> GPU 利用率</h3><span class="aios-p-chart-current" id="chart-util-value">--</span></div>
+            <div class="aios-p-chart-container"><canvas id="chart-util" class="aios-p-canvas"></canvas></div>
         </div>
+        <div class="aios-p-chart-card">
+            <div class="aios-p-chart-header"><h3><i class="fas fa-memory"></i> 显存利用率</h3><span class="aios-p-chart-current" id="chart-mem-value">--</span></div>
+            <div class="aios-p-chart-container"><canvas id="chart-mem" class="aios-p-canvas"></canvas></div>
+        </div>
+        <div class="aios-p-chart-card">
+            <div class="aios-p-chart-header"><h3><i class="fas fa-thermometer-half"></i> 温度</h3><span class="aios-p-chart-current" id="chart-temp-value">--</span></div>
+            <div class="aios-p-chart-container"><canvas id="chart-temp" class="aios-p-canvas"></canvas></div>
+        </div>
+        <div class="aios-p-chart-card">
+            <div class="aios-p-chart-header"><h3><i class="fas fa-bolt"></i> 功耗</h3><span class="aios-p-chart-current" id="chart-power-value">--</span></div>
+            <div class="aios-p-chart-container"><canvas id="chart-power" class="aios-p-canvas"></canvas></div>
+        </div>
+    </div>
+    <div class="aios-p-gpu-layout">
         <div class="aios-p-card aios-p-status-card">
             <div class="aios-p-card-header"><h3><i class="fas fa-bolt"></i> 引擎状态</h3></div>
             <div class="aios-p-card-content" id="aios-engine-status">${loadingHTML()}</div>
@@ -917,7 +931,7 @@
 
     window.AiosManager = {
         gpu: {
-            history: { utilization: [], memoryPct: [], temperature: [] },
+            history: { utilization: [], memoryPct: [], temperature: [], power: [] },
             async refresh() {
                 try {
                     const [gpuData, engineData] = await Promise.all([
@@ -1114,14 +1128,27 @@
                 const gpuDataArr = data.data || [];
                 const gpu = gpuDataArr[0];
                 if (!gpu) return;
-                this.history.utilization.push(gpu.gpuUtilization ?? 0);
-                this.history.memoryPct.push(gpu.memoryUsagePercent ?? 0);
-                this.history.temperature.push(gpu.temperature ?? 0);
                 const maxLen = 30;
+                const util = gpu.gpuUtilization ?? 0;
+                const memPct = gpu.memoryUsagePercent ?? 0;
+                const temp = gpu.temperature ?? 0;
+                const power = gpu.powerDraw ?? 0;
+                this.history.utilization.push(util);
+                this.history.memoryPct.push(memPct);
+                this.history.temperature.push(temp);
+                this.history.power.push(power);
                 for (const k in this.history) {
                     if (this.history[k].length > maxLen) this.history[k] = this.history[k].slice(-maxLen);
                 }
-                drawMiniChart('aios-gpu-chart', this.history.utilization, maxLen);
+                const setVal = (id, val, unit) => { const e = document.getElementById(id); if (e) e.textContent = val != null ? `${val}${unit}` : '--'; };
+                setVal('chart-util-value', util, '%');
+                setVal('chart-mem-value', memPct.toFixed(1), '%');
+                setVal('chart-temp-value', temp, '°C');
+                setVal('chart-power-value', power, 'W');
+                drawMiniChart('chart-util', this.history.utilization, maxLen, 'rgb(129, 140, 248)', util, '%');
+                drawMiniChart('chart-mem', this.history.memoryPct, maxLen, 'rgb(52, 211, 153)', memPct, '%');
+                drawMiniChart('chart-temp', this.history.temperature, maxLen, 'rgb(251, 191, 36)', temp, '°C');
+                drawMiniChart('chart-power', this.history.power, maxLen, 'rgb(248, 113, 113)', power, 'W');
             },
         },
         model: {

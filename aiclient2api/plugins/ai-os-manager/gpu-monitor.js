@@ -86,7 +86,8 @@ class GPUMonitorService {
                 timestamp: gpuItem.timestamp,
                 utilization: gpuItem.gpuUtilization,
                 memory: gpuItem.memoryUsagePercent,
-                temperature: gpuItem.temperature
+                temperature: gpuItem.temperature,
+                power: gpuItem.powerDraw
             });
 
             if (this.gpuHistory.length > this.maxHistory) {
