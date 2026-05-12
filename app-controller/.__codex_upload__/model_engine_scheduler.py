@@ -76,36 +76,6 @@ class ModelEngineScheduler:
             model_cfg = self._config.get('models', {}).get(model_name)
         return self._cfg_get(model_cfg, "engine_type", "vllm") if model_cfg else "vllm"
 
-<<<<<<< HEAD
-    def _engine_mode(self) -> str:
-        return getattr(self, "_engine_manager_mode", "subprocess")
-
-    def _list_services(self) -> List[Dict]:
-        if not self._llm_mgr:
-            return []
-        try:
-            services = self._llm_mgr.list_services()
-        except Exception:
-            return []
-        return services if isinstance(services, list) else []
-
-    def _infer_service_engine(self, model_name: str, service: Optional[Dict] = None) -> str:
-        if service:
-            engine_type = service.get("engine_type")
-            if engine_type:
-                return engine_type
-            service_name = service.get("service_name", "")
-            if "-" in service_name:
-                prefix = service_name.split("-", 1)[0]
-                if prefix in _ENGINE_CAPABILITIES:
-                    return prefix
-        registry_engine = self._engine_model_registry.get(model_name, {}).get("engine")
-        if registry_engine:
-            return registry_engine
-        return self._get_model_engine_from_config(model_name)
-
-=======
->>>>>>> bb4a855 (update)
     def _is_engine_enabled(self, engine_type: str) -> bool:
         if engine_type == "vllm":
             return True
@@ -300,16 +270,14 @@ class ModelEngineScheduler:
                     "service_name": current_info.get("service"),
                 }
 
-        engine_mode = self._engine_mode()
-
-        if engine_mode == "systemd" and current_info and current_info.get("running"):
+        if self._engine_manager_mode == "systemd" and current_info and current_info.get("running"):
             pass
         else:
             if not self._llm_mgr:
-                return {"success": False, "reason": "no_llm_service_manager"}
+                return {"success": False, "reason": "no_llm_service_manager_and_not_systemd"}
             existing = self._llm_mgr.get_service_by_model(model_name)
             if existing and existing.get("status") == "running":
-                existing_engine = self._infer_service_engine(model_name, existing)
+                existing_engine = self._engine_model_registry.get(model_name, {}).get("engine")
                 if existing_engine == engine_type:
                     return {
                         "success": True,
@@ -319,15 +287,14 @@ class ModelEngineScheduler:
 
         if self._gpu_mgr:
             is_current_model = (
-                engine_mode == "systemd"
+                self._engine_manager_mode == "systemd"
                 and current_info
                 and current_info.get("running")
                 and current_info.get("name") == model_name
             )
-            services = self._list_services()
             has_running_service = (
                 (current_info and current_info.get("running"))
-                or any(svc.get("status") == "running" for svc in services)
+                or (self._llm_mgr and self._llm_mgr.list_services())
             )
             if not is_current_model and not has_running_service:
                 feasibility = self._gpu_mgr.check_model_feasibility(model_name)
@@ -346,7 +313,7 @@ class ModelEngineScheduler:
             "requested_at": time.time(),
         }
 
-        if engine_mode == "systemd" and engine_type != "vllm" and not self._llm_mgr:
+        if self._engine_manager_mode == "systemd" and engine_type != "vllm" and not self._llm_mgr:
             self._engine_model_registry[model_name]["status"] = "failed"
             self._engine_model_registry[model_name]["error"] = "non_vllm_not_supported_in_systemd"
             return {
@@ -375,7 +342,7 @@ class ModelEngineScheduler:
     ) -> Dict:
         async with self._switching_lock:
             try:
-                if self._engine_mode() == "systemd":
+                if self._engine_manager_mode == "systemd":
                     return await self._do_systemd_engine_switch(model_name, engine_type, port)
                 else:
                     return await self._do_subprocess_engine_switch(model_name, engine_type, port)
@@ -712,10 +679,22 @@ class ModelEngineScheduler:
         if not port:
             port = self._find_available_port(engine_type)
         feasibility = None
+        if self._gpu_mgr:
+            feasibility = self._gpu_mgr.check_model_feasibility(target_model)
+            if not feasibility["feasible"]:
+                freed = await self._free_up_memory_for(target_model)
+                if not freed:
+                    return {
+                        "success": False,
+                        "reason": "insufficient_gpu_memory",
+                        "feasibility": feasibility,
+                        "suggestion": f"需要 {feasibility.get('required_gb', '?')}GB，可用 {feasibility.get('available_gb', '?')}GB",
+                    }
         async with self._switching_lock:
+            current_services = self._llm_mgr.list_services() if self._llm_mgr else []
             target_service = self._llm_mgr.get_service_by_model(target_model) if self._llm_mgr else None
             if target_service and target_service.get("status") == "running":
-                current_engine = self._infer_service_engine(target_model, target_service)
+                current_engine = target_service.get("engine_type")
                 if current_engine == engine_type:
                     self._active_service = target_service["service_name"]
                     self._record_switch(target_model, engine_type, port, "select_existing")
@@ -724,17 +703,6 @@ class ModelEngineScheduler:
                         "reason": "already_running",
                         "service": target_service,
                     }
-            if self._gpu_mgr:
-                feasibility = self._gpu_mgr.check_model_feasibility(target_model)
-                if not feasibility.get("feasible", True):
-                    freed = await self._free_up_memory_for(target_model)
-                    if not freed:
-                        return {
-                            "success": False,
-                            "reason": "insufficient_gpu_memory",
-                            "feasibility": feasibility,
-                            "suggestion": f"需要 {feasibility.get('required_gb', '?')}GB，可用 {feasibility.get('available_gb', '?')}GB",
-                        }
             stopped_models = await self._stop_all_services(exclude_model=None)
             model_path = None
             if self._model_hub:
@@ -800,7 +768,7 @@ class ModelEngineScheduler:
         feasibility = self._gpu_mgr.check_model_feasibility(target_model)
         if feasibility["feasible"]:
             return True
-        if self._engine_mode() == "systemd":
+        if self._engine_manager_mode == "systemd":
             from core.vllm_manager import stop_vllm_service, get_current_model_info
             current_info = get_current_model_info()
             if current_info and current_info.get("running"):
