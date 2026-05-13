@@ -713,11 +713,15 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
         if not model_path:
             return None
 
-        service_running = _is_service_running()
-        config_model_name = _find_model_name_from_path(model_path)
         vllm_port = discover_vllm_port()
+        config_model_name = _find_model_name_from_path(model_path)
         
         result_name = config_model_name or os.path.basename(model_path)
+        service_running = _is_service_running() or _is_vllm_model_served(
+            vllm_port,
+            model_path,
+            result_name,
+        )
         logger.info("Current model detected: %s (path=%s, running=%s)", result_name, model_path, service_running)
         
         return {
@@ -731,6 +735,41 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.warning("Failed to get current vLLM model info: %s", e)
         return None
+
+
+def _normalize_model_id(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return ""
+    return os.path.basename(value.rstrip("/"))
+
+
+def _model_id_matches(served_id: str, model_path: str, model_name: str) -> bool:
+    served_id = (served_id or "").strip()
+    candidates = {
+        (model_path or "").strip(),
+        (model_name or "").strip(),
+        _normalize_model_id(model_path),
+        _normalize_model_id(model_name),
+    }
+    candidates.discard("")
+    return served_id in candidates or _normalize_model_id(served_id) in candidates
+
+
+def _is_vllm_model_served(port: int, model_path: str, model_name: str) -> bool:
+    """Detect subprocess-managed vLLM processes that are not active systemd services."""
+    try:
+        import httpx
+
+        with httpx.Client(timeout=2) as client:
+            response = client.get(f"{_build_vllm_base_url(port)}/v1/models")
+        if response.status_code != 200:
+            return False
+        models = response.json().get("data", [])
+        return any(_model_id_matches(model.get("id", ""), model_path, model_name) for model in models)
+    except Exception as exc:
+        logger.debug("Failed to probe served vLLM model on port %s: %s", port, exc)
+        return False
 
 
 def _is_service_running() -> bool:
