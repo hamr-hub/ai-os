@@ -1631,6 +1631,14 @@
                 }
                 el.innerHTML = `<div class="aios-p-inline-status aios-p-inline-status-${type || 'info'}"><i class="fas ${type === 'error' ? 'fa-circle-exclamation' : type === 'success' ? 'fa-circle-check' : 'fa-circle-info'}"></i><span>${escapeHtml(message)}</span></div>`;
             },
+            formatSwitchFailure(session) {
+                if (!session) return '切换失败';
+                const reason = session.rollback_reason || session.error || '切换失败';
+                if (session.previous_model && (session.rollback_reason || session.overall_phase === 'rolled_back')) {
+                    return `切换失败，已自动回滚到 ${session.previous_model}: ${reason}`;
+                }
+                return reason;
+            },
             clearSwitchPolling() {
                 if (this._switchPolling) {
                     clearTimeout(this._switchPolling);
@@ -1756,7 +1764,7 @@
                     const progress = session.overall_progress ?? 0;
                     const target = session.target_model || '-';
                     const actionText = session.action === 'switch' ? '切换' : session.action === 'start' ? '启动' : '停止';
-                    const rollback = session.rollback_reason ? `<div class="aios-p-inline-status aios-p-inline-status-error" style="margin-top:var(--space-sm);"><i class="fas fa-rotate-left"></i><span>已触发回滚: ${escapeHtml(session.rollback_reason)}</span></div>` : '';
+                    const rollback = session.rollback_reason ? `<div class="aios-p-inline-status aios-p-inline-status-error" style="margin-top:var(--space-sm);"><i class="fas fa-rotate-left"></i><span>${escapeHtml(this.formatSwitchFailure(session))}</span></div>` : '';
                     const phasesHtml = (session.phases || []).map(p => {
                         const statusIcon = p.status === 'running' ? 'fa-spinner fa-spin' : p.status === 'success' ? 'fa-check' : p.status === 'failed' ? 'fa-times' : 'fa-clock';
                         return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><i class="fas ${statusIcon}" style="width:16px;"></i><span style="font-size:12px;color:var(--text-secondary);">${p.name}</span></div>`;
@@ -1779,7 +1787,7 @@
                             this.setActionStatus('', '');
                         }, 5000);
                     } else if (session?.error || session?.rollback_reason) {
-                        this.setActionStatus('error', session.error || session.rollback_reason);
+                        this.setActionStatus('error', this.formatSwitchFailure(session));
                     } else if (!this.actionLoading) {
                         this.setActionStatus('', '');
                     }
@@ -2289,7 +2297,7 @@
                             return;
                         }
                         if (session?.error || session?.rollback_reason) {
-                            finish('error', session.error || session.rollback_reason);
+                            finish('error', this.formatSwitchFailure(session));
                             return;
                         }
                         finish('success', `切换完成：${target}`);

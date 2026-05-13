@@ -124,7 +124,7 @@ export function useModelSwitch() {
       if (msg.overall_phase === 'completed') {
         appStore.success(`模型 ${msg.target_model} 切换成功`)
       } else if (msg.overall_phase === 'rolled_back' || msg.type === 'switch_failed') {
-        const errMsg = currentSession.value?.rollback_reason || currentSession.value?.error || '切换失败'
+        const errMsg = formatSessionFailure(currentSession.value)
         appStore.error(`模型切换失败: ${errMsg}`)
         error.value = errMsg
       }
@@ -134,18 +134,21 @@ export function useModelSwitch() {
   const isTerminalPhase = (phase: string) =>
     phase === 'completed' || phase === 'failed' || phase === 'rolled_back' || phase === 'idle'
 
+  const formatSessionFailure = (session: SwitchSession | null) => {
+    if (!session) return '切换失败'
+    const reason = session.rollback_reason || session.error || '切换失败'
+    if (session.previous_model && (session.rollback_reason || session.overall_phase === 'rolled_back')) {
+      return `切换失败，已自动回滚到 ${session.previous_model}: ${reason}`
+    }
+    return reason
+  }
+
   const startPolling = () => {
     if (pollInterval || wsConnected.value) return
     pollInterval = window.setInterval(async () => {
       try {
         const status = await getSwitchStatus()
-
-        if (!status.is_switching && isSwitching.value) {
-          isSwitching.value = false
-          stopPolling()
-          disconnectWS()
-          return
-        }
+        const wasSwitching = isSwitching.value
 
         isSwitching.value = status.is_switching
         if (status.session) {
@@ -159,7 +162,7 @@ export function useModelSwitch() {
             if (status.session.completed_successfully) {
               appStore.success(`模型 ${status.session.target_model} 切换成功`)
             } else if (status.session.overall_phase === 'rolled_back' || status.session.overall_phase === 'failed') {
-              const errMsg = status.session.rollback_reason || status.session.error || '切换失败'
+              const errMsg = formatSessionFailure(status.session)
               appStore.error(`模型切换失败: ${errMsg}`)
               error.value = errMsg
             } else if (status.session.overall_phase === 'completed') {
@@ -167,6 +170,13 @@ export function useModelSwitch() {
             }
             return
           }
+        }
+
+        if (!status.is_switching && wasSwitching) {
+          isSwitching.value = false
+          stopPolling()
+          disconnectWS()
+          return
         }
       } catch (e) {
         console.warn('[useModelSwitch] Poll error:', e)

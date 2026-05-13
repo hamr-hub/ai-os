@@ -672,6 +672,31 @@ class ModelSwitchOrchestrator:
             settings = self._config.get('settings', {})
         return settings.get('default_gpu_memory_utilization', default_gmu)
 
+    def _model_id_matches(self, actual_id: str, expected_name: str, expected_path: Optional[str]) -> bool:
+        actual = (actual_id or "").strip()
+        if not actual:
+            return False
+
+        candidates = {expected_name or "", expected_path or ""}
+        if expected_path:
+            candidates.add(os.path.basename(expected_path.rstrip("/")))
+        actual_base = os.path.basename(actual.rstrip("/"))
+
+        normalized_actual = actual.lower()
+        normalized_base = actual_base.lower()
+        for candidate in candidates:
+            candidate = (candidate or "").strip()
+            if not candidate:
+                continue
+            candidate_base = os.path.basename(candidate.rstrip("/"))
+            normalized_candidate = candidate.lower()
+            normalized_candidate_base = candidate_base.lower()
+            if normalized_actual == normalized_candidate or normalized_base == normalized_candidate_base:
+                return True
+            if normalized_candidate in normalized_actual or normalized_candidate_base in normalized_actual:
+                return True
+        return False
+
     async def _phase0_gpu_memory_check(self, session: SwitchSession):
         phase = self._get_phase(session, 0)
         phase.status = PhaseStatus.RUNNING
@@ -1050,7 +1075,7 @@ class ModelSwitchOrchestrator:
                             if registered_ids:
                                 actual_id = registered_ids[0]
                                 target_name = session.target_model
-                                if actual_id == session.target_model_path or target_name in actual_id:
+                                if self._model_id_matches(actual_id, target_name, session.target_model_path):
                                     model_ready = True
                                 else:
                                     await self._log(session, phase,
@@ -1120,11 +1145,11 @@ class ModelSwitchOrchestrator:
                     registered_ids = [m.get("id", "") for m in models_data.get("data", [])]
                     if registered_ids:
                         actual_model_id = registered_ids[0]
-                        if actual_model_id != session.target_model_path:
+                        if not self._model_id_matches(actual_model_id, session.target_model, session.target_model_path):
                             await self._log(session, phase,
                                            f"vLLM 模型ID: {actual_model_id} (配置路径: {session.target_model_path})")
                             target_model_name = session.target_model
-                            if actual_model_id and target_model_name not in actual_model_id and actual_model_id != session.target_model_path:
+                            if actual_model_id:
                                 error_msg = f"模型验证失败: vLLM加载的是 {actual_model_id}，但目标模型是 {target_model_name} ({session.target_model_path})"
                                 phase.status = PhaseStatus.FAILED
                                 phase.error = error_msg
@@ -1452,7 +1477,7 @@ class ModelSwitchOrchestrator:
                                     models_data = models_resp.json()
                                     registered_ids = [m.get("id", "") for m in models_data.get("data", [])]
                                     actual_id = registered_ids[0] if registered_ids else ""
-                                    if actual_id == session.previous_model_path or session.previous_model in actual_id:
+                                    if self._model_id_matches(actual_id, session.previous_model, session.previous_model_path):
                                         rollback_restored = True
                                 if rollback_restored:
                                     await self._log(session, self._get_phase(session, 0),
