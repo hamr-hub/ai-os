@@ -3,6 +3,7 @@ __pycache__
 .DS_Store
 .env
 *.log
+.cache/
 .serena/
 go-vllm-api/server
 go-vllm-api/bin/

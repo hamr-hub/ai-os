@@ -101,6 +101,25 @@ class TestBuildCommandVLLM:
         assert "--tool-call-parser" in cmd_str
         assert "gemma4" in cmd_str
         assert "--limit-mm-per-prompt" in cmd_str
+        assert '{"image": 10}' in cmd
+
+    def test_vllm_with_integer_mm_limit_uses_json_dict(self):
+        config = AppConfig(
+            models={
+                "vision-model": ModelConfig(
+                    service="vllm-vision",
+                    port=8000,
+                    required_memory="8GB",
+                    supports_images=True,
+                    vllm_params={"limit_mm_per_prompt": 2},
+                ),
+            },
+            settings=SettingsConfig(),
+        )
+        mgr = _make_manager(config)
+        cmd = mgr.build_command("vision-model", "vllm", 8000)
+        assert "--limit-mm-per-prompt" in cmd
+        assert '{"image": 2}' in cmd
 
 
 class TestBuildCommandSGLang:

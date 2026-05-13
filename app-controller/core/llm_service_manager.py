@@ -4,6 +4,7 @@ import time
 import logging
 import os
 import asyncio
+import json
 import httpx
 from typing import Dict, Optional, List, Any
 
@@ -54,6 +55,16 @@ class LLMServiceManager:
         if isinstance(cfg, dict):
             return cfg.get(key, default)
         return getattr(cfg, key, default)
+
+    def _format_limit_mm_per_prompt(self, value: Any) -> str:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("{"):
+                return stripped
+            value = int(stripped)
+        if isinstance(value, int):
+            value = {"image": value}
+        return json.dumps(value)
 
     def _get_model_config(self, model_name: str) -> Optional[ModelConfig]:
         if self._config:
@@ -260,7 +271,8 @@ class LLMServiceManager:
                 cmd.extend(["--enable-auto-tool-choice", "--tool-call-parser", tool_parser])
 
         if self._cfg_get(cfg, 'supports_images', False):
-            cmd.extend(["--limit-mm-per-prompt", "10"])
+            limit_mm_per_prompt = vllm_params.get("limit_mm_per_prompt", {"image": 10})
+            cmd.extend(["--limit-mm-per-prompt", self._format_limit_mm_per_prompt(limit_mm_per_prompt)])
 
         extra_args = []
         if hasattr(cfg, 'extra_args') and cfg.extra_args:
