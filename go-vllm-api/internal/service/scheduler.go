@@ -386,16 +386,23 @@ func (s *Scheduler) shouldSkipKeepAlivePreload(name string) bool {
 	if s.GetModelBackendType(name) != "vllm" {
 		return false
 	}
+	matched := s.FindMatchingModel(name)
+	if matched == "" {
+		matched = name
+	}
 	if s.hasPythonModelSwitchInProgress() {
 		return true
+	}
+	if actualModel := s.detectCurrentVLLMModel(); actualModel != "" {
+		return actualModel != matched
 	}
 	s.mu.RLock()
 	currentModel := s.currentModel
 	s.mu.RUnlock()
-	if currentModel != "" && currentModel != name {
+	if currentModel != "" && currentModel != matched {
 		return true
 	}
-	mc := s.GetModelConfig(name)
+	mc := s.GetModelConfig(matched)
 	if mc == nil {
 		return false
 	}
