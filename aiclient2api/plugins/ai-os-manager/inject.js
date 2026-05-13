@@ -113,53 +113,6 @@
         setTimeout(() => toast.remove(), 4000);
     }
 
-    function showConfirm(message, title = '确认操作') {
-        return new Promise((resolve) => {
-            const overlay = document.createElement('div');
-            overlay.className = 'aios-p-scope aios-p-modal-overlay';
-
-            const modal = document.createElement('div');
-            modal.className = 'aios-p-modal';
-
-            const header = document.createElement('h3');
-            header.textContent = title;
-
-            const body = document.createElement('div');
-            body.style.cssText = 'font-size:13px;color:var(--aios-text-secondary);line-height:1.6;margin-bottom:16px;';
-            body.textContent = message;
-
-            const actions = document.createElement('div');
-            actions.className = 'aios-p-modal-actions';
-
-            const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'aios-p-btn';
-            cancelBtn.textContent = '取消';
-
-            const submitBtn = document.createElement('button');
-            submitBtn.className = 'aios-p-btn aios-p-btn-primary';
-            submitBtn.textContent = '确认';
-
-            const cleanup = (value) => {
-                overlay.remove();
-                resolve(value);
-            };
-            cancelBtn.onclick = () => cleanup(false);
-            submitBtn.onclick = () => cleanup(true);
-            overlay.onclick = (e) => {
-                if (e.target === overlay) cleanup(false);
-            };
-
-            actions.appendChild(cancelBtn);
-            actions.appendChild(submitBtn);
-            modal.appendChild(header);
-            modal.appendChild(body);
-            modal.appendChild(actions);
-            overlay.appendChild(modal);
-            document.body.appendChild(overlay);
-            cancelBtn.focus();
-        });
-    }
-
     function loadingHTML(text = '加载中...') {
         return `<div class="aios-p-loading">${escapeHtml(text)}</div>`;
     }
@@ -214,52 +167,18 @@
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const container = canvas.parentElement;
-        const w = container.clientWidth || 400;
-        const h = container.clientHeight || 120;
+        const w = canvas.parentElement.clientWidth || 200;
+        const h = 50;
         canvas.width = w;
         canvas.height = h;
         const points = dataPoints.slice(-maxLen);
         ctx.clearRect(0, 0, w, h);
-        const chartLeft = 35, chartRight = 10, chartTop = 10, chartBottom = 25;
-        const chartW = w - chartLeft - chartRight;
-        const chartH = h - chartTop - chartBottom;
-        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-        ctx.lineWidth = 1;
-        for (let i = 0; i <= 4; i++) {
-            const y = chartTop + (chartH / 4) * i;
-            ctx.beginPath();
-            ctx.moveTo(chartLeft, y);
-            ctx.lineTo(chartLeft + chartW, y);
-            ctx.stroke();
-        }
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(chartLeft, chartTop);
-        ctx.lineTo(chartLeft, chartTop + chartH);
-        ctx.lineTo(chartLeft + chartW, chartTop + chartH);
-        ctx.stroke();
-        if (points.length < 2) {
-            ctx.beginPath();
-            ctx.strokeStyle = color || '#818cf8';
-            ctx.lineWidth = 2;
-            ctx.moveTo(chartLeft, chartTop + chartH / 2);
-            ctx.lineTo(chartLeft + chartW, chartTop + chartH / 2);
-            ctx.stroke();
-            return;
-        }
-        const dataMin = minVal != null ? minVal : 0;
-        const dataMax = maxVal != null ? maxVal : Math.max(...points, 1) * 1.1;
-        if (dataMax === dataMin) dataMax = dataMin + 10;
-        const getY = (v) => chartTop + chartH - ((v - dataMin) / (dataMax - dataMin)) * chartH;
-        const getX = (i) => chartLeft + (i / (points.length - 1)) * chartW;
-        ctx.beginPath();
-        ctx.strokeStyle = color || '#818cf8';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#818cf8';
+        ctx.lineWidth = 1.5;
         points.forEach((v, i) => {
-            const x = getX(i);
-            const y = getY(v);
+            const x = (i / (points.length - 1)) * w;
+            const y = h - (v / max) * (h - 4) - 2;
             i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         });
         ctx.stroke();
@@ -333,65 +252,15 @@
         </div>
     </div>
     <div class="aios-p-stats-grid" id="aios-gpu-stats">${loadingHTML()}</div>
-    <div class="aios-p-chart-section">
-        <div class="aios-p-chart-card">
-            <div class="aios-p-chart-header">
-                <div class="aios-p-chart-header-left"><h3 class="aios-p-util"><i class="fas fa-chart-line"></i> GPU 利用率</h3></div>
-                <span class="aios-p-chart-current" id="chart-util-value">--</span>
-            </div>
-            <div class="aios-p-chart-wrapper">
-                <div class="aios-p-chart-y-axis"><span class="aios-p-y-label">100%</span><span class="aios-p-y-label">50%</span><span class="aios-p-y-label">0%</span></div>
-                <div class="aios-p-chart-canvas-wrap"><canvas id="chart-util" class="aios-p-canvas"></canvas></div>
-                <div class="aios-p-chart-axis"><span class="aios-p-axis-label" id="axis-util-0">--</span><span class="aios-p-axis-label" id="axis-util-1">--</span><span class="aios-p-axis-label" id="axis-util-2">--</span><span class="aios-p-axis-label" id="axis-util-3">--</span><span class="aios-p-axis-label" id="axis-util-4">现在</span></div>
-            </div>
-        </div>
+    <div class="aios-p-card aios-p-chart-card" style="margin-top:var(--space-lg);">
+        <div class="aios-p-card-header"><h3><i class="fas fa-chart-area"></i> GPU 历史趋势</h3></div>
+        <div class="aios-p-card-content"><canvas id="aios-gpu-chart" style="height:80px;"></canvas></div>
     </div>
-    <div class="aios-p-chart-section">
-        <div class="aios-p-chart-card">
-            <div class="aios-p-chart-header">
-                <div class="aios-p-chart-header-left"><h3 class="aios-p-mem"><i class="fas fa-memory"></i> 显存利用率</h3></div>
-                <span class="aios-p-chart-current" id="chart-mem-value">--</span>
-            </div>
-            <div class="aios-p-chart-wrapper">
-                <div class="aios-p-chart-y-axis"><span class="aios-p-y-label">100%</span><span class="aios-p-y-label">50%</span><span class="aios-p-y-label">0%</span></div>
-                <div class="aios-p-chart-canvas-wrap"><canvas id="chart-mem" class="aios-p-canvas"></canvas></div>
-                <div class="aios-p-chart-axis"><span class="aios-p-axis-label" id="axis-mem-0">--</span><span class="aios-p-axis-label" id="axis-mem-1">--</span><span class="aios-p-axis-label" id="axis-mem-2">--</span><span class="aios-p-axis-label" id="axis-mem-3">--</span><span class="aios-p-axis-label" id="axis-mem-4">现在</span></div>
-            </div>
-        </div>
+    <div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-lg);">
+        <div class="aios-p-card-header"><h3><i class="fas fa-bolt"></i> 引擎状态</h3></div>
+        <div class="aios-p-card-content" id="aios-engine-status">${loadingHTML()}</div>
     </div>
-    <div class="aios-p-chart-section">
-        <div class="aios-p-chart-card">
-            <div class="aios-p-chart-header">
-                <div class="aios-p-chart-header-left"><h3 class="aios-p-temp"><i class="fas fa-thermometer-half"></i> 温度</h3></div>
-                <span class="aios-p-chart-current" id="chart-temp-value">--</span>
-            </div>
-            <div class="aios-p-chart-wrapper">
-                <div class="aios-p-chart-y-axis"><span class="aios-p-y-label" id="axis-temp-max">--</span><span class="aios-p-y-label" id="axis-temp-mid">--</span><span class="aios-p-y-label" id="axis-temp-min">--</span></div>
-                <div class="aios-p-chart-canvas-wrap"><canvas id="chart-temp" class="aios-p-canvas"></canvas></div>
-                <div class="aios-p-chart-axis"><span class="aios-p-axis-label" id="axis-temp-0">--</span><span class="aios-p-axis-label" id="axis-temp-1">--</span><span class="aios-p-axis-label" id="axis-temp-2">--</span><span class="aios-p-axis-label" id="axis-temp-3">--</span><span class="aios-p-axis-label" id="axis-temp-4">现在</span></div>
-            </div>
-        </div>
-    </div>
-    <div class="aios-p-chart-section">
-        <div class="aios-p-chart-card">
-            <div class="aios-p-chart-header">
-                <div class="aios-p-chart-header-left"><h3 class="aios-p-power"><i class="fas fa-bolt"></i> 功耗</h3></div>
-                <span class="aios-p-chart-current" id="chart-power-value">--</span>
-            </div>
-            <div class="aios-p-chart-wrapper">
-                <div class="aios-p-chart-y-axis"><span class="aios-p-y-label" id="axis-power-max">--</span><span class="aios-p-y-label" id="axis-power-mid">--</span><span class="aios-p-y-label" id="axis-power-min">--</span></div>
-                <div class="aios-p-chart-canvas-wrap"><canvas id="chart-power" class="aios-p-canvas"></canvas></div>
-                <div class="aios-p-chart-axis"><span class="aios-p-axis-label" id="axis-power-0">--</span><span class="aios-p-axis-label" id="axis-power-1">--</span><span class="aios-p-axis-label" id="axis-power-2">--</span><span class="aios-p-axis-label" id="axis-power-3">--</span><span class="aios-p-axis-label" id="axis-power-4">现在</span></div>
-            </div>
-        </div>
-    </div>
-    <div class="aios-p-gpu-layout">
-        <div class="aios-p-card aios-p-status-card">
-            <div class="aios-p-card-header"><h3><i class="fas fa-bolt"></i> 引擎状态</h3></div>
-            <div class="aios-p-card-content" id="aios-engine-status">${loadingHTML()}</div>
-        </div>
-    </div>
-    <div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-md);">
+    <div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-lg);">
         <div class="aios-p-card-header">
             <h3><i class="fas fa-sliders-h"></i> 引擎配置</h3>
             <button class="aios-p-btn aios-p-btn-sm" onclick="AiosManager.gpu.loadEngineConfig()"><i class="fas fa-sync-alt"></i> 刷新</button>
