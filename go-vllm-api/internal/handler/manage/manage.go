@@ -129,7 +129,32 @@ func (h *ManageHandler) proxyPythonManage(c *gin.Context, method string, path st
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
+	h.syncPythonSwitchState(path, resp.StatusCode, data)
 	c.JSON(resp.StatusCode, data)
+}
+
+func (h *ManageHandler) syncPythonSwitchState(path string, statusCode int, data interface{}) {
+	payload, ok := data.(map[string]interface{})
+	if !ok {
+		return
+	}
+
+	switch path {
+	case "/manage/switch/status":
+		h.scheduler.UpdatePythonSwitchStatus(payload)
+	case "/manage/switch/atomic":
+		if statusCode < 200 || statusCode >= 300 {
+			return
+		}
+		status, _ := payload["status"].(string)
+		if status != "switching" && status != "starting" && status != "stopping" {
+			return
+		}
+		target, _ := payload["target_model"].(string)
+		previous, _ := payload["previous_model"].(string)
+		sessionID, _ := payload["session_id"].(string)
+		h.scheduler.SetPythonSwitchingStarted(target, previous, sessionID)
+	}
 }
 
 func (h *ManageHandler) RegisterRoutes(rg *gin.RouterGroup) {

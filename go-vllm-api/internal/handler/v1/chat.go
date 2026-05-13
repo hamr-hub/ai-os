@@ -46,11 +46,20 @@ func NewV1Handler(scheduler *service.Scheduler, gpuMonitor *service.GPUMonitor, 
 }
 
 func (h *V1Handler) ensureModelReady(c *gin.Context, modelName string) error {
+	gate := h.scheduler.PythonSwitchGateForModel(modelName)
+	if gate.Switching && !gate.Allowed {
+		return fmt.Errorf("model switch in progress, only current python engine model %s is available", gate.CurrentModel)
+	}
+
 	if h.scheduler.IsModelRunning(modelName) {
 		port := h.scheduler.GetModelPort(modelName)
 		if err := h.proxy.WaitUntilReady(c.Request.Context(), port, 180*time.Second, 2*time.Second); err == nil {
 			return nil
 		}
+	}
+
+	if gate.Switching {
+		return fmt.Errorf("model switch in progress, current python engine model %s is not ready", gate.CurrentModel)
 	}
 
 	ok, err := h.scheduler.StartModel(c.Request.Context(), modelName)
@@ -65,6 +74,23 @@ func (h *V1Handler) ensureModelReady(c *gin.Context, modelName string) error {
 	}
 
 	return nil
+}
+
+func (h *V1Handler) rejectIfPythonSwitchBlocks(c *gin.Context, modelName string) bool {
+	gate := h.scheduler.PythonSwitchGateForModel(modelName)
+	if !gate.Switching || gate.Allowed {
+		return false
+	}
+
+	c.JSON(http.StatusServiceUnavailable, gin.H{
+		"error":          "Model switch in progress, Go proxy is paused for non-current models",
+		"retry_after":    gate.RetryAfter,
+		"current_model":  gate.CurrentModel,
+		"target_model":   gate.TargetModel,
+		"previous_model": gate.PreviousModel,
+		"session_id":     gate.SessionID,
+	})
+	return true
 }
 
 func (h *V1Handler) RegisterRoutes(rg *gin.RouterGroup) {
@@ -199,6 +225,11 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 	if !h.scheduler.IsModelAvailable(modelName) {
 		statusCode = 404
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", modelName)})
+		return
+	}
+
+	if h.rejectIfPythonSwitchBlocks(c, modelName) {
+		statusCode = 503
 		return
 	}
 
@@ -427,6 +458,10 @@ func (h *V1Handler) CreateEmbeddings(c *gin.Context) {
 		return
 	}
 
+	if h.rejectIfPythonSwitchBlocks(c, modelName) {
+		return
+	}
+
 	slotAcquired := false
 	defer func() {
 		if slotAcquired {
@@ -570,6 +605,10 @@ func (h *V1Handler) GenerateImage(c *gin.Context) {
 
 	if !h.scheduler.IsModelAvailable(req.Model) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Model not found: %s", req.Model)})
+		return
+	}
+
+	if h.rejectIfPythonSwitchBlocks(c, req.Model) {
 		return
 	}
 

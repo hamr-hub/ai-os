@@ -265,11 +265,12 @@ async def atomic_switch_model(request: Request):
                 _clear_model_caches()
             else:
                 logger.error("Model switch failed: %s", session.error or session.rollback_reason or "unknown")
-                scheduler.clear_default_model()
+                if session.previous_model:
+                    scheduler.mark_model_selected(session.previous_model)
                 _clear_model_caches()
         except Exception as e:
             logger.error("Switch task callback error: %s", e)
-            scheduler.clear_default_model()
+            _clear_model_caches()
 
     task.add_done_callback(lambda t: asyncio.create_task(_on_switch_done(t)))
 

@@ -35,6 +35,8 @@ vi.mock('@/api/client', () => ({
   startModel: vi.fn().mockResolvedValue({ status: 'starting', model: 'model-b' }),
   stopModel: vi.fn().mockResolvedValue({ status: 'stopped', model: 'model-a' }),
   switchModel: vi.fn().mockResolvedValue({ status: 'switched', model: 'model-b' }),
+  atomicSwitchModel: vi.fn().mockResolvedValue({ status: 'switching', session_id: 'sess-1' }),
+  getSwitchStatus: vi.fn().mockResolvedValue({ is_switching: false, session: null }),
   setDefaultModel: vi.fn().mockResolvedValue({ status: 'success', default_model: 'model-b' }),
   clearDefaultModel: vi.fn().mockResolvedValue({ status: 'success' }),
   chatCompletion: vi.fn().mockResolvedValue({}),

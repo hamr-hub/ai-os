@@ -1132,6 +1132,8 @@ class ModelSwitchOrchestrator:
                                 await self._log(session, phase, error_msg)
                                 await self._rollback(session, error_msg)
                                 raise _SwitchAborted(error_msg)
+        except _SwitchAborted:
+            raise
         except Exception as e:
             await self._log(session, phase, f"查询模型ID失败，使用路径: {e}")
 
@@ -1515,8 +1517,9 @@ class ModelSwitchOrchestrator:
         session.overall_phase = SwitchPhase.ROLLED_BACK
         session.finished_at = datetime.now().isoformat()
 
+        restored_model = session.previous_model or "原模型"
         await self._broadcast(session, phase=0, progress=100,
-                              log=f"回滚完成，原因: {reason}", level="error",
+                              log=f"回滚完成，已恢复到 {restored_model}，原因: {reason}", level="error",
                               final=True, event_type="rollback_completed")
 
     async def _broadcast(

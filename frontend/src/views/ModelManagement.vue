@@ -56,6 +56,8 @@ const {
   loading,
   actionLoading,
   switchingModel,
+  switchSession,
+  switchNotice,
   isRefreshing,
   fetchAggregatedModels,
   saveVLLMParams,
@@ -115,10 +117,29 @@ const actionWithToast = async (action: () => Promise<void>, successMsg: string, 
   try {
     await action()
     showToast(successMsg, 'success')
-  } catch {
-    showToast(errorMsg, 'error')
+  } catch (e) {
+    showToast((e as Error)?.message || errorMsg, 'error')
   }
 }
+
+const switchBanner = computed(() => {
+  if (switchingModel.value) {
+    const progress = switchSession.value?.overall_progress ?? 0
+    return {
+      type: 'info' as const,
+      title: `正在切换到 ${switchingModel.value}`,
+      detail: `后端原子切换进行中${progress ? ` · ${progress}%` : ''}`,
+    }
+  }
+  if (switchNotice.value) {
+    return {
+      type: switchNotice.value.type,
+      title: switchNotice.value.message,
+      detail: switchNotice.value.detail || '',
+    }
+  }
+  return null
+})
 
 const recommendedConfig = computed(() => {
   if (!selectedModelForConfig.value) return null
@@ -687,10 +708,13 @@ watch(
       </div>
     </header>
 
-    <div v-if="switchingModel" class="switch-banner">
-      <Loader2 class="w-5 h-5 animate-spin" />
-      <span class="switch-text">正在切换到 {{ switchingModel }}，请耐心等待...</span>
-      <span class="switch-hint">vLLM 加载模型通常需要 30-120 秒</span>
+    <div v-if="switchBanner" class="switch-banner" :class="switchBanner.type">
+      <Loader2 v-if="switchingModel" class="w-5 h-5 animate-spin" />
+      <CheckCircle v-else-if="switchBanner.type === 'success'" class="w-5 h-5" />
+      <XCircle v-else-if="switchBanner.type === 'error'" class="w-5 h-5" />
+      <AlertTriangle v-else class="w-5 h-5" />
+      <span class="switch-text">{{ switchBanner.title }}</span>
+      <span v-if="switchBanner.detail" class="switch-hint">{{ switchBanner.detail }}</span>
     </div>
 
     <div class="search-filter-bar">
@@ -846,7 +870,7 @@ watch(
                       v-if="!variant.running"
                       class="action-btn primary small"
                       :disabled="!!actionLoading || !!switchingModel"
-                      @click.stop="actionWithToast(() => handleSwitchAndSetDefault(variant.name), `已发送切换请求: ${variant.name}`, `切换 ${variant.name} 失败`)"
+                      @click.stop="actionWithToast(() => handleSwitchAndSetDefault(variant.name), `切换成功: ${variant.name}`, `切换 ${variant.name} 失败`)"
                     >
                       <ArrowRightLeft class="w-3.5 h-3.5" /> 切换
                     </button>
@@ -1509,7 +1533,7 @@ watch(
             v-if="!selectedModelDetail.running"
             class="btn primary"
             :disabled="!!actionLoading || !!switchingModel"
-            @click="actionWithToast(() => handleSwitchAndSetDefault(selectedModelDetail!.name), `已发送切换请求: ${selectedModelDetail!.name}`, `切换失败`); closeModelDetail()"
+            @click="actionWithToast(() => handleSwitchAndSetDefault(selectedModelDetail!.name), `切换成功: ${selectedModelDetail!.name}`, `切换失败`); closeModelDetail()"
           >
             <ArrowRightLeft class="w-4 h-4" /> 切换至此模型
           </button>
@@ -1582,6 +1606,41 @@ watch(
   background: var(--bg-secondary);
   padding: 2px 8px;
   border-radius: 10px;
+}
+
+.switch-banner {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.24);
+  background: rgba(59, 130, 246, 0.08);
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+
+.switch-banner.success {
+  border-bottom-color: rgba(34, 197, 94, 0.24);
+  background: rgba(34, 197, 94, 0.08);
+  color: #22c55e;
+}
+
+.switch-banner.error {
+  border-bottom-color: rgba(239, 68, 68, 0.24);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+}
+
+.switch-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.switch-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .icon-btn {

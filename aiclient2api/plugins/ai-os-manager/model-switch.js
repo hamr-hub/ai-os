@@ -46,6 +46,15 @@ class ModelSwitchService {
         return result.error || result.message || fallbackMessage;
     }
 
+    _formatRollbackMessage(session, fallbackMessage = 'Switch failed') {
+        if (!session) return fallbackMessage;
+        const reason = session.rollback_reason || session.error || fallbackMessage;
+        if (session.previous_model && (session.rollback_reason || session.overall_phase === 'rolled_back')) {
+            return `切换失败，已自动回滚到 ${session.previous_model}: ${reason}`;
+        }
+        return reason;
+    }
+
     async init() {
         logger.info('[Model Switch Service] Initializing model switch service (with Go/Python fallback)...');
         await this.fetchModelsFromBackend();
@@ -297,10 +306,9 @@ class ModelSwitchService {
                 startTime: Date.now()
             });
 
-            const baseUrl = backendClient.getBaseUrl();
-            logger.info(`[Model Switch Service] Switching model (${mode}): ${modelName}, baseUrl: ${baseUrl}`);
+            logger.info(`[Model Switch Service] Switching model (${mode}): ${modelName}`);
 
-            const response = await fetch(`${baseUrl}/manage/switch/atomic`, {
+            const response = await backendClient.fetchWithFallback('/manage/switch/atomic', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -309,8 +317,7 @@ class ModelSwitchService {
                     set_as_default: false,
                     ...(options.engineType ? { engine_type: options.engineType } : {}),
                     ...(options.port ? { port: options.port } : {})
-                }),
-                signal: AbortSignal.timeout(30000)
+                })
             });
 
             logger.info(`[Model Switch Service] Switch response status: ${response.status}`);
@@ -356,7 +363,7 @@ class ModelSwitchService {
             while (Date.now() - startTime < maxPollTime) {
                 await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-                const statusResponse = await fetch(`${baseUrl}/manage/switch/status`, {
+                const statusResponse = await backendClient.fetchWithFallback('/manage/switch/status', {
                     signal: AbortSignal.timeout(10000)
                 });
                 const statusData = await statusResponse.json();
@@ -385,7 +392,7 @@ class ModelSwitchService {
                 }
 
                 if (!statusData.is_switching && statusData.session && !statusData.session.completed_successfully) {
-                    const errorMsg = statusData.session.error || statusData.session.rollback_reason || 'Switch failed';
+                    const errorMsg = this._formatRollbackMessage(statusData.session, 'Switch failed');
                     logger.error(`[Model Switch Service] Model switch failed: ${errorMsg}`);
 
                     this.switchTasks.set(taskId, {
@@ -398,13 +405,16 @@ class ModelSwitchService {
                     this.broadcastSwitchResult(taskId, {
                         success: false,
                         error: errorMsg,
-                        modelName
+                        modelName,
+                        rollbackTo: statusData.session.previous_model || null,
+                        rollbackReason: statusData.session.rollback_reason || statusData.session.error || null,
+                        session: statusData.session
                     });
 
                     return {
                         success: false,
                         error: errorMsg,
-                        data: { modelName, status: 'failed', sessionId },
+                        data: { modelName, status: 'failed', sessionId, session: statusData.session },
                         timestamp: new Date().toISOString(),
                         backendStatus: backendClient.getStatus()
                     };

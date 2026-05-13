@@ -251,7 +251,29 @@ func (h *AgentHandler) AgentChat(c *gin.Context) {
 		return
 	}
 
+	gate := h.scheduler.PythonSwitchGateForModel(modelName)
+	if gate.Switching && !gate.Allowed {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":          "Model switch in progress, Go proxy is paused for non-current models",
+			"retry_after":    gate.RetryAfter,
+			"current_model":  gate.CurrentModel,
+			"target_model":   gate.TargetModel,
+			"previous_model": gate.PreviousModel,
+			"session_id":     gate.SessionID,
+		})
+		return
+	}
+
 	if !h.scheduler.IsModelRunning(modelName) {
+		if gate.Switching {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error":         fmt.Sprintf("Model switch in progress, current python engine model %s is not ready", gate.CurrentModel),
+				"retry_after":   gate.RetryAfter,
+				"current_model": gate.CurrentModel,
+				"target_model":  gate.TargetModel,
+			})
+			return
+		}
 		ok, err := h.scheduler.StartModel(c.Request.Context(), modelName)
 		if !ok {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Failed to start model: %v", err)})

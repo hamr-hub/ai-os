@@ -297,7 +297,10 @@ func broadcastStatusLoop(ctx context.Context, gm *service.GPUMonitor, s *service
 			if switchData != nil {
 				isSwitching, _ := switchData["is_switching"].(bool)
 				session := switchData["session"]
-				if isSwitching && session != nil {
+				s.UpdatePythonSwitchStatus(switchData)
+				if session != nil {
+					ws.Broadcast("model_switch", switchData)
+				} else if isSwitching {
 					ws.Broadcast("model_switch", switchData)
 				}
 			}

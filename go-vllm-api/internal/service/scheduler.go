@@ -39,8 +39,24 @@ type Scheduler struct {
 	mu                  sync.RWMutex
 	rateLimiter         *RateLimiter
 	switchingInProgress bool
+	pythonSwitchTarget  string
+	pythonSwitchPrevious string
+	pythonSwitchCurrent string
+	pythonSwitchSessionID string
+	pythonSwitchUpdatedAt time.Time
 	streamActive        map[string]int64
 	zombieCheckerCancel context.CancelFunc
+}
+
+type PythonSwitchGate struct {
+	Switching     bool
+	Allowed       bool
+	RequestedModel string
+	CurrentModel  string
+	TargetModel   string
+	PreviousModel string
+	SessionID     string
+	RetryAfter    int
 }
 
 func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig, llamaCppMgr *LlamaCppManager, vllmManager *VLLMManager, vllmProxy *proxy.VLLMProxy) *Scheduler {
@@ -233,6 +249,10 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 	if mc == nil {
 		return false
 	}
+	if s.isVLLMModelServed(matched, mc) {
+		s.markVLLMRunning(matched)
+		return true
+	}
 
 	port := s.GetModelPort(matched)
 	serviceRunning := mc.Service != "" && s.sysCtl.IsServiceRunning(mc.Service)
@@ -352,7 +372,12 @@ func (s *Scheduler) detectCurrentVLLMModel() string {
 
 	modelID := result.Data[0].ID
 	for name, mc := range s.cfg.Models {
-		if mc.ModelPath == modelID || name == modelID || strings.Contains(modelID, name) || strings.Contains(name, modelID) {
+		if mc.ModelPath == modelID || name == modelID {
+			return name
+		}
+	}
+	for name := range s.cfg.Models {
+		if strings.Contains(modelID, name) || strings.Contains(name, modelID) {
 			return name
 		}
 	}
@@ -866,8 +891,52 @@ func (s *Scheduler) isVLLMModelServed(matched string, mc *config.ModelConfig) bo
 	if port <= 0 || !s.sysCtl.GetProcessInfo(port) {
 		return false
 	}
-	actualModel := s.detectCurrentVLLMModel()
+	actualModel := s.detectServedVLLMModel(port)
 	return actualModel == matched || actualModel == mc.ModelPath
+}
+
+func (s *Scheduler) detectServedVLLMModel(port int) string {
+	if port <= 0 {
+		return ""
+	}
+
+	url := fmt.Sprintf("http://localhost:%d/v1/models", port)
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		s.logger.Debug("failed to query served vllm model", zap.Int("port", port), zap.Error(err))
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		s.logger.Debug("failed to decode served vllm model", zap.Int("port", port), zap.Error(err))
+		return ""
+	}
+	if len(result.Data) == 0 {
+		return ""
+	}
+
+	modelID := result.Data[0].ID
+	for name, cfg := range s.cfg.Models {
+		if cfg.ModelPath == modelID || name == modelID {
+			return name
+		}
+	}
+	for name := range s.cfg.Models {
+		if strings.Contains(modelID, name) || strings.Contains(name, modelID) {
+			return name
+		}
+	}
+	return modelID
 }
 
 func (s *Scheduler) pythonBackendURL() string {
@@ -1421,10 +1490,139 @@ func (s *Scheduler) SetSwitchingInProgress(val bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.switchingInProgress = val
+	if !val {
+		s.pythonSwitchTarget = ""
+		s.pythonSwitchPrevious = ""
+		s.pythonSwitchCurrent = ""
+		s.pythonSwitchSessionID = ""
+	}
+	s.pythonSwitchUpdatedAt = time.Now()
 }
 
 func (s *Scheduler) IsSwitchingInProgress() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.switchingInProgress
+}
+
+func switchStringField(m map[string]interface{}, key string) string {
+	if m == nil {
+		return ""
+	}
+	if val, ok := m[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
+func (s *Scheduler) SetPythonSwitchingStarted(targetModel, previousModel, sessionID string) {
+	currentModel := previousModel
+	if currentModel == "" {
+		currentModel = s.detectCurrentVLLMModel()
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.switchingInProgress = true
+	s.pythonSwitchTarget = targetModel
+	s.pythonSwitchPrevious = previousModel
+	s.pythonSwitchCurrent = currentModel
+	s.pythonSwitchSessionID = sessionID
+	s.pythonSwitchUpdatedAt = time.Now()
+}
+
+func (s *Scheduler) UpdatePythonSwitchStatus(data map[string]interface{}) {
+	if data == nil {
+		return
+	}
+
+	isSwitching, _ := data["is_switching"].(bool)
+	session, _ := data["session"].(map[string]interface{})
+	target := switchStringField(session, "target_model")
+	previous := switchStringField(session, "previous_model")
+	sessionID := switchStringField(session, "session_id")
+	phase := strings.ToLower(switchStringField(session, "overall_phase"))
+	completed, _ := session["completed_successfully"].(bool)
+
+	if target == "" {
+		target = switchStringField(data, "target_model")
+	}
+	if previous == "" {
+		previous = switchStringField(data, "previous_model")
+	}
+	if sessionID == "" {
+		sessionID = switchStringField(data, "session_id")
+	}
+
+	current := ""
+	if isSwitching {
+		current = s.detectCurrentVLLMModel()
+		if current == "" {
+			current = previous
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.switchingInProgress = isSwitching
+	s.pythonSwitchTarget = target
+	s.pythonSwitchPrevious = previous
+	s.pythonSwitchSessionID = sessionID
+	s.pythonSwitchUpdatedAt = time.Now()
+
+	if isSwitching {
+		s.pythonSwitchCurrent = current
+		return
+	}
+
+	switch {
+	case completed && target != "":
+		s.currentModel = target
+		s.pythonSwitchCurrent = target
+	case phase == "rolled_back" && previous != "":
+		s.currentModel = previous
+		s.pythonSwitchCurrent = previous
+	default:
+		s.pythonSwitchCurrent = ""
+	}
+}
+
+func (s *Scheduler) PythonSwitchGateForModel(modelName string) PythonSwitchGate {
+	matched := s.FindMatchingModel(modelName)
+	if matched == "" {
+		matched = modelName
+	}
+
+	s.mu.RLock()
+	switching := s.switchingInProgress
+	current := s.pythonSwitchCurrent
+	target := s.pythonSwitchTarget
+	previous := s.pythonSwitchPrevious
+	sessionID := s.pythonSwitchSessionID
+	s.mu.RUnlock()
+
+	gate := PythonSwitchGate{
+		Switching:      switching,
+		Allowed:        true,
+		RequestedModel: matched,
+		CurrentModel:   current,
+		TargetModel:    target,
+		PreviousModel:  previous,
+		SessionID:      sessionID,
+		RetryAfter:     10,
+	}
+	if !switching {
+		return gate
+	}
+
+	if gate.CurrentModel == "" {
+		gate.CurrentModel = previous
+	}
+	currentMatched := s.FindMatchingModel(gate.CurrentModel)
+	if currentMatched == "" {
+		currentMatched = gate.CurrentModel
+	}
+	gate.Allowed = currentMatched != "" && currentMatched == matched
+	return gate
 }
