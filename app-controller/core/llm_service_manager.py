@@ -50,6 +50,11 @@ class LLMServiceManager:
         self._model_paths: Dict[str, str] = {}
         self._pgids: Dict[str, int] = {}
 
+    def _cfg_get(self, cfg: Any, key: str, default=None):
+        if isinstance(cfg, dict):
+            return cfg.get(key, default)
+        return getattr(cfg, key, default)
+
     def _get_model_config(self, model_name: str) -> Optional[ModelConfig]:
         if self._config:
             if hasattr(self._config, 'get_model'):
@@ -249,12 +254,12 @@ class LLMServiceManager:
         if enable_chunked_prefill:
             cmd.extend(["--enable-chunked-prefill"])
 
-        if hasattr(cfg, 'supports_tool_calling') and cfg.supports_tool_calling:
+        if self._cfg_get(cfg, 'supports_tool_calling', False):
             tool_parser = vllm_params.get("tool_call_parser", "hermes")
             if tool_parser:
                 cmd.extend(["--enable-auto-tool-choice", "--tool-call-parser", tool_parser])
 
-        if hasattr(cfg, 'supports_images') and cfg.supports_images:
+        if self._cfg_get(cfg, 'supports_images', False):
             cmd.extend(["--limit-mm-per-prompt", "10"])
 
         extra_args = []

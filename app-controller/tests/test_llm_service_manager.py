@@ -79,6 +79,29 @@ class TestBuildCommandVLLM:
         assert "--tool-call-parser" in cmd_str
         assert "--enable-auto-tool-choice" in cmd_str
 
+    def test_vllm_with_tool_calling_from_raw_config_dict(self):
+        config = {
+            "models": {
+                "Gemma-4-31B-Abliterated": {
+                    "service": "vllm-aiclient",
+                    "port": 8000,
+                    "required_memory": "40GB",
+                    "model_path": "/mnt/pve_models/Gemma-4-31B-Abliterated",
+                    "supports_images": True,
+                    "supports_tool_calling": True,
+                    "vllm_params": {"tool_call_parser": "gemma4"},
+                },
+            },
+            "settings": {"gpu_memory_utilization": 0.9},
+        }
+        mgr = _make_manager(config)
+        cmd = mgr.build_command("Gemma-4-31B-Abliterated", "vllm", 8000)
+        cmd_str = " ".join(cmd)
+        assert "--enable-auto-tool-choice" in cmd_str
+        assert "--tool-call-parser" in cmd_str
+        assert "gemma4" in cmd_str
+        assert "--limit-mm-per-prompt" in cmd_str
+
 
 class TestBuildCommandSGLang:
     def test_sglang_basic_command(self):
