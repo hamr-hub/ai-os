@@ -15,15 +15,17 @@ import {
     handleRateLimitApiRoutes,
     handleConfigApiRoutes,
     handleInjectScript,
+    handleGPUDashboardScript,
     handlePluginStyles,
     handlePanelRoute,
     handleGetPanelHTML,
 } from './api-handler.js';
 
-const INJECT_SCRIPT_TAG = '<script src="/plugins/ai-os-manager/inject.js" defer></script>';
+const INJECT_SCRIPT_TAG = '<script src="/plugins/ai-os-manager/gpu-dashboard-ui.js" defer></script><script src="/plugins/ai-os-manager/inject.js" defer></script>';
 
 const EXEMPT_PATHS = [
     '/plugins/ai-os-manager/inject.js',
+    '/plugins/ai-os-manager/gpu-dashboard-ui.js',
     '/plugins/ai-os-manager/styles.css',
     '/gpu-admin',
     '/__panel__',
@@ -98,6 +100,7 @@ const aiOsManagerPlugin = {
         { method: 'GET', path: '/__panel__', handler: handleGetPanelHTML },
         { method: 'GET', path: '/__panel_html__', handler: handleGetPanelHTML },
         { method: 'GET', path: '/plugins/ai-os-manager/inject.js', handler: handleInjectScript },
+        { method: 'GET', path: '/plugins/ai-os-manager/gpu-dashboard-ui.js', handler: handleGPUDashboardScript },
         { method: 'GET', path: '/plugins/ai-os-manager/styles.css', handler: handlePluginStyles },
         { method: '*', path: '/api/gpu-monitor', handler: handleGPUMonitorApiRoutes },
         { method: '*', path: '/api/model-switch', handler: handleModelSwitchApiRoutes },

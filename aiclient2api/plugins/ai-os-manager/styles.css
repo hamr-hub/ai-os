@@ -192,15 +192,104 @@
     border-radius: var(--aios-radius-sm);
 }
 
-/* Stat card */
-.aios-p-scope .aios-p-stat-card {
-    background: var(--aios-gradient-subtle);
-    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--aios-border-card); border-radius: var(--aios-radius-lg);
-    padding: var(--aios-space-md); display: flex; align-items: center;
-    gap: var(--aios-space-md); box-shadow: var(--aios-shadow-xs);
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative; overflow: hidden;
+.aios-p-scope .aios-p-gpu-summary {
+    margin-bottom: var(--aios-space-md);
+}
+.aios-p-scope .aios-p-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--aios-space-md);
+}
+.aios-p-scope .aios-p-summary-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--aios-space-md);
+    padding: var(--aios-space-md) var(--aios-space-lg);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-glass);
+}
+.aios-p-scope .aios-p-summary-card.is-loading {
+    border-color: var(--primary-color);
+}
+.aios-p-scope .aios-p-summary-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.aios-p-scope .aios-p-summary-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.aios-p-scope .aios-p-summary-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+.aios-p-scope .aios-p-summary-meta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+.aios-p-scope .aios-p-summary-side {
+    display: flex;
+    align-items: center;
+}
+.aios-p-scope .aios-p-summary-pill {
+    padding: 6px 10px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 12px;
+    max-width: 320px;
+}
+.aios-p-scope .aios-p-summary-pill.is-error {
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+    background: var(--danger-bg-light);
+}
+.aios-p-scope .aios-p-inline-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-lg);
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+.aios-p-scope .aios-p-inline-status-info {
+    color: var(--info-color);
+    border-color: rgba(var(--aios-color-info-rgb), 0.24);
+}
+.aios-p-scope .aios-p-inline-status-success {
+    color: var(--success-color);
+    border-color: rgba(var(--aios-color-success-rgb), 0.24);
+}
+.aios-p-scope .aios-p-inline-status-error {
+    color: var(--danger-color);
+    border-color: rgba(var(--aios-color-danger-rgb), 0.24);
+}
+.aios-p-scope .aios-p-engine-card.aios-p-engine-pending {
+    border-color: var(--warning-color);
+    box-shadow: 0 0 0 1px rgba(var(--aios-color-warning-rgb), 0.18), var(--shadow-sm);
+}
+.aios-p-scope .aios-p-model-item.aios-p-model-item-busy {
+    opacity: 0.72;
+}
+.aios-p-scope .aios-p-model-chip-warning {
+    background: rgba(var(--aios-color-warning-rgb), 0.08);
+    border-color: rgba(var(--aios-color-warning-rgb), 0.18);
+    color: var(--warning-color);
 }
 .aios-p-scope .aios-p-stat-card:hover {
     transform: translateY(-2px);

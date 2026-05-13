@@ -163,79 +163,103 @@
         return t || 'vllm';
     }
 
-    function drawMiniChart(canvasId, dataPoints, maxLen, color, minVal, maxVal, unit, axisPrefix, range, timestamps) {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        const w = canvas.parentElement.clientWidth || 200;
-        const h = 50;
-        canvas.width = w;
-        canvas.height = h;
-        const points = dataPoints.slice(-maxLen);
-        ctx.clearRect(0, 0, w, h);
-        ctx.beginPath();
-        ctx.strokeStyle = '#818cf8';
-        ctx.lineWidth = 1.5;
-        points.forEach((v, i) => {
-            const x = (i / (points.length - 1)) * w;
-            const y = h - (v / max) * (h - 4) - 2;
-            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    function normalizeModelText(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        return raw.split('/').filter(Boolean).pop().toLowerCase();
+    }
+
+    function parsePortValue(value) {
+        if (value == null || String(value).trim() === '') return null;
+        const parsed = Number(value);
+        if (!Number.isInteger(parsed) || parsed <= 0) return null;
+        return parsed;
+    }
+
+    function getResponseTextAsReason(result) {
+        if (!result) return '';
+        if (typeof result === 'string') return result;
+        if (result.reason) return result.reason;
+        if (result.error) return result.error;
+        if (result.detail) return typeof result.detail === 'string' ? result.detail : '';
+        if (result.message) return result.message;
+        return '';
+    }
+
+    function normalizePortValue(value) {
+        if (value == null) return null;
+        const parsed = parsePortValue(value);
+        return parsed === null ? null : parsed;
+    }
+
+    function getEngineServicesFromPayload(payload) {
+        const source = payload || {};
+        const data = source.data || source;
+        return Array.isArray(data.services) ? data.services
+            : Array.isArray(data.running_services) ? data.running_services
+            : Array.isArray(data.engines) ? data.engines
+            : [];
+    }
+
+    function showConfirm(message, options = {}) {
+        const okLabel = options.okLabel || '确认';
+        const cancelLabel = options.cancelLabel || '取消';
+        const tip = String(message || '');
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'aios-p-modal-overlay';
+            overlay.style.zIndex = '2147483001';
+
+            const modal = document.createElement('div');
+            modal.className = 'aios-p-modal';
+
+            const title = document.createElement('h3');
+            title.textContent = '请确认操作';
+
+            const content = document.createElement('div');
+            content.style.cssText = 'font-size:13px;line-height:1.6;color:var(--text-secondary);margin-bottom:14px;';
+            content.textContent = tip;
+
+            const actions = document.createElement('div');
+            actions.className = 'aios-p-modal-actions';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'aios-p-btn';
+            cancelBtn.type = 'button';
+            cancelBtn.textContent = cancelLabel;
+
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = 'aios-p-btn aios-p-btn-primary';
+            confirmBtn.type = 'button';
+            confirmBtn.textContent = okLabel;
+
+            actions.appendChild(cancelBtn);
+            actions.appendChild(confirmBtn);
+            modal.appendChild(title);
+            modal.appendChild(content);
+            modal.appendChild(actions);
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            const cleanup = (value) => {
+                overlay.remove();
+                document.removeEventListener('keydown', onKeydown);
+                resolve(value);
+            };
+
+            const onKeydown = (event) => {
+                if (event.key === 'Escape') cleanup(false);
+                if (event.key === 'Enter') cleanup(true);
+            };
+
+            document.addEventListener('keydown', onKeydown);
+            cancelBtn.onclick = () => cleanup(false);
+            confirmBtn.onclick = () => cleanup(true);
+            overlay.onclick = (event) => {
+                if (event.target === overlay) cleanup(false);
+            };
+            confirmBtn.focus();
         });
-        ctx.stroke();
-        ctx.lineTo(getX(points.length - 1), chartTop + chartH);
-        ctx.lineTo(chartLeft, chartTop + chartH);
-        ctx.closePath();
-        const fillColor = (color || '#818cf8').replace(')', ', 0.1)').replace('rgb', 'rgba');
-        ctx.fillStyle = fillColor;
-        ctx.fill();
-        ctx.fillStyle = color || '#818cf8';
-        points.forEach((v, i) => {
-            if (i % Math.ceil(points.length / 6) === 0 || i === points.length - 1) {
-                const x = getX(i);
-                const y = getY(v);
-                ctx.beginPath();
-                ctx.arc(x, y, 3, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        });
-        if (axisPrefix != null) {
-            const setAxisLabel = (id, v) => {
-                const e = document.getElementById(id);
-                if (e) {
-                    if (unit === '%') e.textContent = v.toFixed(0) + '%';
-                    else if (unit === 'W') e.textContent = v.toFixed(0) + 'W';
-                    else if (unit === 'C') e.textContent = v.toFixed(0) + '°C';
-                    else e.textContent = v;
-                }
-            };
-            if (maxVal != null && minVal === 0) {
-                setAxisLabel('axis-' + axisPrefix + '-max', dataMax);
-                setAxisLabel('axis-' + axisPrefix + '-mid', dataMax / 2);
-                setAxisLabel('axis-' + axisPrefix + '-min', 0);
-            }
-            const step = Math.ceil(points.length / 4);
-            const fmtTime = (d) => {
-                const h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
-                return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-            };
-            const fmtTimeShort = (d) => {
-                const h = d.getHours(), m = d.getMinutes();
-                return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
-            };
-            const fmtDate = (d) => {
-                const mo = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
-                return mo[d.getMonth()] + '-' + (d.getDate() < 10 ? '0' : '') + d.getDate();
-            };
-            const fmtFn = range === 'day' ? fmtDate : (range === 'hour' ? fmtTimeShort : fmtTime);
-            for (let i = 0; i < 4; i++) {
-                const idx = i * step;
-                if (idx < points.length && timestamps && timestamps[idx]) {
-                    const d = new Date(timestamps[idx]);
-                    const e = document.getElementById('axis-' + axisPrefix + '-' + i);
-                    if (e) e.textContent = fmtFn(d);
-                }
-            }
-        }
     }
 
     const GPU_HTML = `
@@ -251,14 +275,17 @@
             <button class="aios-p-btn aios-p-btn-sm" data-action="gpu-refresh"><i class="fas fa-sync-alt"></i> 刷新</button>
         </div>
     </div>
+    <div id="aios-gpu-summary" class="aios-p-gpu-summary">${loadingHTML()}</div>
     <div class="aios-p-stats-grid" id="aios-gpu-stats">${loadingHTML()}</div>
-    <div class="aios-p-card aios-p-chart-card" style="margin-top:var(--space-lg);">
-        <div class="aios-p-card-header"><h3><i class="fas fa-chart-area"></i> GPU 历史趋势</h3></div>
-        <div class="aios-p-card-content"><canvas id="aios-gpu-chart" style="height:80px;"></canvas></div>
-    </div>
-    <div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-lg);">
-        <div class="aios-p-card-header"><h3><i class="fas fa-bolt"></i> 引擎状态</h3></div>
-        <div class="aios-p-card-content" id="aios-engine-status">${loadingHTML()}</div>
+    <div class="aios-p-gpu-layout" style="margin-top:var(--space-lg);">
+        <div class="aios-p-card aios-p-chart-card">
+            <div class="aios-p-card-header"><h3><i class="fas fa-chart-area"></i> GPU 历史趋势</h3></div>
+            <div class="aios-p-card-content"><div id="aios-gpu-history">${loadingHTML()}</div></div>
+        </div>
+        <div class="aios-p-card aios-p-status-card">
+            <div class="aios-p-card-header"><h3><i class="fas fa-bolt"></i> 引擎状态</h3></div>
+            <div class="aios-p-card-content" id="aios-engine-status">${loadingHTML()}</div>
+        </div>
     </div>
     <div class="aios-p-card aios-p-status-card" style="margin-top:var(--space-lg);">
         <div class="aios-p-card-header">
@@ -306,7 +333,7 @@
                     <button class="aios-p-btn aios-p-btn-primary" data-action="switch-model"><i class="fas fa-play"></i> 切换</button>
                 </div>
             </div>
-            <div id="aios-switch-status" style="margin-top:var(--space-md);"></div>
+            <div id="aios-switch-status" class="aios-p-action-status" style="margin-top:var(--space-md);"></div>
         </div>
     </div>
     <div class="aios-p-models-shell" style="margin-top:var(--space-lg);">
@@ -872,6 +899,7 @@
 
             const actionBtn = e.target.closest('[data-action]');
             if (actionBtn) {
+                if (actionBtn.disabled || actionBtn.getAttribute('aria-disabled') === 'true') return;
                 e.preventDefault();
                 const action = actionBtn.getAttribute('data-action');
                 handleActionClick(action, actionBtn);
@@ -910,14 +938,221 @@
     window.AiosManager = {
         gpu: {
             currentRange: 'min',
-            history: {
-                min: { utilization: [], memoryPct: [], temperature: [], power: [] },
-                hour: { utilization: [], memoryPct: [], temperature: [], power: [] },
-                day: { utilization: [], memoryPct: [], temperature: [], power: [] }
+            lastEngineData: null,
+            engineConfigSnapshot: null,
+            historyPanel: null,
+            historyPanelLimits: {
+                min: 60,
+                hour: 120,
+                day: 240,
             },
-            timestamps: { min: [], hour: [], day: [] },
-            lastSaveTime: { min: null, hour: null, day: null },
-            async refresh() {
+            refreshState: {
+                loading: false,
+                lastUpdated: '',
+                lastError: ''
+            },
+            switchingEngine: '',
+            pendingTargetEngine: '',
+            _engineSwitchPollTimer: null,
+            _engineSwitchStableCount: 0,
+            _engineSwitchDeadlineAt: 0,
+            _engineSwitchTargetModel: '',
+            _engineSwitchTargetEngine: '',
+            _engineSwitchTargetPort: null,
+            _engineSwitchTargetSessionId: '',
+            _engineSwitchStableThreshold: 2,
+            _engineSwitchPollInterval: 2000,
+            _engineSwitchTimeoutMs: 120000,
+            _engineSwitchDefaultPorts: {
+                vllm: 8000,
+                sglang: 8100,
+                llamacpp: 8200,
+            },
+            normalizeHistoryRange(range) {
+                const value = String(range || 'min').toLowerCase();
+                if (['min', 'minute', 'minutes', '1m', 'm'].includes(value)) return 'min';
+                if (['hour', 'hours', 'h', 'hr'].includes(value)) return 'hour';
+                if (['day', 'days', 'd'].includes(value)) return 'day';
+                return 'min';
+            },
+            normalizeModelName(value) {
+                const raw = String(value || '').trim();
+                if (!raw) return '';
+                const clean = raw.split('/').filter(Boolean).pop();
+                return clean ? clean.toLowerCase() : '';
+            },
+            getHistoryLimit(range) {
+                return this.historyPanelLimits[this.normalizeHistoryRange(range)] || this.historyPanelLimits.min;
+            },
+            ensureHistoryPanel() {
+                const container = document.getElementById('aios-gpu-history');
+                if (!container) return false;
+                if (this.historyPanel) return true;
+                if (!window.AiosGPUCharts || typeof window.AiosGPUCharts.createDashboard !== 'function') {
+                    container.innerHTML = errorHTML('GPU 图表组件未加载，请刷新后重试');
+                    return false;
+                }
+                this.historyPanel = window.AiosGPUCharts.createDashboard('aios-gpu-history', {
+                    limit: this.historyPanelLimits
+                });
+                return true;
+            },
+            async refreshHistoryData() {
+                if (!this.ensureHistoryPanel()) return;
+                const range = this.normalizeHistoryRange(this.currentRange);
+                const count = this.getHistoryLimit(range);
+                const query = new URLSearchParams({ time_range: range, count: String(count) }).toString();
+                const result = await adminFetch(`/api/gpu-monitor/history?${query}`);
+                const payload = result?.history || result?.data || result;
+                if (Array.isArray(payload)) {
+                    this.historyPanel.setRange(range);
+                    this.historyPanel.update(payload, { range, summary: result });
+                    return;
+                }
+                if (window.AiosGPUCharts && typeof window.AiosGPUCharts.renderGpuHistoryMissing === 'function') {
+                    window.AiosGPUCharts.renderGpuHistoryMissing('aios-gpu-history', range);
+                    return;
+                }
+                const container = document.getElementById('aios-gpu-history');
+                if (container) container.innerHTML = emptyHTML('暂无历史数据');
+            },
+            clearEngineSwitchPolling() {
+                if (this._engineSwitchPollTimer) {
+                    clearTimeout(this._engineSwitchPollTimer);
+                    this._engineSwitchPollTimer = null;
+                }
+                this._engineSwitchStableCount = 0;
+                this._engineSwitchDeadlineAt = 0;
+                this._engineSwitchTargetModel = '';
+                this._engineSwitchTargetPort = null;
+                this._engineSwitchTargetEngine = '';
+                this._engineSwitchTargetSessionId = '';
+            },
+            isTerminalEnginePhase(phase) {
+                const normalized = String(phase || '').toLowerCase();
+                return new Set(['completed', 'failed', 'rolled_back']).has(normalized);
+            },
+            getEngineSessionState(session) {
+                if (!session) return { active: false, terminal: false, phase: '', completed: false, error: '', rollbackReason: '' };
+                const phase = String(session.overall_phase || '').toLowerCase();
+                const terminal = this.isTerminalEnginePhase(phase);
+                return {
+                    active: !terminal && !session.error && !session.rollback_reason && !session.completed_successfully,
+                    terminal,
+                    phase,
+                    completed: !!session.completed_successfully,
+                    error: session.error || '',
+                    rollbackReason: session.rollback_reason || ''
+                };
+            },
+            getRunningServices(payload) {
+                const data = payload || {};
+                if (Array.isArray(data.services)) return data.services;
+                if (Array.isArray(data.current?.services)) return data.current.services;
+                if (Array.isArray(data.engines)) return data.engines;
+                if (Array.isArray(data.current?.engines)) return data.current.engines;
+                return [];
+            },
+            getEngineRegistry(payload) {
+                const scheduler = payload?.scheduler_status || payload?.current?.scheduler_status || null;
+                if (!scheduler || typeof scheduler !== 'object') return {};
+                const registry = scheduler.engine_registry;
+                return registry && typeof registry === 'object' ? registry : {};
+            },
+            setEngineConfigSnapshot(payload = {}) {
+                if (!payload) {
+                    this.engineConfigSnapshot = null;
+                    return;
+                }
+                const raw = payload.data || payload || {};
+                this.engineConfigSnapshot = raw;
+            },
+            getEngineConfig(type, payload = this.engineConfigSnapshot) {
+                const normalized = normalizeEngineType(type);
+                const source = payload || {};
+                if (!source || typeof source !== 'object') return {};
+                const direct = source[normalized] || source[normalized + '_config'] || source[normalized.toUpperCase()] || {};
+                const nested = source.config?.[normalized] || source.configs?.[normalized] || {};
+                const enginesRoot = source.engines || source.engine_config || source.engineConfigs || {};
+                const fromEngines = enginesRoot?.[normalized] || {};
+                const merged = { ...(typeof direct === 'object' && direct ? direct : {}), ...(typeof nested === 'object' && nested ? nested : {}), ...(typeof fromEngines === 'object' && fromEngines ? fromEngines : {}) };
+                return merged;
+            },
+            isEngineEnabled(type, payload = this.engineConfigSnapshot) {
+                if (normalizeEngineType(type) === 'vllm') return true;
+                const config = this.getEngineConfig(type, payload);
+                if (!config || typeof config !== 'object') return true;
+                if (!Object.prototype.hasOwnProperty.call(config, 'enabled')) return true;
+                return config.enabled !== false;
+            },
+            getEngineConfiguredPort(type, payload = this.engineConfigSnapshot) {
+                const config = this.getEngineConfig(type, payload);
+                if (!config || typeof config !== 'object') return null;
+                return parsePortValue(config.port || config.http_port || config.bind_port || config.api_port || config.listen_port || config.host_port);
+            },
+            getEngineRunningPort(type, payload = this.lastEngineData) {
+                const services = this.getRunningServices(payload || {});
+                const target = services.find((s) => normalizeEngineType(s?.engine_type || s?.engine || s?.name || s?.type) === normalizeEngineType(type));
+                return parsePortValue(target?.port);
+            },
+            getEngineDefaultPort(type, payload = this.lastEngineData, configPayload = this.engineConfigSnapshot) {
+                return this.getEngineRunningPort(type, payload)
+                    || this.getEngineConfiguredPort(type, configPayload)
+                    || 8000;
+            },
+            getEngineConfigEnabledMap(payload = this.engineConfigSnapshot) {
+                const map = {
+                    vllm: this.isEngineEnabled('vllm', payload),
+                    sglang: this.isEngineEnabled('sglang', payload),
+                    llamacpp: this.isEngineEnabled('llamacpp', payload),
+                };
+                return map;
+            },
+            isEngineSwitchServiceMatch(service, targetEngine, targetModel, targetPort) {
+                const serviceEngine = normalizeEngineType(service?.engine_type || service?.engine || service?.name || '');
+                if (serviceEngine !== targetEngine) return false;
+                if (targetPort != null && !Number.isNaN(Number(targetPort)) && Number(service?.port) !== Number(targetPort)) {
+                    return false;
+                }
+                if (!targetModel) return true;
+                const serviceModel = this.normalizeModelName(service?.model_name || service?.model || '');
+                const expectedModel = this.normalizeModelName(targetModel);
+                if (!serviceModel || !expectedModel) return serviceEngine === targetEngine;
+                return serviceModel === expectedModel;
+            },
+            refreshStatus(summary = {}) {
+                this.refreshState = {
+                    ...this.refreshState,
+                    ...summary,
+                    lastUpdated: summary.lastUpdated || new Date().toLocaleTimeString('zh-CN', { hour12: false })
+                };
+                this.renderSummary();
+            },
+            renderSummary() {
+                const { loading, lastUpdated, lastError } = this.refreshState;
+                if (window.AiosGPUCharts && typeof window.AiosGPUCharts.renderSummaryCard === 'function') {
+                    window.AiosGPUCharts.renderSummaryCard('aios-gpu-summary', {
+                        loading,
+                        lastUpdated: lastUpdated || '-',
+                        lastError: lastError || '',
+                    });
+                    return;
+                }
+                const el = document.getElementById('aios-gpu-summary');
+                if (!el) return;
+                el.innerHTML = `<div class="aios-p-summary-card ${loading ? 'is-loading' : ''}">
+                    <div class="aios-p-summary-main">
+                        <div class="aios-p-summary-title"><i class="fas fa-wave-square"></i> 监控状态</div>
+                        <div class="aios-p-summary-meta">${loading ? '正在刷新 GPU / 引擎状态…' : '数据刷新正常'}</div>
+                    </div>
+                    <div class="aios-p-summary-side">
+                        <span class="aios-p-summary-pill ${lastError ? 'is-error' : ''}">${lastError ? `异常: ${escapeHtml(lastError)}` : `最近更新 ${escapeHtml(lastUpdated || '-')}`}</span>
+                    </div>
+                </div>`;
+            },
+            async refresh(showLoading = true) {
+                if (showLoading) this.refreshStatus({ loading: true, lastError: '' });
+                let historyError = '';
                 try {
                     const [gpuData, engineData] = await Promise.all([
                         adminFetch('/api/gpu-monitor/info'),
@@ -925,64 +1160,132 @@
                     ]);
                     this.renderGPUCards(gpuData);
                     this.renderEngineStatus(engineData);
-                    this.updateHistory(gpuData);
+                    try {
+                        await this.refreshHistoryData();
+                    } catch (e) {
+                        historyError = e.message;
+                    }
                     this.loadEngineConfig(false);
+                    this.refreshState = {
+                        ...this.refreshState,
+                        loading: false,
+                        lastError: historyError,
+                        lastUpdated: new Date().toLocaleTimeString('zh-CN', { hour12: false })
+                    };
+                    this.renderGPUCards(gpuData);
+                    if (historyError) showToast(`GPU 历史图更新失败: ${historyError}`, 'warning');
                 } catch (e) {
                     const el = document.getElementById('aios-gpu-stats');
                     if (el) el.innerHTML = errorHTML(e.message);
+                    this.refreshStatus({ loading: false, lastError: e.message });
                 }
             },
             renderGPUCards(data) {
-                const gpuDataArr = data.data || [];
-                const gpu = gpuDataArr[0];
-                if (!gpu) {
+                const gpuDataArr = data?.data || [];
+                const gpu = Array.isArray(gpuDataArr) ? gpuDataArr[0] : null;
+                if (!window.AiosGPUCharts || typeof window.AiosGPUCharts.renderGPUCards !== 'function') {
+                    const summaryEl = document.getElementById('aios-gpu-summary');
                     const el = document.getElementById('aios-gpu-stats');
-                    if (el) el.innerHTML = emptyHTML('未检测到 GPU');
+                    if (!gpu) {
+                        if (summaryEl) summaryEl.innerHTML = emptyHTML('未检测到 GPU');
+                        if (el) el.innerHTML = emptyHTML('未检测到 GPU');
+                        return;
+                    }
+                    const util = Number(gpu.gpuUtilization ?? 0);
+                    const memUsed = Number(gpu.memoryUsed ?? 0);
+                    const memTotal = Number(gpu.memoryTotal ?? 0);
+                    const memPct = memTotal > 0 ? (memUsed / memTotal * 100) : 0;
+                    const temp = Number(gpu.temperature ?? 0);
+                    const power = Number(gpu.powerDraw ?? 0);
+                    if (summaryEl) {
+                        summaryEl.innerHTML = `<div class="aios-p-summary-grid">
+                            <div class="aios-p-summary-card"><div class="aios-p-summary-title"><i class="fas fa-tag"></i> 设备</div><div class="aios-p-summary-value">${escapeHtml(gpu.name || '-')}</div><div class="aios-p-summary-meta">驱动 ${escapeHtml(String(gpu.driverVersion || gpu.driver_version || '-'))}</div></div>
+                            <div class="aios-p-summary-card"><div class="aios-p-summary-title"><i class="fas fa-gauge-high"></i> 负载概览</div><div class="aios-p-summary-value">${util.toFixed(1)}% / ${memPct.toFixed(1)}%</div><div class="aios-p-summary-meta">利用率 / 显存占用</div></div>
+                            <div class="aios-p-summary-card"><div class="aios-p-summary-title"><i class="fas fa-clock"></i> 刷新时间</div><div class="aios-p-summary-value">${escapeHtml(this.refreshState.lastUpdated || '-')}</div><div class="aios-p-summary-meta">${this.refreshState.lastError ? `异常: ${escapeHtml(this.refreshState.lastError)}` : '采样正常'}</div></div>
+                        </div>`;
+                    }
+                    const cards = [
+                        { icon: 'fa-chart-line', label: '利用率', value: `${util}%`, progress: util, ptype: util > 80 ? 'danger' : util > 50 ? 'warning' : 'success' },
+                        { icon: 'fa-memory', label: '显存', value: `${formatBytes(memUsed)} / ${formatBytes(memTotal)}`, progress: memPct, ptype: memPct > 80 ? 'danger' : memPct > 50 ? 'warning' : 'success' },
+                        { icon: 'fa-thermometer-half', label: '温度', value: `${temp}°C`, progress: temp, ptype: temp > 80 ? 'danger' : temp > 60 ? 'warning' : 'success' },
+                        { icon: 'fa-plug', label: '功耗', value: `${power}W` },
+                    ];
+                    if (el) {
+                        el.innerHTML = cards.map(c => {
+                            const prog = c.progress != null ? `<div class="aios-p-progress-bar"><div class="aios-p-progress-fill aios-${c.ptype}" style="width:${Math.min(c.progress, 100)}%"></div></div>` : '';
+                            return `<div class="aios-p-stat-card"><div class="aios-p-stat-icon"><i class="fas ${c.icon}"></i></div><div class="aios-p-stat-body"><div class="aios-p-stat-label">${c.label}</div><div class="aios-p-stat-value">${c.value}</div>${prog}</div></div>`;
+                        }).join('');
+                    }
                     return;
                 }
-                const util = gpu.gpuUtilization ?? 0;
-                const memUsed = gpu.memoryUsed ?? 0;
-                const memTotal = gpu.memoryTotal ?? 0;
-                const memPct = memTotal > 0 ? (memUsed / memTotal * 100) : 0;
-                const temp = gpu.temperature ?? 0;
-                const power = gpu.powerDraw ?? 0;
-                const cards = [
-                    { icon: 'fa-tag', label: 'GPU', value: gpu.name || '-' },
-                    { icon: 'fa-chart-line', label: '利用率', value: `${util}%`, progress: util, ptype: util > 80 ? 'danger' : util > 50 ? 'warning' : 'success' },
-                    { icon: 'fa-memory', label: '显存', value: `${formatBytes(memUsed)} / ${formatBytes(memTotal)}`, progress: memPct, ptype: memPct > 80 ? 'danger' : memPct > 50 ? 'warning' : 'success' },
-                    { icon: 'fa-thermometer-half', label: '温度', value: `${temp}°C`, progress: temp, ptype: temp > 80 ? 'danger' : temp > 60 ? 'warning' : 'success' },
-                    { icon: 'fa-plug', label: '功耗', value: `${power}W` },
-                ];
-                const el = document.getElementById('aios-gpu-stats');
-                if (el) {
-                    el.innerHTML = cards.map(c => {
-                        const prog = c.progress != null ? `<div class="aios-p-progress-bar"><div class="aios-p-progress-fill aios-${c.ptype}" style="width:${Math.min(c.progress, 100)}%"></div></div>` : '';
-                        return `<div class="aios-p-stat-card"><div class="aios-p-stat-icon"><i class="fas ${c.icon}"></i></div><div class="aios-p-stat-body"><div class="aios-p-stat-label">${c.label}</div><div class="aios-p-stat-value">${c.value}</div>${prog}</div></div>`;
-                    }).join('');
+                const refreshMeta = {
+                    loading: this.refreshState.loading,
+                    lastUpdated: this.refreshState.lastUpdated || '-',
+                    lastError: this.refreshState.lastError || '',
+                };
+                if (!gpu) {
+                    const summaryEl = document.getElementById('aios-gpu-summary');
+                    if (summaryEl) summaryEl.innerHTML = emptyHTML('未检测到 GPU');
                 }
+                window.AiosGPUCharts.renderGPUCards('aios-gpu-stats', gpu, refreshMeta);
             },
             renderEngineStatus(data) {
                 const result = data.data || data || {};
                 const raw = result.current || result || {};
+                this.lastEngineData = raw;
                 const services = Array.isArray(raw.services) ? raw.services : (Array.isArray(raw.engines) ? raw.engines : []);
+                const runningServices = services.filter(s => s?.status === 'running');
+                const detectedCurrentEngine = normalizeEngineType(
+                    runningServices[0]?.engine_type
+                        || runningServices[0]?.engine
+                        || raw.current_engine
+                        || result.current_engine
+                        || this.currentEngine
+                        || ''
+                );
+                this.currentEngine = detectedCurrentEngine;
                 const engineTypes = ['vllm', 'sglang', 'llamacpp'];
+                const switchSession = result.switch_session || raw.switch_session || result.session || raw.session || null;
+                const sessionState = this.getEngineSessionState(switchSession);
+                const rawCurrentEngine = detectedCurrentEngine;
+                const switchingFromBackend = !!(raw.switching || result.switching || sessionState.active);
+                const isSwitching = !!(switchingFromBackend || this.switchingEngine || this._engineSwitchPollTimer);
+                const switchingTarget = normalizeEngineType(
+                    this.switchingEngine
+                        || this.pendingTargetEngine
+                        || this._engineSwitchTargetEngine
+                        || (switchSession && (switchSession.target_engine || switchSession.engine_type))
+                        || rawCurrentEngine
+                        || ''
+                );
+                if (!isSwitching && !sessionState.active) {
+                    this.switchingEngine = '';
+                    this.pendingTargetEngine = '';
+                    this._engineSwitchTargetEngine = '';
+                }
+                const globalActionDisabled = isSwitching;
                 const configEditor = document.getElementById('aios-engine-config-editor');
-                let config = {};
+                let editorConfig = {};
                 if (configEditor?.value) {
                     try {
-                        config = JSON.parse(configEditor.value);
+                        editorConfig = JSON.parse(configEditor.value);
                     } catch {}
                 }
+                const config = Object.keys(this.engineConfigSnapshot || {}).length > 0
+                    ? this.engineConfigSnapshot
+                    : editorConfig;
                 const configRoot = config.config || config.current || config;
                 const configMap = {
                     vllm: configRoot.vllm || configRoot.vllm_config || {},
                     sglang: configRoot.sglang || configRoot.sglang_config || {},
                     llamacpp: configRoot.llamacpp || configRoot.llama_cpp || configRoot.llamacpp_config || configRoot.llama_cpp_config || {},
                 };
+                const enabledMap = this.getEngineConfigEnabledMap(config);
                 const engines = engineTypes.map(type => {
                     const svc = services.find(s => normalizeEngineType(s.engine_type || s.name || s.type) === type) || null;
-                    const status = svc?.status || (svc ? 'stopped' : 'not_found');
-                    const running = status === 'running';
+                    const engineEnabled = enabledMap[type] !== false;
+                    const status = !engineEnabled ? 'disabled' : (svc?.status || (svc ? 'stopped' : 'not_found'));
+                    const running = status === 'running' && engineEnabled;
                     const cfg = configMap[type] || {};
                     const model = svc?.model || svc?.model_name || cfg.model_name || cfg.model || '-';
                     const port = svc?.port ?? cfg.port ?? cfg.http_port ?? '-';
@@ -1001,17 +1304,24 @@
                 });
                 const html = `<div class="aios-p-engine-grid">${engines.map(e => {
                     const unavailable = e.status === 'not_found';
-                    const canSwitch = !e.running && !unavailable;
+                    const isPending = this.switchingEngine === e.type || (isSwitching && switchingTarget === e.type);
+                    const isDisabled = e.status === 'disabled';
+                    const canSwitch = !globalActionDisabled && !unavailable && !isDisabled && !e.running;
                     const actionAttrs = canSwitch ? `data-action="switch-engine" data-engine="${e.type}"` : 'disabled aria-disabled="true"';
-                    const actionIcon = e.running ? 'fa-check-circle' : (unavailable ? 'fa-ban' : 'fa-play');
-                    const actionText = e.running ? '当前引擎' : (unavailable ? '未配置' : '切换到此引擎');
+                    const actionIcon = e.running ? 'fa-check-circle' : (isDisabled ? 'fa-ban' : (unavailable ? 'fa-triangle-exclamation' : isPending ? 'fa-spinner fa-spin' : 'fa-play'));
+                    const actionText = e.running ? '当前引擎' : (isDisabled ? '已禁用' : (unavailable ? '未配置' : isPending ? '切换中...' : '切换到此引擎'));
+                    const statusText = e.running
+                        ? '运行中'
+                        : isDisabled ? '已禁用'
+                        : (isPending ? `切换中 (${switchingTarget ? engineDisplayName(switchingTarget) : '待确认'})` : (e.status === 'not_found' ? '未配置/未安装' : '已停止'));
+                    const cardClass = `${e.running ? 'aios-p-engine-running' : 'aios-p-engine-stopped'} ${isPending ? 'aios-p-engine-pending' : ''} ${isDisabled ? 'aios-p-engine-disabled' : ''}`;
                     return `
-                    <div class="aios-p-engine-card ${e.running ? 'aios-p-engine-running' : 'aios-p-engine-stopped'}" data-engine-type="${e.type}">
+                    <div class="aios-p-engine-card ${cardClass}" data-engine-type="${e.type}">
                         <div class="aios-p-engine-header">
                             <div class="aios-p-engine-icon"><i class="fas fa-bolt"></i></div>
                             <div class="aios-p-engine-title-row">
                                 <div class="aios-p-engine-title">${engineDisplayName(e.type)}</div>
-                                <div class="aios-p-engine-status-text ${e.running ? 'aios-p-engine-running-text' : 'aios-p-engine-stopped-text'}">${e.running ? '运行中' : (e.status === 'not_found' ? '未配置/未安装' : '已停止')}</div>
+                                <div class="aios-p-engine-status-text ${e.running ? 'aios-p-engine-running-text' : 'aios-p-engine-stopped-text'}">${statusText}</div>
                             </div>
                         </div>
                         <div class="aios-p-engine-info-grid">
@@ -1036,42 +1346,191 @@
                 if (el) el.innerHTML = html;
             },
             async switchEngine(engineType) {
+                const targetEngine = normalizeEngineType(engineType);
                 try {
+                    if (this.switchingEngine) {
+                        showToast('已有引擎切换进行中，请稍候', 'warning');
+                        return;
+                    }
+                    if (!this.isEngineEnabled(targetEngine)) {
+                        showToast(`${engineDisplayName(targetEngine)} 当前已禁用，请先在引擎配置中启用`, 'warning');
+                        return;
+                    }
                     let modelName = '';
                     const aggResult = await adminFetch('/api/model-switch/aggregated');
                     const aggData = aggResult.data || aggResult;
                     const groups = aggData.groups || [];
+                    const runningServices = this.getRunningServices(this.lastEngineData || {});
+                    const currentService = runningServices.find(s => normalizeEngineType(s.engine_type || s.engine || s.name || s.type) === normalizeEngineType(this.currentEngine || this.pendingTargetEngine || ''))
+                        || runningServices.find(s => s.status === 'running');
+                    modelName = currentService?.model_name || currentService?.model || '';
                     for (const g of groups) {
                         for (const v of (g.variants || [])) {
+                            if (modelName) break;
                             if (v.running || v.is_current) { modelName = v.name || g.base_name; break; }
                         }
                         if (modelName) break;
                     }
                     if (!modelName && groups.length > 0) modelName = groups[0].base_name;
                     if (!modelName) { showToast('没有可用模型，请先下载模型', 'warning'); return; }
-                    const confirmed = await showConfirm(`确认切换引擎到 ${engineDisplayName(engineType)}？该操作会重启当前推理服务。`);
+                    const confirmed = await showConfirm(`确认切换引擎到 ${engineDisplayName(targetEngine)}？该操作会重启当前推理服务。`);
                     if (!confirmed) return;
+                    this.switchingEngine = targetEngine;
+                    this.pendingTargetEngine = targetEngine;
+                    this.renderEngineStatus({ data: { current: this.lastEngineData || {} } });
+                    showToast(`正在切换到 ${engineDisplayName(targetEngine)}，请等待状态稳定`, 'info');
+                    const requestBody = { model_name: modelName, engine_type: targetEngine };
+                    const targetPort = parsePortValue(this._engineSwitchTargetPort || this.getEngineDefaultPort(targetEngine) || this._engineSwitchDefaultPorts[targetEngine] || null);
+                    if (targetPort != null) {
+                        requestBody.port = targetPort;
+                    }
+                    this._engineSwitchTargetEngine = targetEngine;
+                    this._engineSwitchTargetModel = this.normalizeModelName(modelName);
+                    this._engineSwitchTargetPort = targetPort;
+                    this._engineSwitchDeadlineAt = Date.now() + this._engineSwitchTimeoutMs;
                     const result = await adminFetch('/api/engine/switch', {
                         method: 'POST',
-                        body: JSON.stringify({ model_name: modelName, engine_type: normalizeEngineType(engineType), port: 8000 })
+                        body: JSON.stringify(requestBody)
                     });
                     if (result.success || result.data?.success) {
-                        showToast(`切换引擎到 ${engineDisplayName(engineType)} 成功`, 'success');
+                        const sessionId = result.data?.session_id || result.session_id || '';
+                        const reason = result.data?.reason || result.reason || '';
+                        this._engineSwitchTargetSessionId = sessionId;
+                        this._engineSwitchTargetModel = this.normalizeModelName(modelName);
+                        this._engineSwitchTargetEngine = targetEngine;
+                        this._engineSwitchTargetPort = targetPort;
+                        this._engineSwitchStableCount = 0;
+                        this._engineSwitchDeadlineAt = Date.now() + this._engineSwitchTimeoutMs;
+                        this.pollEngineSwitchStatus(targetEngine, modelName);
+                        this.renderEngineStatus({ data: { current: this.lastEngineData || {}, switching: true, switch_session: result.session || result.data?.session || null } });
+                        showToast(`切换请求已提交：${engineDisplayName(targetEngine)}，正在确认`, 'success');
+                        this.refresh(false);
+                        if (reason === 'already_running_same_engine') {
+                            this.clearEngineSwitchPolling();
+                            this.switchingEngine = '';
+                            this.pendingTargetEngine = '';
+                            this._engineSwitchTargetEngine = '';
+                            this._engineSwitchTargetSessionId = '';
+                        }
                     } else {
-                        const reason = result.reason || result.error || '未知错误';
+                        const reason = result.data?.reason || result.reason || result.error || '未知错误';
                         if (reason === 'insufficient_gpu_memory') {
                             showToast(`GPU显存不足: ${result.suggestion || ''}`, 'error');
                         } else if (reason === 'already_running_same_engine') {
-                            showToast(`${engineDisplayName(engineType)} 已是当前引擎`, 'info');
+                            showToast(`${engineDisplayName(targetEngine)} 已是当前引擎`, 'info');
+                            this.clearEngineSwitchPolling();
+                            this.switchingEngine = '';
+                            this.pendingTargetEngine = '';
                         } else {
                             showToast(`切换引擎失败: ${reason}`, 'error');
+                            this.clearEngineSwitchPolling();
+                            this.switchingEngine = '';
+                            this.pendingTargetEngine = '';
                         }
                     }
-                    this.refresh();
-                    window.AiosManager.model.refresh();
                 } catch (e) {
                     showToast(`切换引擎失败: ${e.message}`, 'error');
+                    this.clearEngineSwitchPolling();
+                    this.switchingEngine = '';
+                    this.pendingTargetEngine = '';
+                } finally {
+                    if (!this._engineSwitchPollTimer) {
+                        this.refresh(false);
+                    }
                 }
+            },
+            pollEngineSwitchStatus(targetEngine, targetModel) {
+                if (this._engineSwitchPollTimer) {
+                    clearTimeout(this._engineSwitchPollTimer);
+                    this._engineSwitchPollTimer = null;
+                }
+                const normalizedTarget = normalizeEngineType(targetEngine);
+                const normalizedModel = this.normalizeModelName(targetModel || this._engineSwitchTargetModel || '');
+                const deadline = this._engineSwitchDeadlineAt || (Date.now() + this._engineSwitchTimeoutMs);
+                this._engineSwitchDeadlineAt = deadline;
+                this._engineSwitchStableCount = 0;
+
+                const finish = (toastType, message, refreshModel = false) => {
+                    this.clearEngineSwitchPolling();
+                    this.switchingEngine = '';
+                    this.pendingTargetEngine = '';
+                    this._engineSwitchTargetEngine = '';
+                    if (message) showToast(message, toastType);
+                    this.refresh(false);
+                    if (refreshModel) window.AiosManager.model.refresh();
+                };
+
+                const loop = async () => {
+                    if (!normalizedTarget) {
+                        finish('warning', '');
+                        return;
+                    }
+                    if (Date.now() >= deadline) {
+                        finish('warning', `引擎切换超时：${engineDisplayName(normalizedTarget)}，请检查实际运行状态`);
+                        return;
+                    }
+                    try {
+                        const status = await adminFetch('/api/engine/status');
+                        this.renderEngineStatus(status);
+                        const payload = status.data || status || {};
+                        const raw = payload.current || payload;
+                        const services = this.getRunningServices(payload);
+                        const matchingServices = services.filter(
+                            s => normalizeEngineType(s.engine_type || s.engine || s.name || s.type) === normalizedTarget && s.status === 'running'
+                        );
+                        const runningService = matchingServices.find(s => this.isEngineSwitchServiceMatch(s, normalizedTarget, normalizedModel, this._engineSwitchTargetPort)) || matchingServices[0] || null;
+                        const session = payload.switch_session || raw.switch_session || payload.session || raw.session || null;
+                        const sessionState = this.getEngineSessionState(session);
+                        const currentEngine = normalizeEngineType(
+                            runningService?.engine_type
+                                || runningService?.engine
+                                || payload.current_engine
+                                || raw.engine
+                                || raw.current_engine
+                                || payload.engine
+                                || ''
+                        );
+                        const sessionError = session?.error || session?.reason || '';
+                        const sessionRollback = session?.rollback_reason || '';
+                        const runningModel = this.normalizeModelName(runningService?.model_name || runningService?.model || '');
+                        const modelMatches = !normalizedModel || !runningModel || runningModel === normalizedModel;
+                        const hasConflictingRunningService = services.some(service => {
+                            if (service?.status !== 'running') return false;
+                            const serviceEngine = normalizeEngineType(service.engine_type || service.engine || service.name || service.type);
+                            if (!serviceEngine || serviceEngine === normalizedTarget) return false;
+                            return true;
+                        });
+                        const serviceStable = !!runningService && currentEngine === normalizedTarget && modelMatches && !hasConflictingRunningService;
+
+                        if (sessionError || sessionRollback) {
+                            finish('error', sessionRollback ? `引擎切换已回滚：${sessionRollback}` : `引擎切换失败：${sessionError}`);
+                            return;
+                        }
+                        if (sessionState.terminal && !sessionState.completed) {
+                            finish('error', '引擎切换失败或已回滚');
+                            return;
+                        }
+
+                        if (serviceStable) {
+                            this._engineSwitchStableCount += 1;
+                            if (this._engineSwitchStableCount >= this._engineSwitchStableThreshold) {
+                                finish('success', `引擎切换成功：${engineDisplayName(normalizedTarget)} 已稳定运行`, true);
+                                return;
+                            }
+                        } else {
+                            this._engineSwitchStableCount = 0;
+                        }
+                        if (sessionState.completed && serviceStable) {
+                            finish('success', `引擎切换成功：${engineDisplayName(normalizedTarget)} 已完成切换`, true);
+                            return;
+                        }
+
+                        this._engineSwitchPollTimer = setTimeout(loop, this._engineSwitchPollInterval);
+                    } catch (e) {
+                        this._engineSwitchPollTimer = setTimeout(loop, 3000);
+                    }
+                };
+                loop();
             },
             async loadEngineConfig(showMessage = true) {
                 const editor = document.getElementById('aios-engine-config-editor');
@@ -1079,6 +1538,7 @@
                 try {
                     const result = await adminFetch('/api/engine/config');
                     const payload = result.data || result || {};
+                    this.setEngineConfigSnapshot(payload);
                     editor.value = JSON.stringify(payload, null, 2);
                     editor.oninput = () => { editor.dataset.dirty = 'true'; };
                     if (showMessage) showToast('引擎配置已刷新', 'success');
@@ -1103,109 +1563,59 @@
                         return;
                     }
                     editor.dataset.dirty = 'false';
+                    this.setEngineConfigSnapshot(payload);
                     showToast('引擎配置已保存', 'success');
                     this.refresh();
                 } catch (e) {
                     showToast(`保存引擎配置失败: ${e.message}`, 'error');
                 }
             },
-            updateHistory(data) {
-                const gpuDataArr = data.data || [];
-                const gpu = gpuDataArr[0];
-                if (!gpu) return;
-                const util = gpu.gpuUtilization ?? 0;
-                const memPct = gpu.memoryUsagePercent ?? 0;
-                const temp = gpu.temperature ?? 0;
-                const power = gpu.powerDraw ?? 0;
-                const now = new Date().toISOString();
-                const shouldSaveTo = (range) => {
-                    const nowMs = Date.now();
-                    const last = this.lastSaveTime[range];
-                    if (!last) { this.lastSaveTime[range] = nowMs; return true; }
-                    const intervals = { min: 5000, hour: 60000, day: 3600000 };
-                    if (nowMs - last >= intervals[range]) { this.lastSaveTime[range] = nowMs; return true; }
-                    return false;
-                };
-                if (shouldSaveTo('min')) {
-                    this.history.min.utilization.push(util);
-                    this.history.min.memoryPct.push(memPct);
-                    this.history.min.temperature.push(temp);
-                    this.history.min.power.push(power);
-                    this.timestamps.min.push(now);
-                    const maxPoints = { min: 30, hour: 60, day: 48 };
-                    for (const range of ['min', 'hour', 'day']) {
-                        if (this.history[range].utilization.length > maxPoints[range]) {
-                            this.history[range].utilization.shift();
-                            this.history[range].memoryPct.shift();
-                            this.history[range].temperature.shift();
-                            this.history[range].power.shift();
-                            this.timestamps[range].shift();
-                        }
-                    }
-                }
-                if (shouldSaveTo('hour')) {
-                    this.history.hour.utilization.push(util);
-                    this.history.hour.memoryPct.push(memPct);
-                    this.history.hour.temperature.push(temp);
-                    this.history.hour.power.push(power);
-                    this.timestamps.hour.push(now);
-                }
-                if (shouldSaveTo('day')) {
-                    this.history.day.utilization.push(util);
-                    this.history.day.memoryPct.push(memPct);
-                    this.history.day.temperature.push(temp);
-                    this.history.day.power.push(power);
-                    this.timestamps.day.push(now);
-                }
-                this.renderCharts();
+            refreshHistory() {
+                this.refreshHistoryData();
             },
             setTimeRange(range) {
-                this.currentRange = range;
+                this.currentRange = this.normalizeHistoryRange(range);
                 document.querySelectorAll('.aios-p-range-btn').forEach(b => {
-                    b.classList.toggle('active', b.dataset.range === range);
+                    b.classList.toggle('active', b.dataset.range === this.currentRange);
                 });
-                this.renderCharts();
-            },
-            getFilteredData(range) {
-                const maxPoints = { min: 30, hour: 60, day: 48 };
-                const pts = maxPoints[range];
-                const h = this.history[range];
-                return {
-                    utilization: h.utilization.slice(-pts),
-                    memoryPct: h.memoryPct.slice(-pts),
-                    temperature: h.temperature.slice(-pts),
-                    power: h.power.slice(-pts),
-                    timestamps: this.timestamps[range].slice(-pts)
-                };
-            },
-            renderCharts() {
-                const range = this.currentRange;
-                const data = this.getFilteredData(range);
-                const maxLen = { min: 30, hour: 60, day: 48 }[range];
-                const setVal = (id, val, unit) => { const e = document.getElementById(id); if (e) e.textContent = val != null ? `${val}${unit}` : '--'; };
-                const len = data.utilization.length;
-                if (len > 0) {
-                    setVal('chart-util-value', data.utilization[len - 1].toFixed(1), '%');
-                    setVal('chart-mem-value', data.memoryPct[len - 1].toFixed(1), '%');
-                    setVal('chart-temp-value', data.temperature[len - 1], '°C');
-                    setVal('chart-power-value', data.power[len - 1], 'W');
-                }
-                drawMiniChart('chart-util', data.utilization, maxLen, 'rgb(129, 140, 248)', 0, 100, '%', 'util', range, data.timestamps);
-                drawMiniChart('chart-mem', data.memoryPct, maxLen, 'rgb(52, 211, 153)', 0, 100, '%', 'mem', range, data.timestamps);
-                const tempMax = Math.max(...data.temperature.filter(v => v > 0), 80) || 80;
-                drawMiniChart('chart-temp', data.temperature, maxLen, 'rgb(251, 191, 36)', 0, tempMax, 'C', 'temp', range, data.timestamps);
-                const powerMax = Math.max(...data.power.filter(v => v > 0), 100) || 100;
-                drawMiniChart('chart-power', data.power, maxLen, 'rgb(248, 113, 113)', 0, powerMax, 'W', 'power', range, data.timestamps);
+                this.refreshHistoryData().catch((e) => {
+                    showToast(`GPU 历史图刷新失败: ${e.message}`, 'warning');
+                });
             },
         },
         model: {
             _downloadPolling: null,
+            _switchPolling: null,
+            _switchTaskId: '',
+            _switchTargetModel: '',
+            _switchPollDeadlineAt: 0,
+            _switchPollIntervalMs: 3000,
+            _switchPollTimeoutMs: 660000,
             _switchWs: null,
             _downloadWs: null,
             _realtimeStarted: false,
             isSwitching: false,
+            actionLoading: false,
             currentModel: '',
             currentEngine: '',
+            setActionStatus(type, message) {
+                const el = document.getElementById('aios-switch-status');
+                if (!el) return;
+                if (!message) {
+                    el.innerHTML = '';
+                    return;
+                }
+                el.innerHTML = `<div class="aios-p-inline-status aios-p-inline-status-${type || 'info'}"><i class="fas ${type === 'error' ? 'fa-circle-exclamation' : type === 'success' ? 'fa-circle-check' : 'fa-circle-info'}"></i><span>${escapeHtml(message)}</span></div>`;
+            },
+            clearSwitchPolling() {
+                if (this._switchPolling) {
+                    clearTimeout(this._switchPolling);
+                    this._switchPolling = null;
+                }
+                this._switchTaskId = '';
+                this._switchTargetModel = '';
+                this._switchPollDeadlineAt = 0;
+            },
             initRealtime() {
                 if (this._realtimeStarted || typeof WebSocket === 'undefined') return;
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1264,9 +1674,11 @@
                     this.populateEngineSelect(engineData);
                     this.refreshDownloadList();
                     this.refreshPool();
+                    if (!this.isSwitching && !this.actionLoading) this.setActionStatus('', '');
                 } catch (e) {
                     const el = document.getElementById('aios-model-banner');
                     if (el) el.innerHTML = errorHTML(e.message);
+                    if (this.actionLoading) this.setActionStatus('error', e.message);
                 }
             },
             renderBanner(aggData, engineData) {
@@ -1287,6 +1699,7 @@
                 this.currentModel = currentModel || '';
                 this.currentEngine = normalizeEngineType(currentEngine);
                 this.currentPort = currentPort;
+                window.AiosManager.gpu.pendingTargetEngine = this.currentEngine;
                 const modelDisplay = currentModel || '-';
                 const engineDisplay = engineDisplayName(currentEngine);
                 const el = document.getElementById('aios-model-banner');
@@ -1308,21 +1721,37 @@
                 this.isSwitching = !!isSwitching;
                 const session = data.session || null;
                 if (isSwitching && session) {
+                    this.actionLoading = true;
                     const progress = session.overall_progress ?? 0;
                     const target = session.target_model || '-';
+                    const actionText = session.action === 'switch' ? '切换' : session.action === 'start' ? '启动' : '停止';
+                    const rollback = session.rollback_reason ? `<div class="aios-p-inline-status aios-p-inline-status-error" style="margin-top:var(--space-sm);"><i class="fas fa-rotate-left"></i><span>已触发回滚: ${escapeHtml(session.rollback_reason)}</span></div>` : '';
                     const phasesHtml = (session.phases || []).map(p => {
                         const statusIcon = p.status === 'running' ? 'fa-spinner fa-spin' : p.status === 'success' ? 'fa-check' : p.status === 'failed' ? 'fa-times' : 'fa-clock';
                         return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><i class="fas ${statusIcon}" style="width:16px;"></i><span style="font-size:12px;color:var(--text-secondary);">${p.name}</span></div>`;
                     }).join('');
+                    this.setActionStatus('info', `${actionText}任务进行中：${target} · ${progress}%`);
                     el.innerHTML = `<div class="aios-p-status-banner" style="border-color:rgba(var(--color-warning-rgb),0.3);">
-                        <div class="aios-p-banner-title" style="color:var(--color-warning);">正在${session.action === 'switch' ? '切换' : session.action === 'start' ? '启动' : '停止'}模型</div>
+                        <div class="aios-p-banner-title" style="color:var(--color-warning);">正在${actionText}模型</div>
                         <div style="display:flex;align-items:center;gap:var(--space-lg);">
-                            <div style="flex:1;"><div style="font-size:14px;font-weight:600;color:var(--text-primary);">${target}</div><div style="margin-top:8px;">${phasesHtml}</div></div>
+                            <div style="flex:1;"><div style="font-size:14px;font-weight:600;color:var(--text-primary);">${target}</div><div style="margin-top:8px;">${phasesHtml}</div>${rollback}</div>
                             <div style="width:100px;"><div class="aios-p-progress-bar" style="height:8px;"><div class="aios-p-progress-fill aios-p-warning" style="width:${progress}%"></div></div><div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px;">${progress}%</div></div>
                         </div>
                         <div style="margin-top:var(--space-md);"><button class="aios-p-btn aios-p-btn-sm aios-p-btn-danger" data-action="cancel-switch"><i class="fas fa-times"></i> 取消</button></div>
                     </div>`;
                 } else {
+                    this.actionLoading = false;
+                    this.clearSwitchPolling();
+                    if (session?.completed_successfully) {
+                        this.setActionStatus('success', `切换完成：${session.target_model || this.currentModel || '-'}`);
+                        setTimeout(() => {
+                            this.setActionStatus('', '');
+                        }, 5000);
+                    } else if (session?.error || session?.rollback_reason) {
+                        this.setActionStatus('error', session.error || session.rollback_reason);
+                    } else if (!this.actionLoading) {
+                        this.setActionStatus('', '');
+                    }
                     el.innerHTML = '';
                 }
             },
@@ -1359,11 +1788,12 @@
                 const engineOptions = engineTypes.map(t => {
                     const service = services.find(s => normalizeEngineType(s.engine_type || s.name || s.type) === t);
                     const running = service && service.status === 'running';
-                    const disabled = !service;
-                    const suffix = disabled ? ' (未配置)' : (running ? ' (当前)' : '');
+                    const enabled = window.AiosManager.gpu.isEngineEnabled(t);
+                    const disabled = !enabled;
+                    const suffix = disabled ? ' (已禁用)' : (running ? ' (当前)' : ' (可切换)');
                     return `<option value="${t}"${running ? ' selected' : ''}${disabled ? ' disabled' : ''}>${engineDisplayName(t)}${suffix}</option>`;
                 }).join('');
-                const hasUsableEngine = services.some(s => engineTypes.includes(normalizeEngineType(s.engine_type || s.name || s.type)));
+                const hasUsableEngine = engineTypes.some(t => window.AiosManager.gpu.isEngineEnabled(t));
                 const placeholder = hasUsableEngine ? '' : '<option value="" selected disabled>无可用引擎</option>';
                 select.innerHTML = `${placeholder}${engineOptions}`;
             },
@@ -1402,13 +1832,15 @@
                             const vReqMem = v.required_memory || '-';
                             const vPathExists = v.path_exists !== false;
                             const vMultimodal = v.multimodal || v.supports_images || false;
-                            return `<div class="aios-p-model-item ${isCurrent ? 'aios-p-current-model' : ''}">
+                            const isBusy = this.isSwitching || this.actionLoading;
+                            return `<div class="aios-p-model-item ${isCurrent ? 'aios-p-current-model' : ''} ${isBusy ? 'aios-p-model-item-busy' : ''}">
                                 <div class="aios-p-model-header">
                                     <div class="aios-p-model-title-wrap">
                                         <div class="aios-p-model-name">${vName}</div>
                                         <div class="aios-p-model-tags">
                                             <span class="aios-p-model-status ${isRunning ? 'aios-p-running' : 'aios-p-stopped'}">${isRunning ? '运行中' : (vPathExists ? '已下载' : '未下载')}</span>
                                             ${isCurrent ? '<span class="aios-p-badge aios-p-badge-primary">当前</span>' : ''}
+                                            ${this.isSwitching && isCurrent ? '<span class="aios-p-model-chip aios-p-model-chip-warning">切换中</span>' : ''}
                                             <span class="aios-p-model-chip">${engineDisplayName(vEngine)}</span>
                                             ${vMultimodal ? '<span class="aios-p-model-chip" style="background:rgba(var(--color-success-rgb),0.08);border-color:rgba(var(--color-success-rgb),0.18);color:var(--color-success);">多模态</span>' : ''}
                                         </div>
@@ -1420,10 +1852,10 @@
                                     <div class="aios-p-model-info-card"><div class="aios-p-model-info-label">需显存</div><div class="aios-p-model-info-value">${vReqMem}</div></div>
                                 </div>
                                 <div class="aios-p-model-actions">
-                                    ${!vPathExists ? `<button class="aios-p-btn aios-p-btn-sm" data-action="download-by-name" data-model="${vName}"><i class="fas fa-cloud-download-alt"></i> 下载</button>` : ''}
-                                    ${vPathExists && !isRunning ? `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-success" data-action="start-model" data-model="${vName}"><i class="fas fa-play"></i> 启动</button>` : ''}
-                                    ${isRunning && !isCurrent ? `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" data-action="switch-to-model" data-model="${vName}" data-engine="${vEngine}"><i class="fas fa-exchange-alt"></i> 切换</button>` : ''}
-                                    ${isRunning ? `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-danger" data-action="stop-model" data-model="${vName}"><i class="fas fa-stop"></i> 停止</button>` : ''}
+                                    ${!vPathExists ? `<button class="aios-p-btn aios-p-btn-sm" data-action="download-by-name" data-model="${vName}" ${isBusy ? 'disabled' : ''}><i class="fas fa-cloud-download-alt"></i> 下载</button>` : ''}
+                                    ${vPathExists && !isRunning ? `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-success" data-action="start-model" data-model="${vName}" ${isBusy ? 'disabled' : ''}><i class="fas fa-play"></i> 启动</button>` : ''}
+                                    ${isRunning && !isCurrent ? `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-primary" data-action="switch-to-model" data-model="${vName}" data-engine="${vEngine}" ${isBusy ? 'disabled' : ''}><i class="fas fa-exchange-alt"></i> 切换</button>` : ''}
+                                    ${isRunning ? `<button class="aios-p-btn aios-p-btn-sm aios-p-btn-danger" data-action="stop-model" data-model="${vName}" ${isBusy ? 'disabled' : ''}><i class="fas fa-stop"></i> 停止</button>` : ''}
                                 </div>
                             </div>`;
                         }).join('')}</div>
@@ -1619,82 +2051,124 @@
                     showToast('请选择已配置的引擎', 'warning');
                     return;
                 }
-                if (this.isSwitching) {
+                if (this.isSwitching || this.actionLoading) {
                     showToast('已有模型切换任务进行中，请等待完成或取消后再操作', 'warning');
                     return;
                 }
+                this.actionLoading = true;
+                this.setActionStatus('info', `准备切换到 ${modelName} · ${engineDisplayName(engineType)}`);
                 try {
                     const currentModel = this.currentModel || '';
                     const currentEngine = normalizeEngineType(this.currentEngine || '');
                     if (modelName === currentModel && normalizeEngineType(engineType) === currentEngine) {
+                        this.setActionStatus('success', `${modelName} 已在 ${engineDisplayName(engineType)} 上运行`);
                         showToast(`${modelName} 已在 ${engineDisplayName(engineType)} 上运行`, 'info');
                         return;
                     }
                     const confirmed = await showConfirm(`确认切换到 ${modelName} (${engineDisplayName(engineType)})？该操作会重启推理服务。`);
-                    if (!confirmed) return;
+                    if (!confirmed) {
+                        this.setActionStatus('', '');
+                        return;
+                    }
                     if (normalizeEngineType(engineType) !== currentEngine) {
                         const engineBody = { model_name: modelName, engine_type: normalizeEngineType(engineType) };
                         if (port) engineBody.port = parseInt(port);
+                        this.setActionStatus('info', `正在切换引擎到 ${engineDisplayName(engineType)}...`);
                         const engineResult = await adminFetch('/api/engine/switch', {
                             method: 'POST',
                             body: JSON.stringify(engineBody)
                         });
                         if (engineResult.success || engineResult.data?.success) {
                             const reason = engineResult.data?.reason || engineResult.reason;
-                            showToast(reason === 'already_running_same_engine'
+                            const message = reason === 'already_running_same_engine'
                                 ? `${modelName} 已在 ${engineDisplayName(engineType)} 上运行`
-                                : `引擎切换任务已提交: ${engineDisplayName(engineType)}`, reason === 'already_running_same_engine' ? 'info' : 'success');
+                                : `引擎切换任务已提交: ${engineDisplayName(engineType)}`;
+                            this.setActionStatus(reason === 'already_running_same_engine' ? 'success' : 'info', message);
+                            showToast(message, reason === 'already_running_same_engine' ? 'info' : 'success');
+                            const normalizedEngine = normalizeEngineType(engineType);
+                            window.AiosManager.gpu.switchingEngine = normalizedEngine;
+                            window.AiosManager.gpu.pendingTargetEngine = normalizedEngine;
+                            window.AiosManager.gpu._engineSwitchTargetEngine = normalizedEngine;
+                            window.AiosManager.gpu._engineSwitchTargetModel = window.AiosManager.gpu.normalizeModelName(modelName);
+                            window.AiosManager.gpu._engineSwitchTargetPort = port ? parseInt(port) : null;
+                            window.AiosManager.gpu._engineSwitchDeadlineAt = Date.now() + window.AiosManager.gpu._engineSwitchTimeoutMs;
+                            window.AiosManager.gpu.pollEngineSwitchStatus(normalizedEngine, modelName);
                             setTimeout(() => this.refresh(), 3000);
-                            window.AiosManager.gpu.refresh();
+                            window.AiosManager.gpu.refresh(false);
                         } else {
                             const detail = engineResult.detail || engineResult.error || engineResult.data?.detail || engineResult.data?.reason || '未知错误';
+                            this.setActionStatus('error', detail);
                             showToast(`引擎切换失败: ${detail}`, 'error');
                         }
                         return;
                     }
-
                     const body = { modelName, engineType };
                     if (port) body.port = parseInt(port);
+                    this.setActionStatus('info', `正在提交 ${modelName} 的切换任务...`);
                     const result = await adminFetch('/api/model-switch/switch', {
                         method: 'POST',
                         body: JSON.stringify(body)
                     });
                     const data = result.data || result;
                     if (data.taskId) {
+                        this._switchTaskId = data.taskId;
+                        this._switchTargetModel = modelName;
+                        this._switchPollDeadlineAt = Date.now() + this._switchPollTimeoutMs;
+                        this.setActionStatus('info', `切换任务已提交：${modelName}`);
                         showToast('切换任务已提交', 'info');
-                        this.pollSwitchStatus();
+                        this.pollSwitchStatus(data.taskId, modelName);
                     } else if (data.success) {
+                        this.setActionStatus('success', `切换到 ${modelName} 成功`);
                         showToast(`切换到 ${modelName} 成功`, 'success');
                         this.refresh();
-                        window.AiosManager.gpu.refresh();
+                        window.AiosManager.gpu.refresh(false);
                     } else {
+                        this.setActionStatus('error', data.error || '未知错误');
                         showToast(`切换失败: ${data.error || '未知错误'}`, 'error');
                     }
                 } catch (e) {
+                    this.setActionStatus('error', e.message);
                     showToast(`切换失败: ${e.message}`, 'error');
+                } finally {
+                    if (!this._switchPolling && !this.isSwitching) this.actionLoading = false;
                 }
             },
             async switchTo(modelName, backendType) {
+                if (this.isSwitching || this.actionLoading) {
+                    showToast('已有模型切换任务进行中，请等待完成或取消后再操作', 'warning');
+                    return;
+                }
+                this.actionLoading = true;
+                this.setActionStatus('info', `准备切换到 ${modelName}`);
                 try {
                     const confirmed = await showConfirm(`确认切换到 ${modelName}？该操作会重启推理服务。`);
-                    if (!confirmed) return;
+                    if (!confirmed) {
+                        this.setActionStatus('', '');
+                        return;
+                    }
                     const result = await adminFetch('/api/model-switch/switch', {
                         method: 'POST',
                         body: JSON.stringify({ modelName, engineType: normalizeEngineType(backendType), async: true })
                     });
                     const data = result.data || result;
                     if (data.taskId) {
+                        this.setActionStatus('info', `切换任务已提交：${modelName}`);
                         showToast('切换任务已提交', 'info');
-                        this.pollSwitchStatus();
+                        this.pollSwitchStatus(data.taskId, modelName);
                     } else if (data.success) {
+                        this.setActionStatus('success', `切换到 ${modelName} 成功`);
                         showToast(`切换到 ${modelName} 成功`, 'success');
                         this.refresh();
-                        window.AiosManager.gpu.refresh();
+                        window.AiosManager.gpu.refresh(false);
                     } else {
+                        this.setActionStatus('error', data.error || '未知错误');
                         showToast(`切换失败: ${data.error || '未知错误'}`, 'error');
                     }
                 } catch (e) {
+                    this.setActionStatus('error', e.message);
                     showToast(`切换失败: ${e.message}`, 'error');
+                } finally {
+                    if (!this._switchPolling && !this.isSwitching) this.actionLoading = false;
                 }
             },
             async start(modelName) {
@@ -1731,8 +2205,60 @@
                     this.refresh();
                 } catch (e) { showToast(`取消失败: ${e.message}`, 'error'); }
             },
-            pollSwitchStatus() {
-                setTimeout(() => this.refresh(), 3000);
+            pollSwitchStatus(taskId = '', targetModel = '') {
+                if (this._switchPolling) {
+                    clearTimeout(this._switchPolling);
+                    this._switchPolling = null;
+                }
+                this._switchTaskId = taskId || '';
+                this._switchTargetModel = targetModel || '';
+                this._switchPollDeadlineAt = Date.now() + this._switchPollTimeoutMs;
+                this.actionLoading = true;
+                this.isSwitching = true;
+
+                const finish = (type, message) => {
+                    this.clearSwitchPolling();
+                    this.actionLoading = false;
+                    this.isSwitching = false;
+                    if (message) this.setActionStatus(type, message);
+                    if (message) showToast(message, type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'success');
+                    this.refresh();
+                    window.AiosManager.gpu.refresh(false);
+                };
+
+                const loop = async () => {
+                    if (Date.now() >= this._switchPollDeadlineAt) {
+                        finish('warning', `切换超时：${targetModel || this._switchTargetModel || '目标模型'}`);
+                        return;
+                    }
+                    try {
+                        const switchStatus = await adminFetch('/api/model-switch/switch-status');
+                        this.renderSwitchingStatus(switchStatus);
+                        const switchData = switchStatus.data || switchStatus || {};
+                        const session = switchData.session || null;
+                        const target = session?.target_model || targetModel || this._switchTargetModel || '-';
+                        if (switchData.is_switching) {
+                            const progress = session?.overall_progress;
+                            const progressText = Number.isFinite(Number(progress)) ? ` · ${progress}%` : '';
+                            this.setActionStatus('info', `切换中：${target}${progressText}`);
+                            this._switchPolling = setTimeout(loop, this._switchPollIntervalMs);
+                            return;
+                        }
+                        if (session?.completed_successfully) {
+                            finish('success', `切换完成：${target}`);
+                            return;
+                        }
+                        if (session?.error || session?.rollback_reason) {
+                            finish('error', session.error || session.rollback_reason);
+                            return;
+                        }
+                        finish('success', `切换完成：${target}`);
+                    } catch (e) {
+                        this.setActionStatus('warning', `切换状态刷新失败，继续轮询：${e.message}`);
+                        this._switchPolling = setTimeout(loop, this._switchPollIntervalMs);
+                    }
+                };
+                loop();
             },
             async download() {
                 const modelInput = document.getElementById('aios-download-model-name');

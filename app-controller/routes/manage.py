@@ -353,9 +353,9 @@ async def get_gpu_summary():
 
 
 @manage_router.get("/gpu/history")
-async def get_gpu_history(count: int = 60):
+async def get_gpu_history(count: int = 60, time_range: Optional[str] = None):
     try:
-        history = gpu_monitor.get_gpu_history(count)
+        history = gpu_monitor.get_gpu_history(count=count, time_range=time_range)
         return {
             "history": history,
             "count": len(history),
@@ -1741,7 +1741,14 @@ async def engine_switch(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     model_name = body.get("model_name") or body.get("target_model")
     engine_type = body.get("engine_type") or body.get("engine") or "vllm"
-    port = body.get("port", 8000)
+    port = body.get("port")
+    if port is not None:
+        try:
+            port = int(port)
+        except Exception:
+            raise HTTPException(status_code=400, detail="port must be an integer")
+        if port <= 0:
+            raise HTTPException(status_code=400, detail="port must be a positive integer")
     if not model_name:
         raise HTTPException(status_code=400, detail="model_name required")
     result = model_engine_scheduler.switch_engine(model_name, engine_type, port)
@@ -1761,8 +1768,18 @@ async def engine_switch(request: Request):
 
 @manage_router.get("/engines/status")
 async def engine_status():
+    from core.deps import model_switch_orchestrator
     engine_manager_mode = os.environ.get("ENGINE_MANAGER_MODE", "subprocess")
     services = llm_service_manager.list_services()
+    scheduler_status = model_engine_scheduler.get_scheduler_status()
+    switching = False
+    switch_session = None
+    try:
+        switching = bool(model_switch_orchestrator.is_switching)
+        current = model_switch_orchestrator.current_session
+        switch_session = current.to_dict() if current else None
+    except Exception:
+        logger.debug("Failed to load model switch orchestrator status", exc_info=True)
 
     def _cfg_value(cfg, key, default=None):
         if isinstance(cfg, dict):
@@ -1850,11 +1867,22 @@ async def engine_status():
     running_services = [s for s in services if s.get("status") == "running"]
     if running_services:
         current_engine = running_services[0].get("engine_type")
+    current_service = running_services[0] if running_services else None
     return {
+        "scheduler_status": scheduler_status,
         "engine_manager_mode": engine_manager_mode,
         "services": services,
         "active_count": len(running_services),
+        "current": {
+            "engine": current_engine,
+            "services": running_services,
+            "switching": switching,
+            "switch_session": switch_session,
+        },
         "current_engine": current_engine,
+        "current_service": current_service,
+        "switching": switching,
+        "switch_session": switch_session,
     }
 
 

@@ -29,6 +29,13 @@ function parseRequestBody(req) {
     });
 }
 
+function parsePortValue(value) {
+    if (value == null || String(value).trim() === '') return null;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
 function sendJSONResponse(res, statusCode, data) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data));
@@ -41,6 +48,16 @@ function sendHTMLResponse(res, html) {
 
 function getRequestUrl(req, fallbackPath = '/') {
     return new URL(req.url || fallbackPath, 'http://localhost');
+}
+
+async function sendPluginScript(res, fileName) {
+    try {
+        const script = await fs.readFile(pathModule.join(pluginDir, fileName), 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+        res.end(script);
+    } catch (error) {
+        sendJSONResponse(res, 500, { success: false, error: 'Failed' });
+    }
 }
 
 async function proxyToBackend(res, path, method = 'GET', body = null) {
@@ -85,6 +102,18 @@ export async function handlePanelRoute(method, urlPath, req, res) {
     }
 }
 
+export async function handleGPUDashboardScript(method, urlPath, req, res) {
+    if (urlPath !== '/plugins/ai-os-manager/gpu-dashboard-ui.js') return false;
+    if (method === 'HEAD') {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+        res.end();
+        return true;
+    }
+    if (method !== 'GET') return false;
+    await sendPluginScript(res, 'gpu-dashboard-ui.js');
+    return true;
+}
+
 export async function handleInjectScript(method, urlPath, req, res) {
     if (urlPath !== '/plugins/ai-os-manager/inject.js') return false;
     if (method === 'HEAD') {
@@ -124,6 +153,19 @@ export async function handlePluginStyles(method, urlPath, req, res) {
 }
 
 export async function handleGPUMonitorApiRoutes(method, urlPath, req, res, config) {
+    const requestUrl = getRequestUrl(req, urlPath);
+    const search = requestUrl.search || '';
+    const query = new URLSearchParams(search);
+    const requestParams = {};
+    for (const [key, value] of query.entries()) {
+        requestParams[key] = value;
+    }
+    if (!requestParams.time_range && requestParams.range) {
+        requestParams.time_range = requestParams.range;
+        query.set('time_range', requestParams.time_range);
+    }
+    const proxiedSearch = query.toString() ? `?${query.toString()}` : '';
+
     if (!urlPath.startsWith('/api/gpu-monitor')) return false;
     try {
         if (urlPath === '/api/gpu-monitor' && method === 'GET') {
@@ -133,6 +175,9 @@ export async function handleGPUMonitorApiRoutes(method, urlPath, req, res, confi
         if (urlPath === '/api/gpu-monitor/info' && method === 'GET') {
             sendJSONResponse(res, 200, await gpuMonitorService.getGPUInfoSync());
             return true;
+        }
+        if (urlPath === '/api/gpu-monitor/history' && method === 'GET') {
+            return await proxyToBackend(res, `/manage/gpu/history${proxiedSearch}`);
         }
         if (urlPath === '/api/gpu-monitor/status' && method === 'GET') {
             sendJSONResponse(res, 200, gpuMonitorService.getMonitoringStatus());
@@ -249,7 +294,9 @@ export async function handleModelSwitchApiRoutes(method, urlPath, req, res, conf
             if (!body.modelName) { sendJSONResponse(res, 400, { success: false, error: 'Missing modelName' }); return true; }
             const options = {};
             if (body.engineType) options.engineType = body.engineType;
-            if (body.port) options.port = body.port;
+            const rawPort = body.port;
+            const parsedPort = parsePortValue(rawPort);
+            if (parsedPort !== null) options.port = parsedPort;
             sendJSONResponse(res, 200, await modelSwitchService.switchModel(body.modelName, body.async !== false, options));
             return true;
         }
@@ -305,6 +352,7 @@ export async function handleEngineApiRoutes(method, urlPath, req, res, config) {
     if (!urlPath.startsWith('/api/engine')) return false;
     try {
         if (urlPath === '/api/engine/status' && method === 'GET') {
+            await engineManager.updateData();
             sendJSONResponse(res, 200, engineManager.getLatestData());
             return true;
         }

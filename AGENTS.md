@@ -67,6 +67,14 @@ sudo systemctl enable --now nginx-30000.service      # http://localhost:30000
 2. `/rd-asset-review` - 提取研发资产
 3. `/tech-solution` - 生成技术方案
 
+## 部署与验证信息（用于每次测试/部署）
+
+- 部署服务器：`root@ubuntu.hamr.top`，SSH 端口 `27144`
+- 仓库路径：`/root/ai-os`
+- 服务访问入口：`http://ubuntu.hamr.top:27160/`
+- 默认登录密码：`admin123`
+- 更新方式：本地更新并推送后，服务器端可直接拉取代码并重启服务
+
 ---
 
 > 更新于 2026-04-24

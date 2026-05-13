@@ -921,21 +921,142 @@ class GPUMonitor:
         if self._redis_client is None:
             return []
         try:
-            max_counts = {
-                'hour': 720,
-                'day': 1000,
-                'week': 1000,
-                None: count
+            normalized_range = (time_range or "").strip().lower()
+            if normalized_range in {"min", "minute", "minutes", "1m", "m"}:
+                normalized_range = "min"
+            elif normalized_range in {"hour", "hours", "1h", "h", "hr"}:
+                normalized_range = "hour"
+            elif normalized_range in {"day", "days", "1d", "d"}:
+                normalized_range = "day"
+            else:
+                normalized_range = "min"
+
+            range_windows = {
+                "min": timedelta(minutes=1),
+                "hour": timedelta(hours=1),
+                "day": timedelta(days=1),
             }
-            actual_count = min(count, max_counts.get(time_range, count))
-            history_data = self._redis_client.lrange("gpu:history", 0, actual_count - 1)
+            range_caps = {
+                "min": 60,
+                "hour": 720,
+                "day": 1000,
+            }
+            safe_count = max(1, int(count or 1))
+            fetch_limit = min(max(safe_count * 4, safe_count), range_caps.get(normalized_range, safe_count))
+            history_data = self._redis_client.lrange("gpu:history", 0, fetch_limit - 1)
             history = []
             for item in history_data:
                 try:
                     history.append(json.loads(item))
                 except Exception:
                     logger.debug("Skipping invalid GPU history entry")
-            return history[::-1]
+            if not history:
+                return []
+            history = history[::-1]
+            cutoff = datetime.now() - range_windows[normalized_range]
+            filtered = []
+            for item in history:
+                raw_ts = item.get("timestamp")
+                if not raw_ts:
+                    continue
+                try:
+                    ts = datetime.fromisoformat(raw_ts)
+                except Exception:
+                    continue
+                if ts >= cutoff:
+                    filtered.append(item)
+            if not filtered:
+                return []
+            if len(filtered) <= safe_count:
+                return filtered
+            bucket_size = max(1, len(filtered) / safe_count)
+            sampled = []
+            for bucket in range(safe_count):
+                start = int(bucket * bucket_size)
+                end = min(len(filtered), int((bucket + 1) * bucket_size))
+                slice_items = filtered[start:max(start + 1, end)]
+                if not slice_items:
+                    continue
+                peak = max(
+                    slice_items,
+                    key=lambda entry: (
+                        float(entry.get("utilization") or 0)
+                        + float(entry.get("memory_utilization") or 0)
+                        + float(entry.get("temperature") or 0)
+                        + float(entry.get("power_draw") or 0)
+                    ),
+                )
+                sampled.append(peak)
+            first = filtered[0]
+            last = filtered[-1]
+            if sampled and sampled[0] is not first:
+                sampled.insert(0, first)
+            if sampled and sampled[-1] is not last:
+                sampled.append(last)
+            return sampled[-safe_count:]
+        except Exception:
+            logger.exception("Failed to load GPU history")
+            return []
+        try:
+            max_counts = {
+                'hour': 720,
+                'day': 1000,
+                'week': 1000,
+                None: count
+            }
+            normalized_range = (time_range or "").strip().lower()
+            if normalized_range in {"min", "minute", "minutes"}:
+                normalized_range = "min"
+            if normalized_range in {"h", "hour", "hours"}:
+                normalized_range = "hour"
+            if normalized_range in {"d", "day", "days"}:
+                normalized_range = "day"
+
+            range_windows = {
+                "min": timedelta(minutes=60),
+                "hour": timedelta(hours=1),
+                "day": timedelta(days=1),
+            }
+
+            max_points = min(count, max_counts.get(normalized_range, count))
+            history_data = self._redis_client.lrange("gpu:history", 0, max_points - 1)
+            history = []
+            for item in history_data:
+                try:
+                    entry = json.loads(item)
+                    history.append(entry)
+                except Exception:
+                    logger.debug("Skipping invalid GPU history entry")
+
+            if not history:
+                return []
+
+            # lrange returns newest-first list for Redis lists. Convert to chronological order.
+            history = history[::-1]
+
+            window = range_windows.get(normalized_range)
+            if window:
+                cutoff = datetime.now() - window
+                filtered = []
+                for item in history:
+                    raw_ts = item.get("timestamp")
+                    if not raw_ts:
+                        filtered.append(item)
+                        continue
+                    try:
+                        ts = datetime.fromisoformat(raw_ts)
+                    except Exception:
+                        filtered.append(item)
+                        continue
+                    if ts >= cutoff:
+                        filtered.append(item)
+                history = filtered
+
+            if len(history) > max_points:
+                step = max(1, int(len(history) / max_points))
+                history = history[::step][-max_points:]
+
+            return history
         except Exception:
             logger.exception("Failed to load GPU history")
             return []

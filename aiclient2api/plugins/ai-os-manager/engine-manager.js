@@ -84,15 +84,20 @@ class EngineManagerService {
 
     async switchEngine(modelName, engineType, port) {
         try {
-            const response = await backendClient.postWithFallback('/manage/engines/switch', {
+            const body = {
                 model_name: modelName,
                 engine_type: engineType,
-                port: port || 8000
-            });
+            };
+            if (port != null && !Number.isNaN(port)) {
+                body.port = port;
+            }
+            const response = await backendClient.postWithFallback('/manage/engines/switch', body);
             const result = await response.json();
             if (response.ok) {
+                await this.updateData();
                 return { success: true, data: result, timestamp: new Date().toISOString() };
             } else {
+                await this.updateData();
                 return { success: false, error: result.detail || result.error || result.reason || `HTTP ${response.status}`, data: result, timestamp: new Date().toISOString() };
             }
         } catch (error) {
