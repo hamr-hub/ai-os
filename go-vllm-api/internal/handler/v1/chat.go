@@ -301,7 +301,7 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 				select {
 				case <-c.Request.Context().Done():
 					c.JSON(http.StatusServiceUnavailable, gin.H{
-						"error": "request cancelled during model switch retry",
+						"error":       "request cancelled during model switch retry",
 						"retry_after": int(retryDelays[attempt].Seconds()),
 					})
 					return
@@ -311,7 +311,7 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 			}
 			if h.scheduler.IsSwitchingInProgress() {
 				c.JSON(http.StatusServiceUnavailable, gin.H{
-					"error": "Model switch in progress, please wait",
+					"error":       "Model switch in progress, please wait",
 					"retry_after": 10,
 				})
 			} else {
@@ -339,10 +339,10 @@ func (h *V1Handler) ChatCompletions(c *gin.Context) {
 			active := h.scheduler.GetStreamActiveCount(modelName)
 			limit := h.scheduler.GetStreamConcurrencyLimit()
 			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error":          "Too many streaming requests",
-				"stream_active":  active,
-				"stream_limit":   limit,
-				"type":           "stream",
+				"error":         "Too many streaming requests",
+				"stream_active": active,
+				"stream_limit":  limit,
+				"type":          "stream",
 			})
 			return
 		}

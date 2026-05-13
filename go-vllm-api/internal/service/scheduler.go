@@ -22,41 +22,41 @@ import (
 )
 
 type Scheduler struct {
-	logger              *zap.Logger
-	gpuMonitor          *GPUMonitor
-	sysCtl              *SystemController
-	redis               *repository.RedisRepo
-	cfg                 *config.AppConfig
-	llamaCppMgr         *LlamaCppManager
-	vllmManager         *VLLMManager
-	proxy               *proxy.VLLMProxy
-	runningModels       map[string]time.Time
-	preloaded           map[string]bool
-	modelLastUsed       map[string]time.Time
-	modelSwitchTime     map[string]time.Time
-	currentModel        string
-	defaultModel        string
-	mu                  sync.RWMutex
-	rateLimiter         *RateLimiter
-	switchingInProgress bool
-	pythonSwitchTarget  string
-	pythonSwitchPrevious string
-	pythonSwitchCurrent string
+	logger                *zap.Logger
+	gpuMonitor            *GPUMonitor
+	sysCtl                *SystemController
+	redis                 *repository.RedisRepo
+	cfg                   *config.AppConfig
+	llamaCppMgr           *LlamaCppManager
+	vllmManager           *VLLMManager
+	proxy                 *proxy.VLLMProxy
+	runningModels         map[string]time.Time
+	preloaded             map[string]bool
+	modelLastUsed         map[string]time.Time
+	modelSwitchTime       map[string]time.Time
+	currentModel          string
+	defaultModel          string
+	mu                    sync.RWMutex
+	rateLimiter           *RateLimiter
+	switchingInProgress   bool
+	pythonSwitchTarget    string
+	pythonSwitchPrevious  string
+	pythonSwitchCurrent   string
 	pythonSwitchSessionID string
 	pythonSwitchUpdatedAt time.Time
-	streamActive        map[string]int64
-	zombieCheckerCancel context.CancelFunc
+	streamActive          map[string]int64
+	zombieCheckerCancel   context.CancelFunc
 }
 
 type PythonSwitchGate struct {
-	Switching     bool
-	Allowed       bool
+	Switching      bool
+	Allowed        bool
 	RequestedModel string
-	CurrentModel  string
-	TargetModel   string
-	PreviousModel string
-	SessionID     string
-	RetryAfter    int
+	CurrentModel   string
+	TargetModel    string
+	PreviousModel  string
+	SessionID      string
+	RetryAfter     int
 }
 
 func NewScheduler(logger *zap.Logger, gpuMonitor *GPUMonitor, sysCtl *SystemController, redis *repository.RedisRepo, cfg *config.AppConfig, llamaCppMgr *LlamaCppManager, vllmManager *VLLMManager, vllmProxy *proxy.VLLMProxy) *Scheduler {

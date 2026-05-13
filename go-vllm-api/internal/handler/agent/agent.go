@@ -19,20 +19,20 @@ import (
 )
 
 type AgentHandler struct {
-	scheduler   *service.Scheduler
-	gpuMonitor  *service.GPUMonitor
+	scheduler    *service.Scheduler
+	gpuMonitor   *service.GPUMonitor
 	toolExecutor *tools.ToolExecutor
 	toolRegistry *tools.ToolRegistry
-	logger      *zap.Logger
-	httpClient  *http.Client
+	logger       *zap.Logger
+	httpClient   *http.Client
 }
 
 type AgentMessage struct {
-	Role       string                   `json:"role"`
-	Content    string                   `json:"content"`
-	ToolCalls  []map[string]any         `json:"tool_calls,omitempty"`
-	ToolCallID string                   `json:"tool_call_id,omitempty"`
-	Name       string                   `json:"name,omitempty"`
+	Role       string           `json:"role"`
+	Content    string           `json:"content"`
+	ToolCalls  []map[string]any `json:"tool_calls,omitempty"`
+	ToolCallID string           `json:"tool_call_id,omitempty"`
+	Name       string           `json:"name,omitempty"`
 }
 
 type AgentRequest struct {
@@ -128,13 +128,13 @@ func (h *AgentHandler) GetToolInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"name":                 tool.Name,
-		"description":          tool.Description,
-		"parameters":           parameters,
-		"category":             tool.Category,
-		"dangerous":            tool.Dangerous,
+		"name":                  tool.Name,
+		"description":           tool.Description,
+		"parameters":            parameters,
+		"category":              tool.Category,
+		"dangerous":             tool.Dangerous,
 		"requires_confirmation": tool.RequiresConfirmation,
-		"openai_schema":        tool.ToOpenAIFunction(),
+		"openai_schema":         tool.ToOpenAIFunction(),
 	})
 }
 
@@ -360,11 +360,11 @@ func (h *AgentHandler) agentCompletion(ctx context.Context, backendURL, modelNam
 		toolCalls, hasToolCalls := message["tool_calls"].([]any)
 		if !hasToolCalls || len(toolCalls) == 0 {
 			return map[string]any{
-				"id":        data["id"],
-				"model":     modelName,
-				"message":   message,
+				"id":         data["id"],
+				"model":      modelName,
+				"message":    message,
 				"iterations": iteration,
-				"finished":  true,
+				"finished":   true,
 			}
 		}
 
