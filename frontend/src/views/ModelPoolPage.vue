@@ -110,6 +110,14 @@ const formatSize = (bytes: number | null) => {
   return bytes.toFixed(0) + ' B'
 }
 
+const getDisplaySize = (model: any) => {
+  // 优先显示文件大小
+  if (model.file_size_bytes) return formatSize(model.file_size_bytes)
+  // 如果文件大小不存在，则尝试使用参数大小
+  if (model.size_b) return model.size_b + 'B'
+  return '--'
+}
+
 const sourceIcon = (source: string) => {
   if (source === 'hf') return '🤗'
   if (source === 'modelscope') return '🏠'
@@ -142,7 +150,7 @@ const runningStatusColor = (status: string) => {
 
 const poolStats = computed(() => {
   const models = filteredPoolList.value
-  const totalSize = models.reduce((acc, m) => acc + (m.size_b ?? 0), 0)
+  const totalSize = models.reduce((acc, m) => acc + (m.file_size_bytes ?? 0), 0)
   const runningCount = models.filter(m => m.running_status === 'running').length
   const downloadCompleted = models.filter(m => m.download_status === 'completed').length
   const downloadFailed = models.filter(m => m.download_status === 'failed').length
@@ -290,7 +298,7 @@ const poolStats = computed(() => {
       <div v-for="model in filteredPoolList" :key="model.config_key || model.name" class="table-row">
         <span class="model-name">{{ model.name }}</span>
         <span class="source-tag">{{ sourceIcon(model.source) }} {{ model.source }}</span>
-        <span class="mono">{{ formatSize(model.size_b) }}</span>
+        <span class="mono">{{ getDisplaySize(model) }}</span>
         <span>
           <span v-if="model.feasible" class="tag tag-green">
             <CheckCircle class="w-3 h-3 inline" /> {{ model.required_gb }} GB

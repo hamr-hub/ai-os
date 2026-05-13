@@ -37,6 +37,7 @@ class PoolEntry:
     supports_tool_calling: bool = False
     description: Optional[str] = None
     architecture: Optional[str] = None
+    file_size_bytes: Optional[int] = None
     created_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -60,6 +61,7 @@ class PoolEntry:
             "supports_images": self.supports_images,
             "supports_tool_calling": self.supports_tool_calling,
             "description": self.description,
+            "file_size_bytes": self.file_size_bytes,
         }
 
 
@@ -111,6 +113,9 @@ class ModelPoolManager:
             for lm in local_models:
                 n = lm["name"]
                 if n not in self._pool:
+                    file_size_bytes = None
+                    if lm.get("size_gb"):
+                        file_size_bytes = int(lm.get("size_gb") * (1024 ** 3))
                     entry = PoolEntry(
                         name=n, source="local",
                         local_path=lm["path"],
@@ -118,6 +123,7 @@ class ModelPoolManager:
                         running_status="stopped",
                         quant=lm.get("quant", "fp16"),
                         architecture=lm.get("architecture"),
+                        file_size_bytes=file_size_bytes,
                     )
                     self._pool[n] = entry
                     count += 1
@@ -129,12 +135,20 @@ class ModelPoolManager:
     def _create_entry_from_path(self, name: str, path: str) -> PoolEntry:
         size_b = GPUMemoryChecker.parse_model_size(name)
         quant = GPUMemoryChecker.parse_model_quant(name)
+        
+        file_size_bytes = None
+        if self._model_hub:
+            model_info = self._model_hub.get_model_info(name)
+            if model_info and model_info.get("size_gb"):
+                file_size_bytes = int(model_info.get("size_gb") * (1024 ** 3))
+        
         entry = PoolEntry(
             name=name, source="local",
             size_b=size_b, quant=quant,
             local_path=path,
             download_status="completed",
             running_status="stopped",
+            file_size_bytes=file_size_bytes,
         )
         entry.estimated_memory_bytes = self._estimate_entry_memory(entry)
         return entry
@@ -193,12 +207,32 @@ class ModelPoolManager:
         required_gb: Optional[float] = None,
     ) -> PoolEntry:
         short_name = model_name.split("/")[-1]
+        
+        # 从 model_hub 获取完整的模型信息
+        architecture = None
+        file_size_bytes = None
+        if self._model_hub:
+            # 确保模型被 model_hub 正确扫描和注册
+            self._model_hub.refresh_local_models()
+            model_info = self._model_hub.get_model_info(model_name)
+            if model_info:
+                quant = quant or model_info.get("quant")
+                architecture = model_info.get("architecture")
+                if model_info.get("size_gb"):
+                    # 将 GB 转换为字节
+                    file_size_bytes = int(model_info.get("size_gb") * (1024 ** 3))
+            # 优先从名称解析模型参数大小（size_b）
+            if size_b is None:
+                size_b = GPUMemoryChecker.parse_model_size(model_name)
+        
         entry = PoolEntry(
             name=short_name, source=source,
             size_b=size_b, quant=quant, required_gb=required_gb,
             local_path=local_path,
             download_status="completed",
             running_status="stopped",
+            architecture=architecture,
+            file_size_bytes=file_size_bytes,
         )
         entry.estimated_memory_bytes = self._estimate_entry_memory(entry)
         self._pool[short_name] = entry
