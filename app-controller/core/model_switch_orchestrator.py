@@ -511,6 +511,31 @@ class ModelSwitchOrchestrator:
         raise ValueError(f"Phase {phase_num} not found in session")
 
     async def _stop_systemd_vllm_if_active(self, session: SwitchSession, phase: PhaseDetail):
+        async def mask_runtime_restart():
+            try:
+                subprocess.run(
+                    [SYSTEMCTL_BIN, "reset-failed", self._vllm_service_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                mask_result = subprocess.run(
+                    [SYSTEMCTL_BIN, "mask", "--runtime", self._vllm_service_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if mask_result.returncode == 0:
+                    await self._log(session, phase, f"已 runtime mask systemd 服务 {self._vllm_service_name}，避免 Restart=always 干扰 subprocess 引擎")
+                else:
+                    await self._log(
+                        session,
+                        phase,
+                        f"runtime mask systemd 服务失败: {mask_result.stderr.strip() or mask_result.stdout.strip()}",
+                    )
+            except Exception as exc:
+                await self._log(session, phase, f"runtime mask systemd 服务异常: {exc}")
+
         try:
             result = subprocess.run(
                 [SYSTEMCTL_BIN, "is-active", self._vllm_service_name],
@@ -519,6 +544,7 @@ class ModelSwitchOrchestrator:
                 timeout=5,
             )
             if result.stdout.strip() != "active":
+                await mask_runtime_restart()
                 return
 
             await self._log(
@@ -548,11 +574,14 @@ class ModelSwitchOrchestrator:
                     )
                     if active_result.stdout.strip() != "active":
                         await self._log(session, phase, "systemd vLLM 服务已停止")
+                        await mask_runtime_restart()
                         return
                     await asyncio.sleep(1)
                 await self._log(session, phase, "systemd vLLM 服务停止超时，将继续清理残留进程")
+                await mask_runtime_restart()
         except Exception as exc:
             await self._log(session, phase, f"检查/停止 systemd vLLM 服务失败: {exc}")
+            await mask_runtime_restart()
 
     async def _kill_external_vllm_processes(self, session: SwitchSession, phase: PhaseDetail):
         import subprocess as _sp
