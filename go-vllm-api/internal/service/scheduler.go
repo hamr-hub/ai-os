@@ -1,9 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -243,6 +245,7 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 	}
 
 	if portActive || serviceRunning {
+		actualModel := s.detectCurrentVLLMModel()
 		currentModelPath := s.getCurrentVLLMModelPath()
 
 		// 检查是否在切换窗口期内（2分钟）
@@ -251,6 +254,10 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 		isRecentlySwitched := inGracePeriod && time.Since(switchTime) < 2*time.Minute
 		_, inRunningModels := s.runningModels[matched]
 		s.mu.RUnlock()
+
+		if actualModel != "" && actualModel == matched {
+			goto markRunning
+		}
 
 		// 如果在切换窗口期内且在运行模型列表中，先跳过路径检查
 		if currentModelPath != "" && mc.ModelPath != "" && currentModelPath != mc.ModelPath {
@@ -261,7 +268,6 @@ func (s *Scheduler) IsModelRunning(name string) bool {
 						zap.String("model", matched),
 						zap.String("expected", mc.ModelPath),
 						zap.String("actual", currentModelPath))
-					actualModel := s.detectCurrentVLLMModel()
 					if actualModel != "" && actualModel == matched {
 						goto markRunning
 					}
@@ -786,12 +792,21 @@ func (s *Scheduler) startLlamaCppModel(ctx context.Context, matched string, mc *
 }
 
 func (s *Scheduler) startVLLMModel(ctx context.Context, matched string, mc *config.ModelConfig) (bool, error) {
+	if s.isVLLMModelServed(matched, mc) {
+		s.markVLLMRunning(matched)
+		s.logger.Info("vllm model already served by HTTP endpoint", zap.String("model", matched), zap.Int("port", mc.Port))
+		return true, nil
+	}
+
+	if s.hasPythonModelSwitchInProgress() {
+		s.logger.Info("python model switch in progress, waiting for vllm readiness", zap.String("model", matched))
+		return true, nil
+	}
+
 	if s.sysCtl.IsServiceRunning(mc.Service) {
 		currentModelPath := s.getCurrentVLLMModelPath()
 		if currentModelPath == "" || currentModelPath == mc.ModelPath {
-			s.mu.Lock()
-			s.runningModels[matched] = time.Now()
-			s.mu.Unlock()
+			s.markVLLMRunning(matched)
 			s.logger.Info("vllm service running with correct model", zap.String("model", matched))
 			return true, nil
 		}
@@ -803,19 +818,102 @@ func (s *Scheduler) startVLLMModel(ctx context.Context, matched string, mc *conf
 		return false, fmt.Errorf("memory check failed: %w", err)
 	}
 
+	if err := s.startVLLMViaPython(ctx, matched); err == nil {
+		s.markVLLMRunning(matched)
+		s.logger.Info("vllm model start delegated to python backend", zap.String("model", matched))
+		return true, nil
+	} else {
+		s.logger.Warn("python backend model start failed, falling back to systemd",
+			zap.String("model", matched),
+			zap.Error(err))
+	}
+
 	success := s.sysCtl.StartService(mc.Service)
 	if success {
-		s.mu.Lock()
-		s.runningModels[matched] = time.Now()
-		s.modelLastUsed[matched] = time.Now()
-		s.modelSwitchTime[matched] = time.Now()
-		s.mu.Unlock()
+		s.markVLLMRunning(matched)
 		s.logger.Info("vllm model started", zap.String("model", matched), zap.String("service", mc.Service))
 		return true, nil
 	}
 
 	s.logger.Error("failed to start vllm service", zap.String("model", matched), zap.String("service", mc.Service))
 	return false, fmt.Errorf("failed to start service %s for model %s", mc.Service, matched)
+}
+
+func (s *Scheduler) markVLLMRunning(matched string) {
+	s.mu.Lock()
+	s.runningModels[matched] = time.Now()
+	s.modelLastUsed[matched] = time.Now()
+	s.modelSwitchTime[matched] = time.Now()
+	s.currentModel = matched
+	s.mu.Unlock()
+}
+
+func (s *Scheduler) isVLLMModelServed(matched string, mc *config.ModelConfig) bool {
+	if mc == nil {
+		return false
+	}
+	port := mc.Port
+	if port == 0 {
+		port = s.GetModelPort(matched)
+	}
+	if port <= 0 || !s.sysCtl.GetProcessInfo(port) {
+		return false
+	}
+	actualModel := s.detectCurrentVLLMModel()
+	return actualModel == matched || actualModel == mc.ModelPath
+}
+
+func (s *Scheduler) pythonBackendURL() string {
+	if url := strings.TrimSpace(os.Getenv("PYTHON_BACKEND_URL")); url != "" {
+		return strings.TrimRight(url, "/")
+	}
+	if s.cfg != nil && strings.TrimSpace(s.cfg.GoApi.ManageBackendURL) != "" {
+		return strings.TrimRight(s.cfg.GoApi.ManageBackendURL, "/")
+	}
+	return "http://localhost:35000"
+}
+
+func (s *Scheduler) startVLLMViaPython(ctx context.Context, modelName string) error {
+	baseURL := s.pythonBackendURL()
+	if baseURL == "" {
+		return fmt.Errorf("python backend url is empty")
+	}
+
+	payload := map[string]interface{}{
+		"action":     "start",
+		"model_name": modelName,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/manage/switch/atomic", bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("python switch request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+	bodyText := strings.TrimSpace(string(body))
+	if resp.StatusCode == http.StatusConflict && strings.Contains(strings.ToLower(bodyText), "switch") {
+		return nil
+	}
+	if bodyText == "" {
+		return fmt.Errorf("python switch returned %d", resp.StatusCode)
+	}
+	return fmt.Errorf("python switch returned %d: %s", resp.StatusCode, bodyText)
 }
 
 func (s *Scheduler) ensureMemoryAvailable(ctx context.Context, modelName string) error {
