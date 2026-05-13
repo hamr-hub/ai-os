@@ -1766,22 +1766,32 @@
                 const select = document.getElementById('aios-switch-model');
                 if (!select) return;
                 const currentModel = aggResult.current_model || '';
+                const previousValue = select.value || '';
+                const preserveUserSelection = previousValue && previousValue !== currentModel && !this.isSwitching && !this.actionLoading;
+                let hasPreviousValue = false;
+                let hasCurrentValue = false;
                 const modelOptions = groups.map(g => {
                     const variants = Array.isArray(g.variants) && g.variants.length > 0
                         ? g.variants
                         : [{ name: g.base_name, is_current: g.base_name === currentModel, path_exists: true }];
                     const options = variants.map(v => {
                         const name = v.name || g.base_name;
-                        const selected = (name === currentModel || v.is_current) ? ' selected' : '';
-                        const state = v.running || v.is_current ? '运行中' : (v.path_exists === false ? '未下载' : '已下载');
+                        if (name === previousValue) hasPreviousValue = true;
+                        if (name === currentModel || v.is_current) hasCurrentValue = true;
+                        const sizeMb = Number(v.size_mb || 0);
+                        const missingWeights = v.path_exists === true && sizeMb > 0 && sizeMb < 100 && !v.running && !v.is_current;
+                        const disabled = v.path_exists === false || missingWeights ? ' disabled' : '';
+                        const state = v.running || v.is_current ? '运行中' : (v.path_exists === false ? '未下载' : missingWeights ? '权重缺失' : '已下载');
                         const engine = engineDisplayName(v.backend_type || 'vllm');
-                        return `<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name)} · ${engine} · ${state}</option>`;
+                        return `<option value="${escapeHtml(name)}"${disabled}>${escapeHtml(name)} · ${engine} · ${state}</option>`;
                     }).join('');
                     if (variants.length === 1) return options;
                     return `<optgroup label="${escapeHtml(g.base_name)}">${options}</optgroup>`;
                 }).join('');
                 const placeholder = currentModel ? '' : '<option value="" selected disabled>请选择模型</option>';
                 select.innerHTML = `${placeholder}${modelOptions}`;
+                const nextValue = preserveUserSelection && hasPreviousValue ? previousValue : (hasCurrentValue ? currentModel : '');
+                if (nextValue) select.value = nextValue;
             },
             populateEngineSelect(engineData) {
                 const result = engineData.data || engineData;

@@ -775,6 +775,7 @@ class ModelSwitchOrchestrator:
         await self._log(session, phase, "停止 vLLM 服务...")
         await self._broadcast(session, phase=1, progress=10, log="停止旧服务")
 
+        service_log_file = None
         if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
             await self._stop_systemd_vllm_if_active(session, phase)
 
@@ -898,6 +899,7 @@ class ModelSwitchOrchestrator:
                 await self._rollback(session, error_msg)
                 raise _SwitchAborted(error_msg)
 
+            service_log_file = result.get("log_file")
             await self._log(session, phase, f"引擎进程已启动 (pid={result.get('pid')})")
         else:
             from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache
@@ -944,7 +946,16 @@ class ModelSwitchOrchestrator:
 
             if self._engine_manager_mode == "subprocess":
                 if elapsed - last_error_check >= 5:
-                    svc_status = self._llm_service_manager.check_health(session.target_model) if self._llm_service_manager else False
+                    status = self._llm_service_manager.get_service_status(session.target_model) if self._llm_service_manager else {"status": "not_found"}
+                    svc_status = status.get("status") == "running"
+                    if status.get("status") == "stopped":
+                        detail = self._extract_recent_log_error(service_log_file) or f"exit_code={status.get('exit_code')}"
+                        phase.status = PhaseStatus.FAILED
+                        phase.error = f"subprocess引擎进程已退出: {detail}"
+                        phase.finished_at = datetime.now().isoformat()
+                        await self._log(session, phase, phase.error)
+                        await self._rollback(session, phase.error)
+                        raise _SwitchAborted(phase.error)
                     if not svc_status and elapsed >= self.PHASE3_PORT_WAIT_TIMEOUT and not port_seen_alive:
                         phase.status = PhaseStatus.FAILED
                         phase.error = f"subprocess引擎在 {self.PHASE3_PORT_WAIT_TIMEOUT}s 内未就绪"
@@ -1037,6 +1048,7 @@ class ModelSwitchOrchestrator:
         phase.progress = 10
         await self._broadcast(session, phase=phase_num, progress=10, log="冒烟测试")
 
+        service_log_file = None
         if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
             port = self._vllm_port
             base_url = f"http://127.0.0.1:{port}"
@@ -1174,6 +1186,7 @@ class ModelSwitchOrchestrator:
                 phase.finished_at = datetime.now().isoformat()
                 await self._rollback(session, error_msg)
                 raise _SwitchAborted(error_msg)
+            service_log_file = result.get("log_file")
             await self._log(session, phase, f"引擎进程已启动 (pid={result.get('pid')})")
         else:
             from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache, start_vllm_service, _build_vllm_health_url
@@ -1208,6 +1221,16 @@ class ModelSwitchOrchestrator:
             phase.progress = min(95, 15 + int(80 * elapsed / self.PHASE3_START_TIMEOUT))
 
             if elapsed - last_error_check >= 5:
+                if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
+                    status = self._llm_service_manager.get_service_status(session.target_model)
+                    if status.get("status") == "stopped":
+                        detail = self._extract_recent_log_error(service_log_file) or f"exit_code={status.get('exit_code')}"
+                        phase.status = PhaseStatus.FAILED
+                        phase.error = f"subprocess引擎进程已退出: {detail}"
+                        phase.finished_at = datetime.now().isoformat()
+                        await self._log(session, phase, phase.error)
+                        await self._rollback(session, phase.error)
+                        raise _SwitchAborted(phase.error)
                 error_msg = self._check_vllm_logs_for_errors()
                 if error_msg:
                     phase.status = PhaseStatus.FAILED
@@ -1551,3 +1574,21 @@ class ModelSwitchOrchestrator:
         except Exception:
             pass
         return None
+
+    def _extract_recent_log_error(self, log_file: Optional[str]) -> Optional[str]:
+        if not log_file or not os.path.exists(log_file):
+            return None
+
+        try:
+            with open(log_file, "r", errors="ignore") as f:
+                lines = f.readlines()[-160:]
+        except Exception:
+            return None
+
+        for keyword in self.FATAL_KEYWORDS:
+            matched = [line.strip() for line in lines if keyword.lower() in line.lower()]
+            if matched:
+                return matched[-1][:500]
+
+        traceback_lines = [line.strip() for line in lines if "traceback" in line.lower() or "error" in line.lower()]
+        return traceback_lines[-1][:500] if traceback_lines else None
