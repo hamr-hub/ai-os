@@ -700,6 +700,9 @@ class LLMServiceManager:
         start_time = time.time()
         while time.time() - start_time < timeout:
             process = self._processes.get(service_name)
+            if not process:
+                logger.error("Service %s disappeared during readiness wait", service_name)
+                return False
             if process and process.poll() is not None:
                 logger.error("Service %s process died during readiness wait", service_name)
                 return False
