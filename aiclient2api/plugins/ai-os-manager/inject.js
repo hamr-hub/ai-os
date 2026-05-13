@@ -1080,8 +1080,12 @@
             },
             isEngineEnabled(type, payload = this.engineConfigSnapshot) {
                 if (normalizeEngineType(type) === 'vllm') return true;
+                const source = payload || {};
+                const hasConfigPayload = !!(source && typeof source === 'object' && Object.keys(source).length > 0);
                 const config = this.getEngineConfig(type, payload);
-                if (!config || typeof config !== 'object') return true;
+                if (!config || typeof config !== 'object' || Object.keys(config).length === 0) {
+                    return !hasConfigPayload;
+                }
                 if (!Object.prototype.hasOwnProperty.call(config, 'enabled')) return true;
                 return config.enabled !== false;
             },
@@ -1283,10 +1287,11 @@
                 const enabledMap = this.getEngineConfigEnabledMap(config);
                 const engines = engineTypes.map(type => {
                     const svc = services.find(s => normalizeEngineType(s.engine_type || s.name || s.type) === type) || null;
-                    const engineEnabled = enabledMap[type] !== false;
-                    const status = !engineEnabled ? 'disabled' : (svc?.status || (svc ? 'stopped' : 'not_found'));
-                    const running = status === 'running' && engineEnabled;
                     const cfg = configMap[type] || {};
+                    const hasConfig = type === 'vllm' || Object.keys(cfg).length > 0;
+                    const engineEnabled = enabledMap[type] !== false;
+                    const status = !engineEnabled && hasConfig ? 'disabled' : (svc?.status || (svc ? 'stopped' : 'not_found'));
+                    const running = status === 'running' && engineEnabled;
                     const model = svc?.model || svc?.model_name || cfg.model_name || cfg.model || '-';
                     const port = svc?.port ?? cfg.port ?? cfg.http_port ?? '-';
                     const uptime = svc?.uptime_seconds ? `${Math.floor(svc.uptime_seconds / 3600)}h${Math.floor((svc.uptime_seconds % 3600) / 60)}m` : '-';
@@ -1789,11 +1794,17 @@
                     const service = services.find(s => normalizeEngineType(s.engine_type || s.name || s.type) === t);
                     const running = service && service.status === 'running';
                     const enabled = window.AiosManager.gpu.isEngineEnabled(t);
-                    const disabled = !enabled;
-                    const suffix = disabled ? ' (已禁用)' : (running ? ' (当前)' : ' (可切换)');
+                    const cfg = window.AiosManager.gpu.getEngineConfig(t);
+                    const configured = t === 'vllm' || !!service || Object.keys(cfg || {}).length > 0;
+                    const disabled = !enabled || !configured;
+                    const suffix = !configured ? ' (未配置)' : (!enabled ? ' (已禁用)' : (running ? ' (当前)' : ' (可切换)'));
                     return `<option value="${t}"${running ? ' selected' : ''}${disabled ? ' disabled' : ''}>${engineDisplayName(t)}${suffix}</option>`;
                 }).join('');
-                const hasUsableEngine = engineTypes.some(t => window.AiosManager.gpu.isEngineEnabled(t));
+                const hasUsableEngine = engineTypes.some(t => {
+                    const cfg = window.AiosManager.gpu.getEngineConfig(t);
+                    const configured = t === 'vllm' || services.some(s => normalizeEngineType(s.engine_type || s.name || s.type) === t) || Object.keys(cfg || {}).length > 0;
+                    return configured && window.AiosManager.gpu.isEngineEnabled(t);
+                });
                 const placeholder = hasUsableEngine ? '' : '<option value="" selected disabled>无可用引擎</option>';
                 select.innerHTML = `${placeholder}${engineOptions}`;
             },

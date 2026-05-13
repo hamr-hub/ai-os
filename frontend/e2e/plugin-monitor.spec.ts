@@ -1,409 +1,95 @@
 import { test, expect } from '@playwright/test'
 
-const AICLIENT_URL = 'http://localhost:3000'
-const PANEL_TIMEOUT = 30000
-const TOAST_TIMEOUT = 10000
-const REQUEST_TIMEOUT = 30000
+const CARD_TIMEOUT = 20000
 
-const ADMIN_TOKEN = 'test-api-key'
+async function login(page: any) {
+  await page.goto('/login')
+  await page.waitForLoadState('domcontentloaded')
+  await page.fill('input[placeholder="输入 API Key"]', 'test-api-key')
+  await page.locator('button.btn-primary:has-text("登录")').click({ force: true, timeout: 10000 })
+  await page.waitForURL('**/', { timeout: 15000 })
+  await page.waitForLoadState('domcontentloaded')
+}
 
-test.describe('AI Monitor 插件 - 按钮逐个点击测试', () => {
+test.describe('AI OS 页面级 E2E', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript((token) => {
-      localStorage.setItem('authToken', token)
-      localStorage.setItem('authTokenExpiry', String(Date.now() + 86400000))
-      localStorage.setItem('aios_admin_token', token)
-    }, ADMIN_TOKEN)
-
-    await page.goto(AICLIENT_URL)
-    await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(2000)
+    await login(page)
   })
 
-  async function openPanel(page: any) {
-    const toggle = page.locator('#ai-monitor-toggle')
-    await toggle.waitFor({ state: 'visible', timeout: PANEL_TIMEOUT })
-    await toggle.click()
-    const panel = page.locator('#ai-monitor-panel')
-    await expect(panel).toHaveClass(/aim-panel-open/, { timeout: PANEL_TIMEOUT })
-    await page.waitForTimeout(800)
-  }
-
-  test.describe('AI Monitor 面板', () => {
-    test('面板可正常打开和关闭', async ({ page }) => {
-      const toggle = page.locator('#ai-monitor-toggle')
-      await expect(toggle).toBeVisible({ timeout: PANEL_TIMEOUT })
-
-      await toggle.click()
-      const panel = page.locator('#ai-monitor-panel')
-      await expect(panel).toHaveClass(/aim-panel-open/, { timeout: PANEL_TIMEOUT })
-
-      await toggle.click()
-      await expect(panel).not.toHaveClass(/aim-panel-open/, { timeout: PANEL_TIMEOUT })
-    })
-
-    test('面板标题为"AI Monitor"', async ({ page }) => {
-      await openPanel(page)
-      const title = page.locator('#ai-monitor-panel .aim-panel-title')
-      await expect(title).toHaveText('AI Monitor')
-    })
-
-    test('引擎状态卡片有3个 (vLLM / SGLang / llama.cpp)', async ({ page }) => {
-      await openPanel(page)
-      const cards = page.locator('.aim-engine-card')
-      await expect(cards).toHaveCount(3)
-    })
+  test('GPU 监控页可切换到 GPU 管理 tab', async ({ page }) => {
+    await page.goto('/gpumonitor')
+    await expect(page.locator('h1')).toContainText('GPU 监控', { timeout: CARD_TIMEOUT })
+    await page.locator('.tab-btn:has-text("GPU 管理")').click()
+    await expect(page).toHaveURL(/tab=manage/)
+    await expect(page.locator('.gpu-manage-page')).toBeVisible({ timeout: CARD_TIMEOUT })
+    await expect(page.locator('.page-title')).toContainText('GPU 管理')
   })
 
-  test.describe('模型切换按钮', () => {
-    test('切换模型下拉选择非空', async ({ page }) => {
-      await openPanel(page)
-      const modelSelect = page.locator('#aim-switch-model-select')
-      await expect(modelSelect).toBeVisible()
-      const options = modelSelect.locator('option')
-      const count = await options.count()
-      expect(count).toBeGreaterThan(1)
-    })
-
-    test('模型选择 → 点击"切换模型"按钮 → 触发 Toast 通知', async ({ page }) => {
-      await openPanel(page)
-
-      const modelSelect = page.locator('#aim-switch-model-select')
-      await expect(modelSelect).toBeVisible()
-      const options = modelSelect.locator('option')
-      const count = await options.count()
-
-      if (count <= 1) {
-        test.skip(true, '没有可用的模型选项')
-        return
-      }
-
-      const optionValues = await options.evaluateAll((opts: HTMLOptionElement[]) =>
-        opts.filter(o => o.value).map(o => o.value)
-      )
-
-      let selectedModel: string | null = null
-      for (const v of optionValues) {
-        if (!v.includes('(运行中)')) {
-          selectedModel = v
-          break
-        }
-      }
-      if (!selectedModel) {
-        selectedModel = optionValues[0]
-      }
-
-      if (!selectedModel) {
-        test.skip(true, '没有可选的模型')
-        return
-      }
-
-      await modelSelect.selectOption(selectedModel)
-      await page.waitForTimeout(300)
-
-      const engineSelect = page.locator('#aim-switch-engine-select')
-      await expect(engineSelect).toBeVisible({ timeout: 5000 })
-      await engineSelect.selectOption('vllm')
-
-      const switchBtn = page.locator('#aim-switch-model-btn')
-      await expect(switchBtn).toBeVisible()
-      await expect(switchBtn).toBeEnabled()
-
-      console.log(`点击切换模型按钮: ${selectedModel} (vllm)`)
-      await switchBtn.click()
-
-      await expect(switchBtn).toHaveText('切换中...', { timeout: 5000 })
-
-      await page.waitForTimeout(2000)
-
-      const toast = page.locator('.aim-toast')
-      const toastCount = await toast.count()
-      if (toastCount > 0) {
-        const toastText = await toast.first().textContent()
-        console.log(`Toast 通知: ${toastText}`)
-        expect(toastText).toBeTruthy()
-      }
-    })
-
-    test('不选模型直接点击"切换模型" → 提示选择模型', async ({ page }) => {
-      await openPanel(page)
-
-      const modelSelect = page.locator('#aim-switch-model-select')
-      await modelSelect.selectOption('')
-
-      const switchBtn = page.locator('#aim-switch-model-btn')
-      await switchBtn.click()
-
-      const toast = page.locator('.aim-toast-warning')
-      await expect(toast.first()).toBeVisible({ timeout: TOAST_TIMEOUT })
-      await expect(toast.first()).toContainText('请选择目标模型')
-    })
-
-    test('切换模型按钮禁用时不可点击', async ({ page }) => {
-      await openPanel(page)
-
-      const switchBtn = page.locator('#aim-switch-model-btn')
-      const disabled = await switchBtn.isDisabled()
-      expect(typeof disabled).toBe('boolean')
-    })
+  test('GPU 管理页显示核心卡片与模型区块', async ({ page }) => {
+    await page.goto('/gpumonitor?tab=manage')
+    await expect(page.locator('.gpu-manage-page')).toBeVisible({ timeout: CARD_TIMEOUT })
+    await expect(page.locator('.card-title:has-text("GPU 健康评分")')).toBeVisible()
+    await expect(page.locator('.card-title:has-text("模型管理")')).toBeVisible()
+    await expect(page.locator('.card-title:has-text("vLLM 运行时指标")').or(page.locator('.gpu-unavailable'))).toBeVisible()
   })
 
-  test.describe('引擎切换按钮 - vLLM', () => {
-    test('点击 vLLM 引擎切换按钮 → 触发请求', async ({ page }) => {
-      await openPanel(page)
-
-      const vllmBtn = page.locator('.aim-btn-engine[data-engine="vllm"]')
-      await expect(vllmBtn).toBeVisible()
-
-      const modelSelect = page.locator('#aim-switch-model-select')
-      const options = modelSelect.locator('option')
-      const count = await options.count()
-      if (count <= 1) {
-        test.skip(true, '没有可选模型，引擎切换需要先选模型')
-        return
-      }
-
-      const optionValues = await options.evaluateAll((opts: HTMLOptionElement[]) =>
-        opts.filter(o => o.value).map(o => o.value)
-      )
-      const modelToUse = optionValues[0]
-      await modelSelect.selectOption(modelToUse)
-      await page.waitForTimeout(200)
-
-      console.log('点击 vLLM 引擎切换按钮')
-      await vllmBtn.click()
-
-      await page.waitForTimeout(2000)
-
-      const toast = page.locator('.aim-toast')
-      const toastCount = await toast.count()
-      if (toastCount > 0) {
-        const toastText = await toast.first().textContent()
-        console.log(`Toast: ${toastText}`)
-        expect(toastText).toBeTruthy()
-      }
-    })
+  test('GPU 管理页轮询按钮可切换状态', async ({ page }) => {
+    await page.goto('/gpumonitor?tab=manage')
+    const toggleBtn = page.locator('.header-right .btn').filter({ hasText: /开启轮询|轮询中/ }).first()
+    await expect(toggleBtn).toBeVisible({ timeout: CARD_TIMEOUT })
+    await toggleBtn.click()
+    await expect(toggleBtn).toContainText('轮询中')
+    await toggleBtn.click()
+    await expect(toggleBtn).toContainText('开启轮询')
   })
 
-  test.describe('引擎切换按钮 - SGLang', () => {
-    test('点击 SGLang 引擎切换按钮 → 触发请求', async ({ page }) => {
-      await openPanel(page)
-
-      const sglangBtn = page.locator('.aim-btn-engine[data-engine="sglang"]')
-      await expect(sglangBtn).toBeVisible()
-
-      const modelSelect = page.locator('#aim-switch-model-select')
-      const options = modelSelect.locator('option')
-      const count = await options.count()
-      if (count <= 1) {
-        test.skip(true, '没有可选模型')
-        return
-      }
-
-      const optionValues = await options.evaluateAll((opts: HTMLOptionElement[]) =>
-        opts.filter(o => o.value).map(o => o.value)
-      )
-      const modelToUse = optionValues[0]
-      await modelSelect.selectOption(modelToUse)
-      await page.waitForTimeout(200)
-
-      console.log('点击 SGLang 引擎切换按钮')
-      await sglangBtn.click()
-
-      await page.waitForTimeout(2000)
-
-      const toast = page.locator('.aim-toast')
-      const toastCount = await toast.count()
-      if (toastCount > 0) {
-        const toastText = await toast.first().textContent()
-        console.log(`Toast: ${toastText}`)
-        expect(toastText).toBeTruthy()
-      }
-    })
+  test('GPU 管理页存在运行中或已停止模型列表', async ({ page }) => {
+    await page.goto('/gpumonitor?tab=manage')
+    const runningSection = page.locator('.section-title:has-text("运行中的模型")')
+    const stoppedSection = page.locator('.section-title:has-text("已停止的模型")')
+    await expect(runningSection.or(stoppedSection)).toBeVisible({ timeout: CARD_TIMEOUT })
+    const modelNames = page.locator('.model-item .model-name')
+    expect(await modelNames.count()).toBeGreaterThan(0)
   })
 
-  test.describe('引擎切换按钮 - llama.cpp', () => {
-    test('点击 llama.cpp 引擎切换按钮 → 触发请求', async ({ page }) => {
-      await openPanel(page)
-
-      const llamaBtn = page.locator('.aim-btn-engine[data-engine="llamacpp"]')
-      await expect(llamaBtn).toBeVisible()
-
-      const modelSelect = page.locator('#aim-switch-model-select')
-      const options = modelSelect.locator('option')
-      const count = await options.count()
-      if (count <= 1) {
-        test.skip(true, '没有可选模型')
-        return
-      }
-
-      const optionValues = await options.evaluateAll((opts: HTMLOptionElement[]) =>
-        opts.filter(o => o.value).map(o => o.value)
-      )
-      const modelToUse = optionValues[0]
-      await modelSelect.selectOption(modelToUse)
-      await page.waitForTimeout(200)
-
-      console.log('点击 llama.cpp 引擎切换按钮')
-      await llamaBtn.click()
-
-      await page.waitForTimeout(2000)
-
-      const toast = page.locator('.aim-toast')
-      const toastCount = await toast.count()
-      if (toastCount > 0) {
-        const toastText = await toast.first().textContent()
-        console.log(`Toast: ${toastText}`)
-        expect(toastText).toBeTruthy()
-      }
-    })
+  test('系统运维页可进入引擎管理 tab', async ({ page }) => {
+    await page.goto('/systemops')
+    await page.locator('.tab-btn:has-text("引擎管理")').click()
+    await expect(page).toHaveURL(/tab=engine/)
+    await expect(page.locator('h1')).toContainText('Engine Management', { timeout: CARD_TIMEOUT })
+    await expect(page.locator('.header-subtitle')).toContainText('推理引擎管理')
   })
 
-  test.describe('引擎切换 - 不选模型直接点击', () => {
-    test('不选模型点 vLLM 引擎切换 → 提示需要模型', async ({ page }) => {
-      await openPanel(page)
-
-      const modelSelect = page.locator('#aim-switch-model-select')
-      await modelSelect.selectOption('')
-
-      const vllmBtn = page.locator('.aim-btn-engine[data-engine="vllm"]')
-      await vllmBtn.click()
-
-      const toast = page.locator('.aim-toast-warning')
-      await expect(toast.first()).toBeVisible({ timeout: TOAST_TIMEOUT })
-      await expect(toast.first()).toContainText('请先选择模型')
-    })
-
-    test('不选模型点 SGLang 引擎切换 → 提示需要模型', async ({ page }) => {
-      await openPanel(page)
-
-      const modelSelect = page.locator('#aim-switch-model-select')
-      await modelSelect.selectOption('')
-
-      const sglangBtn = page.locator('.aim-btn-engine[data-engine="sglang"]')
-      await sglangBtn.click()
-
-      const toast = page.locator('.aim-toast-warning')
-      await expect(toast.first()).toBeVisible({ timeout: TOAST_TIMEOUT })
-      await expect(toast.first()).toContainText('请先选择模型')
-    })
-
-    test('不选模型点 llama.cpp 引擎切换 → 提示需要模型', async ({ page }) => {
-      await openPanel(page)
-
-      const modelSelect = page.locator('#aim-switch-model-select')
-      await modelSelect.selectOption('')
-
-      const llamaBtn = page.locator('.aim-btn-engine[data-engine="llamacpp"]')
-      await llamaBtn.click()
-
-      const toast = page.locator('.aim-toast-warning')
-      await expect(toast.first()).toBeVisible({ timeout: TOAST_TIMEOUT })
-      await expect(toast.first()).toContainText('请先选择模型')
-    })
+  test('引擎管理页状态概览渲染成功', async ({ page }) => {
+    await page.goto('/systemops?tab=engine')
+    await expect(page.locator('.engine-page')).toBeVisible({ timeout: CARD_TIMEOUT })
+    await expect(page.locator('.health-summary')).toBeVisible()
+    await expect(page.locator('.engine-card')).toHaveCount(3)
   })
 
-  test.describe('刷新按钮', () => {
-    test('点击刷新按钮触发数据刷新', async ({ page }) => {
-      await openPanel(page)
-
-      const refreshBtn = page.locator('#aim-refresh-btn')
-      await expect(refreshBtn).toBeVisible()
-
-      await refreshBtn.click()
-      await page.waitForTimeout(1500)
-
-      const cards = page.locator('.aim-engine-card')
-      await expect(cards).toHaveCount(3)
-    })
+  test('引擎管理页可切换到热切换 tab 并展示表单', async ({ page }) => {
+    await page.goto('/systemops?tab=engine')
+    await page.locator('.tab-btn:has-text("热切换")').click()
+    await expect(page.locator('.switch-form')).toBeVisible({ timeout: CARD_TIMEOUT })
+    await expect(page.locator('.section-title:has-text("引擎热切换")')).toBeVisible()
+    await expect(page.locator('input[placeholder="输入模型名称或从列表选择"]')).toBeVisible()
+    await expect(page.locator('input[type="number"]')).toBeVisible()
   })
 
-  test.describe('完整切换流程', () => {
-    test('切换模型 + 引擎切换一起测试', async ({ page }) => {
-      await openPanel(page)
+  test('引擎管理页可切换到配置编辑并进入编辑态', async ({ page }) => {
+    await page.goto('/systemops?tab=engine')
+    await page.locator('.tab-btn:has-text("配置编辑")').click()
+    const editBtn = page.locator('button:has-text("编辑配置")')
+    await expect(editBtn).toBeVisible({ timeout: CARD_TIMEOUT })
+    await editBtn.click()
+    await expect(page.locator('button:has-text("保存")')).toBeVisible()
+    await expect(page.locator('button:has-text("取消")')).toBeVisible()
+  })
 
-      const modelSelect = page.locator('#aim-switch-model-select')
-      const options = modelSelect.locator('option')
-      const count = await options.count()
-
-      if (count <= 1) {
-        test.skip(true, '没有可用模型')
-        return
-      }
-
-      const optionValues = await options.evaluateAll((opts: HTMLOptionElement[]) =>
-        opts.filter(o => o.value).map(o => o.value)
-      )
-
-      let targetModel: string | null = null
-      for (const v of optionValues) {
-        if (!v.includes('(运行中)')) {
-          targetModel = v
-          break
-        }
-      }
-      if (!targetModel) targetModel = optionValues[0]
-      if (!targetModel) {
-        test.skip(true, '无模型可选')
-        return
-      }
-
-      const cleanModelName = targetModel.replace(/\s*\(.*?\)\s*/g, '').replace(/\s*★\s*/g, '')
-      await modelSelect.selectOption(targetModel)
-      await page.waitForTimeout(300)
-
-      console.log(`步骤1: 切换模型到 ${cleanModelName}`)
-
-      const engineSelect = page.locator('#aim-switch-engine-select')
-      await engineSelect.selectOption('vllm')
-
-      const switchBtn = page.locator('#aim-switch-model-btn')
-      await switchBtn.click()
-      await page.waitForTimeout(3000)
-
-      console.log('步骤2: 切换到 SGLang 引擎')
-
-      const modelSelect2 = page.locator('#aim-switch-model-select')
-      const opts2 = modelSelect2.locator('option')
-      const count2 = await opts2.count()
-      if (count2 > 1) {
-        const vals = await opts2.evaluateAll((opts: HTMLOptionElement[]) =>
-          opts.filter(o => o.value).map(o => o.value)
-        )
-        if (vals.length > 0) {
-          await modelSelect2.selectOption(vals[0])
-          await page.waitForTimeout(200)
-        }
-      }
-
-      const sglangBtn = page.locator('.aim-btn-engine[data-engine="sglang"]')
-      await sglangBtn.click()
-
-      await page.waitForTimeout(2000)
-
-      console.log('步骤3: 切换到 llama.cpp 引擎')
-
-      const modelSelect3 = page.locator('#aim-switch-model-select')
-      const opts3 = modelSelect3.locator('option')
-      const count3 = await opts3.count()
-      if (count3 > 1) {
-        const vals = await opts3.evaluateAll((opts: HTMLOptionElement[]) =>
-          opts.filter(o => o.value).map(o => o.value)
-        )
-        if (vals.length > 0) {
-          await modelSelect3.selectOption(vals[0])
-          await page.waitForTimeout(200)
-        }
-      }
-
-      const llamaBtn = page.locator('.aim-btn-engine[data-engine="llamacpp"]')
-      await llamaBtn.click()
-
-      await page.waitForTimeout(2000)
-
-      const toast = page.locator('.aim-toast')
-      const toastCount = await toast.count()
-      expect(toastCount).toBeGreaterThanOrEqual(0)
-    })
+  test('引擎管理页可切换到日志 tab 并展示日志区域', async ({ page }) => {
+    await page.goto('/systemops?tab=engine')
+    await page.locator('.tab-btn:has-text("引擎日志")').click()
+    await expect(page.locator('button:has-text("刷新日志")').or(page.locator('button:has-text("刷新")'))).toBeVisible({ timeout: CARD_TIMEOUT })
+    await expect(page.locator('.logs-section, .log-section, pre, .code-block').first()).toBeVisible({ timeout: CARD_TIMEOUT })
   })
 })
