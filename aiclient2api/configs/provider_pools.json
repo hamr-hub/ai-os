@@ -9,11 +9,11 @@
       "OPENAI_API_KEY": "123456",
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "97c731f8-8290-4959-8c4f-960fb4b3184c",
-      "isHealthy": true,
-      "lastUsed": null,
+      "isHealthy": false,
+      "lastUsed": "2026-05-13T12:46:38.401Z",
       "usageCount": 0,
-      "errorCount": 0,
-      "lastErrorTime": "2026-05-13T10:59:42.046Z",
+      "errorCount": 10,
+      "lastErrorTime": "2026-05-13T12:46:38.401Z",
       "supportedModels": [],
       "notSupportedModels": [],
       "isDisabled": false,
@@ -21,9 +21,9 @@
       "refreshCount": 0,
       "lastHealthCheckTime": "2026-04-29T14:33:36.586Z",
       "lastHealthCheckModel": "Gemma-4-31B-Abliterated",
-      "lastErrorMessage": "Request failed with status code 503",
-      "lastRefreshTime": 1778669048348,
-      "_lastSelectionSeq": 67,
+      "lastErrorMessage": "Request failed with status code 404",
+      "lastRefreshTime": 1778674315111,
+      "_lastSelectionSeq": 15,
       "lastModelSwitchTime": "2026-04-29T04:51:41.923Z"
     }
   ],
@@ -35,19 +35,19 @@
       "checkHealth": false,
       "isHealthy": true,
       "isDisabled": false,
-      "lastUsed": null,
+      "lastUsed": "2026-05-13T12:39:31.164Z",
       "usageCount": 0,
       "errorCount": 0,
       "lastErrorTime": null,
-      "lastHealthCheckTime": null,
+      "lastHealthCheckTime": "2026-05-13T12:09:27.983Z",
       "lastHealthCheckModel": null,
       "lastErrorMessage": null,
       "PROJECT_ID": "",
       "needsRefresh": false,
       "refreshCount": 0,
       "customName": null,
-      "_lastSelectionSeq": 24,
-      "lastRefreshTime": 1778666846560
+      "_lastSelectionSeq": 1,
+      "lastRefreshTime": 1778674183072
     }
   ]
 }
