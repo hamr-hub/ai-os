@@ -10,10 +10,10 @@
       "OPENAI_BASE_URL": "http://192.168.7.103:35001/v1",
       "uuid": "97c731f8-8290-4959-8c4f-960fb4b3184c",
       "isHealthy": true,
-      "lastUsed": null,
+      "lastUsed": "2026-05-13T10:15:54.819Z",
       "usageCount": 0,
-      "errorCount": 0,
-      "lastErrorTime": null,
+      "errorCount": 1,
+      "lastErrorTime": "2026-05-13T10:15:54.819Z",
       "supportedModels": [],
       "notSupportedModels": [],
       "isDisabled": false,
@@ -21,10 +21,33 @@
       "refreshCount": 0,
       "lastHealthCheckTime": "2026-04-29T14:33:36.586Z",
       "lastHealthCheckModel": "Gemma-4-31B-Abliterated",
-      "lastErrorMessage": null,
+      "lastErrorMessage": "Request failed with status code 503",
       "lastRefreshTime": 1777543718202,
-      "_lastSelectionSeq": 2,
+      "_lastSelectionSeq": 30,
       "lastModelSwitchTime": "2026-04-29T04:51:41.923Z"
+    }
+  ],
+  "gemini-cli-oauth": [
+    {
+      "GEMINI_OAUTH_CREDS_FILE_PATH": "./configs/gemini/1778666797887_oauth_creds.json",
+      "uuid": "b4840abc-eb67-486a-8adb-c6a1f06a5371",
+      "checkModelName": "gemini-2.5-flash",
+      "checkHealth": false,
+      "isHealthy": true,
+      "isDisabled": false,
+      "lastUsed": "2026-05-13T10:14:34.554Z",
+      "usageCount": 3,
+      "errorCount": 0,
+      "lastErrorTime": null,
+      "lastHealthCheckTime": null,
+      "lastHealthCheckModel": null,
+      "lastErrorMessage": null,
+      "PROJECT_ID": "",
+      "needsRefresh": false,
+      "refreshCount": 0,
+      "customName": null,
+      "_lastSelectionSeq": 24,
+      "lastRefreshTime": 1778666846560
     }
   ]
 }
