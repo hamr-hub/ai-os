@@ -1290,8 +1290,9 @@
                     const cfg = configMap[type] || {};
                     const hasConfig = type === 'vllm' || Object.keys(cfg).length > 0;
                     const engineEnabled = enabledMap[type] !== false;
-                    const status = !engineEnabled && hasConfig ? 'disabled' : (svc?.status || (svc ? 'stopped' : 'not_found'));
-                    const running = status === 'running' && engineEnabled;
+                    const status = svc?.status || (svc ? 'stopped' : 'not_found');
+                    const configDisabled = !engineEnabled && hasConfig;
+                    const running = status === 'running';
                     const model = svc?.model || svc?.model_name || cfg.model_name || cfg.model || '-';
                     const port = svc?.port ?? cfg.port ?? cfg.http_port ?? '-';
                     const uptime = svc?.uptime_seconds ? `${Math.floor(svc.uptime_seconds / 3600)}h${Math.floor((svc.uptime_seconds % 3600) / 60)}m` : '-';
@@ -1305,21 +1306,19 @@
                         cfg.quantization ? `量化 ${cfg.quantization}` : '',
                         cfg.dtype ? `精度 ${cfg.dtype}` : '',
                     ].filter(Boolean);
-                    return { type, status, running, model, port, uptime, pid, health, host, parallel, gpuMem, extras };
+                    return { type, status, running, model, port, uptime, pid, health, host, parallel, gpuMem, extras, configDisabled };
                 });
                 const html = `<div class="aios-p-engine-grid">${engines.map(e => {
                     const unavailable = e.status === 'not_found';
                     const isPending = this.switchingEngine === e.type || (isSwitching && switchingTarget === e.type);
-                    const isDisabled = e.status === 'disabled';
-                    const canSwitch = !globalActionDisabled && !unavailable && !isDisabled && !e.running;
+                    const canSwitch = !globalActionDisabled && !e.running;
                     const actionAttrs = canSwitch ? `data-action="switch-engine" data-engine="${e.type}"` : 'disabled aria-disabled="true"';
-                    const actionIcon = e.running ? 'fa-check-circle' : (isDisabled ? 'fa-ban' : (unavailable ? 'fa-triangle-exclamation' : isPending ? 'fa-spinner fa-spin' : 'fa-play'));
-                    const actionText = e.running ? '当前引擎' : (isDisabled ? '已禁用' : (unavailable ? '未配置' : isPending ? '切换中...' : '切换到此引擎'));
+                    const actionIcon = e.running ? 'fa-check-circle' : (isPending ? 'fa-spinner fa-spin' : 'fa-play');
+                    const actionText = e.running ? '当前引擎' : (isPending ? '切换中...' : '切换到此引擎');
                     const statusText = e.running
                         ? '运行中'
-                        : isDisabled ? '已禁用'
-                        : (isPending ? `切换中 (${switchingTarget ? engineDisplayName(switchingTarget) : '待确认'})` : (e.status === 'not_found' ? '未配置/未安装' : '已停止'));
-                    const cardClass = `${e.running ? 'aios-p-engine-running' : 'aios-p-engine-stopped'} ${isPending ? 'aios-p-engine-pending' : ''} ${isDisabled ? 'aios-p-engine-disabled' : ''}`;
+                        : (isPending ? `切换中 (${switchingTarget ? engineDisplayName(switchingTarget) : '待确认'})` : (unavailable ? '未配置，可尝试' : (e.configDisabled ? '配置停用，可尝试' : (e.status === 'failed' ? '启动失败，可重试' : '已停止'))));
+                    const cardClass = `${e.running ? 'aios-p-engine-running' : 'aios-p-engine-stopped'} ${isPending ? 'aios-p-engine-pending' : ''}`;
                     return `
                     <div class="aios-p-engine-card ${cardClass}" data-engine-type="${e.type}">
                         <div class="aios-p-engine-header">
@@ -1355,10 +1354,6 @@
                 try {
                     if (this.switchingEngine) {
                         showToast('已有引擎切换进行中，请稍候', 'warning');
-                        return;
-                    }
-                    if (!this.isEngineEnabled(targetEngine)) {
-                        showToast(`${engineDisplayName(targetEngine)} 当前已禁用，请先在引擎配置中启用`, 'warning');
                         return;
                     }
                     let modelName = '';
@@ -1486,6 +1481,13 @@
                         const runningService = matchingServices.find(s => this.isEngineSwitchServiceMatch(s, normalizedTarget, normalizedModel, this._engineSwitchTargetPort)) || matchingServices[0] || null;
                         const session = payload.switch_session || raw.switch_session || payload.session || raw.session || null;
                         const sessionState = this.getEngineSessionState(session);
+                        const scheduler = payload.scheduler_status || raw.scheduler_status || payload;
+                        const registry = scheduler.engine_registry || payload.engine_registry || raw.engine_registry || {};
+                        const registryFailure = Object.entries(registry).find(([name, reg]) => (
+                            this.normalizeModelName(name) === normalizedModel
+                            && normalizeEngineType(reg?.engine || reg?.engine_type) === normalizedTarget
+                            && ['failed', 'dead'].includes(String(reg?.status || '').toLowerCase())
+                        ));
                         const currentEngine = normalizeEngineType(
                             runningService?.engine_type
                                 || runningService?.engine
@@ -1509,6 +1511,11 @@
 
                         if (sessionError || sessionRollback) {
                             finish('error', sessionRollback ? `引擎切换已回滚：${sessionRollback}` : `引擎切换失败：${sessionError}`);
+                            return;
+                        }
+                        if (registryFailure) {
+                            const failedReg = registryFailure[1] || {};
+                            finish('error', `引擎切换失败：${failedReg.error || failedReg.reason || '目标引擎未能启动'}`);
                             return;
                         }
                         if (sessionState.terminal && !sessionState.completed) {
@@ -1813,17 +1820,10 @@
                     const enabled = window.AiosManager.gpu.isEngineEnabled(t);
                     const cfg = window.AiosManager.gpu.getEngineConfig(t);
                     const configured = t === 'vllm' || !!service || Object.keys(cfg || {}).length > 0;
-                    const disabled = !enabled || !configured;
-                    const suffix = !configured ? ' (未配置)' : (!enabled ? ' (已禁用)' : (running ? ' (当前)' : ' (可切换)'));
-                    return `<option value="${t}"${running ? ' selected' : ''}${disabled ? ' disabled' : ''}>${engineDisplayName(t)}${suffix}</option>`;
+                    const suffix = !configured ? ' (未配置，可尝试)' : (!enabled ? ' (配置停用，可尝试)' : (running ? ' (当前)' : ' (可切换)'));
+                    return `<option value="${t}"${running ? ' selected' : ''}>${engineDisplayName(t)}${suffix}</option>`;
                 }).join('');
-                const hasUsableEngine = engineTypes.some(t => {
-                    const cfg = window.AiosManager.gpu.getEngineConfig(t);
-                    const configured = t === 'vllm' || services.some(s => normalizeEngineType(s.engine_type || s.name || s.type) === t) || Object.keys(cfg || {}).length > 0;
-                    return configured && window.AiosManager.gpu.isEngineEnabled(t);
-                });
-                const placeholder = hasUsableEngine ? '' : '<option value="" selected disabled>无可用引擎</option>';
-                select.innerHTML = `${placeholder}${engineOptions}`;
+                select.innerHTML = engineOptions;
             },
             renderModelList(aggData) {
                 const aggResult = aggData.data || aggData;

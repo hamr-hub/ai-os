@@ -272,12 +272,6 @@ class ModelEngineScheduler:
     ) -> Dict:
         if engine_type not in _ENGINE_CAPABILITIES:
             return {"success": False, "reason": f"unsupported_engine: {engine_type}"}
-        if not self._is_engine_enabled(engine_type):
-            return {
-                "success": False,
-                "reason": "engine_disabled",
-                "detail": f"引擎 {engine_type} 当前未启用。",
-            }
         if not port:
             port = self._find_available_port(engine_type)
 
@@ -550,6 +544,57 @@ class ModelEngineScheduler:
                 self._engine_model_registry[model]["status"] = "stopped"
         return stopped_models
 
+    async def _restore_services_after_engine_switch_failure(
+        self, previous_services: List[Dict], reason: str,
+    ) -> List[str]:
+        if not self._llm_mgr or not previous_services:
+            return []
+        restored = []
+        for svc in previous_services:
+            model = svc.get("model") or svc.get("model_name")
+            if not model:
+                continue
+            engine = svc.get("engine_type") or svc.get("engine") or self._infer_service_engine(model, svc)
+            port_raw = svc.get("port") or self._find_available_port(engine)
+            try:
+                restore_port = int(port_raw)
+            except (TypeError, ValueError):
+                restore_port = self._find_available_port(engine)
+            service_name = svc.get("service_name") or f"{engine}-{model.split('/')[-1]}"
+            logger.warning(
+                "Restoring previous service after engine switch failure: service=%s model=%s engine=%s port=%s reason=%s",
+                service_name, model, engine, restore_port, reason,
+            )
+            result = self._llm_mgr.start_service(
+                service_name, model, engine, restore_port,
+                model_path=svc.get("model_path"),
+            )
+            if result.get("status") != "started":
+                logger.error(
+                    "Failed to restore previous service %s: %s",
+                    service_name, result.get("message", result),
+                )
+                continue
+            ready = await self._llm_mgr.wait_for_ready(service_name, restore_port, timeout=600)
+            if not ready:
+                self._llm_mgr.stop_service(service_name)
+                logger.error("Restored service %s did not become ready", service_name)
+                continue
+            restored.append(model)
+            if self._gpu_mgr:
+                self._gpu_mgr.register_loaded_model(model, device_id=0)
+            self._engine_model_registry[model] = {
+                "engine": engine,
+                "port": restore_port,
+                "status": "running",
+                "service_name": service_name,
+                "restored_at": time.time(),
+                "restore_reason": reason,
+            }
+            self._active_service = service_name
+            self._record_switch(model, engine, restore_port, "engine_switch_rollback")
+        return restored
+
     async def _do_subprocess_engine_switch(
         self, model_name: str, engine_type: str, port: int,
     ) -> Dict:
@@ -561,6 +606,11 @@ class ModelEngineScheduler:
                     self._engine_model_registry[model_name]["status"] = "failed"
                     self._engine_model_registry[model_name]["error"] = "insufficient_memory"
                     return {"success": False, "reason": "insufficient_gpu_memory"}
+        previous_services = [
+            dict(svc)
+            for svc in (self._llm_mgr.list_services() if self._llm_mgr else [])
+            if svc.get("status") == "running"
+        ]
         await self._stop_all_services()
         model_path = None
         if self._model_hub:
@@ -581,13 +631,28 @@ class ModelEngineScheduler:
         )
         if result.get("status") != "started":
             self._engine_model_registry[model_name]["status"] = "failed"
-            return {"success": False, "reason": result.get("message", "start_failed"), "detail": result}
-        ready = await self._llm_mgr.wait_for_ready(service_name, port, timeout=120)
+            reason = result.get("message", "start_failed")
+            self._engine_model_registry[model_name]["error"] = reason
+            restored = await self._restore_services_after_engine_switch_failure(previous_services, reason)
+            self._engine_model_registry[model_name]["rollback_restored"] = restored
+            return {
+                "success": False,
+                "reason": reason,
+                "detail": result,
+                "rollback_restored": restored,
+            }
+        ready = await self._llm_mgr.wait_for_ready(service_name, port, timeout=600)
         if not ready:
             self._llm_mgr.stop_service(service_name)
             self._engine_model_registry[model_name]["status"] = "failed"
             self._engine_model_registry[model_name]["error"] = "service_not_ready"
-            return {"success": False, "reason": "service_not_ready"}
+            restored = await self._restore_services_after_engine_switch_failure(previous_services, "service_not_ready")
+            self._engine_model_registry[model_name]["rollback_restored"] = restored
+            return {
+                "success": False,
+                "reason": "service_not_ready",
+                "rollback_restored": restored,
+            }
         if self._gpu_mgr:
             self._gpu_mgr.register_loaded_model(model_name, device_id=0)
         self._engine_model_registry[model_name].update({

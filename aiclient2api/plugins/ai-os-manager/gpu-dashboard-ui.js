@@ -325,7 +325,7 @@
     function renderMetricCards(root, range, dataset, config) {
         return `
             <div class="aios-p-chart-section">
-                <div class="aios-p-stats-grid" style="margin:0;" data-range="${range}" id="${root.id}-grid">
+                <div class="aios-p-chart-metrics-grid" data-range="${range}" id="${root.id}-grid">
                     ${METRIC_PRESETS.map(preset => {
                         const value = dataset[preset.key];
                 const hasValue = Number.isFinite(value) && value >= 0;

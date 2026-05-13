@@ -1239,6 +1239,25 @@
     margin-bottom: var(--aios-space-lg);
 }
 
+.aios-p-scope .aios-p-chart-metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--aios-space-md);
+    margin: 0;
+}
+
+.aios-p-scope .aios-p-chart-metrics-grid > .aios-p-card {
+    width: 100%;
+}
+
+.aios-p-scope .aios-p-chart-metrics-grid .aios-p-chart-wrapper {
+    min-height: 220px;
+}
+
+.aios-p-scope .aios-p-chart-metrics-grid .aios-p-chart-canvas-wrap {
+    height: 220px;
+}
+
 .aios-p-scope .aios-p-chart-card {
     background: var(--bg-glass);
     border: 1px solid var(--border-color);
@@ -1349,4 +1368,92 @@
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     text-align: right;
     padding-right: 4px;
+}
+/* Global modal fallback: confirm dialogs are appended to document.body, not inside .aios-p-scope. */
+.aios-p-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.48);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.aios-p-modal {
+    width: min(440px, calc(100vw - 48px));
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    padding: 22px;
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    border-radius: 18px;
+    background: var(--bg-card, #ffffff);
+    color: var(--text-primary, #111827);
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.32);
+    animation: aios-p-modal-in 0.18s ease-out;
+}
+
+.aios-p-modal h3 {
+    margin: 0 0 12px;
+    color: var(--text-primary, #111827);
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
+.aios-p-modal p {
+    margin: 0;
+    color: var(--text-secondary, #475569);
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.aios-p-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.aios-p-modal .aios-p-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0 16px;
+    border: 1px solid rgba(148, 163, 184, 0.34);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--text-primary, #111827);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.aios-p-modal .aios-p-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+}
+
+.aios-p-modal .aios-p-btn-primary {
+    border-color: rgba(65, 151, 111, 0.72);
+    background: linear-gradient(135deg, #41976f, #62b98a);
+    color: #ffffff;
+    box-shadow: 0 12px 26px rgba(65, 151, 111, 0.28);
+}
+
+@keyframes aios-p-modal-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }

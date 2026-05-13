@@ -531,6 +531,8 @@ async def get_aggregated_models():
         for variant in group.get("variants", []):
             model_name = variant["name"]
             variant["running"] = model_name in running_model_names
+            if variant["running"]:
+                variant["status"] = "running"
             variant["port"] = scheduler.get_model_port(model_name)
             variant["preloaded"] = scheduler.is_model_preloaded(model_name)
             variant["active_requests"] = scheduler.get_active_requests(model_name)

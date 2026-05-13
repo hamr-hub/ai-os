@@ -44,6 +44,20 @@ docker compose up -d
 sudo systemctl enable --now nginx-30000.service      # http://localhost:30000
 ```
 
+## 服务器部署与验收
+
+```bash
+# 部署服务器
+ssh -p 27144 root@ubuntu.hamr.top
+
+# 服务器仓库
+cd /root/ai-os
+```
+
+- 本地更新并推送代码后，服务器可在 `/root/ai-os` 拉取更新。
+- 浏览器验收地址: http://ubuntu.hamr.top:27160/
+- 默认密码: `admin123`
+
 ---
 
 ## 详细文档
