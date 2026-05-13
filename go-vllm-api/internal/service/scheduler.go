@@ -830,9 +830,13 @@ func (s *Scheduler) startVLLMModel(ctx context.Context, matched string, mc *conf
 		return true, nil
 	}
 
+	if gate := s.PythonSwitchGateForModel(matched); gate.Switching {
+		return false, fmt.Errorf("python model switch in progress, only current model %s can be served", gate.CurrentModel)
+	}
+
 	if s.hasPythonModelSwitchInProgress() {
-		s.logger.Info("python model switch in progress, waiting for vllm readiness", zap.String("model", matched))
-		return true, nil
+		s.logger.Info("python model switch state file detected, refusing to start model", zap.String("model", matched))
+		return false, fmt.Errorf("python model switch in progress")
 	}
 
 	if s.sysCtl.IsServiceRunning(mc.Service) {
