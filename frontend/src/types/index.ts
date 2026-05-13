@@ -745,6 +745,7 @@ export interface PoolEntry {
   name: string
   source: string
   size_b: number | null
+  file_size_bytes?: number | null
   quant: string | null
   required_gb: number | null
   feasible: boolean | null
