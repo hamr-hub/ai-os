@@ -598,20 +598,28 @@ class ModelEngineScheduler:
     async def _do_subprocess_engine_switch(
         self, model_name: str, engine_type: str, port: int,
     ) -> Dict:
-        if self._gpu_mgr:
-            feasibility = self._gpu_mgr.check_model_feasibility(model_name)
-            if not feasibility.get("feasible", True):
-                freed = await self._free_up_memory_for(model_name)
-                if not freed:
-                    self._engine_model_registry[model_name]["status"] = "failed"
-                    self._engine_model_registry[model_name]["error"] = "insufficient_memory"
-                    return {"success": False, "reason": "insufficient_gpu_memory"}
+        if not self._llm_mgr:
+            return {"success": False, "reason": "no_llm_service_manager"}
         previous_services = [
             dict(svc)
             for svc in (self._llm_mgr.list_services() if self._llm_mgr else [])
             if svc.get("status") == "running"
         ]
         await self._stop_all_services()
+        if self._gpu_mgr:
+            feasibility = self._gpu_mgr.check_model_feasibility(model_name)
+            if not feasibility.get("feasible", True):
+                self._engine_model_registry[model_name]["status"] = "failed"
+                self._engine_model_registry[model_name]["error"] = "insufficient_memory"
+                restored = await self._restore_services_after_engine_switch_failure(
+                    previous_services, "insufficient_gpu_memory",
+                )
+                self._engine_model_registry[model_name]["rollback_restored"] = restored
+                return {
+                    "success": False,
+                    "reason": "insufficient_gpu_memory",
+                    "rollback_restored": restored,
+                }
         model_path = None
         if self._model_hub:
             model_path = self._model_hub.get_model_local_path(model_name)
@@ -622,8 +630,6 @@ class ModelEngineScheduler:
                     model_path = cfg.model_path
                 elif isinstance(cfg, dict) and cfg.get("model_path"):
                     model_path = cfg.get("model_path")
-        if not self._llm_mgr:
-            return {"success": False, "reason": "no_llm_service_manager"}
         service_name = f"{engine_type}-{model_name.split('/')[-1]}"
         result = self._llm_mgr.start_service(
             service_name, model_name, engine_type, port,
