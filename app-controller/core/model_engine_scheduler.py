@@ -583,6 +583,9 @@ class ModelEngineScheduler:
             restored.append(model)
             if self._gpu_mgr:
                 self._gpu_mgr.register_loaded_model(model, device_id=0)
+            previous_registry = dict(self._engine_model_registry.get(model, {}))
+            failed_engine = previous_registry.get("engine") if previous_registry.get("status") == "failed" else previous_registry.get("last_failed_engine")
+            failed_error = previous_registry.get("error") or previous_registry.get("last_switch_error") or reason
             self._engine_model_registry[model] = {
                 "engine": engine,
                 "port": restore_port,
@@ -590,6 +593,9 @@ class ModelEngineScheduler:
                 "service_name": service_name,
                 "restored_at": time.time(),
                 "restore_reason": reason,
+                "last_failed_engine": failed_engine,
+                "last_switch_error": failed_error,
+                "last_failed_at": time.time(),
             }
             self._active_service = service_name
             self._record_switch(model, engine, restore_port, "engine_switch_rollback")

@@ -10,7 +10,15 @@ services:
       - "19876-19880:19876-19880"
     volumes:
       - ./configs:/app/configs
-      - ./plugins:/app/src/plugins
+      - ./plugins:/app/ai-os-plugins:ro
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        mkdir -p /app/src/plugins
+        cp -a /app/ai-os-plugins/. /app/src/plugins/
+        exec node src/core/master.js $$ARGS
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:

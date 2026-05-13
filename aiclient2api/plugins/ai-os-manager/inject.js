@@ -1488,6 +1488,11 @@
                             && normalizeEngineType(reg?.engine || reg?.engine_type) === normalizedTarget
                             && ['failed', 'dead'].includes(String(reg?.status || '').toLowerCase())
                         ));
+                        const registryRollback = Object.entries(registry).find(([name, reg]) => (
+                            this.normalizeModelName(name) === normalizedModel
+                            && normalizeEngineType(reg?.last_failed_engine) === normalizedTarget
+                            && (reg?.last_switch_error || reg?.restore_reason || (Array.isArray(reg?.rollback_restored) && reg.rollback_restored.length > 0))
+                        ));
                         const currentEngine = normalizeEngineType(
                             runningService?.engine_type
                                 || runningService?.engine
@@ -1516,6 +1521,13 @@
                         if (registryFailure) {
                             const failedReg = registryFailure[1] || {};
                             finish('error', `引擎切换失败：${failedReg.error || failedReg.reason || '目标引擎未能启动'}`);
+                            return;
+                        }
+                        if (registryRollback) {
+                            const restoredReg = registryRollback[1] || {};
+                            const restoredEngine = engineDisplayName(restoredReg.engine || restoredReg.engine_type || 'vllm');
+                            const errorReason = restoredReg.last_switch_error || restoredReg.restore_reason || '目标引擎未能启动';
+                            finish('error', `引擎切换失败，已回滚到 ${restoredEngine}：${errorReason}`, true);
                             return;
                         }
                         if (sessionState.terminal && !sessionState.completed) {

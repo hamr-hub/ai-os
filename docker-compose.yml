@@ -109,7 +109,15 @@ services:
       - PYTHON_BACKEND_URL=http://ai-controller:35000
     volumes:
       - ./aiclient2api/configs:/app/configs
-      - ./aiclient2api/plugins:/app/src/plugins
+      - ./aiclient2api/plugins:/app/ai-os-plugins:ro
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        mkdir -p /app/src/plugins
+        cp -a /app/ai-os-plugins/. /app/src/plugins/
+        exec node src/core/master.js $$ARGS
     depends_on:
       ai-controller:
         condition: service_healthy
