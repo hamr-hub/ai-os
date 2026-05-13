@@ -12,6 +12,7 @@ go-vllm-api/go-vllm-api-fixed
 frontend/playwright-report/
 frontend/test-results/
 logs/
+app-controller/scripts/.switch_state.json
 aiclient2api/configs/
 aiclient2api/data/
 frontend/dist_30000
