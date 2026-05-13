@@ -299,6 +299,7 @@ async def cancel_switch():
 def _clear_model_caches():
     for key in [
         "api:manage:models:status", "api:manage:models:summary",
+        "api:manage:models:aggregated",
         "api:manage:preload:status", "api:manage:preload:detailed",
         "api:v1:status"
     ]:
