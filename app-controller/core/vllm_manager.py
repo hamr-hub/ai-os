@@ -710,14 +710,23 @@ def get_current_model_info() -> Optional[Dict[str, Any]]:
                     if model_path:
                         break
 
+        vllm_port = discover_vllm_port()
+        served_model = _detect_served_vllm_model(vllm_port)
+        config_model_name = _find_model_name_from_path(model_path) if model_path else None
+
+        if served_model:
+            served_id = served_model.get("id", "")
+            current_name = config_model_name or os.path.basename(model_path or "")
+            if not model_path or not _model_id_matches(served_id, model_path, current_name):
+                model_path = served_model.get("path") or model_path
+                config_model_name = served_model.get("name") or config_model_name
+
         if not model_path:
             return None
-
-        vllm_port = discover_vllm_port()
-        config_model_name = _find_model_name_from_path(model_path)
         
         result_name = config_model_name or os.path.basename(model_path)
-        service_running = _is_service_running() or _is_vllm_model_served(
+        served_matches = bool(served_model and _model_id_matches(served_model.get("id", ""), model_path, result_name))
+        service_running = _is_service_running() or served_matches or _is_vllm_model_served(
             vllm_port,
             model_path,
             result_name,
@@ -754,6 +763,57 @@ def _model_id_matches(served_id: str, model_path: str, model_name: str) -> bool:
     }
     candidates.discard("")
     return served_id in candidates or _normalize_model_id(served_id) in candidates
+
+
+def _find_model_from_served_id(served_id: str) -> Optional[Dict[str, str]]:
+    served_id = (served_id or "").strip()
+    if not served_id:
+        return None
+
+    served_basename = _normalize_model_id(served_id)
+    for model in get_available_models():
+        model_name = model.get("name", "")
+        model_path = model.get("path", "")
+        if _model_id_matches(served_id, model_path, model_name):
+            return {
+                "id": served_id,
+                "name": model_name,
+                "path": model_path,
+            }
+
+    if os.path.isabs(served_id) and os.path.exists(served_id):
+        return {
+            "id": served_id,
+            "name": _find_model_name_from_path(served_id) or served_basename,
+            "path": served_id,
+        }
+
+    candidate_path = os.path.join(MODEL_BASE_PATH, served_basename)
+    if served_basename and os.path.exists(candidate_path):
+        return {
+            "id": served_id,
+            "name": _find_model_name_from_path(candidate_path) or served_basename,
+            "path": candidate_path,
+        }
+
+    return None
+
+
+def _detect_served_vllm_model(port: int) -> Optional[Dict[str, str]]:
+    try:
+        import httpx
+
+        with httpx.Client(timeout=2) as client:
+            response = client.get(f"{_build_vllm_base_url(port)}/v1/models")
+        if response.status_code != 200:
+            return None
+        for model in response.json().get("data", []):
+            detected = _find_model_from_served_id(model.get("id", ""))
+            if detected:
+                return detected
+    except Exception as exc:
+        logger.debug("Failed to detect served vLLM model on port %s: %s", port, exc)
+    return None
 
 
 def _is_vllm_model_served(port: int, model_path: str, model_name: str) -> bool:
