@@ -1679,7 +1679,14 @@
                     this.populateEngineSelect(engineData);
                     this.refreshDownloadList();
                     this.refreshPool();
-                    if (!this.isSwitching && !this.actionLoading) this.setActionStatus('', '');
+                    const switchResult = switchData.data || switchData;
+                    const switchSession = switchResult.session || null;
+                    const hasTerminalSwitchMessage = !switchResult.is_switching && !!(
+                        switchSession?.completed_successfully ||
+                        switchSession?.error ||
+                        switchSession?.rollback_reason
+                    );
+                    if (!this.isSwitching && !this.actionLoading && !hasTerminalSwitchMessage) this.setActionStatus('', '');
                 } catch (e) {
                     const el = document.getElementById('aios-model-banner');
                     if (el) el.innerHTML = errorHTML(e.message);

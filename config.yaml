@@ -39,7 +39,7 @@ engines:
     default_gpu_memory_utilization: 0.9
     default_max_model_len: 32768
     default_port: 8100
-    enabled: false
+    enabled: true
     venv_path: /root/ai-os/venvs/sglang
   vllm:
     default_port: 8000
@@ -109,25 +109,6 @@ models:
       max_num_batched_tokens: 16384
       max_num_seqs: 256
       tool_call_parser: gemma4
-  Gemma-4-31B-GGUF-Q4:
-    ctx_size: 8192
-    description: Gemma 4 31B GGUF Q4_K_M 量化（llama_cpp 后端）
-    engine_type: vllm
-    extra_args: []
-    host: 0.0.0.0
-    keep_alive: false
-    llamacpp_params: {}
-    model_path: /mnt/pve_models/Gemma-4-31B-GGUF-Q4/gemma-4-31b-q4_k_m.gguf
-    n_gpu_layers: -1
-    port: 8001
-    preload: false
-    required_memory: 20GB
-    service: llama_cpp
-    sglang_params: {}
-    supports_image_generation: false
-    supports_images: false
-    supports_tool_calling: false
-    vllm_params: {}
   Qwen3-235B-A22B-Instruct-2507-AWQ:
     ctx_size: 4096
     description: Qwen3 235B AWQ 量化模型
@@ -157,18 +138,24 @@ models:
   Qwen3.6-35B-A3B:
     ctx_size: 4096
     description: Qwen3.6 35B 稀疏激活模型
-    engine_type: vllm
+    engine_type: sglang
     extra_args: []
     host: 0.0.0.0
     keep_alive: false
     llamacpp_params: {}
     model_path: /mnt/pve_models/Qwen3.6-35B-A3B
     n_gpu_layers: -1
-    port: 8000
+    port: 8100
     preload: false
     required_memory: 40GB
-    service: vllm-aiclient
-    sglang_params: {}
+    service: sglang
+    sglang_params:
+      context_length: 8192
+      dtype: bfloat16
+      max_running_requests: 32
+      mem_fraction_static: 0.82
+      served_model_name: Qwen3.6-35B-A3B
+      trust_remote_code: true
     supports_image_generation: false
     supports_images: false
     supports_tool_calling: true
@@ -235,20 +222,24 @@ models:
       max_num_batched_tokens: 16384
       max_num_seqs: 256
       tool_call_parser: null
-  Qwen3.6-35B-GGUF-Q4:
+  Qwen3.6-35B-A3B-Uncensored-GGUF-Q8:
     ctx_size: 8192
-    description: Qwen3.6 35B GGUF Q4_K_M 量化（llama_cpp 后端）
-    engine_type: vllm
+    description: Qwen3.6 35B GGUF Q8_K_P 量化（llama.cpp 后端）
+    engine_type: llamacpp
     extra_args: []
     host: 0.0.0.0
     keep_alive: false
-    llamacpp_params: {}
-    model_path: /mnt/pve_models/Qwen3.6-35B-GGUF-Q4/qwen3.6-35b-q4_k_m.gguf
+    llamacpp_params:
+      chat_format: chatml
+      flash_attn: true
+      n_batch: 512
+      n_threads: 16
+    model_path: /mnt/pve_models/Qwen3.6-35B-A3B-Uncensored/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf
     n_gpu_layers: -1
     port: 8002
     preload: false
-    required_memory: 24GB
-    service: llama_cpp
+    required_memory: 48GB
+    service: llamacpp
     sglang_params: {}
     supports_image_generation: false
     supports_images: false

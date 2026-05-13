@@ -953,7 +953,7 @@ class GPUMonitor:
             if not history:
                 return []
             history = history[::-1]
-            cutoff = datetime.now() - range_windows[normalized_range]
+            window = range_windows[normalized_range]
             filtered = []
             for item in history:
                 raw_ts = item.get("timestamp")
@@ -963,6 +963,7 @@ class GPUMonitor:
                     ts = datetime.fromisoformat(raw_ts)
                 except Exception:
                     continue
+                cutoff = datetime.now(ts.tzinfo) - window if ts.tzinfo else datetime.now() - window
                 if ts >= cutoff:
                     filtered.append(item)
             if not filtered:
@@ -994,69 +995,6 @@ class GPUMonitor:
             if sampled and sampled[-1] is not last:
                 sampled.append(last)
             return sampled[-safe_count:]
-        except Exception:
-            logger.exception("Failed to load GPU history")
-            return []
-        try:
-            max_counts = {
-                'hour': 720,
-                'day': 1000,
-                'week': 1000,
-                None: count
-            }
-            normalized_range = (time_range or "").strip().lower()
-            if normalized_range in {"min", "minute", "minutes"}:
-                normalized_range = "min"
-            if normalized_range in {"h", "hour", "hours"}:
-                normalized_range = "hour"
-            if normalized_range in {"d", "day", "days"}:
-                normalized_range = "day"
-
-            range_windows = {
-                "min": timedelta(minutes=60),
-                "hour": timedelta(hours=1),
-                "day": timedelta(days=1),
-            }
-
-            max_points = min(count, max_counts.get(normalized_range, count))
-            history_data = self._redis_client.lrange("gpu:history", 0, max_points - 1)
-            history = []
-            for item in history_data:
-                try:
-                    entry = json.loads(item)
-                    history.append(entry)
-                except Exception:
-                    logger.debug("Skipping invalid GPU history entry")
-
-            if not history:
-                return []
-
-            # lrange returns newest-first list for Redis lists. Convert to chronological order.
-            history = history[::-1]
-
-            window = range_windows.get(normalized_range)
-            if window:
-                cutoff = datetime.now() - window
-                filtered = []
-                for item in history:
-                    raw_ts = item.get("timestamp")
-                    if not raw_ts:
-                        filtered.append(item)
-                        continue
-                    try:
-                        ts = datetime.fromisoformat(raw_ts)
-                    except Exception:
-                        filtered.append(item)
-                        continue
-                    if ts >= cutoff:
-                        filtered.append(item)
-                history = filtered
-
-            if len(history) > max_points:
-                step = max(1, int(len(history) / max_points))
-                history = history[::step][-max_points:]
-
-            return history
         except Exception:
             logger.exception("Failed to load GPU history")
             return []

@@ -82,6 +82,60 @@ class LLMServiceManager:
             return self._config.get('settings', {})
         return {}
 
+    def _get_engines_config(self) -> Dict:
+        if not self._config:
+            return {}
+        if hasattr(self._config, 'engines'):
+            val = self._config.engines
+            return val if isinstance(val, dict) else {}
+        if isinstance(self._config, dict):
+            return self._config.get('engines', {}) or {}
+        return {}
+
+    def _get_engine_config(self, engine_type: str) -> Dict:
+        engines = self._get_engines_config()
+        val = engines.get(engine_type, {}) if isinstance(engines, dict) else {}
+        return val if isinstance(val, dict) else {}
+
+    def _get_engine_venv_path(self, engine_type: str) -> Optional[str]:
+        engine_cfg = self._get_engine_config(engine_type)
+        venv_path = engine_cfg.get("venv_path")
+        if venv_path:
+            return str(venv_path)
+        if engine_type == "vllm":
+            return self._get_vllm_config().get("venv_path")
+        return None
+
+    def _get_venv_python(self, engine_type: str) -> str:
+        venv_path = self._get_engine_venv_path(engine_type)
+        if venv_path:
+            python_bin = os.path.join(venv_path, "bin", "python")
+            if os.path.isfile(python_bin):
+                return python_bin
+        return "python"
+
+    def _get_engine_env(self, engine_type: str, model_name: str) -> Dict[str, str]:
+        if engine_type == "vllm":
+            return self._get_vllm_env(model_name)
+
+        env = {**os.environ}
+        engine_cfg = self._get_engine_config(engine_type)
+        env_vars = engine_cfg.get("env_vars", {})
+        if isinstance(env_vars, dict):
+            env.update({str(key): str(value) for key, value in env_vars.items() if value is not None})
+
+        venv_path = self._get_engine_venv_path(engine_type)
+        if venv_path and os.path.isdir(venv_path):
+            env["VIRTUAL_ENV"] = venv_path
+            env["PATH"] = os.path.join(venv_path, "bin") + ":" + env.get("PATH", "")
+            env.pop("PYTHONHOME", None)
+
+        env["HF_ENDPOINT"] = os.environ.get("HF_ENDPOINT", engine_cfg.get("hf_endpoint", "https://hf-mirror.com"))
+        if engine_type == "sglang":
+            env.setdefault("NCCL_P2P_DISABLE", "1")
+            env.setdefault("NCCL_IB_DISABLE", "1")
+        return env
+
     def _get_model_base_path(self) -> str:
         vllm_config = self._get_vllm_config()
         return vllm_config.get("model_base_path", "/mnt/pve_models")
@@ -214,7 +268,7 @@ class LLMServiceManager:
 
     def _build_sglang_command(self, model_path: str, port: int, cfg: Any) -> List[str]:
         cmd = [
-            "python", "-m", "sglang.launch_server",
+            self._get_venv_python("sglang"), "-m", "sglang.launch_server",
             "--model-path", model_path,
             "--host", "0.0.0.0",
             "--port", str(port),
@@ -364,8 +418,8 @@ class LLMServiceManager:
 
     def _build_llamacpp_command(self, model_path: str, port: int, cfg: Any) -> List[str]:
         cmd = [
-            "./llama-server",
-            "-m", model_path,
+            self._get_venv_python("llamacpp"), "-m", "llama_cpp.server",
+            "--model", model_path,
             "--port", str(port),
             "--host", "0.0.0.0",
         ]
@@ -379,23 +433,23 @@ class LLMServiceManager:
         n_gpu = llamacpp_params.get("n_gpu_layers", -1)
         if hasattr(cfg, 'n_gpu_layers') and cfg.n_gpu_layers != -1:
             n_gpu = cfg.n_gpu_layers
-        cmd.extend(["-ngl", str(n_gpu)])
+        cmd.extend(["--n_gpu_layers", str(n_gpu)])
 
         ctx = llamacpp_params.get("ctx_size", 4096)
         if hasattr(cfg, 'ctx_size') and cfg.ctx_size:
             ctx = cfg.ctx_size
-        cmd.extend(["-c", str(ctx)])
+        cmd.extend(["--n_ctx", str(ctx)])
 
         threads = llamacpp_params.get("n_threads")
         if hasattr(cfg, 'n_threads') and cfg.n_threads:
             threads = cfg.n_threads
         if threads:
-            cmd.extend(["-t", str(threads)])
+            cmd.extend(["--n_threads", str(threads)])
 
         for key, val in llamacpp_params.items():
             if val is None or key in ("n_gpu_layers", "ctx_size", "n_threads"):
                 continue
-            cmd.extend([f"--{key.replace('_', '-')}", str(val)])
+            cmd.extend([f"--{key}", str(val)])
 
         return cmd
 
@@ -428,10 +482,7 @@ class LLMServiceManager:
         cmd = self.build_command(model_name, engine_type, port)
         logger.info("Starting %s engine for %s: %s", engine_type, model_name, " ".join(cmd))
 
-        if engine_type == "vllm":
-            env = self._get_vllm_env(model_name)
-        else:
-            env = {**os.environ, "HF_ENDPOINT": os.environ.get("HF_ENDPOINT", "https://hf-mirror.com")}
+        env = self._get_engine_env(engine_type, model_name)
 
         log_dir = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "logs",

@@ -511,8 +511,26 @@ class ModelSwitchOrchestrator:
         raise ValueError(f"Phase {phase_num} not found in session")
 
     async def _stop_systemd_vllm_if_active(self, session: SwitchSession, phase: PhaseDetail):
-        async def mask_runtime_restart():
+        async def disable_systemd_restart():
             try:
+                disable_result = subprocess.run(
+                    [SYSTEMCTL_BIN, "disable", self._vllm_service_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if disable_result.returncode == 0:
+                    await self._log(
+                        session,
+                        phase,
+                        f"已 disable systemd 服务 {self._vllm_service_name}，subprocess 引擎作为唯一权威状态源",
+                    )
+                else:
+                    await self._log(
+                        session,
+                        phase,
+                        f"disable systemd 服务失败: {disable_result.stderr.strip() or disable_result.stdout.strip()}",
+                    )
                 subprocess.run(
                     [SYSTEMCTL_BIN, "reset-failed", self._vllm_service_name],
                     capture_output=True,
@@ -534,7 +552,7 @@ class ModelSwitchOrchestrator:
                         f"runtime mask systemd 服务失败: {mask_result.stderr.strip() or mask_result.stdout.strip()}",
                     )
             except Exception as exc:
-                await self._log(session, phase, f"runtime mask systemd 服务异常: {exc}")
+                await self._log(session, phase, f"disable/runtime mask systemd 服务异常: {exc}")
 
         try:
             result = subprocess.run(
@@ -544,7 +562,7 @@ class ModelSwitchOrchestrator:
                 timeout=5,
             )
             if result.stdout.strip() != "active":
-                await mask_runtime_restart()
+                await disable_systemd_restart()
                 return
 
             await self._log(
@@ -574,14 +592,14 @@ class ModelSwitchOrchestrator:
                     )
                     if active_result.stdout.strip() != "active":
                         await self._log(session, phase, "systemd vLLM 服务已停止")
-                        await mask_runtime_restart()
+                        await disable_systemd_restart()
                         return
                     await asyncio.sleep(1)
                 await self._log(session, phase, "systemd vLLM 服务停止超时，将继续清理残留进程")
-                await mask_runtime_restart()
+                await disable_systemd_restart()
         except Exception as exc:
             await self._log(session, phase, f"检查/停止 systemd vLLM 服务失败: {exc}")
-            await mask_runtime_restart()
+            await disable_systemd_restart()
 
     async def _kill_external_vllm_processes(self, session: SwitchSession, phase: PhaseDetail):
         import subprocess as _sp
@@ -713,18 +731,6 @@ class ModelSwitchOrchestrator:
                     }
                     await self._log(session, phase,
                                     f"显存校验失败: vLLM需要 {vllm_required_gb:.2f}GB (gpu_memory_utilization={gmu}), GPU总显存 {total_gb:.2f}GB")
-                elif not is_switch_action and vllm_required > total_available:
-                    feasibility = {
-                        "feasible": False,
-                        "reason": "gpu_memory_utilization_exceeds_safety",
-                        "available_gb": round(safety_available_gb, 2),
-                        "required_gb": round(vllm_required_gb, 2),
-                        "safety_margin_gb": 0,
-                        "gpu_available": True,
-                        "note": f"vLLM gpu_memory_utilization={gmu} 需要 {vllm_required_gb:.2f}GB (GPU总×{gmu}), 但安全阈值仅 {safety_available_gb:.2f}GB (GPU总×{_SAFETY_RATIO}), 即即使释放旧模型 {previous_model} 全部显存也无法运行",
-                    }
-                    await self._log(session, phase,
-                                    f"显存校验失败: vLLM需要 {vllm_required_gb:.2f}GB (gpu_memory_utilization={gmu}), 安全阈值 {safety_available_gb:.2f}GB (_SAFETY_RATIO={_SAFETY_RATIO})")
                 elif is_switch_action and model_weight_bytes + headroom > total_bytes:
                     required_gb = model_weight_bytes / (1024 ** 3)
                     feasibility = {
@@ -805,6 +811,8 @@ class ModelSwitchOrchestrator:
         await self._broadcast(session, phase=1, progress=10, log="停止旧服务")
 
         service_log_file = None
+        target_pid = None
+        target_pid = None
         if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
             await self._stop_systemd_vllm_if_active(session, phase)
 
@@ -929,7 +937,8 @@ class ModelSwitchOrchestrator:
                 raise _SwitchAborted(error_msg)
 
             service_log_file = result.get("log_file")
-            await self._log(session, phase, f"引擎进程已启动 (pid={result.get('pid')})")
+            target_pid = result.get("pid")
+            await self._log(session, phase, f"引擎进程已启动 (pid={target_pid})")
         else:
             from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache
             script_ok = _update_vllm_script(session.target_model_path, session.target_model)
@@ -977,7 +986,13 @@ class ModelSwitchOrchestrator:
                 if elapsed - last_error_check >= 5:
                     status = self._llm_service_manager.get_service_status(session.target_model) if self._llm_service_manager else {"status": "not_found"}
                     svc_status = status.get("status") == "running"
-                    if status.get("status") == "stopped":
+                    pid_alive = True
+                    if target_pid:
+                        try:
+                            os.kill(int(target_pid), 0)
+                        except OSError:
+                            pid_alive = False
+                    if status.get("status") == "stopped" or not pid_alive:
                         detail = self._extract_recent_log_error(service_log_file) or f"exit_code={status.get('exit_code')}"
                         phase.status = PhaseStatus.FAILED
                         phase.error = f"subprocess引擎进程已退出: {detail}"
@@ -1026,27 +1041,36 @@ class ModelSwitchOrchestrator:
 
             try:
                 async with httpx.AsyncClient(timeout=3) as client:
-                    resp = await client.get(health_url)
-                    if resp.status_code == 200:
-                        try:
-                            models_resp = await client.get(f"{base_url}/v1/models")
-                            if models_resp.status_code == 200:
-                                models_data = models_resp.json()
-                                registered_ids = [m.get("id", "") for m in models_data.get("data", [])]
-                                if registered_ids:
-                                    actual_id = registered_ids[0]
-                                    target_name = session.target_model
-                                    if actual_id != session.target_model_path and (target_name not in actual_id):
-                                        await self._log(session, phase,
-                                                        f"模型ID不匹配: vLLM返回 {actual_id}, 目标 {target_name} ({session.target_model_path})")
-                                        continue
-                        except Exception as e:
-                            await self._log(session, phase, f"模型ID验证失败(继续等待): {e}")
-                            continue
+                    model_ready = False
+                    try:
+                        models_resp = await client.get(f"{base_url}/v1/models")
+                        if models_resp.status_code == 200:
+                            models_data = models_resp.json()
+                            registered_ids = [m.get("id", "") for m in models_data.get("data", [])]
+                            if registered_ids:
+                                actual_id = registered_ids[0]
+                                target_name = session.target_model
+                                if actual_id == session.target_model_path or target_name in actual_id:
+                                    model_ready = True
+                                else:
+                                    await self._log(session, phase,
+                                                    f"模型ID不匹配: vLLM返回 {actual_id}, 目标 {target_name} ({session.target_model_path})")
+                    except Exception as e:
+                        await self._log(session, phase, f"模型ID验证失败(继续等待): {e}")
+
+                    health_ready = False
+                    try:
+                        resp = await client.get(health_url)
+                        health_ready = resp.status_code == 200
+                    except Exception:
+                        health_ready = False
+
+                    if model_ready or health_ready:
                         phase.status = PhaseStatus.SUCCESS
                         phase.progress = 100
                         phase.finished_at = datetime.now().isoformat()
-                        await self._log(session, phase, f"vLLM 服务就绪 (耗时 {elapsed}s)")
+                        ready_source = "/v1/models" if model_ready else "/health"
+                        await self._log(session, phase, f"vLLM 服务就绪 ({ready_source}, 耗时 {elapsed}s)")
                         await self._broadcast(session, phase=1, progress=100,
                                               log="vLLM 服务就绪", level="success")
                         return
@@ -1216,7 +1240,8 @@ class ModelSwitchOrchestrator:
                 await self._rollback(session, error_msg)
                 raise _SwitchAborted(error_msg)
             service_log_file = result.get("log_file")
-            await self._log(session, phase, f"引擎进程已启动 (pid={result.get('pid')})")
+            target_pid = result.get("pid")
+            await self._log(session, phase, f"引擎进程已启动 (pid={target_pid})")
         else:
             from core.vllm_manager import _update_vllm_script, refresh_vllm_port_cache, start_vllm_service, _build_vllm_health_url
             script_ok = _update_vllm_script(session.target_model_path, session.target_model)
@@ -1252,7 +1277,13 @@ class ModelSwitchOrchestrator:
             if elapsed - last_error_check >= 5:
                 if self._engine_manager_mode == "subprocess" and self._llm_service_manager:
                     status = self._llm_service_manager.get_service_status(session.target_model)
-                    if status.get("status") == "stopped":
+                    pid_alive = True
+                    if target_pid:
+                        try:
+                            os.kill(int(target_pid), 0)
+                        except OSError:
+                            pid_alive = False
+                    if status.get("status") == "stopped" or not pid_alive:
                         detail = self._extract_recent_log_error(service_log_file) or f"exit_code={status.get('exit_code')}"
                         phase.status = PhaseStatus.FAILED
                         phase.error = f"subprocess引擎进程已退出: {detail}"
@@ -1407,19 +1438,32 @@ class ModelSwitchOrchestrator:
                 if result.get("status") == "started":
                     await self._broadcast(session, phase=0, progress=80,
                                           log="旧模型subprocess已启动，等待就绪", level="warning")
-                    rollback_wait_max = 120
+                    rollback_wait_max = self.PHASE3_START_TIMEOUT
                     rollback_start = time.time()
+                    rollback_restored = False
                     while time.time() - rollback_start < rollback_wait_max:
                         await asyncio.sleep(3)
                         try:
                             async with httpx.AsyncClient(timeout=3) as client:
-                                resp = await client.get(f"http://127.0.0.1:{self._vllm_port}/health")
-                                if resp.status_code == 200:
+                                models_resp = await client.get(f"http://127.0.0.1:{self._vllm_port}/v1/models")
+                                if models_resp.status_code == 200:
+                                    models_data = models_resp.json()
+                                    registered_ids = [m.get("id", "") for m in models_data.get("data", [])]
+                                    actual_id = registered_ids[0] if registered_ids else ""
+                                    if actual_id == session.previous_model_path or session.previous_model in actual_id:
+                                        rollback_restored = True
+                                if rollback_restored:
                                     await self._log(session, self._get_phase(session, 0),
-                                                   "旧模型服务已恢复就绪(subprocess)")
+                                                   "旧模型服务已恢复就绪(subprocess, /v1/models 已确认)")
                                     break
                         except Exception:
                             pass
+                    if not rollback_restored:
+                        await self._log(
+                            session,
+                            self._get_phase(session, 0),
+                            f"rollback: 旧模型启动后 {rollback_wait_max}s 内未确认 /v1/models 就绪",
+                        )
                 else:
                     logger.error("Rollback subprocess start failed: %s", result)
             else:
