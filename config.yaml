@@ -238,7 +238,7 @@ models:
     host: 0.0.0.0
     keep_alive: false
     llamacpp_params:
-      chat_format: chatml
+      chat_template_kwargs: '{"enable_thinking": false}'
       flash_attn: true
       n_batch: 512
       n_threads: 16
