@@ -18,6 +18,18 @@ _MODEL_EXTENSIONS = ['.safetensors', '.bin', '.pt', '.gguf', '.onnx']
 _CONFIG_FILES = ['config.json', 'tokenizer_config.json', 'tokenizer.json', 'special_tokens_map.json']
 
 
+def _filter_supported_kwargs(func, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        import inspect
+        signature = inspect.signature(func)
+        params = signature.parameters.values()
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params):
+            return kwargs
+        return {k: v for k, v in kwargs.items() if k in signature.parameters}
+    except Exception:
+        return kwargs
+
+
 @dataclass
 class SearchResult:
     name: str
@@ -197,10 +209,14 @@ class MultiSourceModelHub:
         if short_name in self._local_models:
             return self._local_models[short_name].path
         direct_path = os.path.join(self._save_root, short_name)
-        if os.path.isdir(direct_path):
+        direct_info = self._analyze_local_model(short_name, direct_path) if os.path.isdir(direct_path) else None
+        if direct_info:
+            self._local_models[short_name] = direct_info
             return direct_path
         full_path = os.path.join(self._save_root, model_name)
-        if os.path.isdir(full_path):
+        full_info = self._analyze_local_model(short_name, full_path) if os.path.isdir(full_path) else None
+        if full_info:
+            self._local_models[short_name] = full_info
             return full_path
         return None
 
@@ -503,8 +519,6 @@ class MultiSourceModelHub:
             kwargs = {
                 "repo_id": model_name,
                 "local_dir": target_dir,
-                "resume_download": True,
-                "endpoint": self._hf_endpoint,
                 "max_workers": max_workers,
                 "force_download": force_download,
             }
@@ -516,9 +530,34 @@ class MultiSourceModelHub:
                 kwargs["ignore_patterns"] = ignore_patterns
             if tqdm_class:
                 kwargs["tqdm_class"] = tqdm_class
-            local_path = snapshot_download(**kwargs)
-            self._register_downloaded_model(model_name, local_path)
-            return {"status": "completed", "local_path": local_path, "source": "huggingface"}
+
+            endpoints = [self._hf_endpoint]
+            official_endpoint = "https://huggingface.co"
+            if self._hf_endpoint.rstrip("/") != official_endpoint:
+                endpoints.append(official_endpoint)
+
+            last_error = None
+            for endpoint in endpoints:
+                attempt_kwargs = dict(kwargs)
+                attempt_kwargs["endpoint"] = endpoint
+                attempt_kwargs = _filter_supported_kwargs(snapshot_download, attempt_kwargs)
+                try:
+                    local_path = snapshot_download(**attempt_kwargs)
+                    self._register_downloaded_model(model_name, local_path)
+                    return {"status": "completed", "local_path": local_path, "source": "huggingface"}
+                except Exception as e:
+                    last_error = e
+                    if endpoint != endpoints[-1]:
+                        logger.warning(
+                            "HF download failed via %s, retrying with %s: %s",
+                            endpoint, endpoints[-1], e,
+                        )
+                        continue
+                    raise
+
+            if last_error:
+                raise last_error
+            return {"status": "error", "message": "No HuggingFace endpoint configured", "source": "huggingface"}
         except Exception as e:
             logger.error("HF download failed: %s", e)
             return {"status": "error", "message": str(e), "source": "huggingface"}
@@ -546,7 +585,7 @@ class MultiSourceModelHub:
                 kwargs["allow_patterns"] = allow_patterns
             if ignore_patterns:
                 kwargs["ignore_patterns"] = ignore_patterns
-            local_path = ms_download(**kwargs)
+            local_path = ms_download(**_filter_supported_kwargs(ms_download, kwargs))
             if progress_callback:
                 progress_callback(100.0)
             self._register_downloaded_model(model_name, local_path)

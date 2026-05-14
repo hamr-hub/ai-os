@@ -196,14 +196,114 @@ models:
     vllm_params:
       attention_backend: FLASH_ATTN
       enable_chunked_prefill: true
-      gpu_memory_utilization: 0.9
-      max_model_len: 40960
-      max_num_batched_tokens: 16384
-      max_num_seqs: 256
+      gpu_memory_utilization: 0.75
+      max_model_len: 8192
+      max_num_batched_tokens: 4096
+      max_num_seqs: 32
       moe_backend: cutlass
       nvfp4_gemm_backend: cutlass
       tool_call_parser: null
       use_flashinfer_moe_fp4: false
+  Qwen2.5-0.5B-Instruct:
+    ctx_size: 4096
+    description: Qwen2.5 0.5B Instruct 小模型（下载验收）
+    engine_type: vllm
+    extra_args: []
+    host: 0.0.0.0
+    keep_alive: false
+    llamacpp_params: {}
+    model_path: /mnt/pve_models/Qwen2.5-0.5B-Instruct
+    n_gpu_layers: -1
+    port: 8112
+    preload: false
+    required_memory: 3GB
+    service: vllm-aiclient
+    sglang_params: {}
+    supports_image_generation: false
+    supports_images: false
+    supports_tool_calling: true
+    vllm_params:
+      enable_chunked_prefill: true
+      gpu_memory_utilization: 0.12
+      max_model_len: 4096
+      max_num_batched_tokens: 2048
+      max_num_seqs: 8
+      tool_call_parser: null
+  Qwen2.5-1.5B-Instruct:
+    ctx_size: 4096
+    description: Qwen2.5 1.5B Instruct 小模型（下载验收）
+    engine_type: vllm
+    extra_args: []
+    host: 0.0.0.0
+    keep_alive: false
+    llamacpp_params: {}
+    model_path: /mnt/pve_models/Qwen2.5-1.5B-Instruct
+    n_gpu_layers: -1
+    port: 8113
+    preload: false
+    required_memory: 5GB
+    service: vllm-aiclient
+    sglang_params: {}
+    supports_image_generation: false
+    supports_images: false
+    supports_tool_calling: true
+    vllm_params:
+      enable_chunked_prefill: true
+      gpu_memory_utilization: 0.16
+      max_model_len: 4096
+      max_num_batched_tokens: 2048
+      max_num_seqs: 8
+      tool_call_parser: null
+  Qwen3-0.6B:
+    ctx_size: 4096
+    description: Qwen3 0.6B 小模型（并发验收）
+    engine_type: vllm
+    extra_args: []
+    host: 0.0.0.0
+    keep_alive: false
+    llamacpp_params: {}
+    model_path: /mnt/pve_models/Qwen3-0.6B
+    n_gpu_layers: -1
+    port: 8110
+    preload: false
+    required_memory: 3GB
+    service: vllm-aiclient
+    sglang_params: {}
+    supports_image_generation: false
+    supports_images: false
+    supports_tool_calling: true
+    vllm_params:
+      enable_chunked_prefill: true
+      gpu_memory_utilization: 0.12
+      max_model_len: 4096
+      max_num_batched_tokens: 2048
+      max_num_seqs: 8
+      tool_call_parser: null
+  Qwen3-VL-2B-Instruct:
+    ctx_size: 4096
+    description: Qwen3-VL 2B Instruct 小模型（并发验收）
+    engine_type: vllm
+    extra_args: []
+    host: 0.0.0.0
+    keep_alive: false
+    llamacpp_params: {}
+    model_path: /mnt/pve_models/Qwen3-VL-2B-Instruct
+    n_gpu_layers: -1
+    port: 8111
+    preload: false
+    required_memory: 6GB
+    service: vllm-aiclient
+    sglang_params: {}
+    supports_image_generation: false
+    supports_images: true
+    supports_tool_calling: true
+    vllm_params:
+      enable_chunked_prefill: true
+      gpu_memory_utilization: 0.18
+      max_model_len: 4096
+      max_num_batched_tokens: 2048
+      max_num_seqs: 4
+      tool_call_parser: null
   Qwen3.6-35B-A3B-Uncensored:
     ctx_size: 4096
     description: Qwen3.6 35B 去审查版
@@ -417,7 +517,7 @@ settings:
   memory_cleanup_delay: 5
   memory_flush_interval: 300
   min_available_memory: 4GB
-  model_start_timeout: 120
+  model_start_timeout: 300
   preload_timeout: 300
   priority:
     default: normal

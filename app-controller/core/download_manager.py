@@ -143,7 +143,7 @@ class DownloadTaskManager:
             }
 
         short_name = model_name.split("/")[-1]
-        if self._model_hub and self._model_hub.is_model_local(model_name):
+        if self._model_hub and not force_download and self._model_hub.is_model_local(model_name):
             local_path = self._model_hub.get_model_local_path(model_name)
             return {
                 "status": "already_exists",
@@ -236,12 +236,14 @@ class DownloadTaskManager:
                                 )
                             self._notify_event("download_complete", task)
                             self._fire_progress(task)
+                            self._decrement_active_count()
                             return
 
                         if task.status == "already_exists":
                             task.progress_pct = 100.0
                             task.completed_at = time.time()
                             self._notify_event("download_complete", task)
+                            self._decrement_active_count()
                             return
 
                         if attempt < task.max_retries:
@@ -261,6 +263,7 @@ class DownloadTaskManager:
                 except asyncio.CancelledError:
                     task.status = "cancelled"
                     self._notify_event("download_cancelled", task)
+                    self._decrement_active_count()
                     return
                 except Exception as e:
                     task.status = "failed"
@@ -273,7 +276,7 @@ class DownloadTaskManager:
                         continue
                     self._notify_event("download_error", task)
 
-            self._active_count -= 1
+            self._decrement_active_count()
 
     def get_status(self, task_id: str) -> Optional[Dict]:
         task = self._tasks.get(task_id)
@@ -313,6 +316,9 @@ class DownloadTaskManager:
 
     def get_active_count(self) -> int:
         return self._active_count
+
+    def _decrement_active_count(self):
+        self._active_count = max(0, self._active_count - 1)
 
     def get_stats(self) -> Dict:
         total = len(self._tasks)
