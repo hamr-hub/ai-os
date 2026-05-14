@@ -40,6 +40,11 @@ engines:
     default_max_model_len: 32768
     default_port: 8100
     enabled: true
+    env_vars:
+      CUDACXX: /root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cu13/bin/nvcc
+      CUDA_HOME: /root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cu13
+      LD_LIBRARY_PATH: /root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cu13/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cublas/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cuda_cupti/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cuda_nvrtc/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cuda_runtime/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cudnn/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cufft/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cufile/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/curand/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cusolver/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cusparse/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cusparselt/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/nccl/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/nvjitlink/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/nvshmem/lib:/root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/nvtx/lib
+      PATH: /root/ai-os/venvs/sglang/lib/python3.13/site-packages/nvidia/cu13/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     venv_path: /root/ai-os/venvs/sglang
   vllm:
     default_port: 8000
@@ -150,10 +155,13 @@ models:
     required_memory: 40GB
     service: sglang
     sglang_params:
+      attention_backend: triton
       context_length: 8192
+      disable_cuda_graph: true
       dtype: bfloat16
       max_running_requests: 32
       mem_fraction_static: 0.82
+      sampling_backend: pytorch
       served_model_name: Qwen3.6-35B-A3B
       trust_remote_code: true
     supports_image_generation: false
