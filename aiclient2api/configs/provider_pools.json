@@ -16,18 +16,11 @@
       "lastErrorTime": null,
       "supportedModels": [
         "Qwen3.6-35B-A3B-Uncensored-GGUF-Q8",
-        "llama-3.3-70b-8.0bpw",
-        "llama-3.3-70b-abliterated-gguf",
-        "midnight-miqu-103b-5.0bpw",
-        "deepseek-r1-70b-gguf",
         "Qwen3.6-35B-A3B",
         "Qwen3.6-35B-A3B-NVFP4",
-        "llama-3.3-70b-exl2-6_5",
-        "llama-3.3-70b-exl2-8_0",
-        "qwen2.5-72b-exl2-8_0",
-        "Gemma-4-31B-Abliterated",
-        "Qwen3-235B-A22B-Instruct-2507-AWQ",
-        "Qwen3.6-35B-A3B-Uncensored"
+        "Qwen2.5-0.5B-Instruct",
+        "Qwen2.5-1.5B-Instruct",
+        "Gemma-4-31B-Abliterated"
       ],
       "notSupportedModels": [],
       "isDisabled": false,

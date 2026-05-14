@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import { recommendModel, checkModelMemory, getGPUSummary, getGPUMemoryCheck, getEngineStatus, switchEngine } from '@/api/client'
+import { recommendModel, checkModelMemory, getGPUSummary, getGPUMemoryCheck, getEngineStatus, switchEngine, getAggregatedModels } from '@/api/client'
 import type { RecommendResult, MemoryCheckResult, GPUSummary, GPUMemoryInfo, EngineStatus, EngineType } from '@/types'
 
 interface RawServiceStatus {
@@ -23,6 +23,47 @@ interface RawEngineStatusResponse {
 }
 
 const ENGINE_TYPES: EngineType[] = ['vllm', 'sglang', 'llamacpp']
+
+const normalizeModelName = (name: string | null | undefined) => (name ?? '').trim().toLowerCase()
+
+const selectModelForEngine = async (
+  status: EngineStatus | null,
+  targetEngine: EngineType,
+): Promise<{ modelName: string; port: number | null }> => {
+  const currentEngine = status?.current_engine ?? 'vllm'
+  const currentModel =
+    status?.[currentEngine]?.model ??
+    status?.vllm.model ??
+    status?.sglang.model ??
+    status?.llamacpp.model ??
+    ''
+  const currentModelKey = normalizeModelName(currentModel)
+
+  try {
+    const aggregated = await getAggregatedModels()
+    const variants = aggregated.groups.flatMap(group =>
+      group.variants.map(variant => ({
+        name: variant.name || group.base_name,
+        variant,
+      })),
+    )
+    const variantEngine = (variant: any) => (variant.backend_type || variant.engine_type || variant.service || 'vllm') as EngineType
+    const pick = (predicate: (item: typeof variants[number]) => boolean) => variants.find(predicate) ?? null
+
+    const selected =
+      pick(item => variantEngine(item.variant) === targetEngine && normalizeModelName(item.name) === currentModelKey) ||
+      pick(item => variantEngine(item.variant) === targetEngine && (item.variant.running || item.variant.is_current)) ||
+      pick(item => variantEngine(item.variant) === targetEngine && item.variant.path_exists !== false) ||
+      pick(item => variantEngine(item.variant) === targetEngine) ||
+      pick(item => item.variant.running || item.variant.is_current) ||
+      variants[0] ||
+      null
+    if (selected) return { modelName: selected.name, port: selected.variant.port ?? null }
+    return { modelName: targetEngine === currentEngine ? currentModel : '', port: status?.[targetEngine]?.port ?? null }
+  } catch {
+    return { modelName: targetEngine === currentEngine ? currentModel : '', port: status?.[targetEngine]?.port ?? null }
+  }
+}
 
 const normalizeGPUMemoryInfo = (raw: any): GPUMemoryInfo => {
   const gpuData = raw?.gpu ?? {}
@@ -163,16 +204,13 @@ export function useGPUMemory() {
     error.value = null
     try {
       const currentEngine = engineStatus.value?.current_engine ?? 'vllm'
-      const currentModel =
-        engineStatus.value?.[currentEngine]?.model ??
-        engineStatus.value?.vllm.model ??
-        engineStatus.value?.sglang.model ??
-        engineStatus.value?.llamacpp.model
+      const targetSelection = await selectModelForEngine(engineStatus.value, targetEngine)
       const currentPort =
+        targetSelection.port ??
         engineStatus.value?.[targetEngine]?.port ??
         engineStatus.value?.[currentEngine]?.port ??
         8000
-      const result = await switchEngine(currentModel ?? '', targetEngine, currentPort)
+      const result = await switchEngine(targetSelection.modelName, targetEngine, currentPort)
       if (engineStatus.value) {
         engineStatus.value.current_engine = targetEngine
       }

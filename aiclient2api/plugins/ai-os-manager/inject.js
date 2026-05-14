@@ -1356,22 +1356,53 @@
                         showToast('已有引擎切换进行中，请稍候', 'warning');
                         return;
                     }
-                    let modelName = '';
                     const aggResult = await adminFetch('/api/model-switch/aggregated');
                     const aggData = aggResult.data || aggResult;
                     const groups = aggData.groups || [];
                     const runningServices = this.getRunningServices(this.lastEngineData || {});
                     const currentService = runningServices.find(s => normalizeEngineType(s.engine_type || s.engine || s.name || s.type) === normalizeEngineType(this.currentEngine || this.pendingTargetEngine || ''))
                         || runningServices.find(s => s.status === 'running');
-                    modelName = currentService?.model_name || currentService?.model || '';
-                    for (const g of groups) {
-                        for (const v of (g.variants || [])) {
-                            if (modelName) break;
-                            if (v.running || v.is_current) { modelName = v.name || g.base_name; break; }
+                    const currentModelName = currentService?.model_name || currentService?.model || '';
+                    const currentModelKey = this.normalizeModelName(currentModelName);
+                    const variants = [];
+                    for (const group of groups) {
+                        for (const variant of (group.variants || [])) {
+                            const name = variant.name || variant.model_name || group.base_name || '';
+                            if (!name) continue;
+                            variants.push({ group, variant, name });
                         }
-                        if (modelName) break;
                     }
-                    if (!modelName && groups.length > 0) modelName = groups[0].base_name;
+                    const variantEngine = (variant) => normalizeEngineType(
+                        variant.backend_type || variant.engine_type || variant.service || variant.engine || ''
+                    );
+                    const pickVariant = (predicate) => {
+                        const item = variants.find(predicate);
+                        return item || null;
+                    };
+                    let selectedVariant = pickVariant(({ variant, name }) =>
+                        variantEngine(variant) === targetEngine && this.normalizeModelName(name) === currentModelKey
+                    );
+                    if (!selectedVariant) {
+                        selectedVariant = pickVariant(({ variant }) =>
+                            variantEngine(variant) === targetEngine && (variant.running || variant.is_current)
+                        );
+                    }
+                    if (!selectedVariant) {
+                        selectedVariant = pickVariant(({ variant }) =>
+                            variantEngine(variant) === targetEngine && variant.path_exists !== false
+                        );
+                    }
+                    if (!selectedVariant) {
+                        selectedVariant = pickVariant(({ variant }) => variantEngine(variant) === targetEngine);
+                    }
+                    if (!selectedVariant && currentModelName && targetEngine === normalizeEngineType(currentService?.engine_type || currentService?.engine || '')) {
+                        selectedVariant = { name: currentModelName, variant: currentService };
+                    }
+                    if (!selectedVariant) {
+                        selectedVariant = pickVariant(({ variant }) => variant.running || variant.is_current);
+                    }
+                    if (!selectedVariant && variants.length > 0) selectedVariant = variants[0];
+                    const modelName = selectedVariant?.name || '';
                     if (!modelName) { showToast('没有可用模型，请先下载模型', 'warning'); return; }
                     const confirmed = await showConfirm(`确认切换引擎到 ${engineDisplayName(targetEngine)}？该操作会重启当前推理服务。`);
                     if (!confirmed) return;
@@ -1380,7 +1411,8 @@
                     this.renderEngineStatus({ data: { current: this.lastEngineData || {} } });
                     showToast(`正在切换到 ${engineDisplayName(targetEngine)}，请等待状态稳定`, 'info');
                     const requestBody = { model_name: modelName, engine_type: targetEngine };
-                    const targetPort = parsePortValue(this._engineSwitchTargetPort || this.getEngineDefaultPort(targetEngine) || this._engineSwitchDefaultPorts[targetEngine] || null);
+                    const selectedPort = parsePortValue(selectedVariant?.variant?.port ?? null);
+                    const targetPort = parsePortValue(this._engineSwitchTargetPort || selectedPort || this.getEngineDefaultPort(targetEngine) || this._engineSwitchDefaultPorts[targetEngine] || null);
                     if (targetPort != null) {
                         requestBody.port = targetPort;
                     }

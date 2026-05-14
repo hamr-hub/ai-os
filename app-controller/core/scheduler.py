@@ -107,7 +107,10 @@ class Scheduler:
         self._init_preloaded_models()
 
     def get_model_backend_type(self, model_name: str) -> str:
-        return 'vllm'
+        config = self.get_model_config(model_name) or {}
+        if isinstance(config, dict):
+            return config.get("engine_type") or config.get("service") or "vllm"
+        return getattr(config, "engine_type", None) or getattr(config, "service", None) or "vllm"
     
     def get_available_models(self) -> List[str]:
         from core.vllm_manager import MODEL_BASE_PATH, get_available_models as _scan_models

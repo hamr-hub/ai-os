@@ -46,6 +46,37 @@ manage_router = APIRouter(prefix="/manage")
 integration_router = APIRouter(prefix="/api/v1")
 
 
+def _to_plain_dict(value: Any) -> Dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return copy.deepcopy(value)
+    if hasattr(value, "model_dump"):
+        return copy.deepcopy(value.model_dump())
+    if hasattr(value, "dict"):
+        return copy.deepcopy(value.dict())
+    if hasattr(value, "__dict__"):
+        return copy.deepcopy(value.__dict__)
+    return {}
+
+
+def _build_engines_config(current_config: Any) -> Dict[str, Any]:
+    config_dict = _to_plain_dict(current_config)
+    nested_engines = _to_plain_dict(config_dict.get("engines"))
+    engines_config: Dict[str, Any] = {}
+
+    for engine_type in ("vllm", "sglang", "llamacpp"):
+        nested_cfg = _to_plain_dict(nested_engines.get(engine_type))
+        legacy_cfg = _to_plain_dict(config_dict.get(engine_type))
+        merged_cfg = {**nested_cfg, **legacy_cfg}
+        if merged_cfg or engine_type == "vllm":
+            engines_config[engine_type] = merged_cfg
+
+    engines_config["default_engine"] = os.environ.get("DEFAULT_ENGINE", "vllm")
+    engines_config["engine_manager_mode"] = os.environ.get("ENGINE_MANAGER_MODE", "subprocess")
+    return engines_config
+
+
 def _resolve_model_from_served_id(served_id: str) -> tuple[Optional[str], Optional[str]]:
     served_id = (served_id or "").strip()
     if not served_id:
@@ -1893,20 +1924,7 @@ async def engine_status():
 @manage_router.get("/engines/config")
 async def get_engines_config():
     current_config = config_watcher.get_config()
-    engines_config = {}
-    if hasattr(current_config, 'sglang'):
-        engines_config["sglang"] = current_config.sglang.__dict__ if hasattr(current_config.sglang, '__dict__') else current_config.sglang
-    elif 'sglang' in (current_config if isinstance(current_config, dict) else {}):
-        engines_config["sglang"] = current_config['sglang']
-    vllm_cfg = {}
-    if hasattr(current_config, 'vllm'):
-        vllm_cfg = current_config.vllm.__dict__ if hasattr(current_config.vllm, '__dict__') else current_config.vllm
-    elif 'vllm' in (current_config if isinstance(current_config, dict) else {}):
-        vllm_cfg = current_config['vllm']
-    engines_config["vllm"] = vllm_cfg
-    engines_config["default_engine"] = os.environ.get("DEFAULT_ENGINE", "vllm")
-    engines_config["engine_manager_mode"] = os.environ.get("ENGINE_MANAGER_MODE", "subprocess")
-    return engines_config
+    return _build_engines_config(current_config)
 
 
 @manage_router.put("/engines/config")
@@ -1916,26 +1934,30 @@ async def update_engines_config(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     current_config = config_watcher.get_config()
-    config_dict = copy.deepcopy(current_config) if isinstance(current_config, dict) else copy.deepcopy(current_config.__dict__) if hasattr(current_config, '__dict__') else {}
+    config_dict = _to_plain_dict(current_config)
     if "default_engine" in body:
         os.environ["DEFAULT_ENGINE"] = body["default_engine"]
     if "engine_manager_mode" in body:
         os.environ["ENGINE_MANAGER_MODE"] = body["engine_manager_mode"]
-    if "sglang" in body:
-        config_dict["sglang"] = body["sglang"]
-    if "vllm" in body:
-        if "vllm" not in config_dict:
-            config_dict["vllm"] = {}
-        config_dict["vllm"].update(body["vllm"])
+    config_dict.setdefault("engines", {})
+    for engine_type in ("vllm", "sglang", "llamacpp"):
+        if engine_type not in body:
+            continue
+        incoming = _to_plain_dict(body.get(engine_type))
+        nested_cfg = _to_plain_dict(config_dict["engines"].get(engine_type))
+        nested_cfg.update(incoming)
+        config_dict["engines"][engine_type] = nested_cfg
+
+        if engine_type == "vllm" or engine_type in config_dict:
+            legacy_cfg = _to_plain_dict(config_dict.get(engine_type))
+            legacy_cfg.update(incoming)
+            config_dict[engine_type] = legacy_cfg
     success = config_watcher.save_config(config_dict)
     if success:
         persisted = config_watcher.get_config()
         from core.deps import _on_config_changed
         _on_config_changed(persisted)
-        return {"status": "success", "engines_config": {
-            "default_engine": os.environ.get("DEFAULT_ENGINE", "vllm"),
-            "engine_manager_mode": os.environ.get("ENGINE_MANAGER_MODE", "subprocess"),
-        }}
+        return {"status": "success", "engines_config": _build_engines_config(persisted)}
     raise HTTPException(status_code=500, detail="Failed to persist engines config")
 
 

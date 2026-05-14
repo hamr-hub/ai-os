@@ -94,12 +94,12 @@ models:
     engine_type: vllm
     extra_args: []
     host: 0.0.0.0
-    keep_alive: true
+    keep_alive: false
     llamacpp_params: {}
     model_path: /mnt/pve_models/Gemma-4-31B-Abliterated
     n_gpu_layers: -1
     port: 8000
-    preload: true
+    preload: false
     required_memory: 40GB
     service: vllm-aiclient
     sglang_params: {}
